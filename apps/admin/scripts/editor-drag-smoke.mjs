@@ -3990,6 +3990,193 @@ const assertPersistedLinkBehavior = async (pageId) => {
   return props;
 };
 
+const waitForSelectOption = async (client, testId, value) => {
+  let state = null;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const select = document.querySelector('[data-testid="${testId}"]');
+      return {
+        hasSelect: select instanceof HTMLSelectElement,
+        values: select instanceof HTMLSelectElement
+          ? Array.from(select.options).map((option) => option.value)
+          : [],
+      };
+    })()`);
+    if (state.hasSelect && state.values.includes(value)) {
+      return state;
+    }
+    await sleep(200);
+  }
+
+  assert(false, `Select ${testId} did not expose option ${value}: ${JSON.stringify(state)}`);
+};
+
+const enableFormCollectionWriteControls = async (client) => {
+  let state = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const checkbox = document.querySelector('[data-testid="editor-form-collection-write-enabled"]');
+      const select = document.querySelector('[data-testid="editor-form-collection-write-collection"]');
+      if (checkbox instanceof HTMLInputElement && !checkbox.checked) {
+        checkbox.click();
+      }
+      return {
+        hasCheckbox: checkbox instanceof HTMLInputElement,
+        checked: checkbox instanceof HTMLInputElement ? checkbox.checked : false,
+        hasSelect: select instanceof HTMLSelectElement,
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    })()`);
+    if (state.hasCheckbox && state.checked && state.hasSelect) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  assert(false, `Form collection-write controls did not render after enabling: ${JSON.stringify(state)}`);
+};
+
+const testFormBehaviorControls = async (client, collectionId) => {
+  await selectLayerById(client, 'smoke-form');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-form-title', 'Smoke lead capture');
+  await setFormControlByTestId(client, 'editor-form-id', 'smoke-lead-capture');
+  await setCheckboxByTestId(client, 'editor-form-active', true);
+  await setFormControlByTestId(client, 'editor-form-audience', 'authenticated');
+  await setFormControlByTestId(client, 'editor-form-action-url', '/api/custom-lead-submit');
+  await setFormControlByTestId(client, 'editor-form-method', 'POST');
+  await setFormControlByTestId(client, 'editor-form-success-message', 'Smoke submission received.');
+  await setFormControlByTestId(client, 'editor-form-success-redirect-url', '/thanks');
+  await setFormControlByTestId(client, 'editor-form-notification-email', 'ops@example.com');
+  await setFormControlByTestId(client, 'editor-form-notification-webhook', 'https://hooks.example.com/backy-smoke');
+  await setCheckboxByTestId(client, 'editor-form-enable-honeypot', true);
+  await setCheckboxByTestId(client, 'editor-form-enable-captcha', true);
+  await setFormControlByTestId(client, 'editor-form-moderation-mode', 'auto-approve');
+  await setCheckboxByTestId(client, 'editor-form-contact-share-enabled', true);
+  await setFormControlByTestId(client, 'editor-form-contact-share-name-field', 'full_name');
+  await setFormControlByTestId(client, 'editor-form-contact-share-email-field', 'email');
+  await setFormControlByTestId(client, 'editor-form-contact-share-phone-field', 'phone');
+  await setFormControlByTestId(client, 'editor-form-contact-share-notes-field', 'message');
+  await setCheckboxByTestId(client, 'editor-form-contact-share-dedupe-by-email', false);
+
+  if (collectionId) {
+    await selectLayerById(client, 'smoke-form');
+    await switchToPropertiesPanel(client);
+    await enableFormCollectionWriteControls(client);
+    await waitForSelectOption(client, 'editor-form-collection-write-collection', collectionId);
+    await setFormControlByTestId(client, 'editor-form-collection-write-collection', collectionId);
+    await setFormControlByTestId(client, 'editor-form-collection-write-slug-field', 'full_name');
+    await setFormControlByTestId(client, 'editor-form-collection-write-field-map', 'full_name: title\nmessage: summary');
+  }
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => Boolean(document.querySelector('[data-testid="' + testId + '"]')?.checked);
+    const form = document.querySelector('[data-element-id="smoke-form"]');
+    return {
+      title: value('editor-form-title'),
+      formId: value('editor-form-id'),
+      active: checked('editor-form-active'),
+      audience: value('editor-form-audience'),
+      actionUrl: value('editor-form-action-url'),
+      method: value('editor-form-method'),
+      successMessage: value('editor-form-success-message'),
+      successRedirectUrl: value('editor-form-success-redirect-url'),
+      notificationEmail: value('editor-form-notification-email'),
+      notificationWebhook: value('editor-form-notification-webhook'),
+      enableHoneypot: checked('editor-form-enable-honeypot'),
+      enableCaptcha: checked('editor-form-enable-captcha'),
+      moderationMode: value('editor-form-moderation-mode'),
+      contactShareEnabled: checked('editor-form-contact-share-enabled'),
+      contactShareNameField: value('editor-form-contact-share-name-field'),
+      contactShareEmailField: value('editor-form-contact-share-email-field'),
+      contactSharePhoneField: value('editor-form-contact-share-phone-field'),
+      contactShareNotesField: value('editor-form-contact-share-notes-field'),
+      contactShareDedupeByEmail: checked('editor-form-contact-share-dedupe-by-email'),
+      collectionWriteEnabled: checked('editor-form-collection-write-enabled'),
+      collectionWriteCollectionId: value('editor-form-collection-write-collection'),
+      collectionWriteSlugField: value('editor-form-collection-write-slug-field'),
+      collectionWriteFieldMap: value('editor-form-collection-write-field-map'),
+      previewText: form?.textContent || '',
+    };
+  })()`);
+
+  assert(state.title === 'Smoke lead capture' && state.previewText.includes('Smoke lead capture'), `Form title mismatch: ${JSON.stringify(state)}`);
+  assert(state.formId === 'smoke-lead-capture', `Form id mismatch: ${JSON.stringify(state)}`);
+  assert(state.active === true, `Form active mismatch: ${JSON.stringify(state)}`);
+  assert(state.audience === 'authenticated', `Form audience mismatch: ${JSON.stringify(state)}`);
+  assert(state.actionUrl === '/api/custom-lead-submit', `Form action URL mismatch: ${JSON.stringify(state)}`);
+  assert(state.method === 'POST', `Form method mismatch: ${JSON.stringify(state)}`);
+  assert(state.successMessage === 'Smoke submission received.', `Form success message mismatch: ${JSON.stringify(state)}`);
+  assert(state.successRedirectUrl === '/thanks', `Form success redirect mismatch: ${JSON.stringify(state)}`);
+  assert(state.notificationEmail === 'ops@example.com', `Form notification email mismatch: ${JSON.stringify(state)}`);
+  assert(state.notificationWebhook === 'https://hooks.example.com/backy-smoke', `Form notification webhook mismatch: ${JSON.stringify(state)}`);
+  assert(state.enableHoneypot === true && state.enableCaptcha === true, `Form spam controls mismatch: ${JSON.stringify(state)}`);
+  assert(state.moderationMode === 'auto-approve', `Form moderation mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.contactShareEnabled === true &&
+      state.contactShareNameField === 'full_name' &&
+      state.contactShareEmailField === 'email' &&
+      state.contactSharePhoneField === 'phone' &&
+      state.contactShareNotesField === 'message' &&
+      state.contactShareDedupeByEmail === false,
+    `Form contact-share controls mismatch: ${JSON.stringify(state)}`,
+  );
+  if (collectionId) {
+    assert(
+      state.collectionWriteEnabled === true &&
+        state.collectionWriteCollectionId === collectionId &&
+        state.collectionWriteSlugField === 'full_name' &&
+        state.collectionWriteFieldMap === 'full_name: title\nmessage: summary',
+      `Form collection-write controls mismatch: ${JSON.stringify(state)}`,
+    );
+  }
+
+  return state;
+};
+
+const assertPersistedFormBehavior = async (pageId, collectionId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const form = findCanvasElement(elements, 'smoke-form');
+  const props = form?.props || {};
+
+  assert(form?.type === 'form', `Persisted smoke-form missing: ${JSON.stringify(form)}`);
+  assert(props.formTitle === 'Smoke lead capture', `Persisted form title mismatch: ${JSON.stringify(props)}`);
+  assert(props.formId === 'smoke-lead-capture', `Persisted form id mismatch: ${JSON.stringify(props)}`);
+  assert(props.formActive !== false, `Persisted form active mismatch: ${JSON.stringify(props)}`);
+  assert(props.formAudience === 'authenticated', `Persisted form audience mismatch: ${JSON.stringify(props)}`);
+  assert(props.actionUrl === '/api/custom-lead-submit', `Persisted form action URL mismatch: ${JSON.stringify(props)}`);
+  assert(props.method === 'POST', `Persisted form method mismatch: ${JSON.stringify(props)}`);
+  assert(props.successMessage === 'Smoke submission received.', `Persisted form success message mismatch: ${JSON.stringify(props)}`);
+  assert(props.successRedirectUrl === '/thanks' && props.redirectUrl === '/thanks', `Persisted form success redirect mismatch: ${JSON.stringify(props)}`);
+  assert(props.notificationEmail === 'ops@example.com', `Persisted form notification email mismatch: ${JSON.stringify(props)}`);
+  assert(props.notificationWebhook === 'https://hooks.example.com/backy-smoke', `Persisted form notification webhook mismatch: ${JSON.stringify(props)}`);
+  assert(props.enableHoneypot === true && props.enableCaptcha === true, `Persisted form spam controls mismatch: ${JSON.stringify(props)}`);
+  assert(props.moderationMode === 'auto-approve', `Persisted form moderation mismatch: ${JSON.stringify(props)}`);
+  assert(
+    props.contactShareEnabled === true &&
+      props.contactShareNameField === 'full_name' &&
+      props.contactShareEmailField === 'email' &&
+      props.contactSharePhoneField === 'phone' &&
+      props.contactShareNotesField === 'message' &&
+      props.contactShareDedupeByEmail === false,
+    `Persisted form contact-share mismatch: ${JSON.stringify(props)}`,
+  );
+  if (collectionId) {
+    assert(
+      props.collectionWriteEnabled === true &&
+        props.collectionWriteCollectionId === collectionId &&
+        props.collectionWriteSlugField === 'full_name' &&
+        JSON.stringify(props.collectionWriteFieldMap) === JSON.stringify({ full_name: 'title', message: 'summary' }),
+      `Persisted form collection-write mismatch: ${JSON.stringify(props)}`,
+    );
+  }
+
+  return props;
+};
+
 const testVideoBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-video');
   await switchToPropertiesPanel(client);
@@ -4445,9 +4632,9 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4461,6 +4648,8 @@ const main = async () => {
                 ? 'smoke-quote'
                 : COMPONENT_SMOKE === 'link'
                   ? 'smoke-link'
+                  : COMPONENT_SMOKE === 'form'
+                    ? 'smoke-form'
                   : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
@@ -4474,6 +4663,8 @@ const main = async () => {
                 ? await testQuoteBehaviorControls(client)
                 : COMPONENT_SMOKE === 'link'
                   ? await testLinkBehaviorControls(client)
+                  : COMPONENT_SMOKE === 'form'
+                    ? await testFormBehaviorControls(client, tempCollection?.id)
                   : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
@@ -4489,6 +4680,8 @@ const main = async () => {
                 ? await assertPersistedQuoteBehavior(tempPageId)
                 : COMPONENT_SMOKE === 'link'
                   ? await assertPersistedLinkBehavior(tempPageId)
+                  : COMPONENT_SMOKE === 'form'
+                    ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
                   : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
@@ -4689,6 +4882,9 @@ const main = async () => {
     const linkBehaviorControls = EDITOR_PATH
       ? null
       : await testLinkBehaviorControls(client);
+    const formBehaviorControls = EDITOR_PATH
+      ? null
+      : await testFormBehaviorControls(client, tempCollection?.id);
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
@@ -4723,6 +4919,7 @@ const main = async () => {
     let persistedRadioFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedLinkBehavior = null;
+    let persistedFormBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
@@ -4824,6 +5021,9 @@ const main = async () => {
         : null;
       persistedLinkBehavior = linkBehaviorControls
         ? await assertPersistedLinkBehavior(tempPageId)
+        : null;
+      persistedFormBehavior = formBehaviorControls
+        ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
         : null;
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
@@ -4956,6 +5156,7 @@ const main = async () => {
       radioFieldBehaviorControls,
       buttonLinkBehaviorControls,
       linkBehaviorControls,
+      formBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
       mapBehaviorControls,
@@ -4982,6 +5183,7 @@ const main = async () => {
       persistedRadioFieldBehavior,
       persistedButtonLinkBehavior,
       persistedLinkBehavior,
+      persistedFormBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
       persistedMapBehavior,

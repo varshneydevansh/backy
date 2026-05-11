@@ -453,6 +453,8 @@ export function PropertyPanel({
           <ContentProperties
             element={element}
             onChange={updateProps}
+            collections={collections}
+            collectionsError={collectionsError}
             elementId={element.id}
             onOpenMedia={(field, mode = 'library') => {
               setMediaField(field);
@@ -632,6 +634,8 @@ interface ContentPropertiesProps {
   onChange: (updates: Partial<ElementProps>) => void;
   onOpenMedia: (field: 'src' | 'video', mode?: 'library' | 'upload') => void;
   onOpenEmoji: () => void;
+  collections: Collection[];
+  collectionsError: string | null;
   elementId?: string;
 }
 
@@ -640,6 +644,8 @@ function ContentProperties({
   onChange,
   onOpenMedia,
   onOpenEmoji,
+  collections,
+  collectionsError,
   elementId,
 }: ContentPropertiesProps) {
   const normalizedType = normalizeCanvasElementType(element.type);
@@ -1665,6 +1671,7 @@ function ContentProperties({
               type="text"
               value={element.props.formTitle || ''}
               onChange={(e) => onChange({ formTitle: e.target.value })}
+              data-testid="editor-form-title"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1680,6 +1687,7 @@ function ContentProperties({
               type="text"
               value={element.props.formId || ''}
               onChange={(e) => onChange({ formId: e.target.value })}
+              data-testid="editor-form-id"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1692,6 +1700,7 @@ function ContentProperties({
               type="checkbox"
               checked={element.props.formActive !== false && String(element.props.formActive || '').toLowerCase() !== 'false'}
               onChange={(e) => onChange({ formActive: e.target.checked })}
+              data-testid="editor-form-active"
             />
             Active for public submissions
           </label>
@@ -1702,6 +1711,7 @@ function ContentProperties({
             <select
               value={element.props.formAudience || 'public'}
               onChange={(e) => onChange({ formAudience: e.target.value as 'public' | 'authenticated' | 'adminOnly' })}
+              data-testid="editor-form-audience"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1720,6 +1730,7 @@ function ContentProperties({
               type="text"
               value={element.props.actionUrl || element.props.action || ''}
               onChange={(e) => onChange({ actionUrl: e.target.value })}
+              data-testid="editor-form-action-url"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1734,6 +1745,7 @@ function ContentProperties({
             <select
               value={element.props.method || 'POST'}
               onChange={(e) => onChange({ method: e.target.value as 'GET' | 'POST' | 'PUT' })}
+              data-testid="editor-form-method"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1752,6 +1764,7 @@ function ContentProperties({
               type="text"
               value={element.props.successMessage || ''}
               onChange={(e) => onChange({ successMessage: e.target.value })}
+              data-testid="editor-form-success-message"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1772,6 +1785,7 @@ function ContentProperties({
                   redirectUrl: e.target.value,
                 })
               }
+              data-testid="editor-form-success-redirect-url"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1787,6 +1801,7 @@ function ContentProperties({
               type="email"
               value={element.props.notificationEmail || ''}
               onChange={(e) => onChange({ notificationEmail: e.target.value })}
+              data-testid="editor-form-notification-email"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1802,6 +1817,7 @@ function ContentProperties({
               type="url"
               value={element.props.notificationWebhook || ''}
               onChange={(e) => onChange({ notificationWebhook: e.target.value })}
+              data-testid="editor-form-notification-webhook"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1814,6 +1830,7 @@ function ContentProperties({
               type="checkbox"
               checked={Boolean(element.props.enableHoneypot)}
               onChange={(e) => onChange({ enableHoneypot: e.target.checked })}
+              data-testid="editor-form-enable-honeypot"
             />
             Enable spam protection (honeypot)
           </label>
@@ -1822,6 +1839,7 @@ function ContentProperties({
               type="checkbox"
               checked={Boolean(element.props.enableCaptcha)}
               onChange={(e) => onChange({ enableCaptcha: e.target.checked })}
+              data-testid="editor-form-enable-captcha"
             />
             Require captcha challenge
           </label>
@@ -1832,6 +1850,7 @@ function ContentProperties({
             <select
               value={element.props.moderationMode || 'manual'}
               onChange={(e) => onChange({ moderationMode: e.target.value as 'manual' | 'auto-approve' })}
+              data-testid="editor-form-moderation-mode"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1846,6 +1865,7 @@ function ContentProperties({
               type="checkbox"
               checked={Boolean(element.props.contactShareEnabled)}
               onChange={(e) => onChange({ contactShareEnabled: e.target.checked })}
+              data-testid="editor-form-contact-share-enabled"
             />
             Enable lead/share capture on approve
           </label>
@@ -1859,6 +1879,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.contactShareNameField || ''}
                   onChange={(e) => onChange({ contactShareNameField: e.target.value })}
+                  data-testid="editor-form-contact-share-name-field"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1874,6 +1895,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.contactShareEmailField || ''}
                   onChange={(e) => onChange({ contactShareEmailField: e.target.value })}
+                  data-testid="editor-form-contact-share-email-field"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1889,6 +1911,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.contactSharePhoneField || ''}
                   onChange={(e) => onChange({ contactSharePhoneField: e.target.value })}
+                  data-testid="editor-form-contact-share-phone-field"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1904,6 +1927,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.contactShareNotesField || ''}
                   onChange={(e) => onChange({ contactShareNotesField: e.target.value })}
+                  data-testid="editor-form-contact-share-notes-field"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1916,6 +1940,7 @@ function ContentProperties({
                   type="checkbox"
                   checked={element.props.contactShareDedupeByEmail !== false}
                   onChange={(e) => onChange({ contactShareDedupeByEmail: e.target.checked })}
+                  data-testid="editor-form-contact-share-dedupe-by-email"
                 />
                 Deduplicate contacts by email
               </label>
@@ -1926,6 +1951,7 @@ function ContentProperties({
               type="checkbox"
               checked={Boolean(element.props.collectionWriteEnabled)}
               onChange={(e) => onChange({ collectionWriteEnabled: e.target.checked })}
+              data-testid="editor-form-collection-write-enabled"
             />
             Create draft collection record on submit
           </label>
@@ -1938,6 +1964,7 @@ function ContentProperties({
                 <select
                   value={element.props.collectionWriteCollectionId || ''}
                   onChange={(e) => onChange({ collectionWriteCollectionId: e.target.value })}
+                  data-testid="editor-form-collection-write-collection"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1962,6 +1989,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.collectionWriteSlugField || ''}
                   onChange={(e) => onChange({ collectionWriteSlugField: e.target.value })}
+                  data-testid="editor-form-collection-write-slug-field"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1976,6 +2004,7 @@ function ContentProperties({
                 <textarea
                   value={formatFieldMap(element.props.collectionWriteFieldMap)}
                   onChange={(e) => onChange({ collectionWriteFieldMap: parseFieldMapInput(e.target.value) })}
+                  data-testid="editor-form-collection-write-field-map"
                   className={cn(
                     'min-h-[80px] w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
