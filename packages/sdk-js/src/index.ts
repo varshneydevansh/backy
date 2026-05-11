@@ -1073,6 +1073,18 @@ export class BackyClient {
     });
   }
 
+  recordsCached<TValues extends Record<string, unknown> = Record<string, unknown>>(
+    collectionId: string,
+    options: BackyCollectionRecordListOptions & BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
+  }
+
   commerceCatalog(options: BackyCommerceCatalogOptions = {}): Promise<BackyEnvelope<BackyCommerceCatalog>> {
     const { requestId, siteId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {

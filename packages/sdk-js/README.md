@@ -38,7 +38,7 @@ const order = await backy.createCommerceOrder({
 console.log(order.data.order.orderNumber, order.data.order.paymentStatus);
 ```
 
-Conditional discovery/render/SEO helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
+Conditional discovery/render/SEO/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
 
 ```ts
 const first = await backy.renderCached('/');
@@ -58,6 +58,13 @@ const seoSecond = await backy.seoCached({ etag: seoFirst.meta.etag });
 
 if (seoSecond.notModified) {
   console.log('Reuse your cached SEO route index.');
+}
+
+const recordsFirst = await backy.recordsCached<{ title: string }>('articles', { limit: 10 });
+const recordsSecond = await backy.recordsCached('articles', { limit: 10, etag: recordsFirst.meta.etag });
+
+if (recordsSecond.notModified) {
+  console.log('Reuse your cached collection records.');
 }
 ```
 

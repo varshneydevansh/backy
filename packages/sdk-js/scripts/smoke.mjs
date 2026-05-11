@@ -122,6 +122,24 @@ async function createSdkSmokeFixture() {
   const collectionId = collection.json?.data?.collection?.id;
   assert(collectionId, 'temporary SDK smoke collection missing id');
 
+  const publishedRecordSlug = `sdk-published-record-${unique}`;
+  const publishedRecord = await request(`/api/admin/sites/${siteId}/collections/${collectionId}/records`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      slug: publishedRecordSlug,
+      status: 'published',
+      values: {
+        title: 'SDK Published Record',
+        summary: 'Published record for SDK cached reads.',
+        category: 'Featured',
+      },
+    }),
+  });
+  assert(publishedRecord.response.status === 201, `${publishedRecord.url} expected record create 201, got ${publishedRecord.response.status}`);
+  const publishedRecordId = publishedRecord.json?.data?.record?.id;
+  assert(publishedRecordId, 'temporary SDK smoke published record missing id');
+
   const page = await request(`/api/admin/sites/${siteId}/pages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -298,6 +316,8 @@ async function createSdkSmokeFixture() {
     redirectPath,
     gonePath,
     collectionId,
+    publishedRecordId,
+    publishedRecordSlug,
     reusableSectionId,
   };
 }
@@ -504,6 +524,20 @@ if (runWriteSmoke) {
     }, `sdk-public-record-${Date.now()}`);
     assert(createdRecord.data.record?.status === 'draft', 'createRecord() should create draft public records');
     writeChecks.push('createRecord');
+
+    const cachedRecords = await writeClient.recordsCached(fixture.collectionId, {
+      slug: fixture.publishedRecordSlug,
+    });
+    assert(cachedRecords.notModified === false, 'recordsCached() should return SDK smoke collection records body');
+    assert(cachedRecords.body?.data?.records?.some?.((record) => record.id === fixture.publishedRecordId), 'recordsCached() missing published SDK smoke record');
+    assert(cachedRecords.meta.cacheScope === 'discovery', 'recordsCached() expected discovery cache scope');
+    assert(cachedRecords.meta.etag, 'recordsCached() SDK smoke missing response ETag');
+    const revalidatedRecords = await writeClient.recordsCached(fixture.collectionId, {
+      slug: fixture.publishedRecordSlug,
+      etag: cachedRecords.meta.etag,
+    });
+    assert(revalidatedRecords.notModified === true, 'recordsCached() SDK smoke revalidation failed');
+    writeChecks.push('recordsCached');
 
     const form = await writeClient.form('sdk-smoke-form');
     assert(form.data.form?.id === 'sdk-smoke-form', 'form() missing SDK smoke form');
