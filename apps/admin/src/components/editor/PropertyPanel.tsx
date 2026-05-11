@@ -1288,7 +1288,7 @@ function ContentProperties({
               <input
                 type="checkbox"
                 id={`required-${element.id}`}
-                checked={Boolean(element.props.required)}
+                checked={parseBooleanSetting(element.props.required)}
                 onChange={(e) => onChange({ required: e.target.checked })}
                 data-testid="editor-field-required"
               />
@@ -1298,7 +1298,7 @@ function ContentProperties({
               <input
                 type="checkbox"
                 id={`disabled-${element.id}`}
-                checked={Boolean(element.props.disabled)}
+                checked={parseBooleanSetting(element.props.disabled)}
                 onChange={(e) => onChange({ disabled: e.target.checked })}
                 data-testid="editor-field-disabled"
               />
@@ -2036,7 +2036,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={Boolean(element.props.enableHoneypot)}
+              checked={parseBooleanSetting(element.props.enableHoneypot)}
               onChange={(e) => onChange({ enableHoneypot: e.target.checked })}
               data-testid="editor-form-enable-honeypot"
             />
@@ -2045,7 +2045,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={Boolean(element.props.enableCaptcha)}
+              checked={parseBooleanSetting(element.props.enableCaptcha)}
               onChange={(e) => onChange({ enableCaptcha: e.target.checked })}
               data-testid="editor-form-enable-captcha"
             />
@@ -2071,13 +2071,13 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={Boolean(element.props.contactShareEnabled)}
+              checked={parseBooleanSetting(element.props.contactShareEnabled)}
               onChange={(e) => onChange({ contactShareEnabled: e.target.checked })}
               data-testid="editor-form-contact-share-enabled"
             />
             Enable lead/share capture on approve
           </label>
-          {Boolean(element.props.contactShareEnabled) && (
+          {parseBooleanSetting(element.props.contactShareEnabled) && (
             <>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
@@ -2146,7 +2146,7 @@ function ContentProperties({
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
-                  checked={element.props.contactShareDedupeByEmail !== false}
+                  checked={parseBooleanSetting(element.props.contactShareDedupeByEmail, true)}
                   onChange={(e) => onChange({ contactShareDedupeByEmail: e.target.checked })}
                   data-testid="editor-form-contact-share-dedupe-by-email"
                 />
@@ -2157,13 +2157,13 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={Boolean(element.props.collectionWriteEnabled)}
+              checked={parseBooleanSetting(element.props.collectionWriteEnabled)}
               onChange={(e) => onChange({ collectionWriteEnabled: e.target.checked })}
               data-testid="editor-form-collection-write-enabled"
             />
             Create draft collection record on submit
           </label>
-          {Boolean(element.props.collectionWriteEnabled) && (
+          {parseBooleanSetting(element.props.collectionWriteEnabled) && (
             <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
