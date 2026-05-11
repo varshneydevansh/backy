@@ -12,6 +12,7 @@ const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
+const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -2745,6 +2746,182 @@ const testZOrderQuickControls = async (client, elementId) => {
     backward,
     undone,
     redone,
+  };
+};
+
+const openPageSettingsDialog = async (client) => {
+  let settingsOpened = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    settingsOpened = await evaluate(client, `(() => {
+      const button = document.querySelector('button[aria-label="Page settings"]');
+      const dialog = document.querySelector('[data-testid="page-settings-dialog"]');
+      if (dialog instanceof HTMLElement) {
+        return { ok: true, clicked: false, disabled: false };
+      }
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'settings-button-missing' };
+      }
+      if (button.disabled) {
+        return { ok: false, reason: 'settings-button-disabled', disabled: true };
+      }
+      button.click();
+      return { ok: false, clicked: true, disabled: false };
+    })()`);
+    if (settingsOpened?.ok) {
+      break;
+    }
+    await sleep(150);
+  }
+
+  assert(settingsOpened?.ok, `Unable to open page settings dialog: ${JSON.stringify(settingsOpened)}`);
+  return settingsOpened;
+};
+
+const clickPageSettingsTab = async (client, tab) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="page-settings-tab-${tab}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        tab: ${JSON.stringify(tab)},
+        dialogText: document.querySelector('[data-testid="page-settings-dialog"]')?.textContent?.slice(0, 500) || '',
+      };
+    }
+    button.click();
+    return { ok: true, tab: ${JSON.stringify(tab)} };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click page settings ${tab} tab: ${JSON.stringify(clicked)}`);
+  await sleep(200);
+  return clicked;
+};
+
+const clickPageSettingsSave = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="page-settings-save"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-save-button' };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'save-disabled', text: button.textContent || '' };
+    }
+    button.click();
+    return { ok: true, text: button.textContent || '' };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click page settings save: ${JSON.stringify(clicked)}`);
+  await sleep(300);
+  return clicked;
+};
+
+const readPageSettingsValidation = async (client) => (
+  evaluate(client, `(() => {
+    const validation = document.querySelector('[data-testid="page-settings-validation-error"]');
+    return {
+      present: Boolean(validation),
+      text: validation?.textContent || '',
+      dialogOpen: Boolean(document.querySelector('[data-testid="page-settings-dialog"]')),
+    };
+  })()`)
+);
+
+const waitForPageSettingsPersisted = async (pageId, expected) => {
+  let lastPage = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const page = payload.data?.page;
+    lastPage = page;
+    const meta = page?.meta || {};
+    const jsonLd = Array.isArray(meta.jsonLd) ? meta.jsonLd : [];
+    const keywords = Array.isArray(meta.keywords) ? meta.keywords : [];
+
+    const matches = page &&
+      page.title === expected.title &&
+      page.slug === expected.slug &&
+      page.status === expected.status &&
+      meta.title === expected.meta.title &&
+      meta.description === expected.meta.description &&
+      meta.ogImage === expected.meta.ogImage &&
+      JSON.stringify(keywords) === JSON.stringify(expected.meta.keywords) &&
+      JSON.stringify(jsonLd) === JSON.stringify(expected.meta.jsonLd);
+
+    if (matches) {
+      return page;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Page settings did not persist: expected ${JSON.stringify(expected)}, got ${JSON.stringify(lastPage)}`);
+};
+
+const testPageSettingsControls = async (client, pageId) => {
+  assert(pageId, 'Page settings smoke requires an internally created smoke page');
+  const suffix = Date.now().toString(36);
+  const expected = {
+    title: `Settings Smoke ${suffix}`,
+    slug: `settings-smoke-${suffix}`,
+    status: 'draft',
+    meta: {
+      title: `Settings Meta ${suffix}`,
+      description: `Settings smoke description ${suffix}`,
+      keywords: ['cms', 'canva builder', 'headless'],
+      ogImage: `https://cdn.backy.test/settings-${suffix}.jpg`,
+      jsonLd: [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: `Settings Smoke ${suffix}`,
+        },
+      ],
+    },
+  };
+
+  await openPageSettingsDialog(client);
+  await setFormControlByTestId(client, 'page-settings-status', 'scheduled');
+  await clickPageSettingsSave(client);
+  const scheduledValidation = await readPageSettingsValidation(client);
+  assert(
+    scheduledValidation.present && /publish date/i.test(scheduledValidation.text),
+    `Scheduled settings save did not require a publish date: ${JSON.stringify(scheduledValidation)}`,
+  );
+
+  await setFormControlByTestId(client, 'page-settings-title', expected.title);
+  await setFormControlByTestId(client, 'page-settings-slug', expected.slug);
+  await setFormControlByTestId(client, 'page-settings-status', expected.status);
+
+  await clickPageSettingsTab(client, 'seo');
+  await setFormControlByTestId(client, 'page-settings-meta-title', expected.meta.title);
+  await setFormControlByTestId(client, 'page-settings-meta-description', expected.meta.description);
+  await setFormControlByTestId(client, 'page-settings-keywords', expected.meta.keywords.join(', '));
+  await setFormControlByTestId(client, 'page-settings-json-ld', JSON.stringify(expected.meta.jsonLd, null, 2));
+
+  await clickPageSettingsTab(client, 'social');
+  await setFormControlByTestId(client, 'page-settings-og-image', expected.meta.ogImage);
+
+  await clickPageSettingsSave(client);
+  let closed = false;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    closed = await evaluate(client, `(() => !document.querySelector('[data-testid="page-settings-dialog"]'))()`);
+    if (closed) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(closed === true, 'Page settings dialog did not close after successful save');
+  const savedStatus = await waitForEditorMutationReady(client, 'after page settings smoke save');
+  const persisted = await waitForPageSettingsPersisted(pageId, expected);
+
+  return {
+    expected,
+    scheduledValidation,
+    savedStatus,
+    persisted: {
+      title: persisted.title,
+      slug: persisted.slug,
+      status: persisted.status,
+      meta: persisted.meta,
+    },
   };
 };
 
@@ -5488,8 +5665,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -5544,6 +5721,19 @@ const main = async () => {
         targetElementId,
         zOrderControls,
         savedStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (PAGE_SETTINGS_SMOKE) {
+      assert(!EDITOR_PATH, 'Page settings smoke currently requires an internally created smoke page');
+      const pageSettings = await testPageSettingsControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'page-settings',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageSettings,
       }, null, 2));
       return;
     }

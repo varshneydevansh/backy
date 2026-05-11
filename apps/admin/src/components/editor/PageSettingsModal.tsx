@@ -125,11 +125,12 @@ export function PageSettingsModal({
         setValidationError(null);
 
         try {
+            const finalKeywords = normalizeKeywords([...keywords, keywordDraft]);
             await Promise.resolve(onSave({
                 ...settings,
                 meta: {
                     ...settings.meta,
-                    keywords,
+                    keywords: finalKeywords,
                     jsonLd: parsedJsonLd.value,
                 },
             }));
@@ -171,6 +172,7 @@ export function PageSettingsModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="page-settings-dialog-title"
+            data-testid="page-settings-dialog"
         >
             <div className="w-[500px] bg-background border border-border rounded-lg shadow-xl flex flex-col max-h-[85vh]">
                 {/* Header */}
@@ -179,6 +181,7 @@ export function PageSettingsModal({
                     <button
                         onClick={onClose}
                         className="p-1 rounded-md hover:bg-muted text-muted-foreground"
+                        aria-label="Close page settings"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -188,6 +191,7 @@ export function PageSettingsModal({
                 <div className="flex px-4 border-b border-border gap-6">
                     <button
                         onClick={() => setActiveTab('general')}
+                        data-testid="page-settings-tab-general"
                         className={cn(
                             'py-3 text-sm font-medium border-b-2 transition-colors',
                             activeTab === 'general'
@@ -199,6 +203,7 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={() => setActiveTab('seo')}
+                        data-testid="page-settings-tab-seo"
                         className={cn(
                             'py-3 text-sm font-medium border-b-2 transition-colors',
                             activeTab === 'seo'
@@ -210,6 +215,7 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={() => setActiveTab('social')}
+                        data-testid="page-settings-tab-social"
                         className={cn(
                             'py-3 text-sm font-medium border-b-2 transition-colors',
                             activeTab === 'social'
@@ -226,7 +232,10 @@ export function PageSettingsModal({
                     {activeTab === 'general' && (
                         <div className="space-y-4">
                             {validationError && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                <div
+                                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                                    data-testid="page-settings-validation-error"
+                                >
                                     {validationError}
                                 </div>
                             )}
@@ -239,6 +248,7 @@ export function PageSettingsModal({
                                     onChange={(e) => setSettings({ ...settings, title: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="e.g. valid-title"
+                                    data-testid="page-settings-title"
                                 />
                             </div>
 
@@ -254,6 +264,7 @@ export function PageSettingsModal({
                                         onChange={(e) => setSettings({ ...settings, slug: e.target.value })}
                                         className="flex-1 px-3 py-2 border rounded-r-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                         placeholder="about-us"
+                                        data-testid="page-settings-slug"
                                     />
                                 </div>
                             </div>
@@ -277,6 +288,7 @@ export function PageSettingsModal({
                                         });
                                     }}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    data-testid="page-settings-status"
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
@@ -297,6 +309,7 @@ export function PageSettingsModal({
                                         })}
                                         onFocus={() => setValidationError(null)}
                                         className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                        data-testid="page-settings-scheduled-at"
                                     />
                                     <p className="mt-1 text-xs text-muted-foreground">
                                         Scheduled pages go live automatically after this time.
@@ -309,7 +322,10 @@ export function PageSettingsModal({
                     {activeTab === 'seo' && (
                         <div className="space-y-4">
                             {validationError && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                <div
+                                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                                    data-testid="page-settings-validation-error"
+                                >
                                     {validationError}
                                 </div>
                             )}
@@ -341,6 +357,7 @@ export function PageSettingsModal({
                                     }
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="Title shown in search results"
+                                    data-testid="page-settings-meta-title"
                                 />
                             </div>
 
@@ -357,6 +374,7 @@ export function PageSettingsModal({
                                     rows={3}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="Description shown in search results"
+                                    data-testid="page-settings-meta-description"
                                 />
                             </div>
 
@@ -396,6 +414,7 @@ export function PageSettingsModal({
                                             onBlur={addKeywordDraft}
                                             className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-sm outline-none"
                                             placeholder={keywords.length ? 'Add keyword...' : 'cms, website builder, portfolio'}
+                                            data-testid="page-settings-keywords"
                                         />
                                     </div>
                                 </div>
@@ -415,6 +434,7 @@ export function PageSettingsModal({
                                     rows={6}
                                     className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs leading-5 focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder='[{"@context":"https://schema.org","@type":"WebPage"}]'
+                                    data-testid="page-settings-json-ld"
                                 />
                             </div>
                         </div>
@@ -483,6 +503,7 @@ export function PageSettingsModal({
                                     }
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="https://..."
+                                    data-testid="page-settings-og-image"
                                 />
                             </div>
                         </div>
@@ -494,6 +515,7 @@ export function PageSettingsModal({
                     <button
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-medium text-foreground hover:bg-accent rounded-md"
+                        data-testid="page-settings-cancel"
                     >
                         Cancel
                     </button>
@@ -501,6 +523,7 @@ export function PageSettingsModal({
                         onClick={handleSave}
                         disabled={Boolean(settingsValidation) || isSavingSettings}
                         className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:opacity-50"
+                        data-testid="page-settings-save"
                     >
                         {isSavingSettings ? 'Saving...' : 'Save Changes'}
                     </button>

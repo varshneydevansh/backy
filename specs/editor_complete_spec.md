@@ -22,7 +22,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 8 | Breakpoint Toggle | ⚠️ | Desktop/Tablet/Mobile - UI only |
 | 9 | Undo/Redo Buttons | ✅ | Toolbar and shortcut undo/redo restore distinct canvas states |
 | 10 | Save Button | ❌ | UI exists, not functional |
-| 11 | Page Settings | ❌ | Button exists, not functional |
+| 11 | Page Settings | ✅ | Modal edits title, slug, status/schedule, SEO, JSON-LD, keywords, and social image with persistence coverage |
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ❌ | No way to delete |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
@@ -197,16 +197,13 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 11. Page Settings Button
 **File:** `pages.$pageId.edit.tsx`
-**Current State:** ❌ Not Functional
-- Settings icon in toolbar
-- No modal/dialog
-- **Required Implementation:**
-    - Page title editor
-    - Page slug editor
-    - SEO meta: title, description, keywords
-    - Social sharing image
-    - Canvas size configuration
-    - Page status (draft/published)
+**Current State:** ✅ Working
+- Settings icon opens `PageSettingsModal`.
+- General tab edits page title, slug, status, and scheduled publish time.
+- SEO tab edits meta title, meta description, keywords, and JSON-LD with JSON validation.
+- Social tab edits/removes OG image URL and can select an image from the media library.
+- Save validates route/title/scheduled status, persists through the page editor `onSave` path, closes the dialog, and updates editor save metadata.
+- `BACKY_EDITOR_PAGE_SETTINGS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers scheduled-date validation, settings save status, and persisted title/slug/status/meta/keywords/JSON-LD/OG image.
 
 ### 12. Z-Index Control (Bring to Front/Back)
 **File:** `PropertyPanel.tsx` (Layout section)
@@ -385,7 +382,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Finalize selected-text style persistence (font family/decoration on partially selected ranges)
 
 **Important (Should Have)**
-- ❌ Page Settings modal
+- ✅ Page Settings modal
 - ❌ Duplicate element
 - ✅ Z-Index quick controls (bring/send forward/back)
 - ❌ Keyboard shortcuts
@@ -424,7 +421,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Phase 2: Core Functionality**
 - Save page to database
 - Load existing page
-- Page Settings modal
 - Duplicate element
 
 **Phase 3: Usability**
