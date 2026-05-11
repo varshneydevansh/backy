@@ -737,6 +737,15 @@ interface ApiContactSyncResponse {
   };
 }
 
+interface ApiContactConsentRetentionResponse {
+  success: boolean;
+  data?: ContactConsentRetentionResult;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiContactResponse {
   success: boolean;
   data?: {
@@ -1709,6 +1718,39 @@ export interface ContactSyncDelivery {
 export interface ContactSyncResult {
   formId: string;
   delivery: ContactSyncDelivery;
+}
+
+export interface ContactConsentEvidence {
+  id: string;
+  formId: string;
+  pageId?: string | null;
+  postId?: string | null;
+  status: ContactStatus;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  requestId?: string | null;
+  sourceSubmissionId?: string | null;
+  sourceIpHash?: string | null;
+  consentValues: Record<string, unknown>;
+  dueAt?: string | null;
+  due: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactConsentRetentionResult {
+  formId: string;
+  dryRun: boolean;
+  policy: {
+    deleteAfterDays: number;
+    now: string;
+  };
+  consentFieldKeys: string[];
+  scanned: number;
+  due: number;
+  anonymized: number;
+  contacts: ContactConsentEvidence[];
 }
 
 export interface ContactCustomerPromotionResult {
@@ -3747,6 +3789,25 @@ export async function syncFormContacts(
     formId: payload.data.formId,
     delivery,
   };
+}
+
+export async function applyContactConsentRetention(
+  siteId: string,
+  formId: string,
+  input: { contactIds?: string[]; dryRun?: boolean; retentionDays?: number; actor?: string },
+): Promise<ContactConsentRetentionResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/consent-retention`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactConsentRetentionResponse>(response);
+  const result = payload.data;
+
+  if (!response.ok || !payload.success || !result?.formId) {
+    throw new Error(payload.error?.message || 'Unable to apply contact consent retention');
+  }
+
+  return result;
 }
 
 export async function createFormContact(

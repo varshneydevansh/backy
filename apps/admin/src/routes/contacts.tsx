@@ -23,6 +23,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import {
+  applyContactConsentRetention,
   createFormContact,
   deleteContactSavedList,
   getAdminApiBase,
@@ -37,6 +38,7 @@ import {
   listForms,
   updateContact,
   type AdminContact,
+  type ContactConsentRetentionResult,
   type ContactSyncDelivery,
   type ContactSavedList,
   type ContactSegmentAnalytics,
@@ -249,6 +251,8 @@ function ContactsRoute() {
   const [savedListName, setSavedListName] = useState('');
   const [contactSyncTarget, setContactSyncTarget] = useState('');
   const [lastContactSync, setLastContactSync] = useState<ContactSyncDelivery | null>(null);
+  const [contactRetentionDays, setContactRetentionDays] = useState('0');
+  const [lastContactRetention, setLastContactRetention] = useState<ContactConsentRetentionResult | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -284,6 +288,9 @@ function ContactsRoute() {
     : '';
   const contactSyncUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/sync`
+    : '';
+  const contactConsentRetentionUrl = apiForm
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/consent-retention`
     : '';
   const contactCreateUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts`
@@ -544,6 +551,7 @@ function ContactsRoute() {
         promoteUser: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}/promote`,
         promoteCustomer: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}/promote-customer`,
         sync: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/sync`,
+        consentRetention: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/consent-retention`,
         create: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts`,
         import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
@@ -599,6 +607,14 @@ function ContactsRoute() {
       lastStatus: lastContactSync?.status || null,
       lastCount: lastContactSync?.count || 0,
       lastTarget: lastContactSync?.target || null,
+    },
+    retention: {
+      selectedEndpoint: contactConsentRetentionUrl,
+      retentionDays: Number.parseInt(contactRetentionDays, 10) || 0,
+      lastScanned: lastContactRetention?.scanned || 0,
+      lastDue: lastContactRetention?.due || 0,
+      lastAnonymized: lastContactRetention?.anonymized || 0,
+      consentFieldKeys: lastContactRetention?.consentFieldKeys || [],
     },
     filters: {
       formId: selectedFormId,
@@ -686,9 +702,11 @@ function ContactsRoute() {
     apiForm,
     bulkContactStatus,
     canMergeSelectedContacts,
+    contactConsentRetentionUrl,
     contactCreateUrl,
     contactImportUrl,
     contactListsUrl,
+    contactRetentionDays,
     contactSyncUrl,
     contactPromoteCustomerUrl,
     contactSavedLists,
@@ -706,6 +724,7 @@ function ContactsRoute() {
     forms,
     metrics,
     lastContactSync,
+    lastContactRetention,
     adminBaseUrl,
     qualityFilter,
     searchQuery,
@@ -977,6 +996,141 @@ function ContactsRoute() {
       } else {
         setNotice(`Synced ${syncedCount} selected contact${syncedCount === 1 ? '' : 's'} to webhook.`);
       }
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const parseRetentionDays = () => {
+    const parsed = Number.parseInt(contactRetentionDays, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  };
+
+  const combineContactRetentionResults = (
+    results: ContactConsentRetentionResult[],
+    dryRun: boolean,
+  ): ContactConsentRetentionResult => ({
+    formId: results.length === 1 ? results[0].formId : 'multiple',
+    dryRun,
+    policy: results.at(-1)?.policy || { deleteAfterDays: parseRetentionDays(), now: new Date().toISOString() },
+    consentFieldKeys: Array.from(new Set(results.flatMap((result) => result.consentFieldKeys))),
+    scanned: results.reduce((sum, result) => sum + result.scanned, 0),
+    due: results.reduce((sum, result) => sum + result.due, 0),
+    anonymized: results.reduce((sum, result) => sum + result.anonymized, 0),
+    contacts: results.flatMap((result) => result.contacts),
+  });
+
+  const downloadContactRetentionCsv = (result: ContactConsentRetentionResult) => {
+    const consentKeys = result.consentFieldKeys;
+    const header = [
+      'contact_id',
+      'form_id',
+      'status',
+      'name',
+      'email',
+      'phone',
+      'request_id',
+      'source_submission_id',
+      'source_ip_hash',
+      'due',
+      'due_at',
+      'created_at',
+      'updated_at',
+      ...consentKeys.map((key) => `consent_${key}`),
+    ];
+    const rows = result.contacts.map((contact) => [
+      contact.id,
+      contact.formId,
+      contact.status,
+      contact.name || '',
+      contact.email || '',
+      contact.phone || '',
+      contact.requestId || '',
+      contact.sourceSubmissionId || '',
+      contact.sourceIpHash || '',
+      contact.due ? 'yes' : 'no',
+      contact.dueAt || '',
+      contact.createdAt || '',
+      contact.updatedAt || '',
+      ...consentKeys.map((key) => formatContactSourceValue(contact.consentValues?.[key])),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteId}-contact-consent-evidence.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleContactRetention = async (dryRun: boolean) => {
+    if (isContactsBusy) return;
+
+    if (selectedContacts.length === 0) {
+      setError(null);
+      setNotice('Select at least one visible contact before running contact retention.');
+      return;
+    }
+
+    const retentionDays = parseRetentionDays();
+    const contactsBySourceForm = selectedContacts.reduce((groups, contact) => {
+      groups.set(contact.formId, [...(groups.get(contact.formId) || []), contact]);
+      return groups;
+    }, new Map<string, AdminContact[]>());
+
+    setUpdatingId(dryRun ? 'export-contact-retention' : 'apply-contact-retention');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const results = await Promise.all(
+        Array.from(contactsBySourceForm.entries()).map(([formId, contacts]) => (
+          applyContactConsentRetention(activeSiteId, formId, {
+            contactIds: contacts.map((contact) => contact.id),
+            dryRun,
+            retentionDays,
+            actor: 'admin',
+          })
+        )),
+      );
+      const combined = combineContactRetentionResults(results, dryRun);
+      setLastContactRetention(combined);
+
+      if (dryRun) {
+        downloadContactRetentionCsv(combined);
+        setNotice(`Exported consent evidence for ${combined.contacts.length} selected contact${combined.contacts.length === 1 ? '' : 's'}; ${combined.due} due for retention.`);
+        return;
+      }
+
+      const refreshed = await Promise.all(
+        Array.from(contactsBySourceForm.keys()).map(async (formId) => {
+          const form = formById.get(formId);
+          if (!form) return null;
+          const inbox = await listFormContacts(activeSiteId, formId, { limit: 100 });
+          return { formId, form, inbox };
+        }),
+      );
+      setContactsByForm((current) => {
+        const next = { ...current };
+        refreshed.forEach((entry) => {
+          if (!entry) return;
+          next[entry.formId] = {
+            form: entry.form,
+            contacts: entry.inbox.contacts,
+            total: entry.inbox.count,
+          };
+        });
+        return next;
+      });
+      setSelectedContactIds([]);
+      setNotice(`Anonymized consent evidence for ${combined.anonymized} due contact${combined.anonymized === 1 ? '' : 's'}.`);
+    } catch (retentionError) {
+      setError(retentionError instanceof Error ? retentionError.message : 'Unable to run contact retention');
     } finally {
       setUpdatingId(null);
     }
@@ -1936,12 +2090,13 @@ function ContactsRoute() {
                 <MetaTile label="Selected" value={`${selectedContactIds.length} contact${selectedContactIds.length === 1 ? '' : 's'}`} />
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-6">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
                 <ApiSnippet label="List contacts" value={contactsUrl} />
                 <ApiSnippet label="Update contact" value={contactUpdateUrl} />
                 <ApiSnippet label="Promote user" value={contactPromoteUserUrl} />
                 <ApiSnippet label="Promote customer" value={contactPromoteCustomerUrl} />
                 <ApiSnippet label="Sync contacts" value={contactSyncUrl} />
+                <ApiSnippet label="Consent retention" value={contactConsentRetentionUrl} />
                 <ApiSnippet label="Create contact" value={contactCreateUrl} />
                 <ApiSnippet label="Import contacts" value={contactImportUrl} />
               </div>
@@ -2193,6 +2348,39 @@ function ContactsRoute() {
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  Retention days
+                  <input
+                    type="number"
+                    min={0}
+                    value={contactRetentionDays}
+                    disabled={isContactsBusy}
+                    onChange={(event) => setContactRetentionDays(event.target.value)}
+                    className="min-h-10 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Contact consent retention days"
+                    data-testid="contacts-retention-days"
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  onClick={() => void handleContactRetention(true)}
+                  iconStart={<Download className="size-4" />}
+                  data-testid="contacts-retention-export"
+                >
+                  Export evidence
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  onClick={() => void handleContactRetention(false)}
+                  iconStart={<ShieldCheck className="size-4" />}
+                  data-testid="contacts-retention-apply"
+                >
+                  Apply retention
+                </Button>
                 <input
                   type="url"
                   value={contactSyncTarget}
@@ -2251,6 +2439,14 @@ function ContactsRoute() {
                 {' '}for {lastContactSync.count} contact{lastContactSync.count === 1 ? '' : 's'} to{' '}
                 <span className="break-all font-mono">{lastContactSync.target}</span>
                 {lastContactSync.statusCode ? ` (${lastContactSync.statusCode})` : ''}
+              </div>
+            ) : null}
+            {lastContactRetention ? (
+              <div className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="contacts-retention-summary">
+                Last retention: scanned <span className="font-semibold text-foreground">{lastContactRetention.scanned}</span>,
+                {' '}due <span className="font-semibold text-foreground">{lastContactRetention.due}</span>,
+                {' '}anonymized <span className="font-semibold text-foreground">{lastContactRetention.anonymized}</span>
+                {' '}with {lastContactRetention.consentFieldKeys.length || 0} consent field{lastContactRetention.consentFieldKeys.length === 1 ? '' : 's'}.
               </div>
             ) : null}
           </div>

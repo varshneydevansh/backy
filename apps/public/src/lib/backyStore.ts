@@ -7548,6 +7548,35 @@ export function updateContactStatus(
   return clone(contact);
 }
 
+export function anonymizeFormContactConsentEvidence(
+  formId: string,
+  contactId: string,
+  consentFieldKeys: string[],
+  actor = 'admin',
+): Contact | undefined {
+  refreshPersistedInteractionStore();
+
+  const contact = contactStore.find((item) => item.id === contactId && item.formId === formId);
+  if (!contact) return undefined;
+
+  const consentKeys = new Set(consentFieldKeys);
+  const nextSourceValues = Object.fromEntries(
+    Object.entries(contact.sourceValues || {}).map(([key, value]) => (
+      consentKeys.has(key) ? [key, null] : [key, value]
+    )),
+  );
+  const marker = `Contact consent evidence anonymized by ${actor} at ${new Date().toISOString()}.`;
+
+  contact.sourceValues = nextSourceValues;
+  contact.sourceIpHash = null;
+  contact.notes = [contact.notes, marker].filter(Boolean).join('\n');
+  contact.updatedAt = new Date().toISOString();
+
+  setContactStore(contactStore.map((item) => (item.id === contact.id ? contact : item)));
+  persistInteractionStore();
+  return clone(contact);
+}
+
 function normalizeCommentStatus(status?: string): 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all' {
   if (status === 'pending' || status === 'approved' || status === 'rejected' || status === 'spam' || status === 'blocked' || status === 'all') {
     return status;

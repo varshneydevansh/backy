@@ -195,6 +195,24 @@ const listContactSegments = async (formId) => {
   };
 };
 
+const exportContactRetention = async (formId, contact) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/consent-retention`, {
+    method: 'POST',
+    body: JSON.stringify({
+      contactIds: [contact.id],
+      dryRun: true,
+      retentionDays: 0,
+      actor: 'contacts-smoke',
+    }),
+  });
+  const result = payload.data;
+  assert(result?.formId === formId, `Contact retention export did not return form scope: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(result.consentFieldKeys?.includes('consent'), `Contact retention export did not detect consent field: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(result.scanned === 1 && result.due === 1 && result.anonymized === 0, `Contact retention export counts are wrong: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(result.contacts?.[0]?.consentValues?.consent === true, `Contact retention export did not include consent evidence: ${JSON.stringify(payload).slice(0, 500)}`);
+  return result;
+};
+
 const createContactSavedList = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/contact-lists`, {
     method: 'POST',
@@ -793,6 +811,58 @@ const syncContactInUi = async (client, formId, contact, targetUrl) => {
   throw new Error(`Contact sync event was not recorded for ${contact.email}`);
 };
 
+const applyContactRetentionInUi = async (client, formId, contact) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((item) => (item.innerText || '').includes(${JSON.stringify(contact.email)}));
+      const checkbox = card?.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+      const days = document.querySelector('[data-testid="contacts-retention-days"]');
+      const button = document.querySelector('[data-testid="contacts-retention-apply"]');
+      if (!(card instanceof HTMLElement) || !(checkbox instanceof HTMLInputElement) || !(days instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'retention-controls-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (!checkbox.checked) checkbox.click();
+      setInputValue(days, '0');
+      if (button.disabled) return { ok: false, reason: 'retention-disabled', selected: checkbox.checked, days: days.value };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to apply contact retention in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(formId);
+    const updated = contacts.find((item) => item.id === contact.id);
+    const uiState = await evaluate(client, `(() => ({
+      hasRetentionSummary: Boolean(document.querySelector('[data-testid="contacts-retention-summary"]')) &&
+        document.body?.innerText?.includes('Last retention:') &&
+        document.body?.innerText?.includes('/contacts/consent-retention'),
+    }))()`);
+
+    if (updated?.sourceValues?.consent === null && (updated.notes || '').includes('Contact consent evidence anonymized') && uiState.hasRetentionSummary) {
+      return updated;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Contact retention did not anonymize consent evidence for ${contact.email}`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -822,6 +892,9 @@ const assertLayout = async (client) => {
       hasContactSync: Boolean(document.querySelector('[data-testid="contacts-sync-webhook"]')) &&
         document.body?.innerText?.includes('/contacts/sync') &&
         document.body?.innerText?.includes('Last sync:'),
+      hasContactRetention: Boolean(document.querySelector('[data-testid="contacts-retention-apply"]')) &&
+        document.body?.innerText?.includes('/contacts/consent-retention') &&
+        document.body?.innerText?.includes('Last retention:'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -840,6 +913,7 @@ const assertLayout = async (client) => {
     && layout.hasPromoteUser
     && layout.hasPromoteCustomer
     && layout.hasContactSync
+    && layout.hasContactRetention
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -948,6 +1022,8 @@ const main = async () => {
       && delivery.body?.contactIds?.includes(promotedCustomer.contact.id)
       && delivery.body?.contacts?.some((item) => item.email === promotedCustomer.contact.email)
     )), `Contact sync receiver did not receive promoted contact: ${JSON.stringify(syncReceiver.received).slice(0, 500)}`);
+    const retentionExport = await exportContactRetention(form.id, contact);
+    const retainedContact = await applyContactRetentionInUi(client, form.id, contact);
     const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
@@ -1018,6 +1094,11 @@ const main = async () => {
         contactId: promotedCustomer.contact.id,
         target: syncReceiver.url,
         eventId: syncedContact.event.id,
+      },
+      retainedContact: {
+        contactId: retainedContact.id,
+        consent: retainedContact.sourceValues?.consent,
+        exportedDue: retentionExport.due,
       },
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
