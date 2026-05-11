@@ -25,6 +25,7 @@ import {
   getSiteFrontendDesign,
   getFormWithSubmissions,
   applyFormConsentRetention,
+  createFormEmbedBlock,
   listFormDeliveryEvents,
   listCollections,
   listForms,
@@ -477,13 +478,15 @@ function FormsRoute() {
   const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
   const [isApplyingConsentRetention, setIsApplyingConsentRetention] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [isCreatingEmbedBlock, setIsCreatingEmbedBlock] = useState(false);
+  const [createdEmbedSectionId, setCreatedEmbedSectionId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isSavingForm;
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCreatingEmbedBlock || isSavingForm;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1203,6 +1206,7 @@ function FormsRoute() {
 
   useEffect(() => {
     setFormDraft(selectedForm ? cloneFormDefinition(selectedForm) : null);
+    setCreatedEmbedSectionId(null);
   }, [selectedForm]);
 
   const patchFormDraft = (patch: Partial<FormDefinition>) => {
@@ -1637,6 +1641,28 @@ function FormsRoute() {
       setError(retentionError instanceof Error ? retentionError.message : 'Unable to apply consent retention policy');
     } finally {
       setIsApplyingConsentRetention(false);
+    }
+  };
+
+  const handleCreateEmbedBlock = async () => {
+    if (isFormsBusy || !selectedForm) return;
+
+    setIsCreatingEmbedBlock(true);
+    setError(null);
+    setNotice(null);
+    setCreatedEmbedSectionId(null);
+
+    try {
+      const section = await createFormEmbedBlock(activeSiteId, selectedForm.id, {
+        actor: 'admin',
+        publicBaseUrl,
+      });
+      setCreatedEmbedSectionId(section.id);
+      setNotice(`${section.name} saved to reusable sections.`);
+    } catch (embedError) {
+      setError(embedError instanceof Error ? embedError.message : 'Unable to create reusable form embed block');
+    } finally {
+      setIsCreatingEmbedBlock(false);
     }
   };
 
@@ -3138,6 +3164,15 @@ function FormsRoute() {
                         </Button>
                         <Button
                           variant="outline"
+                          onClick={() => void handleCreateEmbedBlock()}
+                          disabled={isFormsBusy || !selectedForm}
+                          iconStart={<Sparkles className="size-4" />}
+                          data-testid="forms-create-embed-block-button"
+                        >
+                          {isCreatingEmbedBlock ? 'Saving block...' : 'Save embed block'}
+                        </Button>
+                        <Button
+                          variant="outline"
                           onClick={handleExportFormsCatalog}
                           disabled={isFormsBusy || filteredForms.length === 0}
                           iconStart={<Download className="size-4" />}
@@ -3184,6 +3219,21 @@ function FormsRoute() {
                       <ApiSnippet label="Submit URL" value={selectedFormSubmitUrl} />
                       <ApiSnippet label="Contacts URL" value={selectedFormContactsUrl} />
                     </div>
+                    {createdEmbedSectionId && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" data-testid="forms-embed-block-result">
+                        <span>
+                          Reusable form block created for this frontend contract.
+                        </span>
+                        <Link
+                          to="/reusable-sections"
+                          search={{ siteId: activeSiteId, sectionId: createdEmbedSectionId }}
+                          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                        >
+                          <ExternalLink className="size-4" />
+                          Open block
+                        </Link>
+                      </div>
+                    )}
                     <div className="mt-3 grid gap-3 xl:grid-cols-2">
                       <ApiSnippet label="Sample submission payload" value={selectedFormSamplePayloadText} />
                       <ApiSnippet label="cURL submit example" value={selectedFormCurlExample} />

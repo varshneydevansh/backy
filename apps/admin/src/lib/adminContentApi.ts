@@ -636,6 +636,20 @@ interface ApiFormConsentRetentionResponse {
   };
 }
 
+interface ApiFormEmbedBlockResponse {
+  success: boolean;
+  data?: {
+    section: ApiReusableSection;
+    embed?: {
+      definitionUrl: string;
+      submitUrl: string;
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListFormDeliveryEventsResponse {
   success: boolean;
   data?: {
@@ -3173,6 +3187,28 @@ export async function applyFormConsentRetention(
   }
 
   return result as FormConsentRetentionResult;
+}
+
+export async function createFormEmbedBlock(
+  siteId: string,
+  formId: string,
+  input: { name?: string; slug?: string; actor?: string; publicBaseUrl?: string } = {},
+): Promise<ReusableSection> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/embed-block`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormEmbedBlockResponse>(response);
+  const section = payload.data?.section;
+
+  if (!response.ok || !payload.success || !section) {
+    throw new Error(payload.error?.message || 'Unable to create form embed block');
+  }
+
+  return toReusableSection(section);
 }
 
 export async function listFormDeliveryEvents(

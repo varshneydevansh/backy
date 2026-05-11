@@ -236,6 +236,11 @@ const listForms = async () => {
   return payload.data?.forms || payload.forms || [];
 };
 
+const listReusableSections = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections?status=all`);
+  return payload.data?.sections || payload.sections || [];
+};
+
 const getFormWithSubmissions = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/submissions?limit=100`);
   return {
@@ -247,6 +252,11 @@ const getFormWithSubmissions = async (formId) => {
 const deleteForm = async (formId) => {
   if (!formId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`, { method: 'DELETE' });
+};
+
+const deleteReusableSection = async (sectionId) => {
+  if (!sectionId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, { method: 'DELETE' });
 };
 
 const createCollection = async () => {
@@ -1325,6 +1335,62 @@ const refreshForms = async (client) => {
   await sleep(1000);
 };
 
+const createEmbedBlockInUi = async (client, formId) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="forms-create-embed-block-button"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          button: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          body: document.body?.innerText?.slice(0, 800) || '',
+        };
+      }
+      button.click();
+      return { ok: true, text: button.textContent || '' };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 99) {
+      throw new Error(`Unable to click Save embed block: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const sections = await listReusableSections();
+    const created = sections.find((section) => (
+      section.sourceElementId === formId &&
+      section.category === 'forms' &&
+      section.metadata?.formEmbedBlock?.formId === formId
+    ));
+    const state = await evaluate(client, `(() => ({
+      result: Boolean(document.querySelector('[data-testid="forms-embed-block-result"]')),
+      notice: document.body?.innerText?.includes('saved to reusable sections') || false,
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`);
+
+    if (created && state.result) {
+      assert(created.content?.elements?.[0]?.type === 'form', `Embed section does not contain a form element: ${JSON.stringify(created.content)}`);
+      assert(created.content.elements[0].props?.formId === formId, `Embed formId not preserved: ${JSON.stringify(created.content.elements[0].props)}`);
+      assert(created.metadata?.frontendDesignTemplateId, `Embed frontend design metadata missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.formEmbedBlock?.definitionUrl?.includes(`/forms/${formId}/definition`), `Definition URL missing from embed metadata: ${JSON.stringify(created.metadata)}`);
+      return created;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Reusable embed block was not created: ${JSON.stringify({ sections: sections.slice(0, 5), state })}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const approveSubmissionInUi = async (client, formId, submissionId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1438,8 +1504,10 @@ const main = async () => {
   let client;
   let frontendCreatedFormId = null;
   let createdFormId = null;
+  let createdEmbedSectionId = null;
   let frontendCleaned = false;
   let cleaned = false;
+  let embedCleaned = false;
   let collectionCleaned = false;
   let frontendTemplateForm = null;
   let webhookFailure = null;
@@ -1475,6 +1543,8 @@ const main = async () => {
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
     await editFormBuilderInUi(client, createdFormId, smokeCollection.id, webhookReceiver.url);
+    const embedSection = await createEmbedBlockInUi(client, createdFormId);
+    createdEmbedSectionId = embedSection.id;
 
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
     await assertOpenApiFormSubmissionContract();
@@ -1544,6 +1614,8 @@ const main = async () => {
 
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
 
+    await deleteReusableSection(createdEmbedSectionId);
+    embedCleaned = true;
     await deleteForm(createdFormId);
     cleaned = true;
 
@@ -1597,8 +1669,15 @@ const main = async () => {
         slug: createdRecord.slug,
         collectionId: smokeCollection.id,
       },
+      embedBlock: {
+        id: createdEmbedSectionId,
+        slug: embedSection.slug,
+        category: embedSection.category,
+        fieldCount: embedSection.content?.elements?.[0]?.children?.length || 0,
+      },
       layout,
       frontendCleaned,
+      embedCleaned,
       cleaned,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
@@ -1611,6 +1690,13 @@ const main = async () => {
     if (!cleaned && createdFormId) {
       await deleteForm(createdFormId).catch((error) => {
         console.warn('Unable to delete smoke form:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (!embedCleaned && createdEmbedSectionId) {
+      await deleteReusableSection(createdEmbedSectionId).then(() => {
+        embedCleaned = true;
+      }).catch((error) => {
+        console.warn('Unable to delete smoke embed block:', error instanceof Error ? error.message : error);
       });
     }
     if (!collectionCleaned && smokeCollection?.id) {
