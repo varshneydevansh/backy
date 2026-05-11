@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
+import { requiresAttachmentDelivery } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -66,13 +67,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return jsonError(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 
-    const disposition = searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';
+    const requestedDisposition = searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';
+    const requiresAttachment = requiresAttachmentDelivery(media);
+    const disposition = requiresAttachment ? 'attachment' : requestedDisposition;
     const isPrivateMedia = (media.visibility || 'public') === 'private';
     if (isPrivateMedia && !verifySignedMediaAccess({
       siteId: site.id,
       mediaId: media.id,
       expiresAt: searchParams.get('expiresAt'),
-      disposition,
+      disposition: requestedDisposition,
       token: searchParams.get('token'),
     })) {
       return jsonError(403, 'MEDIA_SIGNATURE_INVALID', 'A valid signed media URL is required.', requestId);
@@ -102,10 +105,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         'content-length': String(buffer.byteLength),
         'content-disposition': contentDispositionHeader(disposition, media.originalName || media.filename),
         'cache-control': isPrivateMedia ? 'private, max-age=60' : 'public, max-age=31536000, immutable',
+        'x-content-type-options': 'nosniff',
         'x-backy-cache-scope': isPrivateMedia ? 'private' : 'discovery',
         'x-backy-request-id': requestId,
         'x-backy-site-id': site.id,
         'x-backy-media-id': media.id,
+        ...(requiresAttachment ? { 'x-backy-media-delivery-policy': 'attachment-only' } : {}),
       },
     });
 

@@ -118,4 +118,28 @@ assert(createOrderIndex !== -1, 'checkout route missing order create');
 assert(updateInventoryIndex !== -1, 'checkout route missing inventory update');
 assert(createOrderIndex < updateInventoryIndex, 'checkout route must create the order before updating inventory');
 
+const mediaSafety = read('apps/public/src/lib/mediaSafety.ts');
+for (const needle of [
+  'deliveryPolicy',
+  'attachment-only',
+  'ACTIVE_WEB_CONTENT_EXTENSIONS',
+  "'text/html'",
+  "'application/javascript'",
+  "'image/svg+xml'",
+  'requiresAttachmentDelivery',
+]) {
+  assertIncludes(mediaSafety, needle, 'mediaSafety');
+}
+
+const mediaFileRoute = read('apps/public/src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
+for (const needle of [
+  'requiresAttachmentDelivery(media)',
+  "const disposition = requiresAttachment ? 'attachment' : requestedDisposition",
+  'disposition: requestedDisposition',
+  "'x-content-type-options': 'nosniff'",
+  "'x-backy-media-delivery-policy': 'attachment-only'",
+]) {
+  assertIncludes(mediaFileRoute, needle, 'media file delivery route');
+}
+
 console.log('Public security regression smoke passed');

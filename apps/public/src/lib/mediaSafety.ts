@@ -7,6 +7,7 @@ export type MediaSafetyScan = {
   scanner: 'backy-static-media-safety-v1';
   checks: string[];
   warnings: string[];
+  deliveryPolicy: 'inline-ok' | 'attachment-only';
 };
 
 export class MediaSafetyError extends Error {
@@ -31,6 +32,43 @@ const hasDangerousSvgMarkup = (content: string) => (
   /\son[a-z]+\s*=/.test(content)
 );
 
+const ACTIVE_WEB_CONTENT_EXTENSIONS = new Set([
+  '.cjs',
+  '.css',
+  '.htm',
+  '.html',
+  '.js',
+  '.mjs',
+  '.svg',
+  '.ts',
+  '.tsx',
+  '.xhtml',
+  '.xml',
+]);
+
+const ACTIVE_WEB_CONTENT_MIME_TYPES = new Set([
+  'application/ecmascript',
+  'application/javascript',
+  'application/xhtml+xml',
+  'application/xml',
+  'image/svg+xml',
+  'text/css',
+  'text/ecmascript',
+  'text/html',
+  'text/javascript',
+  'text/xml',
+]);
+
+export const requiresAttachmentDelivery = (input: {
+  originalName?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+}): boolean => {
+  const extension = extname(input.originalName || input.filename || '').toLowerCase();
+  const mimeType = (input.mimeType || '').trim().toLowerCase().split(';')[0];
+  return ACTIVE_WEB_CONTENT_EXTENSIONS.has(extension) || ACTIVE_WEB_CONTENT_MIME_TYPES.has(mimeType);
+};
+
 export const scanMediaUpload = (input: {
   buffer: Buffer;
   originalName: string;
@@ -40,6 +78,7 @@ export const scanMediaUpload = (input: {
   const extension = extname(input.originalName).toLowerCase();
   const checks = ['non-empty-bytes', 'mime-category-accepted'];
   const warnings: string[] = [];
+  const deliveryPolicy = requiresAttachmentDelivery(input) ? 'attachment-only' : 'inline-ok';
 
   if (input.buffer.length === 0) {
     throw new MediaSafetyError('Uploaded file is empty.', { reason: 'empty-file' });
@@ -76,11 +115,17 @@ export const scanMediaUpload = (input: {
     }
   }
 
+  if (deliveryPolicy === 'attachment-only') {
+    checks.push('active-web-content-attachment-policy');
+    warnings.push('Active web content is stored but must be delivered as an attachment.');
+  }
+
   return {
     status: 'clean',
     scannedAt: new Date().toISOString(),
     scanner: 'backy-static-media-safety-v1',
     checks,
     warnings,
+    deliveryPolicy,
   };
 };
