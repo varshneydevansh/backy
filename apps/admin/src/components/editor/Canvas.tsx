@@ -732,6 +732,12 @@ const parseBooleanSetting = (value: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
+const getBoolean = (value: unknown): boolean => parseBooleanSetting(value, false);
+
+const getBooleanWithFallback = (value: unknown, fallback: boolean): boolean => (
+  value === undefined || value === null ? fallback : parseBooleanSetting(value, fallback)
+);
+
 const formatFieldLabel = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : '';
 };
@@ -2235,11 +2241,11 @@ function CanvasElementComponent({
         <video
           src={videoSrc}
           poster={posterSrc || undefined}
-          controls={isPreview ? (p.controls ?? true) : false}
-          autoPlay={isPreview ? Boolean(p.autoplay ?? p.autoPlay) : false}
-          loop={Boolean(p.loop)}
-          muted={Boolean(p.muted)}
-          playsInline={p.playsInline !== false}
+          controls={isPreview ? getBooleanWithFallback(p.controls, true) : false}
+          autoPlay={isPreview ? getBooleanWithFallback(p.autoplay ?? p.autoPlay, false) : false}
+          loop={getBoolean(p.loop)}
+          muted={getBoolean(p.muted)}
+          playsInline={getBooleanWithFallback(p.playsInline, true)}
           style={{
             ...sharedStyle,
             width: '100%',
@@ -2313,6 +2319,8 @@ function CanvasElementComponent({
         {
           const fieldLabel = formatFieldLabel(p.label);
           const helpText = formatHelpText(p.helpText);
+          const required = getBoolean(p.required);
+          const disabled = getBoolean(p.disabled);
           return (
             <div style={{
               display: 'flex',
@@ -2330,15 +2338,15 @@ function CanvasElementComponent({
                   }}
                 >
                   {fieldLabel}
-                  {p.required ? ' *' : ''}
+                  {required ? ' *' : ''}
                 </label>
               ) : null}
               <input
                 type={p.inputType ?? 'text'}
                 placeholder={p.placeholder ?? 'Enter text...'}
                 value={p.value ?? p.defaultValue ?? ''}
-                disabled={!isPreview}
-                required={Boolean(p.required)}
+                disabled={!isPreview || disabled}
+                required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
                 pattern={typeof p.pattern === 'string' && p.pattern.trim() ? p.pattern : undefined}
                 minLength={typeof p.minLength === 'number' && Number.isFinite(p.minLength) ? p.minLength : undefined}
@@ -2375,6 +2383,8 @@ function CanvasElementComponent({
         {
           const fieldLabel = formatFieldLabel(p.label);
           const helpText = formatHelpText(p.helpText);
+          const required = getBoolean(p.required);
+          const disabled = getBoolean(p.disabled);
           return (
             <div style={{
               display: 'flex',
@@ -2392,15 +2402,15 @@ function CanvasElementComponent({
                   }}
                 >
                   {fieldLabel}
-                  {p.required ? ' *' : ''}
+                  {required ? ' *' : ''}
                 </label>
               ) : null}
               <textarea
                 rows={Number(p.rows) || 4}
                 placeholder={p.placeholder ?? 'Enter text...'}
                 value={p.value ?? p.defaultValue ?? ''}
-                disabled={!isPreview}
-                required={Boolean(p.required)}
+                disabled={!isPreview || disabled}
+                required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
                 minLength={typeof p.minLength === 'number' && Number.isFinite(p.minLength) ? p.minLength : undefined}
                 maxLength={typeof p.maxLength === 'number' && Number.isFinite(p.maxLength) ? p.maxLength : undefined}
@@ -2438,6 +2448,8 @@ function CanvasElementComponent({
         {
           const fieldLabel = formatFieldLabel(p.label);
           const helpText = formatHelpText(p.helpText);
+          const required = getBoolean(p.required);
+          const disabled = getBoolean(p.disabled);
           return (
             <div style={{
               display: 'flex',
@@ -2455,13 +2467,13 @@ function CanvasElementComponent({
                   }}
                 >
                   {fieldLabel}
-                  {p.required ? ' *' : ''}
+                  {required ? ' *' : ''}
                 </label>
               ) : null}
               <select
                 value={p.value ?? p.defaultValue ?? selectOptions[0] ?? ''}
-                disabled={!isPreview}
-                required={Boolean(p.required)}
+                disabled={!isPreview || disabled}
+                required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
                 style={{
                   ...sharedStyle,
@@ -2507,6 +2519,7 @@ function CanvasElementComponent({
           const fieldLabel = formatFieldLabel(p.label);
           const helpText = formatHelpText(p.helpText);
           const optionItems = parseFormOptions(p.options);
+          const required = getBoolean(p.required);
           return (
             <div
               style={{
@@ -2526,7 +2539,7 @@ function CanvasElementComponent({
                 }}
                 >
                   {fieldLabel}
-                  {p.required ? ' *' : ''}
+                  {required ? ' *' : ''}
                 </label>
               ) : null}
               <div style={{
@@ -2560,7 +2573,7 @@ function CanvasElementComponent({
                         type={element.type}
                         name={typeof p.name === 'string' ? p.name : element.type === 'radio' ? `${element.id}-group` : undefined}
                         value={option}
-                        required={Boolean(p.required)}
+                        required={required}
                         checked={Boolean(isChecked)}
                         readOnly
                         onChange={() => {}}
