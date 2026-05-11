@@ -155,6 +155,20 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-icon',
+            type: 'icon',
+            x: 690,
+            y: 110,
+            width: 80,
+            height: 80,
+            zIndex: 7,
+            props: {
+              icon: '★',
+              size: 32,
+              color: '#374151',
+            },
+          },
+          {
             id: 'smoke-embed',
             type: 'embed',
             x: 820,
@@ -3057,6 +3071,59 @@ const assertPersistedImageBehavior = async (pageId) => {
   return props;
 };
 
+const testIconBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-icon');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-icon-symbol', '✓');
+  await setFormControlByTestId(client, 'editor-icon-size', '40');
+  await setFormControlByTestId(client, 'editor-icon-color', '#0e7490');
+  await setFormControlByTestId(client, 'editor-icon-title', 'Smoke icon title');
+  await setFormControlByTestId(client, 'editor-icon-aria-label', 'Smoke check icon');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-icon"]');
+    const icon = node?.querySelector('[role="img"]');
+    return {
+      icon: value('editor-icon-symbol'),
+      size: value('editor-icon-size'),
+      color: value('editor-icon-color'),
+      title: value('editor-icon-title'),
+      ariaLabel: value('editor-icon-aria-label'),
+      previewText: icon?.textContent || '',
+      previewTitle: icon?.getAttribute('title') || '',
+      previewAriaLabel: icon?.getAttribute('aria-label') || '',
+      previewFontSize: icon ? getComputedStyle(icon).fontSize : '',
+      previewColor: icon ? getComputedStyle(icon).color : '',
+    };
+  })()`);
+
+  assert(state.icon === '✓' && state.previewText === '✓', `Icon symbol mismatch: ${JSON.stringify(state)}`);
+  assert(state.size === '40' && state.previewFontSize === '40px', `Icon size mismatch: ${JSON.stringify(state)}`);
+  assert(state.color === '#0e7490' && /14,\s*116,\s*144/.test(state.previewColor), `Icon color mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === 'Smoke icon title' && state.previewTitle === 'Smoke icon title', `Icon title mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === 'Smoke check icon' && state.previewAriaLabel === 'Smoke check icon', `Icon aria label mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedIconBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const icon = findCanvasElement(elements, 'smoke-icon');
+  const props = icon?.props || {};
+
+  assert(icon?.type === 'icon', `Persisted smoke-icon missing: ${JSON.stringify(icon)}`);
+  assert(props.icon === '✓', `Persisted icon symbol mismatch: ${JSON.stringify(props)}`);
+  assert(props.size === 40, `Persisted icon size mismatch: ${JSON.stringify(props)}`);
+  assert(props.color === '#0e7490', `Persisted icon color mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Smoke icon title', `Persisted icon title mismatch: ${JSON.stringify(props)}`);
+  assert(props.ariaLabel === 'Smoke check icon', `Persisted icon aria label mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -3868,7 +3935,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3982,6 +4049,9 @@ const main = async () => {
     const imageBehaviorControls = EDITOR_PATH
       ? null
       : await testImageBehaviorControls(client);
+    const iconBehaviorControls = EDITOR_PATH
+      ? null
+      : await testIconBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4036,6 +4106,7 @@ const main = async () => {
     let persistedDataBinding = null;
     let persistedRepeater = null;
     let persistedImageBehavior = null;
+    let persistedIconBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4046,7 +4117,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4102,6 +4173,9 @@ const main = async () => {
       persistedImageBehavior = imageBehaviorControls
         ? await assertPersistedImageBehavior(tempPageId)
         : null;
+      persistedIconBehavior = iconBehaviorControls
+        ? await assertPersistedIconBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4133,7 +4207,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4237,6 +4311,7 @@ const main = async () => {
       dataBindingQueryControls,
       repeaterControls,
       imageBehaviorControls,
+      iconBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4255,6 +4330,7 @@ const main = async () => {
       persistedDataBinding,
       persistedRepeater,
       persistedImageBehavior,
+      persistedIconBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

@@ -1093,6 +1093,38 @@ function TextElement({ element }: ElementRendererProps) {
 }
 
 /**
+ * Render an icon/symbol element
+ */
+function IconElement({ element }: ElementRendererProps) {
+  const { props, styles } = element;
+  const label = getNameClass(props.ariaLabel);
+  const title = getNameClass(props.title);
+
+  return (
+    <span
+      role={label ? 'img' : undefined}
+      aria-label={label || undefined}
+      aria-hidden={label ? undefined : true}
+      title={title || undefined}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+        fontSize: getLength(props.size, '24px'),
+        lineHeight: 1,
+        color: getNameClass(props.color) || '#374151',
+        ...styles,
+        ...getTypographyStyle(props as Record<string, unknown>),
+      }}
+    >
+      {getNameClass(props.icon) || '*'}
+    </span>
+  );
+}
+
+/**
  * Render a heading element
  */
 function HeadingElement({ element }: ElementRendererProps) {
@@ -2631,7 +2663,7 @@ const ELEMENT_RENDERERS: Record<
   columns: ContainerElement,
   spacer: SpacerElement,
   divider: DividerElement,
-  icon: TextElement, // Placeholder
+  icon: IconElement,
   form: FormElement,
   input: InputElement,
   textarea: TextareaElement,

@@ -2400,6 +2400,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.icon || '★'}
                 onChange={(e) => onChange({ icon: e.target.value })}
+                data-testid="editor-icon-symbol"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background text-center text-2xl',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2421,6 +2422,51 @@ function ContentProperties({
               value={element.props.size || 24}
               onChange={(value) => onChange({ size: value })}
               suffix="px"
+              testId="editor-icon-size"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Icon Color
+            </label>
+            <input
+              type="color"
+              value={(element.props.color as string) || '#374151'}
+              onChange={(e) => onChange({ color: e.target.value })}
+              data-testid="editor-icon-color"
+              className="h-9 w-full rounded-md border border-border bg-background"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Title
+            </label>
+            <input
+              type="text"
+              value={element.props.title || ''}
+              onChange={(e) => onChange({ title: e.target.value })}
+              data-testid="editor-icon-title"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Optional tooltip title"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Accessibility Label
+            </label>
+            <input
+              type="text"
+              value={element.props.ariaLabel || ''}
+              onChange={(e) => onChange({ ariaLabel: e.target.value })}
+              data-testid="editor-icon-aria-label"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Describe the icon"
             />
           </div>
         </div>

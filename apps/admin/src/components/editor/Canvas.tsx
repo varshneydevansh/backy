@@ -3024,6 +3024,10 @@ function CanvasElementComponent({
       case 'icon':
         return (
           <div
+            title={typeof p.title === 'string' ? p.title : undefined}
+            role={typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? 'img' : undefined}
+            aria-label={typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined}
+            aria-hidden={typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? undefined : true}
             style={{
               ...sharedStyle,
               width: '100%',
