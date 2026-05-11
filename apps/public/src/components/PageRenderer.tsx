@@ -997,6 +997,44 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const sanitizeHtmlMarkup = (value: unknown): string => {
+  const source = sanitizeText(value);
+  if (!source) return '';
+
+  return source
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<(iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/?(?:script|style|iframe|object|embed|link|meta|base)\b[^>]*>/gi, '')
+    .replace(/\s+on[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(
+      /\s+(href|src|xlink:href|formaction|action)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,
+      (match, attribute: string, rawValue: string) => {
+        const valueWithoutQuotes = rawValue.replace(/^['"]|['"]$/g, '');
+        const normalizedValue = valueWithoutQuotes.replace(/[\u0000-\u001F\u007F\s]+/g, '').toLowerCase();
+        const isDangerousUrl =
+          normalizedValue.startsWith('javascript:') ||
+          normalizedValue.startsWith('vbscript:') ||
+          normalizedValue.startsWith('data:text/html') ||
+          normalizedValue.startsWith('data:image/svg+xml');
+
+        return isDangerousUrl ? ` ${attribute}="#"` : match;
+      },
+    )
+    .replace(
+      /\s+style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,
+      (match, rawValue: string) => {
+        const normalizedValue = rawValue.replace(/[\u0000-\u001F\u007F\s]+/g, '').toLowerCase();
+        return normalizedValue.includes('javascript:')
+          || normalizedValue.includes('expression(')
+          || normalizedValue.includes('data:text/html')
+          ? ''
+          : match;
+      },
+    );
+};
+
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
 const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
 const IMAGE_DECODING_VALUES = ['async', 'sync', 'auto'] as const;
@@ -1226,7 +1264,7 @@ const normalizeMapUrl = (addressOrUrl: unknown, zoom?: unknown): string => {
  */
 function TextElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
-  const htmlContent = getNameClass(props.content);
+  const htmlContent = sanitizeHtmlMarkup(props.content);
   const textContent = getSlateText(props.content) || getNameClass(props.text);
 
   const tagProps = {
@@ -1644,9 +1682,10 @@ function EmbedElement({ element }: ElementRendererProps) {
  * Render raw HTML element
  */
 function HtmlElement({ element }: ElementRendererProps) {
-  const { props } = element;
+  const { props, styles } = element;
+  const htmlContent = sanitizeHtmlMarkup(props.html) || sanitizeHtmlMarkup(props.content);
 
-  return <div dangerouslySetInnerHTML={{ __html: (props.html as string) || '' }} />;
+  return <div style={styles} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 }
 
 /**
