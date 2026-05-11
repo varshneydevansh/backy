@@ -1089,7 +1089,12 @@ function VideoElement({ element }: ElementRendererProps) {
  */
 function ButtonElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
-  const isSubmit = (props.type as string) === 'submit';
+  const buttonType = props.type === 'submit' || props.type === 'reset' ? props.type : 'button';
+  const isSubmit = buttonType === 'submit';
+  const target = getNameClass(props.target) || undefined;
+  const rel = getNameClass(props.rel) || (target === '_blank' ? 'noopener noreferrer' : undefined);
+  const title = getNameClass(props.title) || undefined;
+  const ariaLabel = getNameClass(props.ariaLabel) || undefined;
   const buttonStyles: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1112,14 +1117,26 @@ function ButtonElement({ element }: ElementRendererProps) {
 
   if (props.href && !isSubmit) {
     return (
-      <a href={(props.href as string) || '#'} style={buttonStyles}>
+      <a
+        href={(props.href as string) || '#'}
+        target={target}
+        rel={rel}
+        title={title}
+        aria-label={ariaLabel}
+        style={buttonStyles}
+      >
         {buttonText}
       </a>
     );
   }
 
   return (
-    <button type={(isSubmit ? 'submit' : 'button') as 'submit' | 'button'} style={buttonStyles}>
+    <button
+      type={buttonType as 'submit' | 'reset' | 'button'}
+      title={title}
+      aria-label={ariaLabel}
+      style={buttonStyles}
+    >
       {buttonText}
     </button>
   );
@@ -1374,10 +1391,18 @@ function QuoteElement({ element }: ElementRendererProps) {
 function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) {
   const { props, styles } = element;
   const linkText = getNameClass(props.content) || getNameClass(props.label) || 'Link';
+  const target = getNameClass(props.target) || undefined;
+  const rel = getNameClass(props.rel) || (target === '_blank' ? 'noopener noreferrer' : undefined);
+  const title = getNameClass(props.title) || undefined;
+  const ariaLabel = getNameClass(props.ariaLabel) || undefined;
 
   return (
     <a
       href={getNameClass(props.href) || '#'}
+      target={target}
+      rel={rel}
+      title={title}
+      aria-label={ariaLabel}
       style={{
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),

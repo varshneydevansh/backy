@@ -2790,6 +2790,58 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   return props;
 };
 
+const testButtonLinkBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-child-button');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-button-href', '/signup');
+  await setFormControlByTestId(client, 'editor-button-target', '_blank');
+  await setFormControlByTestId(client, 'editor-button-rel', 'noopener noreferrer nofollow');
+  await setFormControlByTestId(client, 'editor-button-aria-label', 'Open signup page');
+  await setFormControlByTestId(client, 'editor-button-title', 'Start signup');
+  await setFormControlByTestId(client, 'editor-button-type', 'button');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-child-button"]');
+    const interactive = node?.querySelector('a, button');
+    return {
+      href: value('editor-button-href'),
+      target: value('editor-button-target'),
+      rel: value('editor-button-rel'),
+      ariaLabel: value('editor-button-aria-label'),
+      title: value('editor-button-title'),
+      type: value('editor-button-type'),
+      previewText: interactive?.textContent || '',
+    };
+  })()`);
+
+  assert(state.href === '/signup', `Button href control mismatch: ${JSON.stringify(state)}`);
+  assert(state.target === '_blank', `Button target control mismatch: ${JSON.stringify(state)}`);
+  assert(state.rel === 'noopener noreferrer nofollow', `Button rel control mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === 'Open signup page' && state.title === 'Start signup', `Button accessibility/title controls mismatch: ${JSON.stringify(state)}`);
+  assert(state.type === 'button', `Button type control mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedButtonLinkBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const button = findCanvasElement(elements, 'smoke-child-button');
+  const props = button?.props || {};
+
+  assert(button, `Persisted smoke-child-button missing: ${JSON.stringify(elements)}`);
+  assert(props.href === '/signup', `Persisted button href mismatch: ${JSON.stringify(props)}`);
+  assert(props.target === '_blank', `Persisted button target mismatch: ${JSON.stringify(props)}`);
+  assert(props.rel === 'noopener noreferrer nofollow', `Persisted button rel mismatch: ${JSON.stringify(props)}`);
+  assert(props.ariaLabel === 'Open signup page', `Persisted button aria label mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Start signup', `Persisted button title mismatch: ${JSON.stringify(props)}`);
+  assert(props.type === 'button', `Persisted button type mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -3164,6 +3216,9 @@ const main = async () => {
     const repeaterControls = tempCollection
       ? await testRepeaterControls(client, tempCollection.id)
       : null;
+    const buttonLinkBehaviorControls = EDITOR_PATH
+      ? null
+      : await testButtonLinkBehaviorControls(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -3174,6 +3229,7 @@ const main = async () => {
     let queuedAutosaveStatus = null;
     let persistedDataBinding = null;
     let persistedRepeater = null;
+    let persistedButtonLinkBehavior = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
       responsiveEditing = {
@@ -3227,6 +3283,9 @@ const main = async () => {
         : null;
       persistedRepeater = tempCollection
         ? await assertPersistedRepeater(tempPageId, tempCollection.id)
+        : null;
+      persistedButtonLinkBehavior = buttonLinkBehaviorControls
+        ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
 
       let reloadClient = null;
@@ -3335,6 +3394,7 @@ const main = async () => {
       afterReusableMutationReady,
       dataBindingQueryControls,
       repeaterControls,
+      buttonLinkBehaviorControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
@@ -3343,6 +3403,7 @@ const main = async () => {
       persistedState,
       persistedDataBinding,
       persistedRepeater,
+      persistedButtonLinkBehavior,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,

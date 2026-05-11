@@ -146,6 +146,14 @@ const parseNavigationItems = (value: string): Array<string | { label: string; hr
     })
 );
 
+const normalizeLinkTarget = (value: unknown): '_self' | '_blank' | '_parent' | '_top' => {
+  if (value === '_blank' || value === '_parent' || value === '_top') {
+    return value;
+  }
+
+  return '_self';
+};
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -836,6 +844,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.href || ''}
                 onChange={(e) => onChange({ href: e.target.value })}
+                data-testid="editor-link-href"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -854,6 +863,11 @@ function ContentProperties({
             />
             <label htmlFor="underline" className="text-sm">Underline</label>
           </div>
+          <LinkBehaviorProperties
+            prefix="link"
+            props={element.props}
+            onChange={onChange}
+          />
         </div>
       )}
 
@@ -899,6 +913,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.href || ''}
                 onChange={(e) => onChange({ href: e.target.value })}
+                data-testid="editor-button-href"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -907,6 +922,12 @@ function ContentProperties({
               />
             </div>
           </div>
+          <LinkBehaviorProperties
+            prefix="button"
+            props={element.props}
+            onChange={onChange}
+            includeButtonType
+          />
         </div>
       )}
 
@@ -2059,6 +2080,119 @@ function ContentProperties({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface LinkBehaviorPropertiesProps {
+  prefix: 'button' | 'link';
+  props: ElementProps;
+  onChange: (updates: Partial<ElementProps>) => void;
+  includeButtonType?: boolean;
+}
+
+function LinkBehaviorProperties({
+  prefix,
+  props,
+  onChange,
+  includeButtonType = false,
+}: LinkBehaviorPropertiesProps) {
+  const target = normalizeLinkTarget(props.target);
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            Open target
+          </label>
+          <select
+            value={target}
+            onChange={(e) => onChange({ target: e.target.value })}
+            data-testid={`editor-${prefix}-target`}
+            className={cn(
+              'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+              'focus:outline-none focus:ring-2 focus:ring-ring'
+            )}
+          >
+            <option value="_self">Same tab</option>
+            <option value="_blank">New tab</option>
+            <option value="_parent">Parent frame</option>
+            <option value="_top">Top frame</option>
+          </select>
+        </div>
+        {includeButtonType && (
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Button type
+            </label>
+            <select
+              value={props.type || 'button'}
+              onChange={(e) => onChange({ type: e.target.value })}
+              data-testid="editor-button-type"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="button">Button</option>
+              <option value="submit">Submit</option>
+              <option value="reset">Reset</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">
+          Rel attribute
+        </label>
+        <input
+          type="text"
+          value={props.rel || ''}
+          onChange={(e) => onChange({ rel: e.target.value })}
+          data-testid={`editor-${prefix}-rel`}
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+          placeholder={target === '_blank' ? 'noopener noreferrer' : 'nofollow sponsored'}
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">
+          Accessibility label
+        </label>
+        <input
+          type="text"
+          value={props.ariaLabel || ''}
+          onChange={(e) => onChange({ ariaLabel: e.target.value })}
+          data-testid={`editor-${prefix}-aria-label`}
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+          placeholder="Describe the destination or action"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">
+          Title tooltip
+        </label>
+        <input
+          type="text"
+          value={props.title || ''}
+          onChange={(e) => onChange({ title: e.target.value })}
+          data-testid={`editor-${prefix}-title`}
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+          placeholder="Optional hover title"
+        />
+      </div>
     </div>
   );
 }

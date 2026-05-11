@@ -1929,27 +1929,60 @@ function CanvasElementComponent({
           />
         );
 
-      case 'button':
+      case 'button': {
+        const target = typeof p.target === 'string' ? p.target : '_self';
+        const rel = typeof p.rel === 'string' && p.rel.trim()
+          ? p.rel
+          : target === '_blank'
+            ? 'noopener noreferrer'
+            : undefined;
+        const commonInteractiveProps = {
+          title: typeof p.title === 'string' && p.title.trim() ? p.title : undefined,
+          'aria-label': typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined,
+        };
+        const buttonStyle: CSSProperties = {
+          ...sharedStyle,
+          width: '100%',
+          height: '100%',
+          backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#3b82f6',
+          color: p.color ?? sharedStyle.color ?? '#ffffff',
+          border: sharedStyle.border ?? 'none',
+          borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
+          fontSize: p.fontSize ?? sharedStyle.fontSize ?? 16,
+          fontWeight: p.fontWeight || sharedStyle.fontWeight || '500',
+          cursor: isPreview ? 'pointer' : 'default',
+          pointerEvents: isPreview ? 'auto' : 'none',
+          userSelect: 'none',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textDecoration: 'none',
+        };
+
+        if (isPreview && typeof p.href === 'string' && p.href.trim()) {
+          return (
+            <a
+              href={p.href}
+              target={target}
+              rel={rel}
+              style={buttonStyle}
+              {...commonInteractiveProps}
+            >
+              {p.label ?? 'Button'}
+            </a>
+          );
+        }
+
         return (
           <button
-            style={{
-              ...sharedStyle,
-              width: '100%',
-              height: '100%',
-              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#3b82f6',
-              color: p.color ?? sharedStyle.color ?? '#ffffff',
-              border: sharedStyle.border ?? 'none',
-              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
-              fontSize: p.fontSize ?? sharedStyle.fontSize ?? 16,
-              fontWeight: p.fontWeight || sharedStyle.fontWeight || '500',
-              cursor: isPreview ? 'pointer' : 'default',
-              pointerEvents: isPreview ? 'auto' : 'none',
-              userSelect: 'none',
-            }}
+            type={p.type === 'submit' || p.type === 'reset' ? p.type : 'button'}
+            style={buttonStyle}
+            {...commonInteractiveProps}
           >
             {p.label ?? 'Button'}
           </button>
         );
+      }
 
       case 'nav': {
         const navItems = Array.isArray(p.navItems)
@@ -2432,9 +2465,20 @@ function CanvasElementComponent({
         }
 
       case 'link':
+        {
+          const target = typeof p.target === 'string' ? p.target : '_self';
+          const rel = typeof p.rel === 'string' && p.rel.trim()
+            ? p.rel
+            : target === '_blank'
+              ? 'noopener noreferrer'
+              : undefined;
         return (
           <a
             href={isPreview ? (p.href ?? '#') : undefined}
+            target={target}
+            rel={rel}
+            title={typeof p.title === 'string' && p.title.trim() ? p.title : undefined}
+            aria-label={typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined}
             style={{
               ...sharedStyle,
               color: p.color ?? sharedStyle.color ?? '#3b82f6',
@@ -2448,6 +2492,7 @@ function CanvasElementComponent({
             {p.content ?? 'Link Text'}
           </a>
         );
+        }
 
       case 'spacer':
         return (
