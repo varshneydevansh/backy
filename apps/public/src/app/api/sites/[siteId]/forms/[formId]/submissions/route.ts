@@ -107,13 +107,27 @@ function parseRequestBody(raw: unknown) {
     return null;
   }
 
-  const values = typeof (raw as { values?: unknown }).values === 'object'
-    && (raw as { values?: unknown }).values !== null
-      ? ((raw as { values?: Record<string, unknown> }).values as Record<string, unknown>)
-      : {};
+  const rawRecord = raw as Record<string, unknown>;
+  const valuesCandidate = rawRecord.values ?? rawRecord.fields ?? rawRecord.data ?? rawRecord.submission;
+  const values = valuesCandidate && typeof valuesCandidate === 'object' && !Array.isArray(valuesCandidate)
+    ? valuesCandidate as Record<string, unknown>
+    : Object.entries(rawRecord).reduce<Record<string, unknown>>((acc, [key, value]) => {
+        if (
+          key !== 'contactShareOverride' &&
+          key !== 'honeypot' &&
+          key !== 'pageId' &&
+          key !== 'postId' &&
+          key !== 'requestId' &&
+          key !== 'rateLimitBypass' &&
+          key !== 'startedAt'
+        ) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
 
-  const contactShare = typeof (raw as { contactShareOverride?: unknown }).contactShareOverride === 'object'
-    ? ((raw as { contactShareOverride?: Record<string, unknown> }).contactShareOverride || null)
+  const contactShare = typeof rawRecord.contactShareOverride === 'object'
+    ? (rawRecord.contactShareOverride as Record<string, unknown> | null)
     : null;
 
   const contactShareOverride: ContactShareOverridePayload | null = contactShare

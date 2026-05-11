@@ -339,7 +339,9 @@ interface Pagination {
 
 interface SubmissionValidationDetail {
   field: string;
+  code: string;
   message: string;
+  label?: string;
 }
 
 interface SpamCheckResult {
@@ -3230,7 +3232,36 @@ function getValueAsString(values: Record<string, unknown>, key: string): string 
   return sanitizeString(values[key] || '');
 }
 
+function submissionValidationDetail(
+  field: FormFieldDefinition,
+  code: string,
+  message: string,
+): SubmissionValidationDetail {
+  return {
+    field: field.key,
+    code,
+    message,
+    ...(field.label && field.label !== field.key ? { label: field.label } : {}),
+  };
+}
+
+function isEmptySubmissionValue(field: FormFieldDefinition, value: unknown): boolean {
+  if (field.type === 'checkbox') {
+    if (typeof value === 'boolean') return value !== true;
+    if (Array.isArray(value)) return value.length === 0;
+    const normalized = sanitizeString(value).toLowerCase();
+    return !normalized || normalized === 'false' || normalized === 'off' || normalized === '0' || normalized === 'no';
+  }
+
+  if (Array.isArray(value)) {
+    return parseSubmissionValues(value).length === 0;
+  }
+
+  return sanitizeString(value).length === 0;
+}
+
 function evaluateValidationRule(
+  field: FormFieldDefinition,
   fieldLabel: string,
   fieldType: string,
   rule: { type: string; value?: string | number; message?: string },
@@ -3239,11 +3270,8 @@ function evaluateValidationRule(
   const trimmed = sanitizeString(value);
 
   if (rule.type === 'required') {
-    if (trimmed.length === 0) {
-      return {
-        field: fieldLabel,
-        message: rule.message || `${fieldLabel} is required`,
-      };
+    if (isEmptySubmissionValue(field, value)) {
+      return submissionValidationDetail(field, 'required', rule.message || `${fieldLabel} is required`);
     }
     return null;
   }
@@ -3255,11 +3283,11 @@ function evaluateValidationRule(
   if (rule.type === 'minLength') {
     const minLength = Number(rule.value);
     if (Number.isFinite(minLength) && trimmed.length < minLength) {
-      return {
-        field: fieldLabel,
-        message:
-          rule.message || `${fieldLabel} must be at least ${minLength} characters`,
-      };
+      return submissionValidationDetail(
+        field,
+        'min_length',
+        rule.message || `${fieldLabel} must be at least ${minLength} characters`,
+      );
     }
     return null;
   }
@@ -3267,11 +3295,11 @@ function evaluateValidationRule(
   if (rule.type === 'maxLength') {
     const maxLength = Number(rule.value);
     if (Number.isFinite(maxLength) && trimmed.length > maxLength) {
-      return {
-        field: fieldLabel,
-        message:
-          rule.message || `${fieldLabel} must be no more than ${maxLength} characters`,
-      };
+      return submissionValidationDetail(
+        field,
+        'max_length',
+        rule.message || `${fieldLabel} must be no more than ${maxLength} characters`,
+      );
     }
     return null;
   }
@@ -3284,16 +3312,10 @@ function evaluateValidationRule(
     try {
       const regex = new RegExp(String(rule.value));
       if (!regex.test(trimmed)) {
-        return {
-          field: fieldLabel,
-          message: rule.message || `${fieldLabel} format is invalid`,
-        };
+        return submissionValidationDetail(field, 'pattern', rule.message || `${fieldLabel} format is invalid`);
       }
     } catch {
-      return {
-        field: fieldLabel,
-        message: `${fieldLabel} validation pattern is invalid`,
-      };
+      return submissionValidationDetail(field, 'invalid_pattern', `${fieldLabel} validation pattern is invalid`);
     }
     return null;
   }
@@ -3307,17 +3329,11 @@ function evaluateValidationRule(
     }
 
     if (rule.type === 'min' && numeric < compare) {
-      return {
-        field: fieldLabel,
-        message: rule.message || `${fieldLabel} must be at least ${compare}`,
-      };
+      return submissionValidationDetail(field, 'min', rule.message || `${fieldLabel} must be at least ${compare}`);
     }
 
     if (rule.type === 'max' && numeric > compare) {
-      return {
-        field: fieldLabel,
-        message: rule.message || `${fieldLabel} must be no more than ${compare}`,
-      };
+      return submissionValidationDetail(field, 'max', rule.message || `${fieldLabel} must be no more than ${compare}`);
     }
     return null;
   }
@@ -3325,10 +3341,18 @@ function evaluateValidationRule(
   if (fieldType === 'email' && trimmed.length > 0) {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(trimmed)) {
-      return {
-        field: fieldLabel,
-        message: `${fieldLabel} must be a valid email`,
-      };
+      return submissionValidationDetail(field, 'invalid_email', `${fieldLabel} must be a valid email`);
+    }
+  }
+
+  if (fieldType === 'url' && trimmed.length > 0) {
+    try {
+      const parsedUrl = new URL(trimmed);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
+      }
+    } catch {
+      return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
     }
   }
 
@@ -3353,11 +3377,8 @@ function validateSubmissionValues(
     const submittedValues = parseSubmissionValues(fieldValue).map(sanitizeString);
     const normalizedSubmittedValues = submittedValues.map((value) => value.toLowerCase());
 
-    if (field.required && sanitized.length === 0) {
-      details.push({
-        field: fieldLabel,
-        message: `${fieldLabel} is required`,
-      });
+    if (field.required && isEmptySubmissionValue(field, fieldValue)) {
+      details.push(submissionValidationDetail(field, 'required', `${fieldLabel} is required`));
       return;
     }
 
@@ -3365,36 +3386,24 @@ function validateSubmissionValues(
       const selectedValue = normalizedSubmittedValues[0] || '';
       const matched = normalizedAllowedOptions.includes(selectedValue);
       if (!matched) {
-        details.push({
-          field: fieldLabel,
-          message: `${fieldLabel} value is not a valid option`,
-        });
+        details.push(submissionValidationDetail(field, 'invalid_option', `${fieldLabel} value is not a valid option`));
       }
     }
 
     if ((field.type === 'checkbox') && normalizedSubmittedValues.length > 0 && normalizedAllowedOptions.length > 0) {
       const invalid = normalizedSubmittedValues.filter((value) => !normalizedAllowedOptions.includes(value));
       if (invalid.length > 0) {
-        details.push({
-          field: fieldLabel,
-          message: `${fieldLabel} has invalid option selections`,
-        });
+        details.push(submissionValidationDetail(field, 'invalid_options', `${fieldLabel} has invalid option selections`));
       }
     }
 
     if (field.type === 'select' && field.required && normalizedAllowedOptions.length === 0) {
-      details.push({
-        field: fieldLabel,
-        message: `${fieldLabel} has no available options`,
-      });
+      details.push(submissionValidationDetail(field, 'missing_options', `${fieldLabel} has no available options`));
       return;
     }
 
     if (field.type === 'radio' && submittedValues.length > 0 && normalizedAllowedOptions.length === 0) {
-      details.push({
-        field: fieldLabel,
-        message: `${fieldLabel} has no available options`,
-      });
+      details.push(submissionValidationDetail(field, 'missing_options', `${fieldLabel} has no available options`));
       return;
     }
 
@@ -3402,10 +3411,17 @@ function validateSubmissionValues(
       if (field.type === 'email' && sanitized.length > 0) {
         const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailPattern.test(sanitized)) {
-          details.push({
-            field: fieldLabel,
-            message: `${fieldLabel} must be a valid email`,
-          });
+          details.push(submissionValidationDetail(field, 'invalid_email', `${fieldLabel} must be a valid email`));
+        }
+      }
+      if (field.type === 'url' && sanitized.length > 0) {
+        try {
+          const parsedUrl = new URL(sanitized);
+          if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            details.push(submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`));
+          }
+        } catch {
+          details.push(submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`));
         }
       }
       return;
@@ -3413,6 +3429,7 @@ function validateSubmissionValues(
 
     for (const validation of field.validation) {
       const violation = evaluateValidationRule(
+        field,
         fieldLabel,
         field.type || 'text',
         validation,
@@ -4698,7 +4715,7 @@ export function validateCollectionRecordValues(
       (Array.isArray(value) && value.length === 0);
 
     if (field.required && empty) {
-      errors.push({ field: field.key, message: `${field.label} is required.` });
+      errors.push({ field: field.key, code: 'required', message: `${field.label} is required.`, label: field.label });
       continue;
     }
 
@@ -4711,7 +4728,7 @@ export function validateCollectionRecordValues(
       ));
 
       if (duplicate) {
-        errors.push({ field: field.key, message: `${field.label} must be unique.` });
+        errors.push({ field: field.key, code: 'unique', message: `${field.label} must be unique.`, label: field.label });
       }
     }
 
@@ -4726,7 +4743,9 @@ export function validateCollectionRecordValues(
       if (invalidValues.length > 0) {
         errors.push({
           field: field.key,
+          code: 'invalid_option',
           message: `${field.label} has invalid option value${invalidValues.length === 1 ? '' : 's'}: ${invalidValues.join(', ')}`,
+          label: field.label,
         });
       }
     }
@@ -7127,11 +7146,19 @@ export function createCollectionRecordFromFormSubmission(
 
   const collection = getCollectionByIdOrSlug(siteId, collectionId, { includeUnpublished: true });
   if (!collection || collection.status !== 'published') {
-    return { skipped: false, record: null, errors: [{ field: 'collectionId', message: 'Target collection is not published or does not exist.' }] };
+    return {
+      skipped: false,
+      record: null,
+      errors: [{ field: 'collectionId', code: 'collection_unavailable', message: 'Target collection is not published or does not exist.' }],
+    };
   }
 
   if (!collection.permissions.publicCreate) {
-    return { skipped: false, record: null, errors: [{ field: 'collectionId', message: 'Target collection does not allow public creation.' }] };
+    return {
+      skipped: false,
+      record: null,
+      errors: [{ field: 'collectionId', code: 'public_create_disabled', message: 'Target collection does not allow public creation.' }],
+    };
   }
 
   const fieldKeys = new Set(collection.fields.map((field) => field.key));
@@ -7175,7 +7202,7 @@ export function createCollectionRecordFromFormSubmission(
   return {
     skipped: false,
     record: record || null,
-    errors: record ? [] : [{ field: 'collectionId', message: 'Unable to create collection record.' }],
+    errors: record ? [] : [{ field: 'collectionId', code: 'record_create_failed', message: 'Unable to create collection record.' }],
   };
 }
 
