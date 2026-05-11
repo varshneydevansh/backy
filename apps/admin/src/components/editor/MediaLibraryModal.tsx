@@ -378,6 +378,11 @@ export function MediaLibraryModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="media-library-dialog-title"
+      data-testid="media-library-modal"
+      data-active-tab={activeTab}
+      data-allowed-types={allowedTypes}
+      data-upload-filter={uploadFilter}
+      data-scope-filter={scopeFilter}
     >
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
@@ -415,6 +420,7 @@ export function MediaLibraryModal({
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
+                  data-testid={`media-library-tab-${tab}`}
                   className={cn(
                     'min-h-9 rounded-md px-4 text-sm font-medium capitalize transition-colors',
                     activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -443,7 +449,7 @@ export function MediaLibraryModal({
 
         {error ? (
           <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
-            {error}
+            <span data-testid="media-library-error">{error}</span>
           </div>
         ) : null}
 
@@ -458,6 +464,7 @@ export function MediaLibraryModal({
                       type="search"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
+                      data-testid="media-library-search"
                       className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                       placeholder="Search filename, tag, caption, visibility..."
                       aria-label="Search media"
@@ -469,6 +476,7 @@ export function MediaLibraryModal({
                         type="button"
                         key={filter}
                         onClick={() => setLibraryTypeFilter(filter)}
+                        data-testid={`media-library-type-filter-${filter}`}
                         className={cn(
                           'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
                           libraryTypeFilter === filter
@@ -498,6 +506,13 @@ export function MediaLibraryModal({
                           onSelect(item);
                           onClose();
                         }}
+                        data-testid="media-library-item"
+                        data-media-id={item.id}
+                        data-media-name={item.name}
+                        data-media-type={item.type}
+                        data-media-url={item.url}
+                        data-media-scope={item.scope || 'global'}
+                        data-media-scope-target-id={item.scopeTargetId || ''}
                         className="group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
                       >
                         <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -564,6 +579,7 @@ export function MediaLibraryModal({
                           key={scope}
                           type="button"
                           onClick={() => setScopeFilter(scope)}
+                          data-testid={`media-library-scope-${scope}`}
                           className={cn(
                             'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
                             scopeFilter === scope
@@ -600,6 +616,7 @@ export function MediaLibraryModal({
                         setUploadFilter(filter);
                       }}
                       disabled={isUploading}
+                      data-testid={`media-upload-filter-${filter}`}
                       className={cn(
                         'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                         uploadFilter === filter
@@ -634,6 +651,8 @@ export function MediaLibraryModal({
                     if (isUploading) return;
                     void handleFileUpload(e.dataTransfer.files, uploadFilter);
                   }}
+                  data-testid="media-upload-dropzone"
+                  data-uploading={isUploading ? 'true' : 'false'}
                 >
                   <input
                     type="file"
@@ -641,6 +660,7 @@ export function MediaLibraryModal({
                     multiple
                     disabled={isUploading}
                     accept={getAcceptValue(uploadFilter)}
+                    data-testid="media-upload-input"
                     onChange={(e) => {
                       void handleFileUpload(e.target.files, uploadFilter);
                       e.currentTarget.value = '';
@@ -683,6 +703,7 @@ export function MediaLibraryModal({
                       value={uploadVisibility}
                       onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
                       disabled={isUploading}
+                      data-testid="media-upload-visibility"
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="public">Public delivery</option>
@@ -696,6 +717,7 @@ export function MediaLibraryModal({
                       value={uploadFolderId}
                       onChange={(event) => setUploadFolderId(event.target.value)}
                       disabled={isUploading}
+                      data-testid="media-upload-folder"
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="root">Root library</option>

@@ -44,7 +44,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | heading | ✅ Similar to text | ✅ | ✅ | Selection edge cases for marks | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same text parity issues as heading | ⚠️ |
 | quote | ✅ | ✅ | ⚠️ | Public and editor quote styles can diverge under custom styles | ⚠️ |
-| image | ✅ source/fit/alt | ✅ | ✅ | Upload picker not always aligned with media modal when page-scoped usage is enabled | ⚠️ |
+| image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop persistence still inconsistent in public render options | ⚠️ |
 | button | ✅ label/link-like styling | ✅ | ✅ | Link action config still needs action presets in property panel | ⚠️ |
 | link | ✅ href/content/underline | ✅ | ✅ | Keyboard interaction semantics for target/rel | ⚠️ |
@@ -62,7 +62,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ## Canvas-to-Backend/Frontend Contract
 
 - `media` currently uses shared in-memory store state inside admin for both:
-  - media library modal (`MediaLibraryModal.tsx`)
+  - media library modal (`components/editor/MediaLibraryModal.tsx`)
   - media management route (`routes/media.tsx`)
 - `embed/map` now support:
   - normalized embed source parsing (YouTube/Vimeo/watch/watch URLs + iframe snippets)
@@ -258,6 +258,16 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Selecting an emoji updates the icon preview, closes the picker, and persists through the page canvas payload.
 - Focused component smoke: `BACKY_EDITOR_COMPONENT_SMOKE=icon npm run test:editor-drag --workspace @backy-cms/admin`.
 
+### 17a. Media Upload Modal
+**File:** `components/editor/MediaLibraryModal.tsx`
+**Current State:** ✅ Working for editor image uploads
+- Image elements expose Select and Upload media actions from the property panel.
+- Upload opens the modal directly on the upload tab with image-only filtering and `image/*` file acceptance.
+- Upload defaults include visibility, folder, tags, and the active page/post/global scope context.
+- Uploaded page-scoped images return to the library tab, can be selected, update the image source/preview, and persist `src`, `mediaId`, `mediaScope`, and `mediaScopeTargetId` into the page canvas payload.
+- Focused smoke coverage: `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Remaining: broaden equivalent upload/select coverage for video/embed/font consumers and route-level media management workflows.
+
 ### 18. Grid/Snap
 **Current State:** ✅ Working
 - 10px grid
@@ -324,6 +334,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
@@ -395,7 +406,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
   - Mobile and tablet persistence are covered by editor smoke; still needs visual regression thresholds.
-- ❌ Media upload modal
+- ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
@@ -431,7 +442,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Zoom controls ✅
 - Alignment guides ✅
 - Responsive breakpoints
-- Media upload
+- Media upload ✅
 
 ## Phase 5: Plate.js Editor Migration (CRITICAL PRIORITY)
 **Goal:** Replace Tiptap with Plate.js (headless, fully customizable, MIT license).

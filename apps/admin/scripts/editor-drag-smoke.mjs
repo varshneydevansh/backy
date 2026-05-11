@@ -20,6 +20,7 @@ const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
+const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -31,6 +32,19 @@ const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
 const SMOKE_ICON_PICKER_EMOJI = '\u{1F680}';
+const createSmokeUploadImageFile = () => {
+  const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.png`;
+  const filePath = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(
+    filePath,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAYAAAC9vt6cAAAACXBIWXMAAAsTAAALEwEAmpwYAAAALklEQVR4nGNkYGD4z0AEYCJGEGKgAqAOiP///2dQBSM1TRqGAqMGjBoAAEyDBwIXt2QHAAAAAElFTkSuQmCC',
+      'base64',
+    ),
+  );
+
+  return { filename, filePath };
+};
 const CHECKBOX_BEHAVIOR_SPEC = {
   label: 'Smoke checkbox label',
   name: 'smoke_channels',
@@ -1402,6 +1416,39 @@ const clickControlByTestId = async (client, testId) => {
   assert(clicked?.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
   await sleep(250);
   return clicked;
+};
+
+const setFileInputByTestId = async (client, testId, filePaths) => {
+  const documentNode = await client.send('DOM.getDocument', { depth: -1, pierce: true });
+  const { nodeId } = await client.send('DOM.querySelector', {
+    nodeId: documentNode.root.nodeId,
+    selector: `[data-testid="${testId}"]`,
+  });
+
+  assert(nodeId, `Unable to find file input ${testId}`);
+  await client.send('DOM.setFileInputFiles', {
+    nodeId,
+    files: filePaths,
+  });
+
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== 'file') {
+      return { ok: false, reason: 'missing-file-input', testId: ${JSON.stringify(testId)} };
+    }
+
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      ok: true,
+      testId: ${JSON.stringify(testId)},
+      files: Array.from(input.files || []).map((file) => file.name),
+    };
+  })()`);
+
+  assert(changed?.ok, `Unable to set files for ${testId}: ${JSON.stringify(changed)}`);
+  await sleep(250);
+  return changed;
 };
 
 const blurActiveElement = async (client) => {
@@ -4844,6 +4891,182 @@ const assertPersistedImageBehavior = async (pageId) => {
   return props;
 };
 
+const waitForUploadedMediaItem = async (client, filename) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const items = Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((item) => ({
+        id: item.getAttribute('data-media-id') || '',
+        name: item.getAttribute('data-media-name') || '',
+        type: item.getAttribute('data-media-type') || '',
+        url: item.getAttribute('data-media-url') || '',
+        scope: item.getAttribute('data-media-scope') || '',
+        scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
+      }));
+      const uploadZone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        isUploading: uploadZone?.getAttribute('data-uploading') === 'true',
+        error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
+        item: items.find((candidate) => candidate.name === ${JSON.stringify(filename)}) || null,
+        itemCount: items.length,
+      };
+    })()`);
+
+    if (lastState.error) {
+      throw new Error(`Media upload modal reported an error: ${JSON.stringify(lastState)}`);
+    }
+
+    if (lastState.item?.id && lastState.item?.url) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Uploaded media item did not appear in library: ${JSON.stringify(lastState)}`);
+};
+
+const clickMediaLibraryItemByName = async (client, filename) => {
+  const clicked = await evaluate(client, `(() => {
+    const item = Array.from(document.querySelectorAll('[data-testid="media-library-item"]'))
+      .find((candidate) => candidate.getAttribute('data-media-name') === ${JSON.stringify(filename)});
+    if (!(item instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        filename: ${JSON.stringify(filename)},
+        available: Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((candidate) => candidate.getAttribute('data-media-name') || ''),
+      };
+    }
+    item.click();
+    return {
+      ok: true,
+      id: item.getAttribute('data-media-id') || '',
+      name: item.getAttribute('data-media-name') || '',
+      type: item.getAttribute('data-media-type') || '',
+      url: item.getAttribute('data-media-url') || '',
+      scope: item.getAttribute('data-media-scope') || '',
+      scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
+    };
+  })()`);
+
+  assert(clicked?.ok && clicked.id && clicked.url, `Unable to select uploaded media item: ${JSON.stringify(clicked)}`);
+  await sleep(350);
+  return clicked;
+};
+
+const waitForImageSourceValue = async (client, expectedUrl) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="editor-image-src"]');
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const node = document.querySelector('[data-element-id="smoke-image"]');
+      const image = node?.querySelector('img');
+      return {
+        value: input instanceof HTMLInputElement ? input.value : '',
+        modalOpen: Boolean(modal),
+        previewSrc: image?.getAttribute('src') || '',
+      };
+    })()`);
+
+    if (!lastState.modalOpen && lastState.value === expectedUrl && lastState.previewSrc === expectedUrl) {
+      return lastState;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Uploaded media did not update image source: ${JSON.stringify(lastState)}`);
+};
+
+const waitForPersistedImageMediaSelection = async (pageId, selectedMedia) => {
+  let lastProps = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-image');
+    const props = element?.props || {};
+    lastProps = props;
+
+    if (
+      props.src === selectedMedia.url &&
+      props.mediaId === selectedMedia.id &&
+      props.mediaScope === selectedMedia.scope &&
+      (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
+    ) {
+      return props;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted uploaded media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+};
+
+const testMediaUploadModalControls = async (client, pageId) => {
+  const uploadFile = createSmokeUploadImageFile();
+
+  try {
+    await selectLayerById(client, 'smoke-image');
+    await switchToPropertiesPanel(client);
+    await clickControlByTestId(client, 'editor-image-upload-media');
+
+    const opened = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
+        hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+      };
+    })()`);
+
+    assert(
+      opened.hasModal &&
+        opened.activeTab === 'upload' &&
+        opened.allowedTypes === 'image' &&
+        opened.uploadFilter === 'image' &&
+        opened.fileAccept === 'image/*' &&
+        opened.hasVisibility &&
+        opened.hasFolder,
+      `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
+    );
+
+    await setFileInputByTestId(client, 'media-upload-input', [uploadFile.filePath]);
+    const uploaded = await waitForUploadedMediaItem(client, uploadFile.filename);
+    const selected = await clickMediaLibraryItemByName(client, uploadFile.filename);
+    const imageSource = await waitForImageSourceValue(client, selected.url);
+    await clickSave(client);
+    const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
+    const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
+
+    return {
+      opened,
+      uploaded,
+      selected,
+      imageSource,
+      savedStatus,
+      persisted,
+    };
+  } finally {
+    try {
+      fs.rmSync(uploadFile.filePath, { force: true });
+    } catch {
+      // Temp smoke upload file cleanup is best-effort.
+    }
+  }
+};
+
 const testIconBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-icon');
   await switchToPropertiesPanel(client);
@@ -6560,7 +6783,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -6708,6 +6931,19 @@ const main = async () => {
         mode: 'alignment-guides',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         alignmentGuides,
+      }, null, 2));
+      return;
+    }
+
+    if (MEDIA_UPLOAD_SMOKE) {
+      assert(!EDITOR_PATH, 'Media upload smoke currently requires an internally created smoke page');
+      const mediaUpload = await testMediaUploadModalControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'media-upload',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        mediaUpload,
       }, null, 2));
       return;
     }

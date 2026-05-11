@@ -856,6 +856,7 @@ function ContentProperties({
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Select from Media Library"
                 onClick={() => onOpenMedia('src')}
+                data-testid="editor-image-select-media"
               >
                 Select
               </button>
@@ -863,6 +864,7 @@ function ContentProperties({
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Upload media"
                 onClick={() => onOpenMedia('src', 'upload')}
+                data-testid="editor-image-upload-media"
               >
                 Upload
               </button>
