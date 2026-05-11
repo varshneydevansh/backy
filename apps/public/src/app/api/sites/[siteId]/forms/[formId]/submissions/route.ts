@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonValue, Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 import {
   attachCollectionRecordToSubmission,
@@ -23,6 +23,7 @@ import {
   sendEmailMessage,
 } from '@/lib/formEmailDelivery';
 import { verifyFormCaptcha } from '@/lib/formCaptcha';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -874,6 +875,10 @@ async function notifyFormSubmissionWebhook(params: {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, responseRequestId, { permission: 'forms.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, formId } = await params;
