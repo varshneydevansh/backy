@@ -346,9 +346,45 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-form',
+      type: 'form',
+      x: 284,
+      y: 590,
+      width: 300,
+      height: 180,
+      props: {
+        formId: 'contact_form',
+        formTitle: 'Contact Form',
+        method: 'POST',
+        enableHoneypot: true,
+        gap: 12,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#0284c7',
+        borderRadius: 10,
+        padding: 14,
+      },
+      children: [
+        {
+          id: 'styled-form-input',
+          type: 'input',
+          x: 0,
+          y: 0,
+          width: 220,
+          height: 72,
+          props: {
+            label: 'Name',
+            name: 'name',
+            required: true,
+            placeholder: 'Your name',
+          },
+        },
+      ],
+    },
+    {
       id: 'styled-repeater',
       type: 'repeater',
-      x: 284,
+      x: 604,
       y: 590,
       width: 360,
       height: 220,
@@ -378,7 +414,9 @@ const content: PageContent = {
   ],
 };
 
-const html = renderToStaticMarkup(<PageRenderer content={content} isPreview />);
+const html = renderToStaticMarkup(
+  <PageRenderer content={content} isPreview siteId="site_renderer_smoke" pageId="page_renderer_smoke" />,
+);
 
 assert(html.includes('Slate Heading Rendered'), `Heading Slate content was not rendered: ${html}`);
 assert(html.includes('font-size:42px'), `Heading font size was not rendered: ${html}`);
@@ -462,6 +500,12 @@ assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered:
 assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
 assert(html.includes('border-color:#7c2d12'), `Checkbox wrapper border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 5px 14px rgba(124, 45, 18, 0.2)'), `Checkbox wrapper shadow was not rendered: ${html}`);
+assert(html.includes('action="/api/sites/site_renderer_smoke/forms/contact_form/submissions"'), `Form Backy action was not rendered: ${html}`);
+assert(html.includes('method="POST"'), `Form method was not rendered: ${html}`);
+assert(html.includes('name="honeypot"'), `Form honeypot was not rendered: ${html}`);
+assert(html.includes('name="pageId"'), `Form page hidden input was not rendered: ${html}`);
+assert(html.includes('value="page_renderer_smoke"'), `Form page hidden value was not rendered: ${html}`);
+assert(html.includes('Contact Form'), `Form title was not rendered: ${html}`);
 assert(html.includes('data-backy-repeater="renderer_smoke_repeater"'), `Repeater dataset id was not rendered: ${html}`);
 assert(html.includes('href="/records/repeater-record"'), `Repeater record href was not rendered: ${html}`);
 assert(html.includes('src="https://cdn.backy.test/repeater-record.jpg"'), `Repeater image src was not rendered: ${html}`);
@@ -488,6 +532,7 @@ console.log(JSON.stringify({
     styledTextarea: true,
     styledSelect: true,
     styledCheckbox: true,
+    styledForm: true,
     styledRepeater: true,
   },
 }, null, 2));

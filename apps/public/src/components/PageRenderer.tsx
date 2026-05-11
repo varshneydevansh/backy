@@ -1819,8 +1819,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const fallbackFormId = getNameClass(formId || element.id).trim();
   const resolvedFormId = fallbackFormId.length > 0 ? fallbackFormId : `form-${Math.random().toString(36).slice(2, 8)}`;
   const configuredAction =
-    (typeof props.action as string) ||
-    (typeof props.actionUrl as string) ||
+    getNameClass(props.action) ||
+    getNameClass(props.actionUrl) ||
     (siteId && resolvedFormId ? `/api/sites/${siteId}/forms/${resolvedFormId}/submissions` : undefined);
 
   const isBackyAction = Boolean(siteId && configuredAction?.startsWith('/api/'));
