@@ -18,6 +18,7 @@ const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
+const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -2810,6 +2811,67 @@ const testKeyboardShortcutControls = async (client, pageId) => {
       status: shortcutSavedStatus,
       persisted: persistedAfterShortcutSave[saveElementId],
     },
+  };
+};
+
+const readZoomControlState = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const controls = document.querySelector('[data-testid="editor-zoom-controls"]');
+    const surface = document.querySelector('[data-testid="editor-canvas-scale-surface"]');
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const percent = document.querySelector('[data-testid="editor-zoom-percent"]');
+    const auto = document.querySelector('[data-testid="editor-zoom-autofit"]');
+    const style = surface instanceof HTMLElement ? window.getComputedStyle(surface) : null;
+    const canvasStyle = canvas instanceof HTMLElement ? window.getComputedStyle(canvas) : null;
+    const canvasRect = canvas instanceof HTMLElement ? canvas.getBoundingClientRect() : null;
+    const cssCanvasWidth = Number.parseFloat(canvasStyle?.width || '0');
+    const visualScale = cssCanvasWidth > 0 && canvasRect ? Number((canvasRect.width / cssCanvasWidth).toFixed(3)) : 0;
+    return {
+      label: ${JSON.stringify(label)},
+      hasControls: Boolean(controls),
+      percentText: percent?.textContent || '',
+      scale: Number(surface?.getAttribute('data-canvas-scale') || 0),
+      controlScale: Number(controls?.getAttribute('data-canvas-scale') || 0),
+      controlPercent: Number(controls?.getAttribute('data-zoom-percent') || 0),
+      transform: style?.transform || '',
+      autoFit: controls?.getAttribute('data-auto-fit') === 'true',
+      hasAutoBadge: Boolean(auto),
+      visualScale,
+    };
+  })()`);
+
+  assert(state.hasControls, `Zoom controls are missing during ${label}: ${JSON.stringify(state)}`);
+  assert(Number.isFinite(state.scale) && state.scale > 0, `Zoom scale is invalid during ${label}: ${JSON.stringify(state)}`);
+  assert(Math.abs(state.controlScale - state.scale) < 0.001, `Zoom control scale does not match canvas surface during ${label}: ${JSON.stringify(state)}`);
+  assert(state.controlPercent === Math.round(state.scale * 100), `Zoom control percent does not match scale during ${label}: ${JSON.stringify(state)}`);
+  assert(state.percentText === `${Math.round(state.scale * 100)}%`, `Zoom percent does not match scale during ${label}: ${JSON.stringify(state)}`);
+  assert(Math.abs(state.visualScale - state.scale) < 0.03, `Zoom visual scale does not match canvas scale during ${label}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testZoomControls = async (client) => {
+  const initial = await readZoomControlState(client, 'initial');
+
+  await clickControlByTestId(client, 'editor-zoom-out');
+  const afterZoomOut = await readZoomControlState(client, 'after zoom out');
+  assert(afterZoomOut.scale < initial.scale, `Zoom out did not reduce canvas scale: ${JSON.stringify({ initial, afterZoomOut })}`);
+  assert(afterZoomOut.autoFit === false, `Zoom out should disable auto-fit: ${JSON.stringify(afterZoomOut)}`);
+
+  await clickControlByTestId(client, 'editor-zoom-in');
+  const afterZoomIn = await readZoomControlState(client, 'after zoom in');
+  assert(afterZoomIn.scale > afterZoomOut.scale, `Zoom in did not increase canvas scale: ${JSON.stringify({ afterZoomOut, afterZoomIn })}`);
+  assert(afterZoomIn.autoFit === false, `Zoom in should keep manual zoom mode: ${JSON.stringify(afterZoomIn)}`);
+
+  await clickControlByTestId(client, 'editor-zoom-fit');
+  const afterFit = await readZoomControlState(client, 'after fit');
+  assert(afterFit.autoFit === true, `Fit canvas did not enable auto-fit: ${JSON.stringify(afterFit)}`);
+  assert(afterFit.scale > 0 && afterFit.scale <= 2, `Fit canvas produced out-of-range scale: ${JSON.stringify(afterFit)}`);
+
+  return {
+    initial,
+    afterZoomOut,
+    afterZoomIn,
+    afterFit,
   };
 };
 
@@ -6383,8 +6445,9 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE ? null : await createSmokeCollection();
+  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE;
+  const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
+  const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -6504,6 +6567,19 @@ const main = async () => {
         mode: 'multi-select',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         multiSelect,
+      }, null, 2));
+      return;
+    }
+
+    if (ZOOM_SMOKE) {
+      assert(!EDITOR_PATH, 'Zoom smoke currently requires an internally created smoke page');
+      const zoomControls = await testZoomControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'zoom',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        zoomControls,
       }, null, 2));
       return;
     }

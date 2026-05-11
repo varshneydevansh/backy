@@ -91,9 +91,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Renders all element types
 - Handle drop events
 - Grid background in edit mode
+- Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
 - **Issues:** None major
 - **Improvements Needed:**
-    - Zoom in/out
     - Pan/scroll navigation
     - Rulers
     - Guidelines/smart guides
@@ -322,6 +322,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added explicit keydown passthrough so editor consumers can layer additional shortcuts.
 - Unified canvas `list` rendering with `RichTextBlock` so list editing follows rich-text behavior.
@@ -386,7 +387,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Multi-select elements
 - ✅ Copy/Paste
 - ❌ Alignment guides
-- ❌ Zoom controls
+- ✅ Zoom controls
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
@@ -424,6 +425,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 **Phase 4: Polish**
 - Copy/Paste
+- Zoom controls ✅
 - Alignment guides
 - Responsive breakpoints
 - Media upload

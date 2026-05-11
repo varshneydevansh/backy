@@ -4379,6 +4379,8 @@ export function CanvasEditor({
                 {isPreview ? (
                   <div
                     className="overflow-hidden shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
+                    data-testid="editor-canvas-scale-surface"
+                    data-canvas-scale={activeCanvasScale}
                     style={{
                       width: size.width,
                       height: size.height,
@@ -4451,6 +4453,8 @@ export function CanvasEditor({
                     </div>
                     <div className="relative overflow-visible bg-white">
                       <div
+                        data-testid="editor-canvas-scale-surface"
+                        data-canvas-scale={activeCanvasScale}
                         style={{
                           width: size.width,
                           height: size.height,
@@ -4489,19 +4493,29 @@ export function CanvasEditor({
             </div>
 
             {!isPreview && (
-              <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
+              <div
+                className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
+                data-testid="editor-zoom-controls"
+                data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
+                data-canvas-scale={activeCanvasScale}
+                data-zoom-percent={zoomPercent}
+              >
                 <button
                   type="button"
                   onClick={handleZoomOut}
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Zoom out"
                   aria-label="Zoom out"
+                  data-testid="editor-zoom-out"
                 >
                   <ZoomOut className="h-4 w-4" />
                 </button>
-                <span className="min-w-12 text-center tabular-nums">{zoomPercent}%</span>
+                <span className="min-w-12 text-center tabular-nums" data-testid="editor-zoom-percent">{zoomPercent}%</span>
                 {isCanvasAutoFit && (
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  <span
+                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
+                    data-testid="editor-zoom-autofit"
+                  >
                     Auto
                   </span>
                 )}
@@ -4511,6 +4525,7 @@ export function CanvasEditor({
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Zoom in"
                   aria-label="Zoom in"
+                  data-testid="editor-zoom-in"
                 >
                   <ZoomIn className="h-4 w-4" />
                 </button>
@@ -4521,6 +4536,7 @@ export function CanvasEditor({
                   className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Fit canvas"
                   aria-label="Fit canvas"
+                  data-testid="editor-zoom-fit"
                 >
                   <Maximize2 className="h-4 w-4" />
                 </button>
