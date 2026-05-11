@@ -644,6 +644,35 @@ const parseFormOptions = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const parseFormInputValues = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => (typeof entry === 'string' ? entry.split(',') : [entry]))
+      .map((entry) => {
+        if (typeof entry === 'string') {
+          return entry.trim();
+        }
+
+        if (typeof entry === 'number' && Number.isFinite(entry)) {
+          return `${entry}`;
+        }
+
+        if (entry && typeof entry === 'object') {
+          const record = entry as Record<string, unknown>;
+          return sanitizeText(record.value) || sanitizeText(record.label);
+        }
+
+        return '';
+      })
+      .filter(Boolean);
+  }
+
+  const rawText = sanitizeText(value);
+  return rawText
+    ? rawText.split(',').map((item) => item.trim()).filter(Boolean)
+    : [];
+};
+
 const buildSharedElementStyle = (element: CanvasElement): CSSProperties => {
   const p = element.props as Record<string, any>;
   const savedStyles = element.styles || {};
@@ -2525,6 +2554,10 @@ function CanvasElementComponent({
           const helpText = formatHelpText(p.helpText);
           const optionItems = parseFormOptions(p.options);
           const required = getBoolean(p.required);
+          const selectedValues = parseFormInputValues(
+            p.defaultValue !== undefined ? p.defaultValue : p.value
+          );
+          const selectedSet = new Set(selectedValues);
           return (
             <div
               style={{
@@ -2562,12 +2595,9 @@ function CanvasElementComponent({
               }}
               >
                 {(optionItems.length ? optionItems : ['Option A']).map((option, optionIndex) => {
-                  const selectedValue = p.value ?? p.defaultValue;
                   const isChecked = element.type === 'radio'
-                    ? selectedValue === option
-                    : Array.isArray(selectedValue)
-                      ? selectedValue.includes(option)
-                      : selectedValue === option;
+                    ? selectedValues[0] === option
+                    : selectedSet.has(option);
 
                   return (
                     <label
@@ -2578,7 +2608,7 @@ function CanvasElementComponent({
                         type={element.type}
                         name={typeof p.name === 'string' ? p.name : element.type === 'radio' ? `${element.id}-group` : undefined}
                         value={option}
-                        required={required}
+                        required={element.type === 'checkbox' ? optionIndex === 0 && required : required}
                         checked={Boolean(isChecked)}
                         readOnly
                         onChange={() => {}}
