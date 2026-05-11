@@ -2147,7 +2147,7 @@ export function CanvasEditor({
 
     const nextSelectedId = expandedIds[0] ?? null;
     updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), nextSelectedId, expandedIds);
-    setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
+    setSelectedIds(expandedIds);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
   }, [elements, findElementEntry, selectedId, updateElementsWithHistory]);

@@ -251,14 +251,24 @@ const collectSmartGuideTargets = (
   const vertical = [0, size.width / 2, size.width];
   const horizontal = [0, size.height / 2, size.height];
 
-  for (const element of elements) {
-    if (activeIds.has(element.id) || element.visible === false) {
-      continue;
-    }
+  const collect = (nodes: CanvasElement[], origin = { x: 0, y: 0 }) => {
+    for (const element of nodes) {
+      if (activeIds.has(element.id) || element.visible === false) {
+        continue;
+      }
 
-    vertical.push(element.x, element.x + element.width / 2, element.x + element.width);
-    horizontal.push(element.y, element.y + element.height / 2, element.y + element.height);
-  }
+      const x = origin.x + element.x;
+      const y = origin.y + element.y;
+      vertical.push(x, x + element.width / 2, x + element.width);
+      horizontal.push(y, y + element.height / 2, y + element.height);
+
+      if (element.children?.length) {
+        collect(element.children, { x, y });
+      }
+    }
+  };
+
+  collect(elements);
 
   return { vertical, horizontal };
 };
@@ -382,6 +392,78 @@ const findElementById = (elements: CanvasElement[], targetId: string): CanvasEle
   }
 
   return null;
+};
+
+const findElementEntry = (
+  elements: CanvasElement[],
+  targetId: string,
+  parentId: string | null = null,
+): { element: CanvasElement; parentId: string | null } | null => {
+  for (const element of elements) {
+    if (element.id === targetId) {
+      return { element, parentId };
+    }
+
+    if (element.children?.length) {
+      const found = findElementEntry(element.children, targetId, element.id);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return null;
+};
+
+const getDragBoundsForParent = (
+  elements: CanvasElement[],
+  parentId: string | null,
+  canvasBounds: { width: number; height: number },
+) => {
+  if (!parentId) {
+    return canvasBounds;
+  }
+
+  const parent = findElementById(elements, parentId);
+  return parent
+    ? { width: parent.width, height: parent.height }
+    : canvasBounds;
+};
+
+const getSiblingScopeForParent = (
+  elements: CanvasElement[],
+  parentId: string | null,
+): CanvasElement[] => {
+  if (!parentId) {
+    return elements;
+  }
+
+  return findElementById(elements, parentId)?.children || [];
+};
+
+const createDragSnapshot = (
+  elements: CanvasElement[],
+  targetId: string,
+  canvasBounds: { width: number; height: number },
+): DragSnapshot | null => {
+  const entry = findElementEntry(elements, targetId);
+  if (!entry) {
+    return null;
+  }
+
+  const bounds = getDragBoundsForParent(elements, entry.parentId, canvasBounds);
+
+  return {
+    id: entry.element.id,
+    x: entry.element.x,
+    y: entry.element.y,
+    width: entry.element.width,
+    height: entry.element.height,
+    zIndex: entry.element.zIndex || 1,
+    parentId: entry.parentId,
+    boundsWidth: bounds.width,
+    boundsHeight: bounds.height,
+  };
 };
 
 const collectDragSnapshots = (
@@ -1247,17 +1329,11 @@ export function Canvas({
             && snapshot.boundsWidth === activeSnapshot.boundsWidth
             && snapshot.boundsHeight === activeSnapshot.boundsHeight
           ))
-        : [{
-            id: clickedElement.id,
-            x: clickedElement.x,
-            y: clickedElement.y,
-            width: clickedElement.width,
-            height: clickedElement.height,
-            zIndex: clickedElement.zIndex || 1,
-            parentId: null,
-            boundsWidth: size.width,
-            boundsHeight: size.height,
-          }];
+        : [createDragSnapshot(elementsRef.current, elementId, { width: size.width, height: size.height })]
+            .filter((snapshot): snapshot is DragSnapshot => !!snapshot);
+      if (!dragSnapshots.length) {
+        return;
+      }
       const isMultiDrag = dragSnapshots.length > 1;
       const minSelectedZIndex = Math.min(...dragSnapshots.map((snapshot) => snapshot.zIndex));
       const zIndexOffset = Math.max(0, getMaxZIndex(elementsRef.current) - minSelectedZIndex + 1);
@@ -1319,17 +1395,11 @@ export function Canvas({
               snapshot.boundsHeight === activeSnapshot.boundsHeight
             );
           })
-        : [{
-            id: element.id,
-            x: element.x,
-            y: element.y,
-            width: element.width,
-            height: element.height,
-            zIndex: element.zIndex || 1,
-            parentId: null,
-            boundsWidth: size.width,
-            boundsHeight: size.height,
-          }];
+        : [createDragSnapshot(elementsRef.current, elementId, { width: size.width, height: size.height })]
+            .filter((snapshot): snapshot is DragSnapshot => !!snapshot);
+      if (!resizeSnapshots.length) {
+        return;
+      }
 
       const nextResizeState: ResizeInteraction = {
         elementId,
@@ -1408,12 +1478,12 @@ export function Canvas({
       } else {
         const nextBounds = resizeBoundsFromHandle(
           {
-            x: activeResizeState.initialX,
-            y: activeResizeState.initialY,
-            width: activeResizeState.initialWidth,
-            height: activeResizeState.initialHeight,
-            boundsWidth: size.width,
-            boundsHeight: size.height,
+            x: activeResizeState.bounds.x,
+            y: activeResizeState.bounds.y,
+            width: activeResizeState.bounds.width,
+            height: activeResizeState.bounds.height,
+            boundsWidth: activeResizeState.bounds.boundsWidth,
+            boundsHeight: activeResizeState.bounds.boundsHeight,
           },
           activeResizeState.handle,
           deltaX,
@@ -1455,10 +1525,15 @@ export function Canvas({
 
     const snappedX = snapToGrid(clampToCanvas(newX, activeDragState.bounds.width, activeDragState.bounds.boundsWidth));
     const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, activeDragState.bounds.boundsHeight));
+    const activeParentId = activeDragState.snapshots[0]?.parentId ?? null;
+    const guideScope = getSiblingScopeForParent(elementsRef.current, activeParentId);
     const smartSnap = resolveSmartDragSnap(
-      elementsRef.current,
+      guideScope,
       activeDragState.elementIds,
-      size,
+      {
+        width: activeDragState.bounds.boundsWidth,
+        height: activeDragState.bounds.boundsHeight,
+      },
       snappedX,
       snappedY,
       activeDragState.bounds.width,
