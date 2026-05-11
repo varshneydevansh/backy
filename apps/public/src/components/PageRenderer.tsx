@@ -1599,16 +1599,24 @@ function ListElement({ element }: ElementRendererProps) {
   );
 }
 
+const repeaterRecordRawValue = (
+  record: Record<string, unknown>,
+  field: unknown,
+  fallbackFields: string[],
+): unknown => {
+  const values = isRecord(record.values) ? record.values : {};
+  const fieldKey = typeof field === 'string' && field.length > 0
+    ? field
+    : fallbackFields.find((key) => values[key] !== undefined);
+  return fieldKey ? values[fieldKey] : undefined;
+};
+
 const repeaterRecordValue = (
   record: Record<string, unknown>,
   field: unknown,
   fallbackFields: string[],
 ): string => {
-  const values = isRecord(record.values) ? record.values : {};
-  const fieldKey = typeof field === 'string' && field.length > 0
-    ? field
-    : fallbackFields.find((key) => values[key] !== undefined);
-  const value = fieldKey ? values[fieldKey] : undefined;
+  const value = repeaterRecordRawValue(record, field, fallbackFields);
 
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value;
@@ -1619,6 +1627,26 @@ const repeaterRecordValue = (
   } catch {
     return '';
   }
+};
+
+const repeaterRecordImageValue = (
+  record: Record<string, unknown>,
+  field: unknown,
+  fallbackFields: string[],
+): string => {
+  const value = repeaterRecordRawValue(record, field, fallbackFields);
+
+  if (typeof value === 'string') return value;
+  if (isRecord(value)) {
+    return (
+      getNameClass(value.url) ||
+      getNameClass(value.src) ||
+      getNameClass(value.publicUrl) ||
+      getNameClass(value.path)
+    );
+  }
+
+  return '';
 };
 
 /**
@@ -1633,6 +1661,7 @@ function RepeaterElement({ element }: ElementRendererProps) {
   const gap = getLength(props.gap, '16px');
   const titleField = typeof props.titleField === 'string' ? props.titleField : 'title';
   const descriptionField = typeof props.descriptionField === 'string' ? props.descriptionField : 'summary';
+  const imageField = typeof props.imageField === 'string' ? props.imageField : '';
   const emptyMessage = getNameClass(props.emptyMessage) || 'No records yet.';
 
   return (
@@ -1654,6 +1683,7 @@ function RepeaterElement({ element }: ElementRendererProps) {
         const recordId = typeof record.id === 'string' ? record.id : `${element.id}-record`;
         const title = repeaterRecordValue(record, titleField, ['title', 'name', 'label', 'slug']);
         const description = repeaterRecordValue(record, descriptionField, ['summary', 'description', 'excerpt', 'body']);
+        const imageSrc = repeaterRecordImageValue(record, imageField, ['image', 'thumbnail', 'photo', 'avatar', 'cover_image']);
         const href = typeof record.href === 'string' ? record.href : '#';
 
         return (
@@ -1672,6 +1702,22 @@ function RepeaterElement({ element }: ElementRendererProps) {
               boxShadow: '0 12px 28px rgba(15,23,42,0.08)',
             }}
           >
+            {imageSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageSrc}
+                alt={title || getNameClass(record.slug) || ''}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  aspectRatio: '16 / 9',
+                  objectFit: 'cover',
+                  borderRadius: 6,
+                  marginBottom: 12,
+                }}
+                loading="lazy"
+              />
+            ) : null}
             <div style={{ fontSize: 18, lineHeight: 1.25, fontWeight: 700, color: '#0f172a' }}>
               {title || getNameClass(record.slug) || 'Untitled'}
             </div>

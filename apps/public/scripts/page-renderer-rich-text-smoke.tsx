@@ -345,6 +345,36 @@ const content: PageContent = {
         boxShadow: '0 5px 14px rgba(124, 45, 18, 0.2)',
       },
     },
+    {
+      id: 'styled-repeater',
+      type: 'repeater',
+      x: 284,
+      y: 590,
+      width: 360,
+      height: 220,
+      props: {
+        datasetId: 'renderer_smoke_repeater',
+        titleField: 'title',
+        descriptionField: 'summary',
+        imageField: 'thumbnail',
+        columns: 1,
+        gap: 18,
+        records: [
+          {
+            id: 'record-1',
+            slug: 'repeater-record',
+            href: '/records/repeater-record',
+            values: {
+              title: 'Repeater record title',
+              summary: 'Repeater record summary',
+              thumbnail: {
+                url: 'https://cdn.backy.test/repeater-record.jpg',
+              },
+            },
+          },
+        ],
+      },
+    },
   ],
 };
 
@@ -432,6 +462,12 @@ assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered:
 assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
 assert(html.includes('border-color:#7c2d12'), `Checkbox wrapper border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 5px 14px rgba(124, 45, 18, 0.2)'), `Checkbox wrapper shadow was not rendered: ${html}`);
+assert(html.includes('data-backy-repeater="renderer_smoke_repeater"'), `Repeater dataset id was not rendered: ${html}`);
+assert(html.includes('href="/records/repeater-record"'), `Repeater record href was not rendered: ${html}`);
+assert(html.includes('src="https://cdn.backy.test/repeater-record.jpg"'), `Repeater image src was not rendered: ${html}`);
+assert(html.includes('alt="Repeater record title"'), `Repeater image alt was not rendered: ${html}`);
+assert(html.includes('Repeater record title'), `Repeater title was not rendered: ${html}`);
+assert(html.includes('Repeater record summary'), `Repeater summary was not rendered: ${html}`);
 
 console.log(JSON.stringify({
   ok: true,
@@ -452,5 +488,6 @@ console.log(JSON.stringify({
     styledTextarea: true,
     styledSelect: true,
     styledCheckbox: true,
+    styledRepeater: true,
   },
 }, null, 2));

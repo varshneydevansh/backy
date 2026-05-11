@@ -643,6 +643,7 @@ const createSmokeCollection = async () => {
         { key: 'category', label: 'Category', type: 'select', required: false, unique: false, sortOrder: 20, options: ['Featured', 'Reference'] },
         { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 30 },
         { key: 'rank', label: 'Rank', type: 'number', required: false, unique: false, sortOrder: 40 },
+        { key: 'thumbnail', label: 'Thumbnail', type: 'image', required: false, unique: false, sortOrder: 50 },
       ],
     }),
   });
@@ -660,6 +661,7 @@ const createSmokeCollection = async () => {
           category: index === 1 ? 'Featured' : 'Reference',
           summary: `${title} summary`,
           rank: index + 1,
+          thumbnail: `https://cdn.backy.test/${slug}-${index + 1}.jpg`,
         },
       }),
     });
@@ -3117,6 +3119,7 @@ const testRepeaterControls = async (client, collectionId) => {
       return {
         titleFields: optionValues('editor-repeater-title-field'),
         descriptionFields: optionValues('editor-repeater-description-field'),
+        imageFields: optionValues('editor-repeater-image-field'),
         filterFields: optionValues('editor-repeater-filter-field'),
         sortFields: optionValues('editor-repeater-sort-by'),
         hasLayoutControls: Boolean(document.querySelector('[data-testid="editor-repeater-layout-controls"]')),
@@ -3125,6 +3128,7 @@ const testRepeaterControls = async (client, collectionId) => {
     if (
       controlsReady.titleFields.includes('title') &&
       controlsReady.descriptionFields.includes('summary') &&
+      controlsReady.imageFields.includes('thumbnail') &&
       controlsReady.filterFields.includes('category') &&
       controlsReady.sortFields.includes('rank') &&
       controlsReady.hasLayoutControls
@@ -3137,6 +3141,7 @@ const testRepeaterControls = async (client, collectionId) => {
   assert(
     controlsReady?.titleFields?.includes('title') &&
       controlsReady?.descriptionFields?.includes('summary') &&
+      controlsReady?.imageFields?.includes('thumbnail') &&
       controlsReady?.filterFields?.includes('category') &&
       controlsReady?.sortFields?.includes('rank') &&
       controlsReady?.hasLayoutControls,
@@ -3146,6 +3151,7 @@ const testRepeaterControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-repeater-dataset-id', `dataset_${collectionId}_smoke_repeater`);
   await setFormControlByTestId(client, 'editor-repeater-title-field', 'title');
   await setFormControlByTestId(client, 'editor-repeater-description-field', 'summary');
+  await setFormControlByTestId(client, 'editor-repeater-image-field', 'thumbnail');
   await setFormControlByTestId(client, 'editor-repeater-search', 'featured');
   await setFormControlByTestId(client, 'editor-repeater-filter-field', 'category');
   await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Featured');
@@ -3167,6 +3173,7 @@ const testRepeaterControls = async (client, collectionId) => {
       datasetId: value('editor-repeater-dataset-id'),
       titleField: value('editor-repeater-title-field'),
       descriptionField: value('editor-repeater-description-field'),
+      imageField: value('editor-repeater-image-field'),
       search: value('editor-repeater-search'),
       filterField: value('editor-repeater-filter-field'),
       filterValue: value('editor-repeater-filter-value'),
@@ -3183,7 +3190,7 @@ const testRepeaterControls = async (client, collectionId) => {
 
   assert(state.collectionId === collectionId, `Repeater did not select collection: ${JSON.stringify(state)}`);
   assert(state.datasetId === `dataset_${collectionId}_smoke_repeater`, `Repeater dataset id mismatch: ${JSON.stringify(state)}`);
-  assert(state.titleField === 'title' && state.descriptionField === 'summary', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
+  assert(state.titleField === 'title' && state.descriptionField === 'summary' && state.imageField === 'thumbnail', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
   assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
@@ -3201,13 +3208,12 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   assert(repeater?.type === 'repeater', `Persisted repeater missing: ${JSON.stringify(repeater)}`);
   assert(props.collectionId === collectionId, `Persisted repeater collection mismatch: ${JSON.stringify(props)}`);
   assert(props.datasetId === `dataset_${collectionId}_smoke_repeater`, `Persisted repeater dataset mismatch: ${JSON.stringify(props)}`);
-  assert(props.titleField === 'title' && props.descriptionField === 'summary', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
+  assert(props.titleField === 'title' && props.descriptionField === 'summary' && props.imageField === 'thumbnail', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.q === 'featured', `Persisted repeater search mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.fieldKey === 'category' && props.query?.fieldValue === 'Featured', `Persisted repeater filter mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.sortBy === 'rank' && props.query?.sortDirection === 'desc', `Persisted repeater sort mismatch: ${JSON.stringify(props)}`);
   assert(props.limit === 2 && props.offset === 0 && props.columns === 2 && props.gap === 18, `Persisted repeater layout mismatch: ${JSON.stringify(props)}`);
   assert(props.emptyMessage === 'No matching records.', `Persisted repeater empty state mismatch: ${JSON.stringify(props)}`);
-  assert(!props.imageField, `Persisted repeater should not default imageField without an image field: ${JSON.stringify(props)}`);
 
   return props;
 };
@@ -5057,6 +5063,11 @@ const main = async () => {
         targetElementId: 'smoke-child-button',
         test: () => testButtonLinkBehaviorControls(client),
         assertPersisted: () => assertPersistedButtonLinkBehavior(tempPageId),
+      },
+      repeater: {
+        targetElementId: 'smoke-repeater',
+        test: () => testRepeaterControls(client, tempCollection?.id),
+        assertPersisted: () => assertPersistedRepeater(tempPageId, tempCollection?.id),
       },
       list: {
         targetElementId: 'smoke-list',
