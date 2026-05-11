@@ -1460,36 +1460,86 @@ function ContentProperties({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-              <label className="text-xs text-muted-foreground mb-1 block">
-                Min length
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={(element.props.minLength as number) || ''}
-                onChange={(e) => onChange({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })}
-                data-testid="editor-input-min-length"
-                className={cn(
-                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                  'focus:outline-none focus:ring-2 focus:ring-ring'
-                )}
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Min length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.minLength as number) || ''}
+                    onChange={(e) => onChange({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                    data-testid="editor-input-min-length"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
                   />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
-                Max length
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={(element.props.maxLength as number) || ''}
-                onChange={(e) => onChange({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })}
-                data-testid="editor-input-max-length"
-                className={cn(
-                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                  'focus:outline-none focus:ring-2 focus:ring-ring'
-                )}
-              />
+                    Max length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.maxLength as number) || ''}
+                    onChange={(e) => onChange({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                    data-testid="editor-input-max-length"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Min
+                  </label>
+                  <input
+                    type="text"
+                    value={(element.props.min as string) || ''}
+                    onChange={(e) => onChange({ min: e.target.value || undefined })}
+                    data-testid="editor-input-min"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Max
+                  </label>
+                  <input
+                    type="text"
+                    value={(element.props.max as string) || ''}
+                    onChange={(e) => onChange({ max: e.target.value || undefined })}
+                    data-testid="editor-input-max"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Step
+                  </label>
+                  <input
+                    type="text"
+                    value={(element.props.step as string) || ''}
+                    onChange={(e) => onChange({ step: e.target.value || undefined })}
+                    data-testid="editor-input-step"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="1"
+                  />
                 </div>
               </div>
               <div>
