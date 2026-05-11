@@ -99,6 +99,11 @@ const BLOG_CREATE_CONTROL_AREAS = [
         href: '#blog-create-canvas',
     },
     {
+        title: 'Writing structure',
+        detail: 'Article sections, pull quotes, word count, and reading-time planning.',
+        href: '#blog-create-writing',
+    },
+    {
         title: 'Publishing',
         detail: 'Draft, publish, schedule, readiness, and save controls.',
         href: '#blog-create-publish',
@@ -374,6 +379,182 @@ function hasFrontendBlogTemplateRoot(elements: CanvasElement[], template: SiteFr
     return elements.some(visit);
 }
 
+function collectCanvasText(elements: CanvasElement[]): string {
+    const chunks: string[] = [];
+    const visit = (element: CanvasElement) => {
+        const content = element.props?.content;
+        if (typeof content === 'string') {
+            chunks.push(content);
+        }
+
+        if (Array.isArray(element.children)) {
+            element.children.forEach(visit);
+        }
+    };
+
+    elements.forEach(visit);
+    return chunks.join(' ');
+}
+
+function countWords(value: string): number {
+    return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function getWritingStats(title: string, excerpt: string, elements: CanvasElement[]) {
+    const titleWords = countWords(title);
+    const excerptWords = countWords(excerpt);
+    const canvasWords = countWords(collectCanvasText(elements));
+    const totalWords = titleWords + excerptWords + canvasWords;
+
+    return {
+        titleWords,
+        excerptWords,
+        canvasWords,
+        totalWords,
+        readingMinutes: Math.max(1, Math.ceil(totalWords / 225)),
+    };
+}
+
+function appendLongFormBlockToElements(
+    elements: CanvasElement[],
+    options: {
+        kind: 'section' | 'quote';
+        selectedFrontendTemplateId?: string;
+        sequence: number;
+    },
+): CanvasElement[] {
+    const targetId = options.selectedFrontendTemplateId
+        ? `frontend-blog-template-${options.selectedFrontendTemplateId}-body-region`
+        : 'blog-article-body';
+    let appended = false;
+
+    const appendToTarget = (element: CanvasElement): CanvasElement => {
+        if (element.id === targetId) {
+            const children = Array.isArray(element.children) ? element.children : [];
+            const nextY = children.reduce((max, child) => Math.max(max, (child.y || 0) + (child.height || 0)), 0) + 36;
+            const idPrefix = `blog-longform-${options.kind}-${options.sequence}`;
+            const nextChild = options.kind === 'section'
+                ? createCanvasElement('section', 28, nextY, {
+                    id: idPrefix,
+                    width: Math.min(820, Math.max(320, (element.width || DEFAULT_CANVAS_SIZE.width) - 96)),
+                    height: 240,
+                    props: {
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                        borderRadius: 10,
+                        padding: 0,
+                    },
+                    children: [
+                        createCanvasElement('heading', 28, 28, {
+                            id: `${idPrefix}-heading`,
+                            width: 620,
+                            height: 54,
+                            props: {
+                                content: 'New article section',
+                                level: 'h2',
+                                fontSize: 32,
+                                fontWeight: '800',
+                                lineHeight: 1.15,
+                                color: '#0f172a',
+                                binding: 'post.content.section',
+                            },
+                        }),
+                        createCanvasElement('paragraph', 28, 98, {
+                            id: `${idPrefix}-body`,
+                            width: 700,
+                            height: 106,
+                            props: {
+                                content: 'Develop this section with supporting details, examples, media references, or product/context links before publishing.',
+                                fontSize: 17,
+                                lineHeight: 1.7,
+                                color: '#334155',
+                                binding: 'post.content.body',
+                            },
+                        }),
+                    ],
+                })
+                : createCanvasElement('quote', 44, nextY, {
+                    id: idPrefix,
+                    width: Math.min(760, Math.max(300, (element.width || DEFAULT_CANVAS_SIZE.width) - 120)),
+                    height: 130,
+                    props: {
+                        content: 'Add a memorable pull quote or editorial takeaway for readers scanning the article.',
+                        fontSize: 24,
+                        fontWeight: '700',
+                        lineHeight: 1.45,
+                        color: '#0f172a',
+                        borderColor: '#0f766e',
+                        borderWidth: 0,
+                        binding: 'post.content.quote',
+                    },
+                });
+            const nextHeight = Math.max(element.height || 0, nextY + nextChild.height + 48);
+            appended = true;
+            return {
+                ...element,
+                height: nextHeight,
+                children: [...children, nextChild],
+            };
+        }
+
+        if (!Array.isArray(element.children)) {
+            return element;
+        }
+
+        const nextChildren = element.children.map(appendToTarget);
+        const childrenChanged = nextChildren.some((child, index) => child !== element.children?.[index]);
+        if (!childrenChanged) {
+            return element;
+        }
+
+        return {
+            ...element,
+            height: Math.max(element.height || 0, ...nextChildren.map((child) => (child.y || 0) + (child.height || 0) + 48)),
+            children: nextChildren,
+        };
+    };
+
+    const nextElements = elements.map(appendToTarget);
+    if (appended) {
+        return nextElements;
+    }
+
+    const sequence = options.sequence;
+    const y = getCanvasHeightForElements(elements) + 40;
+    const fallback = options.kind === 'section'
+        ? createCanvasElement('section', 0, y, {
+            id: `blog-longform-section-${sequence}`,
+            width: DEFAULT_CANVAS_SIZE.width,
+            height: 260,
+            dataBindings: [{ source: 'blog', mode: 'current', fields: ['content'] }],
+            props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+            children: [
+                createCanvasElement('heading', 220, 48, {
+                    id: `blog-longform-section-${sequence}-heading`,
+                    width: 720,
+                    height: 58,
+                    props: { content: 'New article section', level: 'h2', fontSize: 32, fontWeight: '800', lineHeight: 1.15, color: '#0f172a' },
+                }),
+                createCanvasElement('paragraph', 220, 122, {
+                    id: `blog-longform-section-${sequence}-body`,
+                    width: 760,
+                    height: 106,
+                    props: { content: 'Develop this section with supporting details, examples, media references, or product/context links before publishing.', fontSize: 17, lineHeight: 1.7, color: '#334155' },
+                }),
+            ],
+        })
+        : createCanvasElement('quote', 260, y, {
+            id: `blog-longform-quote-${sequence}`,
+            width: 680,
+            height: 130,
+            props: { content: 'Add a memorable pull quote or editorial takeaway for readers scanning the article.', fontSize: 24, fontWeight: '700', lineHeight: 1.45, color: '#0f172a' },
+        });
+
+    return [...elements, fallback];
+}
+
 function getFrontendBlogTemplateCanvasSize(template: SiteFrontendDesignTemplate, elements: CanvasElement[]): CanvasSize {
     return {
         ...DEFAULT_CANVAS_SIZE,
@@ -620,6 +801,27 @@ function NewBlogPostPage() {
         [designTemplateId, frontendBlogTemplates],
     );
     const effectiveCanvasSource = selectedFrontendTemplate ? 'frontend-design' : 'backy-starter';
+    const writingStats = useMemo(
+        () => getWritingStats(title, excerpt, canvasElements),
+        [canvasElements, excerpt, title],
+    );
+    const addLongFormBlock = (kind: 'section' | 'quote') => {
+        if (isCreateBusy) return;
+
+        clearCreationFeedback();
+        const nextElements = appendLongFormBlockToElements(canvasElements, {
+            kind,
+            selectedFrontendTemplateId: selectedFrontendTemplate?.id,
+            sequence: Date.now(),
+        });
+        setCanvasElements(nextElements);
+        setCanvasSize((current) => ({
+            ...current,
+            height: Math.max(current.height, getCanvasHeightForElements(nextElements)),
+        }));
+        setCanvasSeedKey(`longform-${kind}-${Date.now()}`);
+        setNotice(kind === 'section' ? 'Added an editable article section to the canvas.' : 'Added an editable pull quote to the canvas.');
+    };
     const applyFrontendTemplate = (template: SiteFrontendDesignTemplate, options: { syncRoute?: boolean } = {}) => {
         if (isCreateBusy) return;
 
@@ -1627,6 +1829,53 @@ function NewBlogPostPage() {
                             />
                             <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
                         </div>
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel id="blog-create-writing" className="overflow-hidden scroll-mt-24" data-testid="blog-create-writing-panel">
+                            <PanelHeader
+                                title="Writing structure"
+                                description="Plan long-form article flow before publishing: sections, pull quotes, word count, and reading time."
+                                icon={<FileText className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-3" data-testid="blog-create-writing-metrics">
+                                    <div className="rounded-lg border border-border bg-background px-4 py-3">
+                                        <div className="text-xs font-medium text-muted-foreground">Total words</div>
+                                        <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{writingStats.totalWords}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-background px-4 py-3">
+                                        <div className="text-xs font-medium text-muted-foreground">Canvas words</div>
+                                        <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{writingStats.canvasWords}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-background px-4 py-3">
+                                        <div className="text-xs font-medium text-muted-foreground">Reading time</div>
+                                        <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{writingStats.readingMinutes} min</div>
+                                    </div>
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isCreateBusy}
+                                        onClick={() => addLongFormBlock('section')}
+                                        data-testid="blog-create-add-section"
+                                    >
+                                        Add section
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isCreateBusy}
+                                        onClick={() => addLongFormBlock('quote')}
+                                        data-testid="blog-create-add-quote"
+                                    >
+                                        Add pull quote
+                                    </Button>
+                                </div>
+                                <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs leading-5 text-muted-foreground">
+                                    Inserted blocks become normal editable canvas layers and are saved with the post content for hosted and custom frontends.
+                                </div>
                             </PanelContent>
                         </Panel>
 

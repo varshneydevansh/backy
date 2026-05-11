@@ -278,6 +278,8 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
     const inspector = document.querySelector('[data-testid="editor-inspector"]');
     const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
     const frontendTemplatePanel = document.querySelector('[data-testid="blog-frontend-template-panel"]');
+    const writingPanel = document.querySelector('[data-testid="blog-create-writing-panel"]');
+    const frontendTemplateRoot = document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]');
     const activeTemplate = document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]');
     const payload = document.querySelector('[data-testid="blog-create-payload"]');
     const rect = (node) => {
@@ -309,7 +311,12 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       mediaPanel: Boolean(document.querySelector('#blog-create-media')),
       publishPanel: Boolean(document.querySelector('#blog-create-publish')),
       taxonomyPanel: Boolean(document.querySelector('#blog-create-taxonomy')),
+      writingPanel: Boolean(writingPanel),
+      writingMetrics: Boolean(document.querySelector('[data-testid="blog-create-writing-metrics"]')),
+      addSection: Boolean(document.querySelector('[data-testid="blog-create-add-section"]')),
+      addQuote: Boolean(document.querySelector('[data-testid="blog-create-add-quote"]')),
       frontendTemplatePanel: Boolean(frontendTemplatePanel),
+      frontendTemplateRoot: Boolean(frontendTemplateRoot),
       activeTemplate: activeTemplate?.getAttribute('data-active') || '',
       payloadTemplateId: (() => {
         try {
@@ -341,8 +348,9 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
     assert(!state.commandVisible && !state.draftPanel && !state.publishPanel, `${label} focus mode did not hide create panels: ${JSON.stringify(state)}`);
   } else {
     assert(state.commandVisible, `${label} command center missing: ${JSON.stringify(state)}`);
-    assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
-    assert(state.frontendTemplatePanel && state.activeTemplate === 'true' && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `${label} frontend template handoff missing: ${JSON.stringify(state)}`);
+    assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel && state.writingPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
+    assert(state.writingMetrics && state.addSection && state.addQuote, `${label} writing structure controls missing: ${JSON.stringify(state)}`);
+    assert(state.frontendTemplatePanel && state.frontendTemplateRoot && state.activeTemplate === 'true' && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `${label} frontend template handoff missing: ${JSON.stringify(state)}`);
     assert(state.hasFocusAction, `${label} focus canvas action missing: ${JSON.stringify(state)}`);
   }
 
@@ -588,6 +596,39 @@ const assertMobileBreakpointAuthoring = async (client) => {
   };
 };
 
+const assertWritingStructureTools = async (client) => {
+  for (const testId of ['blog-create-add-section', 'blog-create-add-quote']) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="${testId}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    assert(clicked?.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+    await sleep(300);
+  }
+
+  const state = await evaluate(client, `(() => {
+    const metrics = document.querySelector('[data-testid="blog-create-writing-metrics"]')?.textContent || '';
+    const section = document.querySelector('[data-element-id^="blog-longform-section-"]');
+    const quote = document.querySelector('[data-element-id^="blog-longform-quote-"]');
+    return {
+      metrics,
+      sectionId: section?.getAttribute('data-element-id') || '',
+      quoteId: quote?.getAttribute('data-element-id') || '',
+      hasSectionText: document.body?.innerText?.includes('New article section') || false,
+      hasQuoteText: document.body?.innerText?.includes('memorable pull quote') || false,
+    };
+  })()`);
+
+  assert(state.sectionId && state.quoteId, `Long-form canvas blocks were not inserted: ${JSON.stringify(state)}`);
+  assert(state.hasSectionText && state.hasQuoteText, `Long-form inserted block text missing: ${JSON.stringify(state)}`);
+  assert(/Total words/i.test(state.metrics) && /Reading time/i.test(state.metrics), `Writing metrics did not render: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const navigateToBlogCreate = async (client) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&designTemplate=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
@@ -598,6 +639,7 @@ const navigateToBlogCreate = async (client) => {
       seo: Boolean(document.querySelector('#blog-create-seo')),
       media: Boolean(document.querySelector('#blog-create-media')),
       canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      frontendTemplateRoot: Boolean(document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')),
       frontendPanel: Boolean(document.querySelector('[data-testid="blog-frontend-template-options"]')),
       frontendTemplateActive: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
       payloadTemplateId: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.id || '',
@@ -611,6 +653,7 @@ const navigateToBlogCreate = async (client) => {
       && state.seo
       && state.media
       && state.canvas
+      && state.frontendTemplateRoot
       && state.frontendPanel
       && state.frontendTemplateActive === 'true'
       && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID
@@ -820,6 +863,8 @@ const assertAutosaveWritten = async (client, slug) => {
         return null;
       };
       const heading = find(parsed?.canvasElements || [], 'frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading');
+      const hasLongFormSection = Boolean((parsed?.canvasElements || []).some((element) => JSON.stringify(element).includes('blog-longform-section-')));
+      const hasLongFormQuote = Boolean((parsed?.canvasElements || []).some((element) => JSON.stringify(element).includes('blog-longform-quote-')));
       return {
         hasDraft: Boolean(parsed),
         slug: parsed?.slug || null,
@@ -830,6 +875,8 @@ const assertAutosaveWritten = async (client, slug) => {
         designTemplateId: parsed?.designTemplateId || null,
         hasFrontendTemplateRoot: Array.isArray(parsed?.canvasElements) && parsed.canvasElements.some(visit),
         mobileOverride: heading?.responsive?.mobile || null,
+        hasLongFormSection,
+        hasLongFormQuote,
         badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
       };
     })()`);
@@ -849,6 +896,7 @@ const assertAutosaveWritten = async (client, slug) => {
   assert(state.designTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Autosave did not retain frontend template id: ${JSON.stringify(state)}`);
   assert(state.hasFrontendTemplateRoot === true, `Autosave did not retain frontend template canvas root: ${JSON.stringify(state)}`);
   assert(state.mobileOverride?.x === 24 && state.mobileOverride?.width === 320, `Autosave did not retain mobile breakpoint override: ${JSON.stringify(state)}`);
+  assert(state.hasLongFormSection && state.hasLongFormQuote, `Autosave did not retain long-form writing blocks: ${JSON.stringify(state)}`);
   return state;
 };
 
@@ -1090,12 +1138,15 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   const wrapper = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}`);
   const heading = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`);
   const bodyRegion = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-body-region`);
+  const longFormSection = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-section-'));
+  const longFormQuote = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-quote-'));
 
   assert(wrapper?.type === 'section', `Frontend blog template wrapper missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
   assert(wrapper.props?.frontendTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Frontend blog wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
   assert(heading?.props?.content === 'Smoke Blog Create', `Frontend blog heading does not use post title: ${JSON.stringify(heading?.props)}`);
   assert(heading?.responsive?.mobile?.x === 24 && heading?.responsive?.mobile?.width === 320, `Frontend blog heading did not persist mobile breakpoint override: ${JSON.stringify(heading?.responsive)}`);
   assert(Array.isArray(bodyRegion?.props?.bindingHints) && bodyRegion.props.bindingHints.length === 2, `Frontend blog body region missing binding hints: ${JSON.stringify(bodyRegion?.props)}`);
+  assert(longFormSection && longFormQuote, `Created blog did not persist long-form writing blocks: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 80) })}`);
   assert(canvasSize.width === 1260 && canvasSize.height >= 940, `Frontend blog canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-blog-primary'), `Frontend blog custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
 
@@ -1115,6 +1166,8 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
       wrapperId: wrapper.id,
       heading: heading?.props?.content,
       headingMobileOverride: heading?.responsive?.mobile,
+      longFormSectionId: longFormSection?.id,
+      longFormQuoteId: longFormQuote?.id,
       customCssStored: typeof content.customCSS === 'string',
     },
   };
@@ -1197,6 +1250,7 @@ const main = async () => {
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
     const focusMode = await assertCanvasFocusMode(client);
     const mobileBreakpoint = await assertMobileBreakpointAuthoring(client);
+    const writingStructure = await assertWritingStructureTools(client);
     const filled = await fillBlogCreateForm(client, slug);
     const mediaPicker = await assertFeaturedMediaPicker(client);
     const autosave = await assertAutosaveWritten(client, slug);
@@ -1227,6 +1281,7 @@ const main = async () => {
       },
       focusMode,
       mobileBreakpoint,
+      writingStructure,
       filled,
       mediaPicker,
       autosave,
