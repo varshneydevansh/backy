@@ -2677,6 +2677,7 @@ function SelectElement({ element }: ElementRendererProps) {
   const options = parseOptionValues(props.options);
   const name = getNameClass(props.name) || `field-${element.id}`;
   const defaultValue = parseAttributeString(props.defaultValue);
+  const placeholder = getNameClass(props.placeholder);
   const label = getNameClass(props.label);
   const helpText = getNameClass(props.helpText);
 
@@ -2715,7 +2716,11 @@ function SelectElement({ element }: ElementRendererProps) {
           ...styles,
         }}
       >
-        {options.length === 0 ? <option value="">Select</option> : null}
+        {placeholder || options.length === 0 ? (
+          <option value="" disabled={options.length > 0}>
+            {placeholder || 'Select'}
+          </option>
+        ) : null}
         {options.map((option) => (
           <option key={option} value={option}>
             {option}

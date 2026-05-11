@@ -308,6 +308,7 @@ const content: PageContent = {
         label: 'Plan field',
         name: 'styled_plan',
         required: true,
+        placeholder: 'Choose a plan',
         options: ['Starter', 'Growth', 'Scale'],
         defaultValue: 'Growth',
         helpText: 'Choose a plan.',
@@ -493,6 +494,7 @@ assert(html.includes('Textarea body'), `Textarea default value was not rendered:
 assert(html.includes('border:2px solid #059669'), `Textarea border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 6px 16px rgba(5, 150, 105, 0.22)'), `Textarea shadow was not rendered: ${html}`);
 assert(html.includes('name="styled_plan"'), `Select name was not rendered: ${html}`);
+assert(html.includes('<option value="" disabled="">Choose a plan</option>'), `Select placeholder was not rendered: ${html}`);
 assert(html.includes('<option value="Growth" selected="">Growth</option>'), `Select default value was not rendered: ${html}`);
 assert(html.includes('border:2px double #4f46e5'), `Select border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 4px 10px rgba(79, 70, 229, 0.2)'), `Select shadow was not rendered: ${html}`);
