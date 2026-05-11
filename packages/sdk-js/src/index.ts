@@ -1323,6 +1323,13 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`);
   }
 
+  commerceOrderContractCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceOrderContract>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
   createCommerceOrder(input: BackyCommerceOrderInput, siteId = this.requireSiteId()): Promise<BackyEnvelope<{
     schemaVersion: 'backy.commerce-orders.v1';
     order: BackyCommerceOrderSummary;

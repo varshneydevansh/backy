@@ -130,6 +130,13 @@ if (catalogSecond.notModified) {
   console.log('Reuse your cached product catalog.');
 }
 
+const orderContractFirst = await backy.commerceOrderContractCached();
+const orderContractSecond = await backy.commerceOrderContractCached({ etag: orderContractFirst.meta.etag });
+
+if (orderContractSecond.notModified) {
+  console.log('Reuse your cached checkout order contract.');
+}
+
 const fontsFirst = await backy.mediaFontsCached();
 const fontsSecond = await backy.mediaFontsCached({ etag: fontsFirst.meta.etag });
 

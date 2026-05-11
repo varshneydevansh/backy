@@ -589,6 +589,16 @@ assert(Array.isArray(events.data.events), 'events() missing events array');
 
 let commerceCatalogChecked = false;
 try {
+  const commerceOrderContract = await client.commerceOrderContract();
+  assert(commerceOrderContract.data.schemaVersion === 'backy.commerce-orders.v1', 'commerceOrderContract() missing schema version');
+  assert(commerceOrderContract.data.relatedEndpoints?.catalog, 'commerceOrderContract() missing catalog endpoint');
+  const cachedCommerceOrderContract = await client.commerceOrderContractCached();
+  assert(cachedCommerceOrderContract.notModified === false, 'commerceOrderContractCached() first request should return a body');
+  assert(cachedCommerceOrderContract.body.data.schemaVersion === 'backy.commerce-orders.v1', 'commerceOrderContractCached() missing schema version');
+  assert(cachedCommerceOrderContract.meta.etag, 'commerceOrderContractCached() missing response ETag');
+  const revalidatedCommerceOrderContract = await client.commerceOrderContractCached({ etag: cachedCommerceOrderContract.meta.etag });
+  assert(revalidatedCommerceOrderContract.notModified === true, 'commerceOrderContractCached() did not return notModified for matching ETag');
+
   const commerceCatalog = await client.commerceCatalog({ limit: 5 });
   assert(commerceCatalog.data.schemaVersion === 'backy.commerce-catalog.v1', 'commerceCatalog() missing schema version');
   assert(Array.isArray(commerceCatalog.data.products), 'commerceCatalog() missing products array');
@@ -885,7 +895,7 @@ console.log(JSON.stringify({
     'reportReasonsCached',
     'siteComments',
     'events',
-    ...(commerceCatalogChecked ? ['commerceCatalog', 'commerceCatalogCached'] : []),
+    ...(commerceCatalogChecked ? ['commerceOrderContract', 'commerceOrderContractCached', 'commerceCatalog', 'commerceCatalogCached'] : []),
   ],
   writeChecked: writeChecks,
 }, null, 2));
