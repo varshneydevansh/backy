@@ -95,6 +95,13 @@ const normalizeInputType = (value: unknown): string => {
   return 'text';
 };
 
+const normalizeTextareaResize = (value: unknown): CSSProperties['resize'] => {
+  const resize = sanitizeText(value);
+  return ['none', 'both', 'horizontal', 'vertical', 'block', 'inline'].includes(resize)
+    ? resize as CSSProperties['resize']
+    : 'vertical';
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -2495,7 +2502,7 @@ function CanvasElementComponent({
                   borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
                   backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
                   pointerEvents: isPreview ? 'auto' : 'none',
-                  resize: 'none',
+                  resize: normalizeTextareaResize(p.resize),
                 }}
                 readOnly
               />

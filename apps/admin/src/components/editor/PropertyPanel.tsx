@@ -1406,6 +1406,27 @@ function ContentProperties({
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
+                  Resize
+                </label>
+                <select
+                  value={(element.props.resize as string) || 'vertical'}
+                  onChange={(e) => onChange({ resize: e.target.value })}
+                  data-testid="editor-textarea-resize"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="vertical">Vertical</option>
+                  <option value="horizontal">Horizontal</option>
+                  <option value="both">Both</option>
+                  <option value="none">None</option>
+                  <option value="block">Block</option>
+                  <option value="inline">Inline</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
                   Default Value
                 </label>
                 <input
