@@ -20,6 +20,22 @@ const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
 const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
+const CHECKBOX_BEHAVIOR_SPEC = {
+  label: 'Smoke checkbox label',
+  name: 'smoke_channels',
+  placeholder: 'Choose channels',
+  helpText: 'Pick at least one channel.',
+  options: ['Email', 'SMS', 'Phone'],
+  value: 'SMS',
+};
+const RADIO_BEHAVIOR_SPEC = {
+  label: 'Smoke radio label',
+  name: 'smoke_frequency',
+  placeholder: 'Choose frequency',
+  helpText: 'Pick one frequency.',
+  options: ['Daily', 'Weekly', 'Monthly'],
+  value: 'Weekly',
+};
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -4986,103 +5002,126 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'image' || COMPONENT_SMOKE === 'icon' || COMPONENT_SMOKE === 'video' || COMPONENT_SMOKE === 'embed' || COMPONENT_SMOKE === 'map' || COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box' || COMPONENT_SMOKE === 'heading') {
+    const componentSmokeHandlers = {
+      image: {
+        targetElementId: 'smoke-image',
+        test: () => testImageBehaviorControls(client),
+        assertPersisted: () => assertPersistedImageBehavior(tempPageId),
+      },
+      icon: {
+        targetElementId: 'smoke-icon',
+        test: () => testIconBehaviorControls(client),
+        assertPersisted: () => assertPersistedIconBehavior(tempPageId),
+      },
+      video: {
+        targetElementId: 'smoke-video',
+        test: () => testVideoBehaviorControls(client),
+        assertPersisted: () => assertPersistedVideoBehavior(tempPageId),
+      },
+      embed: {
+        targetElementId: 'smoke-embed',
+        test: () => testEmbedBehaviorControls(client),
+        assertPersisted: () => assertPersistedEmbedBehavior(tempPageId),
+      },
+      map: {
+        targetElementId: 'smoke-map',
+        test: () => testMapBehaviorControls(client),
+        assertPersisted: () => assertPersistedMapBehavior(tempPageId),
+      },
+      input: {
+        targetElementId: 'smoke-input',
+        test: () => testInputFieldBehaviorControls(client),
+        assertPersisted: () => assertPersistedInputFieldBehavior(tempPageId),
+      },
+      textarea: {
+        targetElementId: 'smoke-textarea',
+        test: () => testTextareaFieldBehaviorControls(client),
+        assertPersisted: () => assertPersistedTextareaFieldBehavior(tempPageId),
+      },
+      select: {
+        targetElementId: 'smoke-select',
+        test: () => testSelectFieldBehaviorControls(client),
+        assertPersisted: () => assertPersistedSelectFieldBehavior(tempPageId),
+      },
+      checkbox: {
+        targetElementId: 'smoke-checkbox',
+        test: () => testChoiceFieldBehaviorControls(client, 'smoke-checkbox', 'checkbox', CHECKBOX_BEHAVIOR_SPEC),
+        assertPersisted: () => assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-checkbox', 'checkbox', CHECKBOX_BEHAVIOR_SPEC),
+      },
+      radio: {
+        targetElementId: 'smoke-radio',
+        test: () => testChoiceFieldBehaviorControls(client, 'smoke-radio', 'radio', RADIO_BEHAVIOR_SPEC),
+        assertPersisted: () => assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-radio', 'radio', RADIO_BEHAVIOR_SPEC),
+      },
+      button: {
+        targetElementId: 'smoke-child-button',
+        test: () => testButtonLinkBehaviorControls(client),
+        assertPersisted: () => assertPersistedButtonLinkBehavior(tempPageId),
+      },
+      list: {
+        targetElementId: 'smoke-list',
+        test: () => testListBehaviorControls(client),
+        assertPersisted: () => assertPersistedListBehavior(tempPageId),
+      },
+      divider: {
+        targetElementId: 'smoke-divider',
+        test: () => testDividerBehaviorControls(client),
+        assertPersisted: () => assertPersistedDividerBehavior(tempPageId),
+      },
+      columns: {
+        targetElementId: 'smoke-columns',
+        test: () => testColumnsBehaviorControls(client),
+        assertPersisted: () => assertPersistedColumnsBehavior(tempPageId),
+      },
+      nav: {
+        targetElementId: 'smoke-nav',
+        test: () => testNavBehaviorControls(client),
+        assertPersisted: () => assertPersistedNavBehavior(tempPageId),
+      },
+      spacer: {
+        targetElementId: 'smoke-spacer',
+        test: () => testSpacerBehaviorControls(client),
+        assertPersisted: () => assertPersistedSpacerBehavior(tempPageId),
+      },
+      quote: {
+        targetElementId: 'smoke-quote',
+        test: () => testQuoteBehaviorControls(client),
+        assertPersisted: () => assertPersistedQuoteBehavior(tempPageId),
+      },
+      link: {
+        targetElementId: 'smoke-link',
+        test: () => testLinkBehaviorControls(client),
+        assertPersisted: () => assertPersistedLinkBehavior(tempPageId),
+      },
+      form: {
+        targetElementId: 'smoke-form',
+        test: () => testFormBehaviorControls(client, tempCollection?.id),
+        assertPersisted: () => assertPersistedFormBehavior(tempPageId, tempCollection?.id),
+      },
+      comment: {
+        targetElementId: 'smoke-comment',
+        test: () => testCommentBehaviorControls(client),
+        assertPersisted: () => assertPersistedCommentBehavior(tempPageId),
+      },
+      box: {
+        targetElementId: 'smoke-box',
+        test: () => testBoxBehaviorControls(client),
+        assertPersisted: () => assertPersistedBoxBehavior(tempPageId),
+      },
+      heading: {
+        targetElementId: 'smoke-heading',
+        test: () => testHeadingTypographyControls(client),
+        assertPersisted: () => assertPersistedHeadingTypography(tempPageId),
+      },
+    };
+    const componentSmoke = componentSmokeHandlers[COMPONENT_SMOKE];
+    if (componentSmoke) {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
-      const targetElementId = COMPONENT_SMOKE === 'image'
-        ? 'smoke-image'
-        : COMPONENT_SMOKE === 'icon'
-          ? 'smoke-icon'
-          : COMPONENT_SMOKE === 'video'
-            ? 'smoke-video'
-            : COMPONENT_SMOKE === 'embed'
-              ? 'smoke-embed'
-              : COMPONENT_SMOKE === 'map'
-                ? 'smoke-map'
-          : COMPONENT_SMOKE === 'divider'
-        ? 'smoke-divider'
-        : COMPONENT_SMOKE === 'columns'
-          ? 'smoke-columns'
-          : COMPONENT_SMOKE === 'nav'
-            ? 'smoke-nav'
-            : COMPONENT_SMOKE === 'spacer'
-              ? 'smoke-spacer'
-              : COMPONENT_SMOKE === 'quote'
-                ? 'smoke-quote'
-                : COMPONENT_SMOKE === 'link'
-                  ? 'smoke-link'
-                  : COMPONENT_SMOKE === 'form'
-                    ? 'smoke-form'
-                    : COMPONENT_SMOKE === 'comment'
-                      ? 'smoke-comment'
-                      : COMPONENT_SMOKE === 'box'
-                        ? 'smoke-box'
-                        : COMPONENT_SMOKE === 'heading'
-                          ? 'smoke-heading'
-                  : 'smoke-list';
-      const behaviorControls = COMPONENT_SMOKE === 'image'
-        ? await testImageBehaviorControls(client)
-        : COMPONENT_SMOKE === 'icon'
-          ? await testIconBehaviorControls(client)
-          : COMPONENT_SMOKE === 'video'
-            ? await testVideoBehaviorControls(client)
-            : COMPONENT_SMOKE === 'embed'
-              ? await testEmbedBehaviorControls(client)
-              : COMPONENT_SMOKE === 'map'
-                ? await testMapBehaviorControls(client)
-          : COMPONENT_SMOKE === 'divider'
-        ? await testDividerBehaviorControls(client)
-        : COMPONENT_SMOKE === 'columns'
-          ? await testColumnsBehaviorControls(client)
-          : COMPONENT_SMOKE === 'nav'
-            ? await testNavBehaviorControls(client)
-            : COMPONENT_SMOKE === 'spacer'
-              ? await testSpacerBehaviorControls(client)
-              : COMPONENT_SMOKE === 'quote'
-                ? await testQuoteBehaviorControls(client)
-                : COMPONENT_SMOKE === 'link'
-                  ? await testLinkBehaviorControls(client)
-                  : COMPONENT_SMOKE === 'form'
-                    ? await testFormBehaviorControls(client, tempCollection?.id)
-                    : COMPONENT_SMOKE === 'comment'
-                      ? await testCommentBehaviorControls(client)
-                      : COMPONENT_SMOKE === 'box'
-                        ? await testBoxBehaviorControls(client)
-                        : COMPONENT_SMOKE === 'heading'
-                          ? await testHeadingTypographyControls(client)
-                  : await testListBehaviorControls(client);
+      const targetElementId = componentSmoke.targetElementId;
+      const behaviorControls = await componentSmoke.test();
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
-      const persistedBehavior = COMPONENT_SMOKE === 'image'
-        ? await assertPersistedImageBehavior(tempPageId)
-        : COMPONENT_SMOKE === 'icon'
-          ? await assertPersistedIconBehavior(tempPageId)
-          : COMPONENT_SMOKE === 'video'
-            ? await assertPersistedVideoBehavior(tempPageId)
-            : COMPONENT_SMOKE === 'embed'
-              ? await assertPersistedEmbedBehavior(tempPageId)
-              : COMPONENT_SMOKE === 'map'
-                ? await assertPersistedMapBehavior(tempPageId)
-          : COMPONENT_SMOKE === 'divider'
-        ? await assertPersistedDividerBehavior(tempPageId)
-        : COMPONENT_SMOKE === 'columns'
-          ? await assertPersistedColumnsBehavior(tempPageId)
-          : COMPONENT_SMOKE === 'nav'
-            ? await assertPersistedNavBehavior(tempPageId)
-            : COMPONENT_SMOKE === 'spacer'
-              ? await assertPersistedSpacerBehavior(tempPageId)
-              : COMPONENT_SMOKE === 'quote'
-                ? await assertPersistedQuoteBehavior(tempPageId)
-                : COMPONENT_SMOKE === 'link'
-                  ? await assertPersistedLinkBehavior(tempPageId)
-                  : COMPONENT_SMOKE === 'form'
-                    ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
-                    : COMPONENT_SMOKE === 'comment'
-                      ? await assertPersistedCommentBehavior(tempPageId)
-                      : COMPONENT_SMOKE === 'box'
-                        ? await assertPersistedBoxBehavior(tempPageId)
-                        : COMPONENT_SMOKE === 'heading'
-                          ? await assertPersistedHeadingTypography(tempPageId)
-                  : await assertPersistedListBehavior(tempPageId);
+      const persistedBehavior = await componentSmoke.assertPersisted();
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -5254,28 +5293,12 @@ const main = async () => {
     const selectFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testSelectFieldBehaviorControls(client);
-    const checkboxBehaviorSpec = {
-      label: 'Smoke checkbox label',
-      name: 'smoke_channels',
-      placeholder: 'Choose channels',
-      helpText: 'Pick at least one channel.',
-      options: ['Email', 'SMS', 'Phone'],
-      value: 'SMS',
-    };
-    const radioBehaviorSpec = {
-      label: 'Smoke radio label',
-      name: 'smoke_frequency',
-      placeholder: 'Choose frequency',
-      helpText: 'Pick one frequency.',
-      options: ['Daily', 'Weekly', 'Monthly'],
-      value: 'Weekly',
-    };
     const checkboxFieldBehaviorControls = EDITOR_PATH
       ? null
-      : await testChoiceFieldBehaviorControls(client, 'smoke-checkbox', 'checkbox', checkboxBehaviorSpec);
+      : await testChoiceFieldBehaviorControls(client, 'smoke-checkbox', 'checkbox', CHECKBOX_BEHAVIOR_SPEC);
     const radioFieldBehaviorControls = EDITOR_PATH
       ? null
-      : await testChoiceFieldBehaviorControls(client, 'smoke-radio', 'radio', radioBehaviorSpec);
+      : await testChoiceFieldBehaviorControls(client, 'smoke-radio', 'radio', RADIO_BEHAVIOR_SPEC);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -5423,10 +5446,10 @@ const main = async () => {
         ? await assertPersistedSelectFieldBehavior(tempPageId)
         : null;
       persistedCheckboxFieldBehavior = checkboxFieldBehaviorControls
-        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-checkbox', 'checkbox', checkboxBehaviorSpec)
+        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-checkbox', 'checkbox', CHECKBOX_BEHAVIOR_SPEC)
         : null;
       persistedRadioFieldBehavior = radioFieldBehaviorControls
-        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-radio', 'radio', radioBehaviorSpec)
+        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-radio', 'radio', RADIO_BEHAVIOR_SPEC)
         : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
