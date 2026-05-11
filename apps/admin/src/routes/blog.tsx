@@ -88,6 +88,16 @@ const BLOG_FRONTEND_SYSTEMS = [
     detail: 'Categories, tags, archive pages, related posts, frontend filter chips, and feed grouping.',
   },
   {
+    key: 'search',
+    title: 'Search feeds',
+    detail: 'Query-based public feeds for custom search pages and frontend post discovery.',
+  },
+  {
+    key: 'archives',
+    title: 'Archive feeds',
+    detail: 'Year/month public feeds for archive pages, editorial timelines, and date navigation.',
+  },
+  {
     key: 'authors',
     title: 'Authors and bylines',
     detail: 'Author IDs, display names, post counts, profile pages, and public byline contracts.',
@@ -255,8 +265,11 @@ function BlogListView() {
   const handoffPost = selectedPosts[0] || siteScopedPosts.find((post) => post.status === 'published') || siteScopedPosts[0] || null;
   const handoffPostSegment = handoffPost?.id ? encodeURIComponent(handoffPost.id) : '{postId}';
   const handoffPostSlug = handoffPost?.slug ? encodeURIComponent(handoffPost.slug) : '{postSlug}';
+  const handoffArchive = getPostArchiveParts(handoffPost);
   const publicBlogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog`;
   const publicPostBySlugUrl = `${publicBlogUrl}?slug=${handoffPostSlug}`;
+  const publicBlogSearchUrl = `${publicBlogUrl}?q=${encodeURIComponent(handoffPost?.title || '{query}')}`;
+  const publicBlogArchiveUrl = `${publicBlogUrl}?year=${handoffArchive.year}&month=${handoffArchive.month}`;
   const publicPostRenderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(handoffPost ? `/blog/${handoffPost.slug}` : '/blog/{postSlug}')}`;
   const publicPostResolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(handoffPost ? `/blog/${handoffPost.slug}` : '/blog/{postSlug}')}`;
   const adminBlogUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog`;
@@ -980,6 +993,8 @@ function BlogListView() {
     endpoints: {
       publicPosts: publicBlogUrl,
       publicPostBySlug: publicPostBySlugUrl,
+      publicSearchFeed: publicBlogSearchUrl,
+      publicArchiveFeed: publicBlogArchiveUrl,
       publicRender: publicPostRenderUrl,
       publicResolve: publicPostResolveUrl,
       adminPosts: adminBlogUrl,
@@ -1070,6 +1085,8 @@ function BlogListView() {
     handoffPost,
     postMetrics,
     publicBlogUrl,
+    publicBlogArchiveUrl,
+    publicBlogSearchUrl,
     publicPostBySlugUrl,
     publicPostResolveUrl,
     publicPostRenderUrl,
@@ -1479,6 +1496,8 @@ function BlogListView() {
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <BlogApiSnippet label="Public posts" value={publicBlogUrl} />
           <BlogApiSnippet label="Post by slug" value={publicPostBySlugUrl} />
+          <BlogApiSnippet label="Search feed" value={publicBlogSearchUrl} />
+          <BlogApiSnippet label="Archive feed" value={publicBlogArchiveUrl} />
           <BlogApiSnippet label="Render post" value={publicPostRenderUrl} />
           <BlogApiSnippet label="Resolve post" value={publicPostResolveUrl} />
           <BlogApiSnippet label="Admin posts" value={adminBlogUrl} />
@@ -2106,6 +2125,17 @@ const getPostSeoSummary = (post: BlogPost) => {
     canonical: canonical || `/blog/${post.slug}`,
     noIndex: meta.noIndex === true,
     noFollow: meta.noFollow === true,
+  };
+};
+
+const getPostArchiveParts = (post: BlogPost | null): { year: string; month: string } => {
+  const source = post?.publishedAt || post?.scheduledAt || new Date().toISOString();
+  const date = new Date(source);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return {
+    year: String(safeDate.getUTCFullYear()),
+    month: String(safeDate.getUTCMonth() + 1).padStart(2, '0'),
   };
 };
 

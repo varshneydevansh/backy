@@ -52,6 +52,16 @@ const parseStatusFilter = (value: string | null): 'published' | 'draft' | 'sched
     value === 'published' || value === 'draft' || value === 'scheduled' || value === 'archived' ? value : undefined
 );
 
+const parseArchiveYear = (value: string | null): number | undefined => {
+    const parsed = Number.parseInt(value || '', 10);
+    return Number.isInteger(parsed) && parsed >= 1970 && parsed <= 3000 ? parsed : undefined;
+};
+
+const parseArchiveMonth = (value: string | null): number | undefined => {
+    const parsed = Number.parseInt(value || '', 10);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12 ? parsed : undefined;
+};
+
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
     item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
 );
@@ -106,6 +116,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const limit = parseBoundedInteger(searchParams.get('limit'), 10, 1, 100);
         const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
         const status = parseStatusFilter(searchParams.get('status'));
+        const search = (searchParams.get('q') || searchParams.get('search') || '').trim();
+        const year = parseArchiveYear(searchParams.get('year'));
+        const month = parseArchiveMonth(searchParams.get('month'));
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
@@ -169,6 +182,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 categoryId: searchParams.get('categoryId') || category?.id || undefined,
                 tagId: searchParams.get('tagId') || tag?.id || undefined,
                 authorId: searchParams.get('authorId') || author?.id || undefined,
+                search: search || undefined,
+                year,
+                month,
                 limit,
                 offset,
             });
@@ -178,6 +194,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 pagination: {
                     ...result.pagination,
                     total: posts.length,
+                },
+                filters: {
+                    q: search || null,
+                    year: year || null,
+                    month: month || null,
+                    categoryId: searchParams.get('categoryId') || category?.id || null,
+                    tagId: searchParams.get('tagId') || tag?.id || null,
+                    authorId: searchParams.get('authorId') || author?.id || null,
                 },
             };
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
@@ -248,6 +272,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             tagSlug: searchParams.get('tagSlug') || undefined,
             authorId: searchParams.get('authorId') || undefined,
             authorSlug: searchParams.get('authorSlug') || undefined,
+            search: search || undefined,
+            year,
+            month,
         });
         const posts = data.posts.map(publicPost);
         return publicContractJson({
@@ -256,6 +283,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             data: {
                 ...data,
                 posts,
+                filters: {
+                    q: search || null,
+                    year: year || null,
+                    month: month || null,
+                    categoryId: searchParams.get('categoryId') || null,
+                    tagId: searchParams.get('tagId') || null,
+                    authorId: searchParams.get('authorId') || null,
+                },
             },
             ...data,
             posts,

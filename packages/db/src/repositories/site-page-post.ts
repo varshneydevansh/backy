@@ -253,6 +253,18 @@ const taxonomyArrayFromMeta = (meta: unknown, key: 'categoryIds' | 'tagIds'): st
     toStringArray((normalizeMeta(meta) as PageMeta & Record<string, unknown>)[key])
 );
 
+const postArchiveMatches = (post: BackyPost, year?: number, month?: number): boolean => {
+    if (!year && !month) return true;
+
+    const source = post.publishedAt || post.scheduledAt || post.updatedAt || post.createdAt;
+    const date = source ? new Date(source) : null;
+    if (!date || Number.isNaN(date.getTime())) return false;
+
+    if (year && date.getUTCFullYear() !== year) return false;
+    if (month && date.getUTCMonth() + 1 !== month) return false;
+    return true;
+};
+
 const normalizeContentDocument = (
     rawContent: unknown,
     input: {
@@ -571,7 +583,10 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
                 .filter((post) => input.includeUnpublished || input.status === 'all' || post.status === 'published')
                 .filter((post) => input.status && input.status !== 'all' ? post.status === input.status : true)
                 .filter((post) => input.authorId ? post.authorId === input.authorId : true)
-                .filter((post) => input.search ? searchText(`${post.title} ${post.slug} ${post.excerpt || ''}`, input.search) : true);
+                .filter((post) => input.categoryId ? post.categoryIds.includes(input.categoryId) : true)
+                .filter((post) => input.tagId ? post.tagIds.includes(input.tagId) : true)
+                .filter((post) => input.search ? searchText(`${post.title} ${post.slug} ${post.excerpt || ''}`, input.search) : true)
+                .filter((post) => postArchiveMatches(post, input.year, input.month));
             return paginate(filtered, input.limit, input.offset);
         },
 

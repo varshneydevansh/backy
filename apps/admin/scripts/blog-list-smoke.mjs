@@ -244,6 +244,22 @@ const assertPublicPost = async (slug, categoryId, tagId) => {
   return post;
 };
 
+const assertPublicSearchAndArchiveFeeds = async ({ slug, title, publishedAt }) => {
+  const searchPayload = await requestApi(`/api/sites/${SITE_ID}/blog?q=${encodeURIComponent(title)}`);
+  const searchPosts = searchPayload.data?.posts || searchPayload.posts || [];
+  assert(searchPosts.some((candidate) => candidate.slug === slug), `Public search feed did not include ${slug}: ${JSON.stringify(searchPayload).slice(0, 500)}`);
+
+  const sourceDate = publishedAt ? new Date(publishedAt) : new Date();
+  const safeDate = Number.isNaN(sourceDate.getTime()) ? new Date() : sourceDate;
+  const year = safeDate.getUTCFullYear();
+  const month = safeDate.getUTCMonth() + 1;
+  const archivePayload = await requestApi(`/api/sites/${SITE_ID}/blog?year=${year}&month=${month}`);
+  const archivePosts = archivePayload.data?.posts || archivePayload.posts || [];
+  assert(archivePosts.some((candidate) => candidate.slug === slug), `Public archive feed did not include ${slug}: ${JSON.stringify(archivePayload).slice(0, 500)}`);
+
+  return { year, month };
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -380,6 +396,8 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
     commandCreate: Boolean(document.querySelector('[data-testid="blog-command-create"]')),
     apiContract: document.body?.innerText?.includes('Blog API contract') || false,
     publicPostsApi: document.body?.innerText?.includes('/api/sites/${SITE_ID}/blog') || false,
+    searchFeed: document.body?.innerText?.includes('?q=') || false,
+    archiveFeed: document.body?.innerText?.includes('?year=') || false,
     taxonomyManager: Boolean(document.querySelector('[data-testid="blog-taxonomy-manager"]')),
     previewEndpoint: document.body?.innerText?.includes('/preview') || false,
     bulkControl: Boolean(document.querySelector('#blog-bulk select')),
@@ -823,8 +841,9 @@ const main = async () => {
     await exerciseFilters(client, { title, categoryId, tagId, authorId });
     const previewUrls = await clickPreview(client, title);
     await bulkPublishPost(client, title);
-    await waitForPostStatus(slug, 'published');
+    const publishedPost = await waitForPostStatus(slug, 'published');
     await assertPublicPost(slug, categoryId, tagId);
+    const archiveFeed = await assertPublicSearchAndArchiveFeeds({ slug, title, publishedAt: publishedPost.publishedAt });
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -845,6 +864,7 @@ const main = async () => {
       categorySlug,
       tagSlug,
       taxonomyUi,
+      archiveFeed,
       previewUrl: previewUrls[previewUrls.length - 1],
       screenshot: SCREENSHOT_PATH,
     }, null, 2));

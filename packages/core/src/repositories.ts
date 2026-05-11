@@ -212,6 +212,8 @@ export interface BackyPostListInput extends BackyPaginationInput {
   categoryId?: string;
   tagId?: string;
   search?: string;
+  year?: number;
+  month?: number;
 }
 
 export interface BackyBlogCategory extends BlogCategory {

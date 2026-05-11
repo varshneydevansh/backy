@@ -5326,6 +5326,9 @@ export function getBlogPosts(
     tagSlug?: string;
     authorId?: string;
     authorSlug?: string;
+    search?: string;
+    year?: number;
+    month?: number;
     limit?: number;
     offset?: number;
     includeUnpublished?: boolean;
@@ -5340,6 +5343,9 @@ export function getBlogPosts(
     tagSlug,
     authorId,
     authorSlug,
+    search,
+    year,
+    month,
     limit = 20,
     offset = 0,
     includeUnpublished = false,
@@ -5382,6 +5388,27 @@ export function getBlogPosts(
   const effectiveAuthorId = normalizedAuthorId || authorBySlug?.id || '';
   if (effectiveAuthorId) {
     posts = posts.filter((post) => post.authorId === effectiveAuthorId);
+  }
+
+  const normalizedSearch = normalizeIdentifier(search || '');
+  if (normalizedSearch) {
+    posts = posts.filter((post) => [
+      post.title,
+      post.slug,
+      post.excerpt,
+      typeof post.content === 'string' ? post.content : '',
+    ].some((value) => normalizeIdentifier(value || '').includes(normalizedSearch)));
+  }
+
+  if (year || month) {
+    posts = posts.filter((post) => {
+      const source = post.publishedAt || post.scheduledAt || post.updatedAt || post.createdAt;
+      const date = source ? new Date(source) : null;
+      if (!date || Number.isNaN(date.getTime())) return false;
+      if (year && date.getUTCFullYear() !== year) return false;
+      if (month && date.getUTCMonth() + 1 !== month) return false;
+      return true;
+    });
   }
 
   if (slug) {
