@@ -1680,6 +1680,7 @@ function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) 
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
         display: 'inline-block',
+        textDecoration: props.underline === true ? 'underline' : getNameClass(props.textDecoration),
       }}
     >
       {linkText}

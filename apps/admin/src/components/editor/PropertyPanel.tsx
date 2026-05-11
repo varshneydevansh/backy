@@ -999,6 +999,7 @@ function ContentProperties({
               type="text"
               value={element.props.content || ''}
               onChange={(e) => onChange({ content: e.target.value })}
+              data-testid="editor-link-text"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1012,6 +1013,7 @@ function ContentProperties({
             </label>
             <div className="space-y-2">
               <select
+                data-testid="editor-link-page-select"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1045,6 +1047,7 @@ function ContentProperties({
               id="underline"
               checked={element.props.underline || false}
               onChange={(e) => onChange({ underline: e.target.checked })}
+              data-testid="editor-link-underline"
               className="rounded"
             />
             <label htmlFor="underline" className="text-sm">Underline</label>

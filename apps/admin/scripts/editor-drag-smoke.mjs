@@ -326,6 +326,23 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-link',
+            type: 'link',
+            x: 760,
+            y: 920,
+            width: 220,
+            height: 36,
+            zIndex: 5,
+            props: {
+              content: 'Initial link',
+              href: '#',
+              target: '_self',
+              color: '#2563eb',
+              fontSize: 16,
+              underline: true,
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -3910,6 +3927,69 @@ const assertPersistedButtonLinkBehavior = async (pageId) => {
   return props;
 };
 
+const testLinkBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-link');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-link-text', 'Smoke docs link');
+  await setFormControlByTestId(client, 'editor-link-href', '/docs');
+  await setFormControlByTestId(client, 'editor-link-target', '_blank');
+  await setFormControlByTestId(client, 'editor-link-rel', 'noopener noreferrer nofollow');
+  await setFormControlByTestId(client, 'editor-link-aria-label', 'Read Backy docs');
+  await setFormControlByTestId(client, 'editor-link-title', 'Open docs');
+  await setCheckboxByTestId(client, 'editor-link-underline', false);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => Boolean(document.querySelector('[data-testid="' + testId + '"]')?.checked);
+    const link = document.querySelector('[data-element-id="smoke-link"] a');
+    const style = link ? getComputedStyle(link) : null;
+    return {
+      text: value('editor-link-text'),
+      href: value('editor-link-href'),
+      target: value('editor-link-target'),
+      rel: value('editor-link-rel'),
+      ariaLabel: value('editor-link-aria-label'),
+      title: value('editor-link-title'),
+      underline: checked('editor-link-underline'),
+      previewText: link?.textContent?.trim() || '',
+      previewTarget: link?.getAttribute('target') || '',
+      previewRel: link?.getAttribute('rel') || '',
+      previewAriaLabel: link?.getAttribute('aria-label') || '',
+      previewTitle: link?.getAttribute('title') || '',
+      previewTextDecoration: style?.textDecorationLine || '',
+    };
+  })()`);
+
+  assert(state.text === 'Smoke docs link' && state.previewText === 'Smoke docs link', `Link text mismatch: ${JSON.stringify(state)}`);
+  assert(state.href === '/docs', `Link href control mismatch: ${JSON.stringify(state)}`);
+  assert(state.target === '_blank' && state.previewTarget === '_blank', `Link target mismatch: ${JSON.stringify(state)}`);
+  assert(state.rel === 'noopener noreferrer nofollow' && state.previewRel === 'noopener noreferrer nofollow', `Link rel mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === 'Read Backy docs' && state.previewAriaLabel === 'Read Backy docs', `Link aria label mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === 'Open docs' && state.previewTitle === 'Open docs', `Link title mismatch: ${JSON.stringify(state)}`);
+  assert(state.underline === false && state.previewTextDecoration === 'none', `Link underline mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedLinkBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const link = findCanvasElement(elements, 'smoke-link');
+  const props = link?.props || {};
+
+  assert(link?.type === 'link', `Persisted smoke-link missing: ${JSON.stringify(link)}`);
+  assert(props.content === 'Smoke docs link', `Persisted link text mismatch: ${JSON.stringify(props)}`);
+  assert(props.href === '/docs', `Persisted link href mismatch: ${JSON.stringify(props)}`);
+  assert(props.target === '_blank', `Persisted link target mismatch: ${JSON.stringify(props)}`);
+  assert(props.rel === 'noopener noreferrer nofollow', `Persisted link rel mismatch: ${JSON.stringify(props)}`);
+  assert(props.ariaLabel === 'Read Backy docs', `Persisted link aria label mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Open docs', `Persisted link title mismatch: ${JSON.stringify(props)}`);
+  assert(props.underline === false, `Persisted link underline mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testVideoBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-video');
   await switchToPropertiesPanel(client);
@@ -4365,9 +4445,9 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4379,7 +4459,9 @@ const main = async () => {
               ? 'smoke-spacer'
               : COMPONENT_SMOKE === 'quote'
                 ? 'smoke-quote'
-                : 'smoke-list';
+                : COMPONENT_SMOKE === 'link'
+                  ? 'smoke-link'
+                  : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
         : COMPONENT_SMOKE === 'columns'
@@ -4390,7 +4472,9 @@ const main = async () => {
               ? await testSpacerBehaviorControls(client)
               : COMPONENT_SMOKE === 'quote'
                 ? await testQuoteBehaviorControls(client)
-                : await testListBehaviorControls(client);
+                : COMPONENT_SMOKE === 'link'
+                  ? await testLinkBehaviorControls(client)
+                  : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = COMPONENT_SMOKE === 'divider'
@@ -4403,7 +4487,9 @@ const main = async () => {
               ? await assertPersistedSpacerBehavior(tempPageId)
               : COMPONENT_SMOKE === 'quote'
                 ? await assertPersistedQuoteBehavior(tempPageId)
-                : await assertPersistedListBehavior(tempPageId);
+                : COMPONENT_SMOKE === 'link'
+                  ? await assertPersistedLinkBehavior(tempPageId)
+                  : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -4600,6 +4686,9 @@ const main = async () => {
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
+    const linkBehaviorControls = EDITOR_PATH
+      ? null
+      : await testLinkBehaviorControls(client);
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
@@ -4633,11 +4722,12 @@ const main = async () => {
     let persistedCheckboxFieldBehavior = null;
     let persistedRadioFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
+    let persistedLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4732,6 +4822,9 @@ const main = async () => {
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
+      persistedLinkBehavior = linkBehaviorControls
+        ? await assertPersistedLinkBehavior(tempPageId)
+        : null;
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
         : null;
@@ -4745,7 +4838,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4862,6 +4955,7 @@ const main = async () => {
       checkboxFieldBehaviorControls,
       radioFieldBehaviorControls,
       buttonLinkBehaviorControls,
+      linkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
       mapBehaviorControls,
@@ -4887,6 +4981,7 @@ const main = async () => {
       persistedCheckboxFieldBehavior,
       persistedRadioFieldBehavior,
       persistedButtonLinkBehavior,
+      persistedLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
       persistedMapBehavior,
