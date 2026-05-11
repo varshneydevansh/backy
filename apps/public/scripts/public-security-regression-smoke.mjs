@@ -142,4 +142,23 @@ for (const needle of [
   assertIncludes(mediaFileRoute, needle, 'media file delivery route');
 }
 
+const mediaResponsive = read('apps/public/src/lib/mediaResponsive.ts');
+for (const needle of [
+  'publicMediaFilePath',
+  'deliveryUrl',
+  'downloadUrl',
+  'url: deliveryUrl',
+  'src: publicMediaFilePath(siteId, media.id)',
+]) {
+  assertIncludes(mediaResponsive, needle, 'media responsive public contract');
+}
+
+const mediaTransformRoute = read('apps/public/src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
+for (const needle of [
+  'publicMediaFilePath',
+  "transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id))",
+]) {
+  assertIncludes(mediaTransformRoute, needle, 'media transform route');
+}
+
 console.log('Public security regression smoke passed');

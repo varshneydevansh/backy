@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
+import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     const transformUrl = new URL('/_next/image', request.url);
-    transformUrl.searchParams.set('url', media.url);
+    transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id));
     transformUrl.searchParams.set('w', String(width));
     transformUrl.searchParams.set('q', String(quality));
 

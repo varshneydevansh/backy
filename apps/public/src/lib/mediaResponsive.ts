@@ -27,7 +27,23 @@ export type MediaResponsiveManifest = {
 };
 
 export type MediaWithResponsiveManifest = MediaItem & {
+  deliveryUrl?: string;
+  downloadUrl?: string;
   responsive?: MediaResponsiveManifest;
+};
+
+export const publicMediaFilePath = (
+  siteId: string,
+  mediaId: string,
+  options: { disposition?: 'inline' | 'attachment' } = {},
+) => {
+  const searchParams = new URLSearchParams();
+  if (options.disposition) {
+    searchParams.set('disposition', options.disposition);
+  }
+
+  const query = searchParams.toString();
+  return `/api/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ''}`;
 };
 
 export const mediaTransformPath = (
@@ -70,9 +86,7 @@ const generatedManifestFromMetadata = (
           return {
             width: Math.floor(width),
             quality: Number.isFinite(quality) && quality > 0 ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY,
-            url: typeof variant.url === 'string' && variant.url.trim().length > 0
-              ? variant.url
-              : mediaTransformPath(siteId, media.id, Math.floor(width), Number.isFinite(quality) ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY),
+            url: mediaTransformPath(siteId, media.id, Math.floor(width), Number.isFinite(quality) ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY),
             ...(typeof variant.storagePath === 'string' ? { storagePath: variant.storagePath } : {}),
             ...(Number.isFinite(bytes) ? { bytes } : {}),
             ...(typeof variant.mimeType === 'string' ? { mimeType: variant.mimeType } : {}),
@@ -88,7 +102,7 @@ const generatedManifestFromMetadata = (
   }
 
   return {
-    src: typeof record.src === 'string' && record.src.trim().length > 0 ? record.src : media.url,
+    src: publicMediaFilePath(siteId, media.id),
     srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
     sizes: typeof record.sizes === 'string' && record.sizes.trim().length > 0
       ? record.sizes
@@ -122,7 +136,7 @@ export const buildImageResponsiveManifest = (
   }));
 
   return {
-    src: media.url,
+    src: publicMediaFilePath(siteId, media.id),
     srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
     sizes: '(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px',
     variants,
@@ -133,9 +147,18 @@ export const withResponsiveMediaManifest = (
   siteId: string,
   media: MediaItem,
 ): MediaWithResponsiveManifest => {
+  const deliveryUrl = publicMediaFilePath(siteId, media.id);
+  const downloadUrl = publicMediaFilePath(siteId, media.id, { disposition: 'attachment' });
   const responsive = buildImageResponsiveManifest(siteId, media);
+  const publicMedia = {
+    ...media,
+    url: deliveryUrl,
+    thumbnailUrl: media.type === 'image' ? deliveryUrl : media.thumbnailUrl,
+    deliveryUrl,
+    downloadUrl,
+  };
 
   return responsive
-    ? { ...media, responsive }
-    : media;
+    ? { ...publicMedia, responsive }
+    : publicMedia;
 };

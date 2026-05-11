@@ -21,6 +21,7 @@ import {
 } from './backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
+import { publicMediaFilePath } from './mediaResponsive';
 
 type JsonObject = Record<string, unknown>;
 
@@ -69,6 +70,10 @@ const toStringArray = (value: unknown): string[] => (
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
     : []
+);
+
+const publicMediaUrl = (siteId: string, media: { id?: string } | null | undefined) => (
+  typeof media?.id === 'string' && media.id.length > 0 ? publicMediaFilePath(siteId, media.id) : ''
 );
 
 const getSiteJsonLd = (site: StoreSite): Array<Record<string, unknown>> => (
@@ -535,16 +540,18 @@ const applyBindingValue = (
   if ((propName === 'assetId' || propName === 'mediaId') && isRecord(resolved.media)) {
     nextProps.assetId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
     nextProps.mediaId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
-    if (typeof resolved.media.url === 'string') {
-      nextProps.src = resolved.media.url;
+    const deliveryUrl = publicMediaUrl(siteId, resolved.media);
+    if (deliveryUrl) {
+      nextProps.src = deliveryUrl;
     }
   }
 
   if (propName === 'src' && isRecord(resolved.media)) {
     nextProps.assetId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
     nextProps.mediaId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
-    if (typeof resolved.media.url === 'string') {
-      nextProps.src = resolved.media.url;
+    const deliveryUrl = publicMediaUrl(siteId, resolved.media);
+    if (deliveryUrl) {
+      nextProps.src = deliveryUrl;
     }
   }
 
@@ -957,7 +964,7 @@ const buildFontAssets = (site: StoreSite) => {
     id: font.id,
     family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
     source: 'uploaded',
-    url: font.url,
+    url: publicMediaFilePath(site.id, font.id),
     weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
     styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
       ? getStringMetadata(font.metadata, 'fontStyle')
@@ -1328,7 +1335,7 @@ export const buildCollectionItemContent = (
   const title = getCollectionRecordTitle(collection, record);
   const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
   const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
-  const imageSrc = media?.url || (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
+  const imageSrc = media ? publicMediaFilePath(site.id, media.id) : (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
   const contentLeft = imageSrc ? 536 : 96;
   const detailFields = collection.fields
     .filter((field) => (

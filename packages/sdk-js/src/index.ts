@@ -195,6 +195,8 @@ export interface BackyMediaAsset {
   id: string;
   type: 'image' | 'video' | 'audio' | 'document' | 'font' | string;
   url?: string;
+  deliveryUrl?: string;
+  downloadUrl?: string;
   src?: string;
   alt?: string;
   title?: string;

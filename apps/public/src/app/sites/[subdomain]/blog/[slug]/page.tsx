@@ -10,6 +10,7 @@ import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
 import { getBlogPosts, getMediaList, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { resolveElementDataBindings } from '@/lib/renderPayload';
+import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Metadata } from 'next';
 import type { StoreBlogPost } from '@/lib/backyStore';
@@ -66,7 +67,7 @@ function getHostedFontAssets(siteId: string) {
     id: font.id,
     family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
     source: 'uploaded' as const,
-    url: font.url,
+    url: publicMediaFilePath(siteId, font.id),
     weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
     styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
       ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
@@ -100,7 +101,7 @@ async function getRepositoryFontAssets(hostedSite: Extract<HostedSite, { mode: '
     id: font.id,
     family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
     source: 'uploaded' as const,
-    url: font.url,
+    url: publicMediaFilePath(hostedSite.site.id, font.id),
     weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
     styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
       ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
