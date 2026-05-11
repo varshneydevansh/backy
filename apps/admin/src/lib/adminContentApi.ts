@@ -616,10 +616,28 @@ interface ApiFormDetailResponse {
 
 interface ApiFormSubmissionResponse {
   success: boolean;
+  requestId?: string;
   data?: {
     submission: FormSubmission;
+    delivery?: FormWebhookRetryDelivery;
   };
   submission?: FormSubmission;
+  delivery?: FormWebhookRetryDelivery;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiListFormDeliveryEventsResponse {
+  success: boolean;
+  data?: {
+    events: FormDeliveryEvent[];
+    count?: number;
+    pagination?: ApiPagination;
+  };
+  events?: FormDeliveryEvent[];
+  count?: number;
+  pagination?: ApiPagination;
   error?: {
     message?: string;
   };
@@ -1371,6 +1389,37 @@ export interface FormSubmissionList {
     offset: number;
     hasMore: boolean;
   };
+}
+
+export interface FormDeliveryEvent {
+  id: string;
+  siteId: string;
+  kind: string;
+  formId?: string | null;
+  submissionId?: string | null;
+  target: string;
+  status: 'queued' | 'succeeded' | 'failed' | 'received' | string;
+  statusCode?: number;
+  requestId?: string | null;
+  reason?: string | null;
+  actor?: string | null;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  createdAt: string;
+}
+
+export interface FormDeliveryEventList {
+  events: FormDeliveryEvent[];
+  count: number;
+  pagination?: ApiPagination;
+}
+
+export interface FormWebhookRetryDelivery {
+  attempted: boolean;
+  target?: string;
+  status: 'queued' | 'succeeded' | 'failed' | string;
+  statusCode?: number;
+  error?: string;
 }
 
 export type ContactStatus = Contact['status'];
@@ -3066,6 +3115,63 @@ export async function updateFormSubmission(
   }
 
   return submission;
+}
+
+export async function listFormDeliveryEvents(
+  siteId: string,
+  formId: string,
+  filters: { limit?: number; offset?: number } = {},
+): Promise<FormDeliveryEventList> {
+  const query = new URLSearchParams();
+  query.set('kind', 'form-submission');
+  query.set('formId', formId);
+  query.set('limit', String(filters.limit || 50));
+  query.set('offset', String(filters.offset || 0));
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/events?${query.toString()}`);
+  const payload = await readJson<ApiListFormDeliveryEventsResponse>(response);
+  const events = payload.data?.events || payload.events;
+  const count = payload.data?.count ?? payload.count ?? events?.length ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination;
+
+  if (!response.ok || !payload.success || !events) {
+    throw new Error(payload.error?.message || 'Unable to load form delivery events');
+  }
+
+  return {
+    events,
+    count,
+    pagination,
+  };
+}
+
+export async function retryFormWebhookDelivery(
+  siteId: string,
+  formId: string,
+  submissionId: string,
+): Promise<{ requestId: string; delivery: FormWebhookRetryDelivery; submission: FormSubmission }> {
+  const requestId = `forms-ui-retry-${Date.now().toString(36)}`;
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}/webhook-retry`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': requestId,
+    },
+    body: JSON.stringify({ requestId }),
+  });
+  const payload = await readJson<ApiFormSubmissionResponse>(response);
+  const delivery = payload.data?.delivery || payload.delivery;
+  const submission = payload.data?.submission || payload.submission;
+
+  if (!response.ok || !payload.success || !delivery || !submission) {
+    throw new Error(payload.error?.message || 'Unable to retry webhook delivery');
+  }
+
+  return {
+    requestId: payload.requestId || requestId,
+    delivery,
+    submission,
+  };
 }
 
 export async function listFormContacts(

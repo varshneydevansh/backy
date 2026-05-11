@@ -70,7 +70,7 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - Form builder now exposes per-form notification email and webhook URL controls.
   - Public form submissions deliver configured webhooks for form submissions and contact-share events in demo and repository modes, with queued/succeeded/failed delivery events queryable through the interaction events API.
   - Admins can retry a form submission webhook through `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/webhook-retry`, which records retry queued/succeeded/failed events.
-  - `test:forms` starts a local webhook receiver, configures the rendered form builder, verifies webhook headers/payload delivery, forces an initial failed delivery, retries it, and asserts failed plus retry queued/succeeded event history.
+  - `test:forms` starts a local webhook receiver, configures the rendered form builder, verifies webhook headers/payload delivery, forces an initial failed delivery, refreshes the rendered Forms delivery panel, retries the failed delivery from the UI, and asserts failed plus retry queued/succeeded event history.
 
 ### Task 1.5: Export/filter and analytics hooks
 - **Location**: `apps/admin/src/routes/sites.$siteId.tsx`, `apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts`

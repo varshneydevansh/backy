@@ -24,13 +24,16 @@ import {
   getAdminApiBase,
   getSiteFrontendDesign,
   getFormWithSubmissions,
+  listFormDeliveryEvents,
   listCollections,
   listForms,
   createForm,
+  retryFormWebhookDelivery,
   updateForm,
   updateFormSubmission,
   type Collection,
   type FormDefinition,
+  type FormDeliveryEvent,
   type FormFieldDefinition,
   type FormSubmission,
   type FormSubmissionStatus,
@@ -400,6 +403,7 @@ function FormsRoute() {
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
+  const [deliveryEventsByForm, setDeliveryEventsByForm] = useState<Record<string, FormDeliveryEvent[]>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
@@ -411,6 +415,7 @@ function FormsRoute() {
   const [submissionQuery, setSubmissionQuery] = useState(routeSearch.submissionQ || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -418,7 +423,7 @@ function FormsRoute() {
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isCreatingTemplateId) || isSavingForm;
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || Boolean(isCreatingTemplateId) || isSavingForm;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -596,6 +601,16 @@ function FormsRoute() {
   );
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
+  const selectedDeliveryEvents = useMemo(
+    () => selectedForm ? deliveryEventsByForm[selectedForm.id] || [] : [],
+    [deliveryEventsByForm, selectedForm],
+  );
+  const selectedDeliveryMetrics = useMemo(() => ({
+    total: selectedDeliveryEvents.length,
+    failed: selectedDeliveryEvents.filter((event) => event.status === 'failed').length,
+    succeeded: selectedDeliveryEvents.filter((event) => event.status === 'succeeded').length,
+    queued: selectedDeliveryEvents.filter((event) => event.status === 'queued').length,
+  }), [selectedDeliveryEvents]);
   const filteredSubmissions = useMemo(
     () => selectedSubmissions.filter((submission) => {
       const statusMatches = statusFilter === 'all' || submission.status === statusFilter;
@@ -897,10 +912,21 @@ function FormsRoute() {
           }] as const;
         }),
       );
+      const deliveryPairs = await Promise.all(
+        loadedForms.map(async (form) => {
+          try {
+            const result = await listFormDeliveryEvents(activeSiteId, form.id, { limit: 50 });
+            return [form.id, result.events] as const;
+          } catch {
+            return [form.id, []] as const;
+          }
+        }),
+      );
       const nextInbox = Object.fromEntries(inboxPairs);
       setForms(loadedForms);
       setCollections(loadedCollections);
       setInboxByForm(nextInbox);
+      setDeliveryEventsByForm(Object.fromEntries(deliveryPairs));
       setSelectedFormId((current) => (
         current && loadedForms.some((form) => form.id === current)
           ? current
@@ -950,6 +976,7 @@ function FormsRoute() {
           total: 0,
         },
       }));
+      setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
       updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
       setNotice(`${template.title} form created. It is active and ready for public submissions.`);
@@ -993,6 +1020,7 @@ function FormsRoute() {
           total: 0,
         },
       }));
+      setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
       updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
       setNotice(`${template.name} form created from the frontend design contract.`);
@@ -1244,6 +1272,51 @@ function FormsRoute() {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
     } finally {
       setIsSavingForm(false);
+    }
+  };
+
+  const refreshFormDeliveryEvents = async (formId: string): Promise<FormDeliveryEvent[]> => {
+    const result = await listFormDeliveryEvents(activeSiteId, formId, { limit: 50 });
+    setDeliveryEventsByForm((current) => ({
+      ...current,
+      [formId]: result.events,
+    }));
+    return result.events;
+  };
+
+  const handleRefreshDeliveryEvents = async () => {
+    if (isFormsBusy || !selectedForm) return;
+
+    setError(null);
+    setNotice(null);
+
+    try {
+      const events = await refreshFormDeliveryEvents(selectedForm.id);
+      setNotice(`Delivery history refreshed with ${events.length} event${events.length === 1 ? '' : 's'}.`);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'Unable to refresh delivery history');
+    }
+  };
+
+  const handleRetryDeliveryEvent = async (event: FormDeliveryEvent) => {
+    if (isFormsBusy || !selectedForm || !event.submissionId) return;
+
+    setIsRetryingDeliveryId(event.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await retryFormWebhookDelivery(activeSiteId, selectedForm.id, event.submissionId);
+      await refreshFormDeliveryEvents(selectedForm.id);
+      if (result.delivery.status === 'succeeded') {
+        setNotice(`Webhook retry succeeded for ${event.submissionId}.`);
+      } else {
+        setError(result.delivery.error || `Webhook retry finished with ${result.delivery.status}.`);
+      }
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : 'Unable to retry webhook delivery');
+    } finally {
+      setIsRetryingDeliveryId(null);
     }
   };
 
@@ -2777,6 +2850,57 @@ function FormsRoute() {
                     </div>
                   </div>
 
+                  <div data-testid="forms-webhook-delivery-panel" className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <RefreshCw className="size-4" />
+                          Webhook delivery
+                        </div>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                          Review queued, failed, and retried form webhook deliveries without leaving the form workspace.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                          {selectedDeliveryMetrics.total} events
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2.5 py-1 text-xs font-semibold',
+                          selectedDeliveryMetrics.failed > 0 ? 'bg-destructive/10 text-destructive' : 'bg-emerald-50 text-emerald-700',
+                        )}
+                        >
+                          {selectedDeliveryMetrics.failed} failed
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isFormsBusy}
+                          onClick={() => void handleRefreshDeliveryEvents()}
+                          iconStart={<RefreshCw className="size-4" />}
+                        >
+                          Refresh delivery
+                        </Button>
+                      </div>
+                    </div>
+                    {selectedDeliveryEvents.length === 0 ? (
+                      <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                        No webhook delivery events recorded for this form yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-3">
+                        {selectedDeliveryEvents.slice(0, 8).map((event) => (
+                          <FormDeliveryEventCard
+                            key={event.id}
+                            event={event}
+                            isRetrying={isRetryingDeliveryId === event.id}
+                            onRetry={() => void handleRetryDeliveryEvent(event)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <MetaTile label="Moderation" value={selectedForm.moderationMode || 'manual'} />
                     <MetaTile label="Spam guard" value={[
@@ -2962,6 +3086,78 @@ function RoutingTile({
         </span>
       </div>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function FormDeliveryEventCard({
+  event,
+  isRetrying,
+  onRetry,
+}: {
+  event: FormDeliveryEvent;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  const retryable = event.status === 'failed' && Boolean(event.submissionId);
+  const isRetryEvent = event.metadata?.retry === true;
+  const statusClass = event.status === 'succeeded'
+    ? 'bg-success/10 text-success'
+    : event.status === 'failed'
+      ? 'bg-destructive/10 text-destructive'
+      : 'bg-warning/10 text-warning';
+
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn('rounded-md px-2 py-1 text-[11px] font-semibold', statusClass)}>
+              {event.status}
+            </span>
+            {isRetryEvent && (
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
+                retry
+              </span>
+            )}
+            {typeof event.statusCode === 'number' && (
+              <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                HTTP {event.statusCode}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">{formatDate(event.createdAt)}</span>
+          </div>
+          <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+            <div className="min-w-0">
+              <span className="font-medium text-foreground">Submission:</span>{' '}
+              <span className="font-mono">{event.submissionId || 'n/a'}</span>
+            </div>
+            <div className="min-w-0">
+              <span className="font-medium text-foreground">Request:</span>{' '}
+              <span className="font-mono">{event.requestId || 'n/a'}</span>
+            </div>
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Target:</span> {event.target}
+          </div>
+          {event.error && (
+            <div className="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
+              {event.error}
+            </div>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant={retryable ? 'danger' : 'outline'}
+          disabled={!retryable || isRetrying}
+          onClick={onRetry}
+          iconStart={<RefreshCw className={cn('size-4', isRetrying && 'animate-spin')} />}
+          aria-label={`Retry webhook delivery ${event.submissionId || event.id}`}
+          data-testid="forms-webhook-retry-button"
+        >
+          {isRetrying ? 'Retrying' : 'Retry'}
+        </Button>
+      </div>
     </div>
   );
 }
