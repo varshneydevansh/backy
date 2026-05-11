@@ -258,6 +258,21 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-columns',
+            type: 'columns',
+            x: 980,
+            y: 335,
+            width: 360,
+            height: 170,
+            zIndex: 5,
+            props: {
+              columns: 2,
+              gap: 16,
+              backgroundColor: '#ffffff',
+              borderRadius: 6,
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -3272,6 +3287,48 @@ const assertPersistedDividerBehavior = async (pageId) => {
   return props;
 };
 
+const testColumnsBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-columns');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-columns-count', '3');
+  await setFormControlByTestId(client, 'editor-columns-gap', '24');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-columns"]');
+    const surface = node?.firstElementChild;
+    const style = surface ? getComputedStyle(surface) : null;
+    return {
+      columns: value('editor-columns-count'),
+      gap: value('editor-columns-gap'),
+      previewDisplay: style?.display || '',
+      previewGridTemplateColumns: style?.gridTemplateColumns || '',
+      previewGap: style?.gap || '',
+    };
+  })()`);
+
+  assert(state.columns === '3', `Columns count control mismatch: ${JSON.stringify(state)}`);
+  assert(state.gap === '24' && state.previewGap === '24px', `Columns gap mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewDisplay === 'grid', `Columns preview did not render as grid: ${JSON.stringify(state)}`);
+  assert((state.previewGridTemplateColumns.match(/\d+px/g) || []).length === 3, `Columns preview did not render three tracks: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedColumnsBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const columns = findCanvasElement(elements, 'smoke-columns');
+  const props = columns?.props || {};
+
+  assert(columns?.type === 'columns', `Persisted smoke-columns missing: ${JSON.stringify(columns)}`);
+  assert(props.columns === 3, `Persisted columns count mismatch: ${JSON.stringify(props)}`);
+  assert(props.gap === 24, `Persisted columns gap mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -4083,19 +4140,27 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
-      const targetElementId = COMPONENT_SMOKE === 'divider' ? 'smoke-divider' : 'smoke-list';
+      const targetElementId = COMPONENT_SMOKE === 'divider'
+        ? 'smoke-divider'
+        : COMPONENT_SMOKE === 'columns'
+          ? 'smoke-columns'
+          : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
-        : await testListBehaviorControls(client);
+        : COMPONENT_SMOKE === 'columns'
+          ? await testColumnsBehaviorControls(client)
+          : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = COMPONENT_SMOKE === 'divider'
         ? await assertPersistedDividerBehavior(tempPageId)
-        : await assertPersistedListBehavior(tempPageId);
+        : COMPONENT_SMOKE === 'columns'
+          ? await assertPersistedColumnsBehavior(tempPageId)
+          : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -4246,6 +4311,9 @@ const main = async () => {
     const dividerBehaviorControls = EDITOR_PATH
       ? null
       : await testDividerBehaviorControls(client);
+    const columnsBehaviorControls = EDITOR_PATH
+      ? null
+      : await testColumnsBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4303,6 +4371,7 @@ const main = async () => {
     let persistedIconBehavior = null;
     let persistedListBehavior = null;
     let persistedDividerBehavior = null;
+    let persistedColumnsBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4313,7 +4382,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4378,6 +4447,9 @@ const main = async () => {
       persistedDividerBehavior = dividerBehaviorControls
         ? await assertPersistedDividerBehavior(tempPageId)
         : null;
+      persistedColumnsBehavior = columnsBehaviorControls
+        ? await assertPersistedColumnsBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4409,7 +4481,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4516,6 +4588,7 @@ const main = async () => {
       iconBehaviorControls,
       listBehaviorControls,
       dividerBehaviorControls,
+      columnsBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4537,6 +4610,7 @@ const main = async () => {
       persistedIconBehavior,
       persistedListBehavior,
       persistedDividerBehavior,
+      persistedColumnsBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

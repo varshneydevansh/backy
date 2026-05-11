@@ -1299,6 +1299,44 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
 }
 
 /**
+ * Render a column layout element
+ */
+function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+  const { props, styles, children } = element;
+  const columnCount = Math.max(1, Math.min(6, Number(props.columns) || 2));
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+        gap: getLength(props.gap, '16px'),
+        width: '100%',
+        height: '100%',
+        alignItems: props.alignItems as React.CSSProperties['alignItems'],
+        justifyContent: props.justifyContent as React.CSSProperties['justifyContent'],
+        padding: getLength(props.padding),
+        backgroundColor: getNameClass(props.backgroundColor),
+        borderRadius: getLength(props.borderRadius),
+        ...styles,
+      }}
+      aria-label={getNameClass(props.ariaLabel)}
+    >
+      {children?.map((child) => (
+        <ElementRenderer
+          key={child.id}
+          element={child}
+          isPreview={isPreview}
+          siteId={siteId}
+          pageId={pageId}
+          postId={postId}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
  * Render a spacer element
  */
 function SpacerElement({ element }: ElementRendererProps) {
@@ -2663,7 +2701,7 @@ const ELEMENT_RENDERERS: Record<
   footer: ContainerElement,
   nav: ContainerElement,
   section: ContainerElement,
-  columns: ContainerElement,
+  columns: ColumnsElement,
   spacer: SpacerElement,
   divider: DividerElement,
   icon: IconElement,

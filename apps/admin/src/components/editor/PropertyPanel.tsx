@@ -2194,6 +2194,7 @@ function ContentProperties({
             <select
               value={element.props.columns || 2}
               onChange={(e) => onChange({ columns: parseInt(e.target.value) })}
+              data-testid="editor-columns-count"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2214,6 +2215,7 @@ function ContentProperties({
               value={element.props.gap || 16}
               onChange={(value) => onChange({ gap: value })}
               suffix="px"
+              testId="editor-columns-gap"
             />
           </div>
         </div>
