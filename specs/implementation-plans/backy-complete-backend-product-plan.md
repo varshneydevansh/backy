@@ -367,10 +367,10 @@ The next implementation should not start by adding more UI screens. The product 
 - **Current progress**:
   - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
   - The SDK exports starter public contract types for render payloads, content documents/elements, media/font assets, collection schemas/records, forms/submissions/contacts, comments, events, response metadata, and conditional 304 results.
-  - `manifestCached`, `openapiCached`, `renderCached`, `seoCached`, and `recordsCached` expose Backy's cache/contract headers and send `If-None-Match` so custom frontends can reuse cached discovery/render/SEO/dynamic-data payloads through the SDK.
+  - `manifestCached`, `openapiCached`, `renderCached`, `seoCached`, `mediaCached`, `mediaAssetCached`, `mediaFontsCached`, and `recordsCached` expose Backy's cache/contract headers and send `If-None-Match` so custom frontends can reuse cached discovery/render/SEO/media/font/dynamic-data payloads through the SDK.
   - Public manifest, OpenAPI, and render endpoints emit cache-control, ETag/304 revalidation, plus Backy contract/schema/request/site headers; preview and error responses are no-store.
 - **Validation**:
-  - SDK smoke test against local public app, including cached manifest/OpenAPI/render/SEO/collection-record 304 revalidation and temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
+  - SDK smoke test against local public app, including cached manifest/OpenAPI/render/SEO/media/font/collection-record 304 revalidation and temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
   - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes and that discovery/render cache headers, contract headers, and conditional 304 responses are present.
 
 ## Sprint 5: Media, Fonts, Files, Video, and Audio Management
@@ -445,6 +445,7 @@ The next implementation should not start by adding more UI screens. The product 
   - Site-level and element-level font choices render in admin and public.
 - **Current progress**:
   - The editor property panel can open the backend-backed media picker from text font controls, upload/select font files, and apply the registered font family to the selected element.
+  - The public SDK exposes typed `BackyFontManifest` helpers with ETag/304 revalidation so custom frontends can cache uploaded font families, variants, and generated `@font-face` CSS.
 - **Validation**:
   - Visual render test and CSS output inspection.
 

@@ -401,9 +401,21 @@ assert(revalidatedSeo.notModified === true, 'seoCached() did not return notModif
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');
+const cachedMedia = await client.mediaCached({ limit: 5 });
+assert(cachedMedia.notModified === false, 'mediaCached() first request should return a body');
+assert(cachedMedia.meta.etag, 'mediaCached() missing response ETag');
+assert(Array.isArray(cachedMedia.body.data.media), 'mediaCached() missing media array');
+const revalidatedMedia = await client.mediaCached({ limit: 5, etag: cachedMedia.meta.etag });
+assert(revalidatedMedia.notModified === true, 'mediaCached() did not return notModified for matching ETag');
 if (media.data.media?.length > 0) {
   const mediaDetail = await client.mediaAsset(media.data.media[0].id);
   assert(mediaDetail.data.media?.id === media.data.media[0].id, 'mediaAsset() returned wrong media asset');
+  const cachedMediaDetail = await client.mediaAssetCached(media.data.media[0].id);
+  assert(cachedMediaDetail.notModified === false, 'mediaAssetCached() first request should return a body');
+  assert(cachedMediaDetail.body.data.media?.id === media.data.media[0].id, 'mediaAssetCached() returned wrong media asset');
+  assert(cachedMediaDetail.meta.etag, 'mediaAssetCached() missing response ETag');
+  const revalidatedMediaDetail = await client.mediaAssetCached(media.data.media[0].id, { etag: cachedMediaDetail.meta.etag });
+  assert(revalidatedMediaDetail.notModified === true, 'mediaAssetCached() did not return notModified for matching ETag');
   assert(
     client.mediaFileUrl(media.data.media[0].id).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/file`),
     'mediaFileUrl() returned wrong media file URL',
@@ -413,6 +425,17 @@ if (media.data.media?.length > 0) {
     'mediaTransformUrl() returned wrong media transform URL',
   );
 }
+
+const mediaFonts = await client.mediaFonts();
+assert(mediaFonts.data.schemaVersion === 'backy.font-manifest.v1', 'mediaFonts() missing font manifest schema version');
+assert(Array.isArray(mediaFonts.data.families), 'mediaFonts() missing font families array');
+assert(Array.isArray(mediaFonts.data.fonts), 'mediaFonts() missing font variants array');
+const cachedMediaFonts = await client.mediaFontsCached();
+assert(cachedMediaFonts.notModified === false, 'mediaFontsCached() first request should return a body');
+assert(cachedMediaFonts.body.data.schemaVersion === 'backy.font-manifest.v1', 'mediaFontsCached() missing font manifest body');
+assert(cachedMediaFonts.meta.etag, 'mediaFontsCached() missing response ETag');
+const revalidatedMediaFonts = await client.mediaFontsCached({ etag: cachedMediaFonts.meta.etag });
+assert(revalidatedMediaFonts.notModified === true, 'mediaFontsCached() did not return notModified for matching ETag');
 
 const reusableSections = await client.reusableSections();
 assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
@@ -687,6 +710,10 @@ console.log(JSON.stringify({
     'seo',
     'seoCached',
     'media',
+    'mediaCached',
+    'mediaAssetCached',
+    'mediaFonts',
+    'mediaFontsCached',
     'mediaFileUrl',
     'mediaTransformUrl',
     'reusableSections',

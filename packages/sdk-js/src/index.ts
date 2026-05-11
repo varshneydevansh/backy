@@ -229,6 +229,49 @@ export interface BackyFontAsset extends BackyMediaAsset {
   cssFamily?: string;
 }
 
+export interface BackyFontVariant {
+  id: string;
+  mediaId: string;
+  family: string;
+  weight: string;
+  style: string;
+  display: string;
+  fallbackStack: string;
+  cssFamily: string;
+  url: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  originalName?: string;
+  folderId?: string | null;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export interface BackyFontFamily {
+  family: string;
+  fallbackStack: string;
+  display: string;
+  cssFamily: string;
+  variants: BackyFontVariant[];
+  assetIds: string[];
+  [key: string]: unknown;
+}
+
+export interface BackyFontManifest {
+  schemaVersion: 'backy.font-manifest.v1';
+  generatedAt?: string;
+  siteId: string;
+  families: BackyFontFamily[];
+  fonts: BackyFontVariant[];
+  css: string;
+  counts: {
+    families: number;
+    variants: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFieldSchema {
   key: string;
   label?: string;
@@ -1017,8 +1060,35 @@ export class BackyClient {
     });
   }
 
+  mediaCached(options: BackyMediaListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
+  }
+
   mediaAsset(mediaId: string): Promise<BackyEnvelope<{ media: BackyMediaAsset }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`);
+  }
+
+  mediaAssetCached(mediaId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
+  mediaFonts(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFontManifest>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/media/fonts`);
+  }
+
+  mediaFontsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFontManifest>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/fonts`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   mediaFileUrl(

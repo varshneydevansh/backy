@@ -38,7 +38,7 @@ const order = await backy.createCommerceOrder({
 console.log(order.data.order.orderNumber, order.data.order.paymentStatus);
 ```
 
-Conditional discovery/render/SEO/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
+Conditional discovery/render/SEO/media/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
 
 ```ts
 const first = await backy.renderCached('/');
@@ -66,10 +66,17 @@ const recordsSecond = await backy.recordsCached('articles', { limit: 10, etag: r
 if (recordsSecond.notModified) {
   console.log('Reuse your cached collection records.');
 }
+
+const fontsFirst = await backy.mediaFontsCached();
+const fontsSecond = await backy.mediaFontsCached({ etag: fontsFirst.meta.etag });
+
+if (fontsSecond.notModified) {
+  console.log('Reuse your cached uploaded font manifest and CSS.');
+}
 ```
 
 The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
-The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 
