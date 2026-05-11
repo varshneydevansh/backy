@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare } from 'lucide-react';
 import {
   archiveBlogPost,
   createBlogCategory,
@@ -20,9 +20,12 @@ import {
   listBlogCategories,
   listBlogPosts,
   listBlogTags,
+  listComments,
   publishBlogPost,
   updateBlogCategory,
+  updateBlogPost,
   updateBlogTag,
+  type AdminComment,
   type BlogAuthor,
   type BlogCategory,
   type BlogTag,
@@ -182,6 +185,7 @@ function BlogListView() {
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
+  const [commentSummaries, setCommentSummaries] = useState<Record<string, BlogPostCommentSummary>>({});
   const [categoryDraft, setCategoryDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft('#2563eb'));
   const [tagDraft, setTagDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft());
   const [editingCategoryId, setEditingCategoryId] = useState('');
@@ -197,13 +201,15 @@ function BlogListView() {
   const [mutatingPostId, setMutatingPostId] = useState<string | null>(null);
   const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
   const [mutatingTaxonomyKey, setMutatingTaxonomyKey] = useState('');
+  const [updatingSeoPostId, setUpdatingSeoPostId] = useState('');
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingTaxonomyDelete, setPendingTaxonomyDelete] = useState<TaxonomyDeleteTarget | null>(null);
   const isPostMutationBusy = mutatingPostId !== null;
   const isPostPreviewBusy = previewingPostId !== null;
   const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
-  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy;
+  const isSeoBusy = Boolean(updatingSeoPostId);
+  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy || isSeoBusy;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -270,11 +276,13 @@ function BlogListView() {
           listBlogTags(siteId),
           listBlogAuthors(siteId),
         ]);
+        const commentResult = await listComments(siteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }));
         setPosts(backendPosts);
         setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
         setCategories(backendCategories);
         setTags(backendTags);
         setAuthors(backendAuthors);
+        setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load posts');
       } finally {
@@ -304,12 +312,14 @@ function BlogListView() {
           listBlogTags(activeSiteId),
           listBlogAuthors(activeSiteId),
         ]);
+        const commentResult = await listComments(activeSiteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }));
         if (!cancelled) {
           setPosts(backendPosts);
           setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
           setCategories(backendCategories);
           setTags(backendTags);
           setAuthors(backendAuthors);
+          setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -484,6 +494,31 @@ function BlogListView() {
       setError(deleteError instanceof Error ? deleteError.message : `Unable to delete blog ${target.type}`);
     } finally {
       setMutatingTaxonomyKey('');
+    }
+  };
+
+  const togglePostSeoFlag = async (post: BlogPost, key: 'noIndex' | 'noFollow') => {
+    if (isBlogWorkflowBusy) return;
+
+    setUpdatingSeoPostId(post.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const nextMeta = {
+        ...(post.meta || {}),
+        [key]: post.meta?.[key] !== true,
+      };
+      const updated = await updateBlogPost(activeSiteId, post.id, {
+        meta: nextMeta,
+        revisionNote: `Updated ${key} from blog list row.`,
+      });
+      updatePost(post.id, updated);
+      setNotice(`${post.title} SEO ${key === 'noIndex' ? 'indexing' : 'link following'} updated.`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update post SEO controls');
+    } finally {
+      setUpdatingSeoPostId('');
     }
   };
 
@@ -682,6 +717,64 @@ function BlogListView() {
           </div>
         </div>
       )
+    },
+    {
+      key: 'meta',
+      label: 'SEO / Comments',
+      render: (post) => {
+        const seo = getPostSeoSummary(post);
+        const summary = commentSummaries[post.id] || emptyCommentSummary();
+        const commentsHref = `/comments?siteId=${encodeURIComponent(activeSiteId)}`;
+        const seoBusy = updatingSeoPostId === post.id;
+
+        return (
+          <div className="min-w-56 space-y-2 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void togglePostSeoFlag(post, 'noIndex')}
+                disabled={isBlogWorkflowBusy || seoBusy}
+                data-testid={`blog-post-seo-noindex-${post.id}`}
+                className={cn(
+                  'rounded-full border px-2 py-0.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+                  seo.noIndex ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {seo.noIndex ? 'Noindex' : 'Index'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void togglePostSeoFlag(post, 'noFollow')}
+                disabled={isBlogWorkflowBusy || seoBusy}
+                data-testid={`blog-post-seo-nofollow-${post.id}`}
+                className={cn(
+                  'rounded-full border px-2 py-0.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+                  seo.noFollow ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {seo.noFollow ? 'Nofollow' : 'Follow'}
+              </button>
+            </div>
+            <div className="leading-5 text-muted-foreground">
+              <span className={seo.hasTitle ? 'text-foreground' : 'text-amber-700'}>
+                {seo.hasTitle ? 'SEO title' : 'Missing SEO title'}
+              </span>
+              {' · '}
+              <span className={seo.hasDescription ? 'text-foreground' : 'text-amber-700'}>
+                {seo.hasDescription ? 'Description' : 'Missing description'}
+              </span>
+            </div>
+            <a
+              href={commentsHref}
+              data-testid={`blog-post-comments-${post.id}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              {summary.total} comments · {summary.pending} pending · {summary.flagged} flagged
+            </a>
+          </div>
+        );
+      }
     },
     {
       key: 'publishedAt',
@@ -939,6 +1032,8 @@ function BlogListView() {
       author: post.author,
       categoryIds: post.categoryIds || [],
       tagIds: post.tagIds || [],
+      seo: getPostSeoSummary(post),
+      comments: commentSummaries[post.id] || emptyCommentSummary(),
       publicUrl: post.status === 'published' ? publicPostUrl(post) : null,
     })),
     selectedPost: handoffPost
@@ -966,6 +1061,7 @@ function BlogListView() {
     adminBlogUrl,
     authors,
     categories,
+    commentSummaries,
     currentPage,
     data,
     editorialReadiness.checks,
@@ -1966,6 +2062,51 @@ const getBulkBusyLabel = (action: 'publish' | 'archive' | 'delete' | ''): string
   if (action === 'archive') return 'Archiving...';
   if (action === 'delete') return 'Deleting...';
   return 'Applying...';
+};
+
+interface BlogPostCommentSummary {
+  total: number;
+  pending: number;
+  approved: number;
+  flagged: number;
+}
+
+const emptyCommentSummary = (): BlogPostCommentSummary => ({
+  total: 0,
+  pending: 0,
+  approved: 0,
+  flagged: 0,
+});
+
+const buildPostCommentSummaries = (comments: AdminComment[]): Record<string, BlogPostCommentSummary> => (
+  comments.reduce<Record<string, BlogPostCommentSummary>>((summaries, comment) => {
+    if (comment.targetType !== 'post' || !comment.targetId) {
+      return summaries;
+    }
+
+    const summary = summaries[comment.targetId] || emptyCommentSummary();
+    summary.total += 1;
+    if (comment.status === 'pending') summary.pending += 1;
+    if (comment.status === 'approved') summary.approved += 1;
+    if ((comment.reportCount || 0) > 0 || (comment.reportReasons || []).length > 0) summary.flagged += 1;
+    summaries[comment.targetId] = summary;
+    return summaries;
+  }, {})
+);
+
+const getPostSeoSummary = (post: BlogPost) => {
+  const meta = post.meta || {};
+  const title = typeof meta.title === 'string' ? meta.title.trim() : '';
+  const description = typeof meta.description === 'string' ? meta.description.trim() : '';
+  const canonical = typeof meta.canonical === 'string' ? meta.canonical.trim() : '';
+
+  return {
+    hasTitle: title.length > 0,
+    hasDescription: description.length > 0 || post.excerpt.trim().length > 0,
+    canonical: canonical || `/blog/${post.slug}`,
+    noIndex: meta.noIndex === true,
+    noFollow: meta.noFollow === true,
+  };
 };
 
 interface TaxonomyDraft {

@@ -182,6 +182,23 @@ const createBlogPost = async ({ title, slug, categoryId, tagId, authorId }) => {
   return post;
 };
 
+const submitBlogComment = async ({ postId, requestId }) => {
+  const payload = await requestApi(`/api/sites/${SITE_ID}/blog/${postId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      authorName: 'Blog List Smoke Reader',
+      authorEmail: 'blog-list-smoke@example.com',
+      content: 'Temporary comment proving the blog list row shows moderation counts.',
+      requestId,
+      startedAt: Date.now() - 5000,
+      rateLimitBypass: true,
+    }),
+  });
+  const comment = payload.data?.comment || payload.comment;
+  assert(comment?.id, `Submit blog comment did not return a comment: ${JSON.stringify(payload).slice(0, 500)}`);
+  return comment;
+};
+
 const deleteBlogPost = async (postId) => {
   if (!postId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`, { method: 'DELETE' });
@@ -373,6 +390,8 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
     post: document.body?.innerText?.includes(${JSON.stringify(title)}) || false,
     previewButton: Boolean(Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('title') === 'Preview post')),
     editButton: Boolean(Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('title') === 'Edit post')),
+    seoToggle: Boolean(document.querySelector('[data-testid^="blog-post-seo-noindex-"]')),
+    commentSummary: Boolean(document.querySelector('[data-testid^="blog-post-comments-"]')),
   }))()`);
 
   assert(Object.values(state).every(Boolean), `Blog list layout missing expected regions: ${JSON.stringify(state)}`);
@@ -468,15 +487,23 @@ const waitForTaxonomy = async ({ kind, slug, exists = true }) => {
 };
 
 const clickButtonByTestId = async (client, testId) => {
-  const clicked = await evaluate(client, `(() => {
-    const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) {
+      return;
     }
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(clicked.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+    if (attempt === 79) {
+      throw new Error(`Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(200);
+  }
 };
 
 const clickButtonByLabel = async (client, label) => {
@@ -551,6 +578,48 @@ const manageTaxonomyInUi = async (client, suffix) => {
     categorySlug: updatedCategorySlug,
     tagSlug: updatedTagSlug,
   };
+};
+
+const toggleNoIndexInUi = async (client, postId) => {
+  await clickButtonByTestId(client, `blog-post-seo-noindex-${postId}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const post = await fetchPostBySlugFromAdminId(postId);
+    if (post?.meta?.noIndex === true) {
+      return post;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Blog post ${postId} did not persist noIndex from list row`);
+};
+
+const fetchPostBySlugFromAdminId = async (postId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog?limit=100`);
+  const posts = payload.data?.posts || payload.posts || [];
+  return posts.find((post) => post.id === postId) || null;
+};
+
+const assertRowSeoAndComments = async (client, { postId }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const seo = document.querySelector(${JSON.stringify(`[data-testid="blog-post-seo-noindex-${postId}"]`)});
+      const comments = document.querySelector(${JSON.stringify(`[data-testid="blog-post-comments-${postId}"]`)});
+      return {
+        seoText: seo?.textContent || '',
+        commentsText: comments?.textContent || '',
+      };
+    })()`);
+    if (/Index|Noindex/.test(state.seoText) && /1 comments/.test(state.commentsText)) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Blog row did not expose SEO/comment controls: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const clickPreview = async (client, title) => {
@@ -727,6 +796,10 @@ const main = async () => {
     const authorId = author?.id || 'admin';
     const post = await createBlogPost({ title, slug, categoryId, tagId, authorId });
     postId = post.id;
+    await submitBlogComment({
+      postId,
+      requestId: `blog-list-row-comment-${suffix}`,
+    });
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -744,6 +817,8 @@ const main = async () => {
 
     await navigateToBlog(client, title);
     await assertBlogListLayout(client, { title, categoryName, tagName, authorName: author?.name || null });
+    await assertRowSeoAndComments(client, { postId });
+    await toggleNoIndexInUi(client, postId);
     const taxonomyUi = await manageTaxonomyInUi(client, suffix);
     await exerciseFilters(client, { title, categoryId, tagId, authorId });
     const previewUrls = await clickPreview(client, title);
