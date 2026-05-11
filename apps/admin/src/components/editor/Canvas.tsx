@@ -506,7 +506,32 @@ const normalizeEmbedUrl = (raw: unknown): string => {
   return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
 };
 
-const normalizeMapUrl = (addressOrUrl: unknown): string => {
+const normalizeMapZoom = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? parseInt(value, 10)
+      : NaN;
+
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(20, parsed)) : undefined;
+};
+
+const appendMapZoom = (url: string, zoom: unknown): string => {
+  const normalizedZoom = normalizeMapZoom(zoom);
+  if (!normalizedZoom) {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('z', String(normalizedZoom));
+    return parsed.toString();
+  } catch {
+    return `${url}${url.includes('?') ? '&' : '?'}z=${normalizedZoom}`;
+  }
+};
+
+const normalizeMapUrl = (addressOrUrl: unknown, zoom?: unknown): string => {
   const source = sanitizeText(addressOrUrl);
   if (!source) {
     return '';
@@ -521,23 +546,23 @@ const normalizeMapUrl = (addressOrUrl: unknown): string => {
   })();
 
   if (!parsed) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`;
+    return appendMapZoom(`https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`, zoom);
   }
 
   const host = parsed.host.toLowerCase();
   if (host.includes('google.com') && host.includes('maps')) {
     if (parsed.searchParams.has('output')) {
-      return source;
+      return appendMapZoom(source, zoom);
     }
     if (parsed.searchParams.has('q')) {
-      return `${parsed.origin}${parsed.pathname}?${parsed.searchParams.toString()}&output=embed`;
+      return appendMapZoom(`${parsed.origin}${parsed.pathname}?${parsed.searchParams.toString()}&output=embed`, zoom);
     }
     if (parsed.searchParams.has('ll') || parsed.searchParams.has('pb')) {
-      return `${parsed.toString()}&output=embed`;
+      return appendMapZoom(`${parsed.toString()}&output=embed`, zoom);
     }
   }
 
-  return `https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`;
+  return appendMapZoom(`https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`, zoom);
 };
 
 const parseFormOptions = (value: unknown): string[] => {
@@ -3086,7 +3111,7 @@ function CanvasElementComponent({
       }
 
       case 'map':
-        const mapSrc = normalizeMapUrl(p.src || p.address);
+        const mapSrc = normalizeMapUrl(p.src || p.address, p.zoom);
         if (!mapSrc) {
           return (
             <div
@@ -3109,7 +3134,7 @@ function CanvasElementComponent({
         }
         return (
           <iframe
-            title={p.title || 'Map'}
+            title={sanitizeText(p.title) || 'Map'}
             src={mapSrc}
             style={{
               ...sharedStyle,
@@ -3119,9 +3144,9 @@ function CanvasElementComponent({
               borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
               pointerEvents: isPreview ? 'auto' : 'none',
             }}
-            allowFullScreen
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            allowFullScreen={parseBooleanSetting(p.allowFullScreen, true)}
+            loading={normalizeIframeLoading(p.loading)}
+            referrerPolicy={normalizeIframeReferrerPolicy(p.referrerPolicy) || 'no-referrer'}
           />
         );
 

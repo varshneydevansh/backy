@@ -17,6 +17,7 @@ const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2F
 const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
 const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
+const SMOKE_MAP_ADDRESS = 'Mumbai India';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -165,6 +166,23 @@ const createSmokePage = async () => {
               title: 'Initial embed',
               allow: '',
               loading: 'lazy',
+              allowFullScreen: true,
+            },
+          },
+          {
+            id: 'smoke-map',
+            type: 'map',
+            x: 820,
+            y: 500,
+            width: 320,
+            height: 180,
+            zIndex: 9,
+            props: {
+              address: 'New Delhi India',
+              zoom: 12,
+              title: 'Initial map',
+              loading: 'lazy',
+              referrerPolicy: 'no-referrer',
               allowFullScreen: true,
             },
           },
@@ -3032,6 +3050,74 @@ const assertPersistedEmbedBehavior = async (pageId) => {
   return props;
 };
 
+const testMapBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-map');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-map-address', SMOKE_MAP_ADDRESS);
+  await setFormControlByTestId(client, 'editor-map-src', '');
+  await setFormControlByTestId(client, 'editor-map-title', 'Smoke map frame');
+  await setFormControlByTestId(client, 'editor-map-zoom', '17');
+  await setFormControlByTestId(client, 'editor-map-loading', 'eager');
+  await setFormControlByTestId(client, 'editor-map-referrer-policy', 'origin');
+  await setCheckboxByTestId(client, 'editor-map-allow-fullscreen', false);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-map"]');
+    const iframe = node?.querySelector('iframe');
+    const previewSrc = iframe?.getAttribute('src') || '';
+    return {
+      address: value('editor-map-address'),
+      src: value('editor-map-src'),
+      title: value('editor-map-title'),
+      zoom: value('editor-map-zoom'),
+      loading: value('editor-map-loading'),
+      referrerPolicy: value('editor-map-referrer-policy'),
+      allowFullScreen: checked('editor-map-allow-fullscreen'),
+      previewSrc,
+      decodedPreviewSrc: previewSrc ? decodeURIComponent(previewSrc) : '',
+      previewTitle: iframe?.getAttribute('title') || '',
+      previewLoading: iframe?.getAttribute('loading') || '',
+      previewReferrerPolicy: iframe?.getAttribute('referrerpolicy') || '',
+      previewAllowFullScreen: iframe instanceof HTMLIFrameElement ? iframe.allowFullscreen : null,
+    };
+  })()`);
+
+  assert(state.address === SMOKE_MAP_ADDRESS, `Map address control mismatch: ${JSON.stringify(state)}`);
+  assert(state.src === '', `Map custom src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === 'Smoke map frame' && state.previewTitle === 'Smoke map frame', `Map title control mismatch: ${JSON.stringify(state)}`);
+  assert(state.zoom === '17' && /[?&]z=17(&|$)/.test(state.previewSrc), `Map zoom control mismatch: ${JSON.stringify(state)}`);
+  assert(state.decodedPreviewSrc.replace(/\+/g, ' ').includes(SMOKE_MAP_ADDRESS) && state.previewSrc.includes('output=embed'), `Map address was not reflected in embed URL: ${JSON.stringify(state)}`);
+  assert(state.loading === 'eager' && state.previewLoading === 'eager', `Map loading control mismatch: ${JSON.stringify(state)}`);
+  assert(state.referrerPolicy === 'origin' && state.previewReferrerPolicy === 'origin', `Map referrer policy mismatch: ${JSON.stringify(state)}`);
+  assert(state.allowFullScreen === false && state.previewAllowFullScreen === false, `Map fullscreen control mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedMapBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const map = findCanvasElement(elements, 'smoke-map');
+  const props = map?.props || {};
+
+  assert(map?.type === 'map', `Persisted smoke-map missing: ${JSON.stringify(map)}`);
+  assert(props.address === SMOKE_MAP_ADDRESS, `Persisted map address mismatch: ${JSON.stringify(props)}`);
+  assert(props.src === undefined || props.src === '', `Persisted map src mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Smoke map frame', `Persisted map title mismatch: ${JSON.stringify(props)}`);
+  assert(props.zoom === 17, `Persisted map zoom mismatch: ${JSON.stringify(props)}`);
+  assert(props.loading === 'eager', `Persisted map loading mismatch: ${JSON.stringify(props)}`);
+  assert(props.referrerPolicy === 'origin', `Persisted map referrer policy mismatch: ${JSON.stringify(props)}`);
+  assert(props.allowFullScreen === false, `Persisted map fullscreen mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -3295,7 +3381,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3415,6 +3501,9 @@ const main = async () => {
     const embedBehaviorControls = EDITOR_PATH
       ? null
       : await testEmbedBehaviorControls(client);
+    const mapBehaviorControls = EDITOR_PATH
+      ? null
+      : await testMapBehaviorControls(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -3428,8 +3517,9 @@ const main = async () => {
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
+    let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3491,11 +3581,14 @@ const main = async () => {
       persistedEmbedBehavior = embedBehaviorControls
         ? await assertPersistedEmbedBehavior(tempPageId)
         : null;
+      persistedMapBehavior = mapBehaviorControls
+        ? await assertPersistedMapBehavior(tempPageId)
+        : null;
 
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-form', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -3601,6 +3694,7 @@ const main = async () => {
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
+      mapBehaviorControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
@@ -3612,6 +3706,7 @@ const main = async () => {
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
+      persistedMapBehavior,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,
