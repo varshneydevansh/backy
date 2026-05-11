@@ -1283,16 +1283,26 @@ function ContentProperties({
               placeholder="name, email, message"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id={`required-${element.id}`}
-              checked={Boolean(element.props.required)}
-              onChange={(e) => onChange({ required: e.target.checked })}
-              data-testid="editor-field-required"
-            />
-            <label htmlFor={`required-${element.id}`} className="text-xs text-muted-foreground">
-              Required field
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                id={`required-${element.id}`}
+                checked={Boolean(element.props.required)}
+                onChange={(e) => onChange({ required: e.target.checked })}
+                data-testid="editor-field-required"
+              />
+              Required
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                id={`disabled-${element.id}`}
+                checked={Boolean(element.props.disabled)}
+                onChange={(e) => onChange({ disabled: e.target.checked })}
+                data-testid="editor-field-disabled"
+              />
+              Disabled
             </label>
           </div>
           <div>
