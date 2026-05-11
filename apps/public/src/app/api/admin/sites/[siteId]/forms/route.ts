@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { createAdminForm, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { seedFormInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -201,6 +202,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ...input,
         siteId: site.id,
       })).item;
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'form',
+        entityId: created.id,
+        action: 'form.create',
+        after: created,
+        metadata: {
+          title: created.title || created.name || created.id,
+          fieldCount: created.fields.length,
+          source: textValue(seeded.body.frontendDesignTemplateId) ? 'frontend-design-template' : 'admin-template',
+        },
+        requestId,
+      });
 
       return NextResponse.json(
         { success: true, requestId, data: { form: created }, form: created },
@@ -230,6 +245,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const created = createAdminForm({
       ...input,
       siteId: site.id,
+    });
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'form',
+      entityId: created.id,
+      action: 'form.create',
+      after: created,
+      metadata: {
+        title: created.title || created.name || created.id,
+        fieldCount: created.fields.length,
+        source: textValue(seeded.body.frontendDesignTemplateId) ? 'frontend-design-template' : 'admin-template',
+      },
+      requestId,
     });
 
     return NextResponse.json(

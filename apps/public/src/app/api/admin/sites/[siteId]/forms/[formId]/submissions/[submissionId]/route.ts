@@ -8,6 +8,7 @@ import {
   getSubmissionById,
   updateFormSubmissionStatus,
 } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -250,6 +251,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (updated.status === 'approved' && shouldShareContact) {
         await buildRepositoryContactShare(repositories, form, updated, body.contactShareOverride);
       }
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'formSubmission',
+        entityId: updated.id,
+        action: 'formSubmission.review',
+        before: submission,
+        after: updated,
+        metadata: {
+          formId: form.id,
+          formTitle: form.title || form.name || form.id,
+          status: updated.status,
+          reviewedBy: updated.reviewedBy || body.reviewedBy || 'admin',
+          contactShare: updated.status === 'approved' && shouldShareContact,
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -295,6 +313,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         sourceSubmissionId: updated.id,
       }, body.contactShareOverride);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'formSubmission',
+      entityId: updated.id,
+      action: 'formSubmission.review',
+      before: submission,
+      after: updated,
+      metadata: {
+        formId: form.id,
+        formTitle: form.title || form.name || form.id,
+        status: updated.status,
+        reviewedBy: updated.reviewedBy || body.reviewedBy || 'admin',
+        contactShare: updated.status === 'approved' && shouldShareContact,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

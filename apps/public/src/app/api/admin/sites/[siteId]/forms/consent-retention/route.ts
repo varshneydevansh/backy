@@ -7,6 +7,7 @@ import {
   listFormsBySite,
   listFormSubmissions,
 } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -221,18 +222,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           submissions: dryRun ? result.dueSubmissions : updated,
         });
       }
+      const summary = {
+        dryRun,
+        policy: { now: new Date(now).toISOString() },
+        scannedForms: forms.length,
+        formsWithConsent: results.filter((result) => result.consentFieldKeys.length > 0).length,
+        scannedSubmissions: results.reduce((total, result) => total + result.scanned, 0),
+        due: results.reduce((total, result) => total + result.due, 0),
+        anonymized: results.reduce((total, result) => total + result.anonymized, 0),
+      };
+      if (!dryRun) {
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          actorId: actor,
+          entity: 'site',
+          entityId: site.id,
+          action: 'forms.consentRetention',
+          metadata: summary,
+          requestId,
+        });
+      }
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
-          dryRun,
-          policy: { now: new Date(now).toISOString() },
-          scannedForms: forms.length,
-          formsWithConsent: results.filter((result) => result.consentFieldKeys.length > 0).length,
-          scannedSubmissions: results.reduce((total, result) => total + result.scanned, 0),
-          due: results.reduce((total, result) => total + result.due, 0),
-          anonymized: results.reduce((total, result) => total + result.anonymized, 0),
+          ...summary,
           results,
         },
       });
@@ -260,18 +276,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         submissions: dryRun ? result.dueSubmissions : updated,
       };
     });
+    const summary = {
+      dryRun,
+      policy: { now: new Date(now).toISOString() },
+      scannedForms: forms.length,
+      formsWithConsent: results.filter((result) => result.consentFieldKeys.length > 0).length,
+      scannedSubmissions: results.reduce((total, result) => total + result.scanned, 0),
+      due: results.reduce((total, result) => total + result.due, 0),
+      anonymized: results.reduce((total, result) => total + result.anonymized, 0),
+    };
+    if (!dryRun) {
+      await recordAdminAudit({
+        siteId: site.id,
+        actorId: actor,
+        entity: 'site',
+        entityId: site.id,
+        action: 'forms.consentRetention',
+        metadata: summary,
+        requestId,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
-        dryRun,
-        policy: { now: new Date(now).toISOString() },
-        scannedForms: forms.length,
-        formsWithConsent: results.filter((result) => result.consentFieldKeys.length > 0).length,
-        scannedSubmissions: results.reduce((total, result) => total + result.scanned, 0),
-        due: results.reduce((total, result) => total + result.due, 0),
-        anonymized: results.reduce((total, result) => total + result.anonymized, 0),
+        ...summary,
         results,
       },
     });

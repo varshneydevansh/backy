@@ -7,6 +7,7 @@ import {
   getSiteByIdOrSlug,
   listFormSubmissions,
 } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -185,6 +186,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             adminNotes: appendAnonymizedNote(submission, actor),
           })).item);
         }
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          actorId: actor,
+          entity: 'form',
+          entityId: form.id,
+          action: 'form.consentRetention',
+          metadata: {
+            dryRun,
+            scanned: submissions.length,
+            due: dueSubmissions.length,
+            anonymized: updated.length,
+            consentFieldKeys,
+            deleteAfterDays,
+          },
+          requestId,
+        });
       }
 
       return NextResponse.json({
@@ -224,6 +242,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const anonymized = anonymizeFormSubmissionConsentEvidence(form.id, submission.id, consentFieldKeys, actor);
         return anonymized ? [anonymized] : [];
       });
+    if (!dryRun) {
+      await recordAdminAudit({
+        siteId: site.id,
+        actorId: actor,
+        entity: 'form',
+        entityId: form.id,
+        action: 'form.consentRetention',
+        metadata: {
+          dryRun,
+          scanned: submissions.length,
+          due: dueSubmissions.length,
+          anonymized: updated.length,
+          consentFieldKeys,
+          deleteAfterDays,
+        },
+        requestId,
+      });
+    }
 
     return NextResponse.json({
       success: true,

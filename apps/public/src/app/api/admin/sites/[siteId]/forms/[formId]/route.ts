@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { deleteAdminForm, getFormById, getSiteByIdOrSlug, updateAdminForm } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -260,13 +261,52 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
         : input;
       const updated = (await repositories.forms.update(site.id, formId, updateInput)).item;
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'form',
+        entityId: updated.id,
+        action: 'form.update',
+        before: existing,
+        after: updated,
+        metadata: {
+          title: updated.title || updated.name || updated.id,
+          fieldCount: updated.fields.length,
+          changedKeys: Object.keys(input).sort(),
+        },
+        requestId,
+      });
       return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
     }
 
-    const updated = updateAdminForm(siteId, formId, input);
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const existing = getFormById(site.id, formId);
+    if (!existing) {
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    }
+
+    const updated = updateAdminForm(site.id, formId, input);
     if (!updated) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'form',
+      entityId: updated.id,
+      action: 'form.update',
+      before: existing,
+      after: updated,
+      metadata: {
+        title: updated.title || updated.name || updated.id,
+        fieldCount: updated.fields.length,
+        changedKeys: Object.keys(input).sort(),
+      },
+      requestId,
+    });
 
     return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
   } catch (error) {
@@ -297,13 +337,48 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
 
       await repositories.forms.delete(site.id, formId);
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'form',
+        entityId: existing.id,
+        action: 'form.delete',
+        before: existing,
+        metadata: {
+          title: existing.title || existing.name || existing.id,
+          fieldCount: existing.fields.length,
+        },
+        requestId,
+      });
       return NextResponse.json({ success: true, requestId, data: { deleted: true }, deleted: true });
     }
 
-    const deleted = deleteAdminForm(siteId, formId);
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const existing = getFormById(site.id, formId);
+    if (!existing) {
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    }
+
+    const deleted = deleteAdminForm(site.id, formId);
     if (!deleted) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'form',
+      entityId: existing.id,
+      action: 'form.delete',
+      before: existing,
+      metadata: {
+        title: existing.title || existing.name || existing.id,
+        fieldCount: existing.fields.length,
+      },
+      requestId,
+    });
 
     return NextResponse.json({ success: true, requestId, data: { deleted: true }, deleted: true });
   } catch (error) {

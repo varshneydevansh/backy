@@ -246,6 +246,11 @@ const getFormsAnalytics = async () => {
   return payload.data?.analytics;
 };
 
+const getAdminAuditLogs = async () => {
+  const payload = await requestApi(`/api/admin/audit-logs?siteId=${encodeURIComponent(SITE_ID)}&limit=60`);
+  return payload.data?.logs || payload.logs || [];
+};
+
 const getFormWithSubmissions = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/submissions?limit=100`);
   return {
@@ -400,12 +405,13 @@ const navigateToForms = async (client) => {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
       analytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')),
+      audit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')),
       templates: document.body?.innerText?.includes('Form templates') || false,
       registration: document.body?.innerText?.includes('Registration') || false,
       body: document.body?.innerText?.slice(0, 500) || '',
     }))()`);
 
-    if (state.ready && state.analytics && state.templates && state.registration) {
+    if (state.ready && state.analytics && state.audit && state.templates && state.registration) {
       return state;
     }
 
@@ -1436,6 +1442,40 @@ const assertFormsAnalytics = async (client, formId, submissionId) => {
   return analytics;
 };
 
+const assertFormsAuditTrail = async (client, formId, submissionId) => {
+  const logs = await getAdminAuditLogs();
+  const formLogs = logs.filter((log) => log.entity === 'form' && log.entityId === formId);
+  const submissionLogs = logs.filter((log) => log.entity === 'formSubmission' && log.entityId === submissionId);
+  const embedLogs = logs.filter((log) => (
+    log.entity === 'reusableSection' &&
+    log.action === 'reusableSection.create' &&
+    log.metadata?.source === 'form-embed-block' &&
+    log.metadata?.formId === formId
+  ));
+  assert(formLogs.some((log) => log.action === 'form.create' && log.requestId), `Form create audit log missing request id: ${JSON.stringify(formLogs)}`);
+  assert(formLogs.some((log) => log.action === 'form.update' && log.requestId), `Form update audit log missing request id: ${JSON.stringify(formLogs)}`);
+  assert(submissionLogs.some((log) => log.action === 'formSubmission.review' && log.requestId), `Submission review audit log missing request id: ${JSON.stringify(submissionLogs)}`);
+  assert(embedLogs.some((log) => log.requestId), `Form embed audit log missing request id: ${JSON.stringify(embedLogs)}`);
+
+  const state = await evaluate(client, `(() => ({
+    panel: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')),
+    list: Boolean(document.querySelector('[data-testid="forms-audit-list"]')),
+    body: document.querySelector('[data-testid="forms-audit-panel"]')?.innerText || '',
+  }))()`);
+  assert(state.panel && state.list, `Forms audit panel missing expected regions: ${JSON.stringify(state).slice(0, 800)}`);
+  assert(state.body.includes('Forms activity'), 'Forms audit panel title is not rendered');
+  assert(
+    state.body.includes('Form updated') || state.body.includes('Submission reviewed') || state.body.includes('Embed block saved'),
+    `Forms audit panel did not render expected audit actions: ${JSON.stringify(state).slice(0, 800)}`,
+  );
+
+  return {
+    form: formLogs.length,
+    submission: submissionLogs.length,
+    embed: embedLogs.length,
+  };
+};
+
 const approveSubmissionInUi = async (client, formId, submissionId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1487,6 +1527,8 @@ const assertLayout = async (client) => {
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
     hasAnalytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')) &&
       document.body?.innerText?.includes('Submission analytics'),
+    hasAudit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')) &&
+      document.body?.innerText?.includes('Forms activity'),
     hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
       document.body?.innerText?.includes('Registration/account handoff') &&
       document.body?.innerText?.includes('Create registration form'),
@@ -1496,7 +1538,7 @@ const assertLayout = async (client) => {
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAccountContract && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -1648,6 +1690,8 @@ const main = async () => {
     const consentRetention = await assertConsentRetentionApi(createdFormId, submitted.id);
     await refreshForms(client);
     const approved = await approveSubmissionInUi(client, createdFormId, submitted.id);
+    await refreshForms(client);
+    const auditTrail = await assertFormsAuditTrail(client, createdFormId, submitted.id);
     const layout = await assertLayout(client);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -1718,6 +1762,7 @@ const main = async () => {
         spam: formsAnalytics.summary.spam,
         routedToCollections: formsAnalytics.summary.routedToCollections,
       },
+      auditTrail,
       collectionRecord: {
         id: createdRecord.id,
         slug: createdRecord.slug,

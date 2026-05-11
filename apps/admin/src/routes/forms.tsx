@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FileInput,
   Filter,
+  History,
   Inbox,
   Plus,
   RefreshCw,
@@ -28,6 +29,7 @@ import {
   applyFormConsentRetention,
   createFormEmbedBlock,
   getFormsAnalytics,
+  listAdminAuditLogs,
   listFormDeliveryEvents,
   listCollections,
   listForms,
@@ -37,6 +39,7 @@ import {
   updateForm,
   updateFormSubmission,
   type Collection,
+  type AdminAuditLog,
   type FormDefinition,
   type FormDeliveryEvent,
   type FormFieldDefinition,
@@ -468,6 +471,7 @@ function FormsRoute() {
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [deliveryEventsByForm, setDeliveryEventsByForm] = useState<Record<string, FormDeliveryEvent[]>>({});
   const [formsAnalytics, setFormsAnalytics] = useState<FormsAnalytics | null>(null);
+  const [formsAuditLogs, setFormsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
@@ -1011,10 +1015,11 @@ function FormsRoute() {
     setNotice(null);
 
     try {
-      const [loadedForms, loadedCollections, loadedAnalytics] = await Promise.all([
+      const [loadedForms, loadedCollections, loadedAnalytics, loadedAuditResult] = await Promise.all([
         listForms(activeSiteId),
         listCollections(activeSiteId).catch(() => []),
         getFormsAnalytics(activeSiteId, { days: 14 }).catch(() => null),
+        listAdminAuditLogs({ siteId: activeSiteId, limit: 40 }).catch(() => null),
       ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
@@ -1042,6 +1047,7 @@ function FormsRoute() {
       setInboxByForm(nextInbox);
       setDeliveryEventsByForm(Object.fromEntries(deliveryPairs));
       setFormsAnalytics(loadedAnalytics);
+      setFormsAuditLogs((loadedAuditResult?.logs || []).filter(isFormsAuditLog).slice(0, 8));
       setSelectedFormId((current) => (
         current && loadedForms.some((form) => form.id === current)
           ? current
@@ -2120,6 +2126,40 @@ function FormsRoute() {
               )}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4" data-testid="forms-audit-panel">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <History className="size-4" />
+              Forms activity
+            </div>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Request-id-backed audit events for form edits, submission review, consent retention, and reusable embed blocks.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void loadForms()}
+            disabled={isFormsBusy}
+            iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+          >
+            Refresh
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-2" data-testid="forms-audit-list">
+          {formsAuditLogs.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+              No form audit events recorded yet.
+            </div>
+          ) : (
+            formsAuditLogs.map((log) => (
+              <FormAuditLogCard key={log.id} log={log} />
+            ))
+          )}
         </div>
       </section>
 
@@ -3633,6 +3673,89 @@ function FormTrendBars({ trend }: { trend: FormsAnalytics['trend'] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function isFormsAuditLog(log: AdminAuditLog): boolean {
+  if (log.entity === 'form' || log.entity === 'formSubmission') {
+    return true;
+  }
+
+  if (log.entity === 'reusableSection') {
+    return log.metadata?.source === 'form-embed-block' || typeof log.metadata?.formId === 'string';
+  }
+
+  return log.entity === 'site' && String(log.action).startsWith('forms.');
+}
+
+function auditMetadataText(log: AdminAuditLog, key: string): string {
+  const value = log.metadata?.[key];
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function formAuditTitle(log: AdminAuditLog): string {
+  if (log.action === 'form.create') return 'Form created';
+  if (log.action === 'form.update') return 'Form updated';
+  if (log.action === 'form.delete') return 'Form deleted';
+  if (log.action === 'formSubmission.review') return 'Submission reviewed';
+  if (log.action === 'form.consentRetention') return 'Consent retention applied';
+  if (log.action === 'forms.consentRetention') return 'Site retention applied';
+  if (log.action === 'reusableSection.create' && auditMetadataText(log, 'source') === 'form-embed-block') {
+    return 'Embed block saved';
+  }
+
+  return log.action.replace(/[._-]+/g, ' ');
+}
+
+function formAuditDescription(log: AdminAuditLog): string {
+  const title = auditMetadataText(log, 'title') || auditMetadataText(log, 'formTitle');
+  const formId = auditMetadataText(log, 'formId');
+  const status = auditMetadataText(log, 'status');
+  const anonymized = auditMetadataText(log, 'anonymized');
+  const scanned = auditMetadataText(log, 'scanned') || auditMetadataText(log, 'scannedSubmissions');
+  const fieldCount = auditMetadataText(log, 'fieldCount');
+  const reusableSlug = auditMetadataText(log, 'slug');
+
+  if (log.action === 'formSubmission.review') {
+    return `${status || 'updated'} submission ${log.entityId}${formId ? ` for ${formId}` : ''}.`;
+  }
+
+  if (log.action === 'form.consentRetention' || log.action === 'forms.consentRetention') {
+    return `${anonymized || '0'} anonymized from ${scanned || '0'} scanned submission${scanned === '1' ? '' : 's'}.`;
+  }
+
+  if (log.action === 'reusableSection.create' && auditMetadataText(log, 'source') === 'form-embed-block') {
+    return `${reusableSlug || log.entityId}${formId ? ` from ${formId}` : ''}.`;
+  }
+
+  return [
+    title || log.entityId,
+    fieldCount ? `${fieldCount} fields` : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function FormAuditLogCard({ log }: { log: AdminAuditLog }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{formAuditTitle(log)}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{formAuditDescription(log)}</div>
+        </div>
+        <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
+          {formatDate(log.createdAt)}
+        </time>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span className="rounded bg-muted px-2 py-1">{log.actorId || 'admin'}</span>
+        <span className="rounded bg-muted px-2 py-1">{log.entity}</span>
+        {log.requestId && (
+          <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+        )}
+      </div>
     </div>
   );
 }
