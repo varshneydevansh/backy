@@ -775,6 +775,28 @@ try {
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
     assert(list.json?.data?.folders?.some((folder) => folder.id === createdMediaFolderId), `${list.url} missing created folder`);
 
+    const invalidFolderUploadForm = new FormData();
+    invalidFolderUploadForm.set('file', new Blob(['invalid-folder-upload'], { type: 'text/plain' }), 'invalid-folder.txt');
+    invalidFolderUploadForm.set('folderId', 'missing_media_folder');
+    const invalidFolderUpload = await request(`/api/admin/sites/${createdSiteId}/media`, {
+      method: 'POST',
+      body: invalidFolderUploadForm,
+    });
+    assert(invalidFolderUpload.response.status === 404, `${invalidFolderUpload.url} expected invalid upload folder 404, got ${invalidFolderUpload.response.status}`);
+    assert(invalidFolderUpload.json?.error?.code === 'FOLDER_NOT_FOUND', `${invalidFolderUpload.url} expected FOLDER_NOT_FOUND for invalid upload folder`);
+
+    const invalidAssignMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        folderId: 'missing_media_folder',
+      }),
+    });
+    assert(invalidAssignMedia.response.status === 404, `${invalidAssignMedia.url} expected invalid folder assignment 404, got ${invalidAssignMedia.response.status}`);
+    assert(invalidAssignMedia.json?.error?.code === 'FOLDER_NOT_FOUND', `${invalidAssignMedia.url} expected FOLDER_NOT_FOUND for invalid folder assignment`);
+
     const assignMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
       method: 'PATCH',
       headers: {

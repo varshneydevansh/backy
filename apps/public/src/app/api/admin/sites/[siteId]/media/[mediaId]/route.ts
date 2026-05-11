@@ -10,7 +10,7 @@ import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
+import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePath, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
@@ -268,6 +268,18 @@ const visibilityFromInput = (value: unknown): 'public' | 'private' | undefined =
   value === 'public' || value === 'private' ? value : undefined
 );
 
+const nullableStringFromBody = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return typeof value === 'string' ? value.trim() || null : undefined;
+};
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
@@ -291,9 +303,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const folderId = nullableStringFromBody(body.folderId);
+      if (folderId) {
+        const folder = await repositories.media.getFolderById(site.id, folderId);
+        if (!folder) {
+          return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
+        }
+      }
+
       const updated = await repositories.media.update(site.id, mediaId, {
         filename: typeof body.filename === 'string' ? body.filename : undefined,
-        folderId: typeof body.folderId === 'string' || body.folderId === null ? body.folderId : undefined,
+        folderId,
         altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
         caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,
         visibility: visibilityFromInput(body.visibility),
@@ -337,6 +357,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const folderId = nullableStringFromBody(body.folderId);
+    if (folderId) {
+      const folder = listMediaFolders(site.id).find((item) => item.id === folderId);
+      if (!folder) {
+        return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
+      }
+    }
+
     const media = updateMediaItem(site.id, mediaId, body);
 
     if (!media) {

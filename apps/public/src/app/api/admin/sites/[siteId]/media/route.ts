@@ -9,7 +9,7 @@ import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { createMediaItem, getMediaList, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
 import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
@@ -392,6 +392,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const visibility = parseVisibility(formData.get('visibility'));
     const scopeTargetId = toStringValue(formData.get('scopeTargetId'));
     const folderId = toStringValue(formData.get('folderId'));
+    if (folderId) {
+      const folder = repositories
+        ? await repositories.media.getFolderById(site.id, folderId)
+        : listMediaFolders(site.id).find((item) => item.id === folderId);
+
+      if (!folder) {
+        return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
+      }
+    }
     const extension = extname(originalName).toLowerCase();
     const safeName = safePathSegment(extension ? originalName.slice(0, -extension.length) : originalName);
     const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
