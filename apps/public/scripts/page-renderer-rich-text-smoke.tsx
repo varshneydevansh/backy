@@ -126,7 +126,11 @@ const content: PageContent = {
         fontSize: 18,
         fontWeight: '700',
         borderRadius: 12,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#fde047',
         padding: 14,
+        margin: 6,
         boxShadow: '0 8px 16px rgba(22, 163, 74, 0.25)',
       },
     },
@@ -375,6 +379,10 @@ assert(html.includes('Styled CTA'), `Button label was not rendered: ${html}`);
 assert(html.includes('background-color:#16a34a'), `Button background was not rendered: ${html}`);
 assert(html.includes('font-size:18px'), `Button font size was not rendered: ${html}`);
 assert(html.includes('border-radius:12px'), `Button border radius was not rendered: ${html}`);
+assert(html.includes('border-width:2px'), `Button border width was not rendered: ${html}`);
+assert(html.includes('border-style:solid'), `Button border style was not rendered: ${html}`);
+assert(html.includes('border-color:#fde047'), `Button border color was not rendered: ${html}`);
+assert(html.includes('margin:6px'), `Button margin was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 8px 16px rgba(22, 163, 74, 0.25)'), `Button shadow was not rendered: ${html}`);
 assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
 assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);

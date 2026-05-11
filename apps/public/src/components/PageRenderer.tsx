@@ -1314,6 +1314,7 @@ function ButtonElement({ element }: ElementRendererProps) {
     cursor: 'pointer',
     textDecoration: 'none',
     transition: 'all 0.2s ease',
+    ...getAppearanceStyle(props as Record<string, unknown>),
     ...styles,
     ...getTypographyStyle(props as Record<string, unknown>),
   };
