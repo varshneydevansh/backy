@@ -298,6 +298,23 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-password',
+      type: 'input',
+      x: 824,
+      y: 440,
+      width: 220,
+      height: 96,
+      props: {
+        label: 'Password field',
+        name: 'styled_password',
+        inputType: 'password',
+        required: true,
+        placeholder: 'Secret',
+        minLength: 8,
+        maxLength: 72,
+      },
+    },
+    {
       id: 'styled-select',
       type: 'select',
       x: 824,
@@ -523,6 +540,8 @@ assert(html.includes('rows="5"'), `Textarea rows were not rendered: ${html}`);
 assert(html.includes('Textarea body'), `Textarea default value was not rendered: ${html}`);
 assert(html.includes('border:2px solid #059669'), `Textarea border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 6px 16px rgba(5, 150, 105, 0.22)'), `Textarea shadow was not rendered: ${html}`);
+assert(html.includes('name="styled_password"'), `Password input name was not rendered: ${html}`);
+assert(html.includes('type="password"'), `Password input type was not preserved: ${html}`);
 assert(html.includes('name="styled_plan"'), `Select name was not rendered: ${html}`);
 assert(html.includes('<option value="" disabled="">Choose a plan</option>'), `Select placeholder was not rendered: ${html}`);
 assert(html.includes('<option value="Growth" selected="">Growth</option>'), `Select default value was not rendered: ${html}`);

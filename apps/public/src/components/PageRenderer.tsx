@@ -552,10 +552,16 @@ const normalizeInputType = (value: unknown): string => {
   if (inputType === 'url') {
     return 'url';
   }
+  if (inputType === 'password') {
+    return 'password';
+  }
+  if (inputType === 'search') {
+    return 'search';
+  }
   if (inputType === 'file') {
     return 'file';
   }
-  if (inputType === 'hidden' || inputType === 'password' || inputType === 'search') {
+  if (inputType === 'hidden') {
     return 'text';
   }
   if (inputType === 'text') {
