@@ -66,6 +66,10 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - Duplicate contact submit honors `dedupeByEmail`.
 - **Validation**:
   - Repeat submit same identity with dedupe enabled.
+- **Progress**:
+  - Form builder now exposes per-form notification email and webhook URL controls.
+  - Public form submissions deliver configured webhooks for form submissions and contact-share events in demo and repository modes, with queued/succeeded/failed delivery events queryable through the interaction events API.
+  - `test:forms` starts a local webhook receiver, configures the rendered form builder, verifies webhook headers/payload delivery, and asserts queued/succeeded event history.
 
 ### Task 1.5: Export/filter and analytics hooks
 - **Location**: `apps/admin/src/routes/sites.$siteId.tsx`, `apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts`

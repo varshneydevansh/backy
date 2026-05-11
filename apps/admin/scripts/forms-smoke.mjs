@@ -2,6 +2,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -22,6 +23,48 @@ const assert = (condition, message) => {
     throw new Error(message);
   }
 };
+
+const startWebhookReceiver = async () => new Promise((resolve, reject) => {
+  const deliveries = [];
+  const server = http.createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      let payload = null;
+      try {
+        payload = body ? JSON.parse(body) : null;
+      } catch {
+        payload = body;
+      }
+      deliveries.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        payload,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ ok: true }));
+    });
+  });
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => {
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      server.close();
+      reject(new Error('Unable to bind webhook receiver'));
+      return;
+    }
+
+    resolve({
+      url: `http://127.0.0.1:${address.port}/backy/forms`,
+      deliveries,
+      close: () => new Promise((closeResolve) => server.close(() => closeResolve())),
+    });
+  });
+});
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
@@ -476,7 +519,7 @@ const getAdminForm = async (formId) => {
   return payload.data?.form || payload.form;
 };
 
-const editFormBuilderInUi = async (client, formId, collectionId) => {
+const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
       const setInputValue = (input, value) => {
@@ -498,11 +541,20 @@ const editFormBuilderInUi = async (client, formId, collectionId) => {
       const title = inputs.find((input) => input.value === 'Registration');
       const machineName = inputs.find((input) => input.value.startsWith('registration-'));
       const firstPlaceholder = inputs.find((input) => input.value === 'Ada Lovelace');
+      const notificationEmail = panel.querySelector('[data-testid="form-notification-email-input"]');
+      const notificationWebhook = panel.querySelector('[data-testid="form-notification-webhook-input"]');
       const addButton = Array.from(panel.querySelectorAll('button')).find((button) => (
         (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add field'
       ));
 
-      if (!(title instanceof HTMLInputElement) || !(machineName instanceof HTMLInputElement) || !(firstPlaceholder instanceof HTMLInputElement) || !(addButton instanceof HTMLButtonElement)) {
+      if (
+        !(title instanceof HTMLInputElement) ||
+        !(machineName instanceof HTMLInputElement) ||
+        !(firstPlaceholder instanceof HTMLInputElement) ||
+        !(notificationEmail instanceof HTMLInputElement) ||
+        !(notificationWebhook instanceof HTMLInputElement) ||
+        !(addButton instanceof HTMLButtonElement)
+      ) {
         return {
           ok: false,
           reason: 'controls-missing',
@@ -519,6 +571,12 @@ const editFormBuilderInUi = async (client, formId, collectionId) => {
 
       firstPlaceholder.focus();
       setInputValue(firstPlaceholder, 'Grace Hopper');
+
+      notificationEmail.focus();
+      setInputValue(notificationEmail, 'forms-smoke-leads@example.com');
+
+      notificationWebhook.focus();
+      setInputValue(notificationWebhook, ${JSON.stringify(webhookUrl)});
 
       addButton.click();
       return { ok: true };
@@ -719,15 +777,18 @@ const editFormBuilderInUi = async (client, formId, collectionId) => {
       collectionTarget.fieldMap?.company === 'company'
     );
     const placeholder = form?.fields?.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper');
+    const notificationTargets = form?.notificationEmail === 'forms-smoke-leads@example.com' && form?.notificationWebhook === webhookUrl;
 
-    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder) {
-      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets) {
+      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets };
     }
 
     if (attempt === 79) {
       throw new Error(`Form builder changes did not persist: ${JSON.stringify({
         saved,
         title: form?.title,
+        notificationEmail: form?.notificationEmail,
+        notificationWebhook: form?.notificationWebhook,
         collectionTarget,
         fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
       })}`);
@@ -740,10 +801,11 @@ const editFormBuilderInUi = async (client, formId, collectionId) => {
 };
 
 const submitRegistration = async (formId) => {
+  const requestId = `forms-smoke-${Date.now().toString(36)}`;
   const payload = await requestApi(`/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
     method: 'POST',
     body: JSON.stringify({
-      requestId: `forms-smoke-${Date.now().toString(36)}`,
+      requestId,
       rateLimitBypass: true,
       startedAt: Date.now() - 3000,
       honeypot: '',
@@ -761,7 +823,7 @@ const submitRegistration = async (formId) => {
   const submission = payload.data?.submission;
   assert(submission?.id, `Public registration submit did not return a submission: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(submission.status === 'pending', `Registration submission should be pending for manual review: ${submission.status}`);
-  return submission;
+  return { ...submission, requestId };
 };
 
 const submitInvalidRegistration = async (formId) => {
@@ -826,6 +888,39 @@ const assertOpenApiFormSubmissionContract = async () => {
       validationDetail.properties.label,
     `Form submission OpenAPI validation detail is not machine-readable: ${JSON.stringify(validationDetail)}`,
   );
+
+  const eventFilters = new Set((openapi.paths?.[`/api/sites/${SITE_ID}/events`]?.get?.parameters || []).map((parameter) => parameter.name));
+  assert(
+    eventFilters.has('kind') && eventFilters.has('requestId') && eventFilters.has('formId') && eventFilters.has('commentId') && eventFilters.has('contactId'),
+    `Interaction events OpenAPI filters are incomplete: ${JSON.stringify(Array.from(eventFilters))}`,
+  );
+};
+
+const waitForWebhookDelivery = async (receiver, formId, submission) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const delivery = receiver.deliveries.find((item) => item.payload?.submissionId === submission.id && item.payload?.formId === formId);
+    const payload = await requestApi(`/api/sites/${SITE_ID}/events?kind=form-submission&formId=${encodeURIComponent(formId)}&requestId=${encodeURIComponent(submission.requestId)}&limit=20`);
+    const events = payload.data?.events || payload.events || [];
+    const queued = events.find((event) => event.status === 'queued' && event.submissionId === submission.id);
+    const succeeded = events.find((event) => event.status === 'succeeded' && event.submissionId === submission.id && Number(event.statusCode) === 200);
+
+    if (delivery && queued && succeeded) {
+      assert(
+        delivery.headers['x-backy-site-id'] === SITE_ID &&
+          delivery.headers['x-backy-form-id'] === formId &&
+          delivery.headers['x-backy-submission-id'] === submission.id,
+        `Webhook receiver did not get Backy headers: ${JSON.stringify(delivery.headers)}`,
+      );
+      return {
+        delivery,
+        events,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Webhook delivery did not complete for ${submission.id}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
 };
 
 const refreshForms = async (client) => {
@@ -949,6 +1044,7 @@ const main = async () => {
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));
   const smokeCollection = await createCollection();
+  const webhookReceiver = await startWebhookReceiver();
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let frontendCreatedFormId = null;
@@ -957,6 +1053,7 @@ const main = async () => {
   let cleaned = false;
   let collectionCleaned = false;
   let frontendTemplateForm = null;
+  let webhookDelivery = null;
 
   try {
     await waitForCdp();
@@ -984,7 +1081,7 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
-    await editFormBuilderInUi(client, createdFormId, smokeCollection.id);
+    await editFormBuilderInUi(client, createdFormId, smokeCollection.id, webhookReceiver.url);
 
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
     await assertOpenApiFormSubmissionContract();
@@ -1011,9 +1108,18 @@ const main = async () => {
       definition.data.form.fields.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper'),
       'Edited registration definition did not expose updated placeholder',
     );
+    assert(
+      definition.data.form.notificationEmail === 'forms-smoke-leads@example.com' &&
+        definition.data.form.notificationWebhook === webhookReceiver.url,
+      `Edited registration definition did not expose notification routing: ${JSON.stringify({
+        notificationEmail: definition.data.form.notificationEmail,
+        notificationWebhook: definition.data.form.notificationWebhook,
+      })}`,
+    );
 
     const invalidSubmission = await submitInvalidRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
+    webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted);
     const records = await listCollectionRecords(smokeCollection.id);
     const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
     assert(createdRecord, `Collection record was not created for submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
@@ -1055,12 +1161,17 @@ const main = async () => {
         contactShare: Boolean(definition.data.form.contactShare?.enabled),
         collectionTarget: definition.data.form.collectionTarget,
         companyValidation: definition.data.form.fields.find((field) => field.key === 'company')?.validation || [],
+        notificationWebhook: Boolean(definition.data.form.notificationWebhook),
       },
       invalidSubmissionRejected: Boolean(invalidSubmission.error || invalidSubmission.errorMessage),
       submission: {
         id: submitted.id,
         initialStatus: submitted.status,
         finalStatus: approved.status,
+      },
+      webhook: {
+        deliveries: webhookReceiver.deliveries.length,
+        eventStatuses: webhookDelivery.events.map((event) => event.status),
       },
       collectionRecord: {
         id: createdRecord.id,
@@ -1094,7 +1205,12 @@ const main = async () => {
       console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
     });
 
-    await cleanupBrowser({ client, childProcess, userDataDir });
+    await cleanupBrowser({ client, childProcess, userDataDir }).catch((error) => {
+      console.warn('Unable to clean up forms smoke browser:', error instanceof Error ? error.message : error);
+    });
+    await webhookReceiver.close().catch((error) => {
+      console.warn('Unable to close forms smoke webhook receiver:', error instanceof Error ? error.message : error);
+    });
   }
 };
 

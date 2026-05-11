@@ -14,6 +14,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -36,6 +37,8 @@ interface ContactShareOverridePayload {
 const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const;
 
 type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
+type FormRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+type WebhookEventKind = 'form-submission' | 'contact-shared' | 'contact-status';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -204,6 +207,46 @@ function extractIpHash(request: NextRequest): string | null {
 const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
   value as Record<string, BackyJsonValue>
 );
+
+async function recordWebhookDeliveryEvent(params: {
+  repositories?: FormRepositories | null;
+  kind: WebhookEventKind;
+  siteId: string;
+  formId: string;
+  target: string;
+  status: 'queued' | 'succeeded' | 'failed';
+  requestId?: string;
+  submissionId?: string;
+  contactId?: string;
+  contactStatus?: string;
+  statusCode?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const event = {
+    kind: params.kind,
+    siteId: params.siteId,
+    formId: params.formId,
+    target: params.target,
+    status: params.status,
+    requestId: params.requestId,
+    submissionId: params.submissionId,
+    contactId: params.contactId,
+    statusCode: params.statusCode,
+    error: params.error,
+    metadata: {
+      ...(params.metadata || {}),
+      ...(params.contactStatus ? { contactStatus: params.contactStatus } : {}),
+    },
+  };
+
+  if (params.repositories) {
+    await recordRepositoryInteractionEvent(params.repositories, event);
+    return;
+  }
+
+  trackWebhookEvent(event);
+}
 
 const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
   if (!field) return null;
@@ -378,11 +421,12 @@ const createRepositoryCollectionRecordFromSubmission = async (
 };
 
 async function notifyContactWebhook(params: {
+  repositories?: FormRepositories | null;
   formId: string;
   eventType: 'contact-shared' | 'contact-status';
   target: string;
   requestId?: string;
-  siteId?: string;
+  siteId: string;
   submissionId?: string;
   contactId?: string;
   contactStatus?: string;
@@ -400,8 +444,10 @@ async function notifyContactWebhook(params: {
     timestamp: new Date().toISOString(),
   };
 
-  trackWebhookEvent({
+  await recordWebhookDeliveryEvent({
+    repositories: params.repositories,
     kind: webhookKind,
+    siteId: params.siteId,
     formId: params.formId,
     target: params.target,
     status: 'queued',
@@ -420,8 +466,10 @@ async function notifyContactWebhook(params: {
     });
 
     if (!response.ok) {
-      trackWebhookEvent({
+      await recordWebhookDeliveryEvent({
+        repositories: params.repositories,
         kind: webhookKind,
+        siteId: params.siteId,
         formId: params.formId,
         target: params.target,
         status: 'failed',
@@ -434,8 +482,10 @@ async function notifyContactWebhook(params: {
       return;
     }
 
-    trackWebhookEvent({
+    await recordWebhookDeliveryEvent({
+      repositories: params.repositories,
       kind: webhookKind,
+      siteId: params.siteId,
       formId: params.formId,
       target: params.target,
       status: 'succeeded',
@@ -445,8 +495,10 @@ async function notifyContactWebhook(params: {
       statusCode: 200,
     });
   } catch (error) {
-    trackWebhookEvent({
+    await recordWebhookDeliveryEvent({
+      repositories: params.repositories,
       kind: webhookKind,
+      siteId: params.siteId,
       formId: params.formId,
       target: params.target,
       status: 'failed',
@@ -454,6 +506,100 @@ async function notifyContactWebhook(params: {
       submissionId: params.submissionId,
       contactId: params.contactId,
       error: error instanceof Error ? error.message : 'Unknown webhook error',
+    });
+  }
+}
+
+async function notifyFormSubmissionWebhook(params: {
+  repositories?: FormRepositories | null;
+  siteId: string;
+  form: FormDefinition;
+  submission: FormSubmission;
+  values: Record<string, unknown>;
+  pageId?: string | null;
+  postId?: string | null;
+  requestId: string;
+  contact?: Contact | null;
+}) {
+  const target = params.form.notificationWebhook;
+  if (!target || params.submission.status === 'spam' || params.submission.status === 'rejected') {
+    return;
+  }
+
+  const payload = {
+    formId: params.form.id,
+    siteId: params.siteId,
+    values: params.submission.values || params.values,
+    submissionId: params.submission.id,
+    status: params.submission.status,
+    pageId: params.pageId,
+    postId: params.postId,
+  };
+
+  await recordWebhookDeliveryEvent({
+    repositories: params.repositories,
+    kind: 'form-submission',
+    siteId: params.siteId,
+    formId: params.form.id,
+    target,
+    status: 'queued',
+    requestId: params.requestId,
+    submissionId: params.submission.id,
+    metadata: { submissionStatus: params.submission.status },
+  });
+
+  try {
+    const response = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-backy-site-id': params.siteId,
+        'x-backy-form-id': params.form.id,
+        'x-backy-submission-id': params.submission.id,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    await recordWebhookDeliveryEvent({
+      repositories: params.repositories,
+      kind: 'form-submission',
+      siteId: params.siteId,
+      formId: params.form.id,
+      target,
+      status: response.ok ? 'succeeded' : 'failed',
+      statusCode: response.status,
+      requestId: params.requestId,
+      submissionId: params.submission.id,
+      error: response.ok ? undefined : `Webhook returned ${response.status}`,
+      metadata: { submissionStatus: params.submission.status },
+    });
+  } catch (error) {
+    await recordWebhookDeliveryEvent({
+      repositories: params.repositories,
+      kind: 'form-submission',
+      siteId: params.siteId,
+      formId: params.form.id,
+      target,
+      status: 'failed',
+      requestId: params.requestId,
+      submissionId: params.submission.id,
+      error: error instanceof Error ? error.message : 'Unknown webhook error',
+      metadata: { submissionStatus: params.submission.status },
+    });
+  }
+
+  if (params.contact) {
+    await notifyContactWebhook({
+      repositories: params.repositories,
+      formId: params.form.id,
+      eventType: 'contact-shared',
+      target,
+      requestId: params.requestId,
+      siteId: params.siteId,
+      submissionId: params.submission.id,
+      contactId: params.contact.id,
+      contactStatus: params.contact.status,
+      values: params.values,
     });
   }
 }
@@ -629,6 +775,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         })).item;
       }
 
+      await notifyFormSubmissionWebhook({
+        repositories,
+        siteId: site.id,
+        form,
+        submission,
+        values: parsed.values,
+        pageId: parsed.pageId,
+        postId: parsed.postId,
+        requestId,
+        contact,
+      });
+
       return privateResponse(
         {
           success: true,
@@ -746,82 +904,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }) || submission;
     }
 
-    if (form.notificationWebhook && submission.status !== 'spam' && submission.status !== 'rejected') {
-      const eventIdPayload = {
-        formId: form.id,
-        values: submission.values,
-        submissionId: submission.id,
-        status: submission.status,
-        pageId: parsed.pageId,
-        postId: parsed.postId,
-      };
-
-      trackWebhookEvent({
-        kind: 'form-submission',
-        formId: form.id,
-        target: form.notificationWebhook,
-        status: 'queued',
-        requestId,
-      });
-
-      try {
-        const response = await fetch(form.notificationWebhook, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-backy-site-id': site.id,
-            'x-backy-form-id': form.id,
-            'x-backy-submission-id': submission.id,
-          },
-          body: JSON.stringify(eventIdPayload),
-        });
-
-        if (!response.ok) {
-          trackWebhookEvent({
-            kind: 'form-submission',
-            formId: form.id,
-            target: form.notificationWebhook,
-            status: 'failed',
-            statusCode: response.status,
-            requestId,
-            error: `Webhook returned ${response.status}`,
-          });
-        } else {
-          trackWebhookEvent({
-            kind: 'form-submission',
-            formId: form.id,
-            target: form.notificationWebhook,
-            status: 'succeeded',
-            statusCode: 200,
-            requestId: requestId,
-          });
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown webhook error';
-        trackWebhookEvent({
-          kind: 'form-submission',
-          formId: form.id,
-          target: form.notificationWebhook,
-          status: 'failed',
-          requestId,
-          error: message,
-        });
-      }
-
-      if (contact) {
-        await notifyContactWebhook({
-          formId: form.id,
-          eventType: 'contact-shared',
-          target: form.notificationWebhook,
-          requestId,
-          siteId: site.id,
-          submissionId: submission.id,
-          contactId: contact.id,
-          contactStatus: contact.status,
-          values: parsed.values,
-        });
-      }
-    }
+    await notifyFormSubmissionWebhook({
+      siteId: site.id,
+      form,
+      submission,
+      values: parsed.values,
+      pageId: parsed.pageId,
+      postId: parsed.postId,
+      requestId,
+      contact,
+    });
 
     return privateResponse(
       {

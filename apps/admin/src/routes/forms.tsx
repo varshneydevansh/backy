@@ -2244,6 +2244,28 @@ function FormsRoute() {
                               className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
                             />
                           </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Notification email
+                            <input
+                              type="email"
+                              value={formDraft.notificationEmail || ''}
+                              onChange={(event) => patchFormDraft({ notificationEmail: event.target.value })}
+                              placeholder="leads@example.com"
+                              data-testid="form-notification-email-input"
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Webhook URL
+                            <input
+                              type="url"
+                              value={formDraft.notificationWebhook || ''}
+                              onChange={(event) => patchFormDraft({ notificationWebhook: event.target.value })}
+                              placeholder="https://example.com/backy/forms"
+                              data-testid="form-notification-webhook-input"
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
                         </div>
 
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

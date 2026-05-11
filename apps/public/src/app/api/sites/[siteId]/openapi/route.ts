@@ -1463,6 +1463,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             parameters: [
               queryParameter('kind'),
               queryParameter('requestId'),
+              queryParameter('formId'),
+              queryParameter('commentId'),
+              queryParameter('contactId'),
               queryParameter('limit', { type: 'integer', minimum: 1 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
