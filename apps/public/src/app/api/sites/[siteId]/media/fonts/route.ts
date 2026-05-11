@@ -50,7 +50,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         type: 'font',
         visibility: 'public',
-        limit: 100,
+        limit: 10000,
         offset: 0,
       });
       const manifest = buildPublicFontManifest(site.id, result.items);
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const fonts = getMediaList(site.id, {
       type: 'font',
       visibility: 'public',
-      limit: 100,
+      limit: 10000,
     }).media;
     const manifest = buildPublicFontManifest(site.id, fonts);
 

@@ -37,16 +37,33 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     )
 );
 
-const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => (
-    value === 'image' ||
-    value === 'video' ||
-    value === 'audio' ||
-    value === 'document' ||
-    value === 'font' ||
-    value === 'other'
+const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => {
+    if (value === 'file') {
+        return 'document';
+    }
+
+    return value === 'image' ||
+        value === 'video' ||
+        value === 'audio' ||
+        value === 'document' ||
+        value === 'font' ||
+        value === 'other'
         ? value
-        : undefined
-);
+        : undefined;
+};
+
+const mediaTagMatches = (tags: string[], tag: string | null) => {
+    if (!tag) {
+        return true;
+    }
+
+    const normalizedTag = tag.trim().toLowerCase();
+    if (!normalizedTag) {
+        return true;
+    }
+
+    return tags.some((item) => item.trim().toLowerCase() === normalizedTag);
+};
 
 const paginateMedia = (siteId: string, items: MediaItem[], limit: number, offset: number) => ({
     media: items.slice(offset, offset + limit).map((item) => withResponsiveMediaManifest(siteId, item)),
@@ -64,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
-        const type = searchParams.get('type'); // image, video, audio, document, font
+        const type = mediaTypeFromInput(searchParams.get('type')); // image, video, audio, document/file, font
         const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
         const scope = searchParams.get('scope');
@@ -84,16 +101,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             const result = await repositories.media.list({
                 siteId: site.id,
-                type: mediaTypeFromInput(type) || 'all',
+                type: type || 'all',
                 folderId,
                 visibility: 'public',
                 search: search || undefined,
-                limit: 100,
+                limit: 10000,
                 offset: 0,
             });
             const filtered = result.items
                 .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
-                .filter((item) => tag ? item.tags.includes(tag) : true);
+                .filter((item) => mediaTagMatches(item.tags, tag));
             const mediaPayload = paginateMedia(site.id, filtered, limit, offset);
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
