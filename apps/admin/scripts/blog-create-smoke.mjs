@@ -26,6 +26,12 @@ const assert = (condition, message) => {
   }
 };
 
+const isIgnorableBrowserLogError = (event) => (
+  event.method === 'Log.entryAdded' &&
+  event.params?.entry?.source === 'intervention' &&
+  /beforeunload.*confirmation panel/i.test(event.params?.entry?.text || '')
+);
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -344,6 +350,244 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
   return { ...state, screenshotPath };
 };
 
+const parseCssPixel = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getElementBox = async (client, elementId) => (
+  evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    const style = window.getComputedStyle(node);
+    return {
+      id: node.getAttribute('data-element-id'),
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      left: style.left,
+      top: style.top,
+      cssWidth: style.width,
+      cssHeight: style.height,
+      text: node.textContent.trim().slice(0, 100),
+    };
+  })()`)
+);
+
+const readEditorElementState = async (client, elementIds) => {
+  const entries = await Promise.all(elementIds.map(async (elementId) => {
+    const box = await getElementBox(client, elementId);
+    assert(box, `Missing element ${elementId} while reading editor state`);
+
+    return [
+      elementId,
+      {
+        x: Math.round(parseCssPixel(box.left) ?? box.x),
+        y: Math.round(parseCssPixel(box.top) ?? box.y),
+        width: Math.round(parseCssPixel(box.cssWidth) ?? box.width),
+        height: Math.round(parseCssPixel(box.cssHeight) ?? box.height),
+      },
+    ];
+  }));
+
+  return Object.fromEntries(entries);
+};
+
+const clickButtonByAriaLabel = async (client, ariaLabel) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('button[aria-label="${ariaLabel}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, `Unable to click button with aria-label ${ariaLabel}`);
+  await sleep(250);
+};
+
+const switchToPropertiesPanel = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-tab-properties"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, 'Unable to switch editor inspector to Properties panel');
+  await sleep(250);
+};
+
+const selectLayerById = async (client, elementId) => {
+  const layersReady = await evaluate(client, `(() => {
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-layers-tab',
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    layersButton.click();
+    return { ok: true };
+  })()`);
+
+  assert(layersReady?.ok, `Unable to open Layers panel: ${JSON.stringify(layersReady)}`);
+  await sleep(150);
+
+  let clicked = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const layer = document.querySelector(${JSON.stringify(`[data-layer-id="${elementId}"]`)});
+      if (!(layer instanceof HTMLElement)) {
+        return {
+          ok: false,
+          availableLayerIds: Array.from(document.querySelectorAll('[data-layer-id]'))
+            .map((node) => node.getAttribute('data-layer-id')),
+          panelText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        };
+      }
+      layer.click();
+      return { ok: true };
+    })()`);
+
+    if (clicked?.ok) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(clicked?.ok, `Unable to select layer ${elementId}: ${JSON.stringify(clicked)}`);
+  await sleep(250);
+  await switchToPropertiesPanel(client);
+};
+
+const setLayoutNumberInput = async (client, label, value) => {
+  const testIdByLabel = {
+    X: 'editor-layout-x',
+    Y: 'editor-layout-y',
+    Width: 'editor-layout-width',
+    Height: 'editor-layout-height',
+  };
+  const testId = testIdByLabel[label];
+  assert(testId, `Unknown layout label ${label}`);
+
+  const focused = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    input.focus();
+    input.select();
+    return { ok: true };
+  })()`);
+
+  assert(focused?.ok, `Unable to focus ${label} layout input: ${JSON.stringify(focused)}`);
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return false;
+    }
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return input.value === ${JSON.stringify(String(value))};
+  })()`);
+
+  assert(changed, `Unable to change ${label} layout input to ${value}`);
+  await sleep(250);
+};
+
+const waitForElementState = async (client, elementId, predicate, label) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = (await readEditorElementState(client, [elementId]))[elementId];
+    if (predicate(lastState)) {
+      return lastState;
+    }
+    await sleep(100);
+  }
+  throw new Error(`${label}: ${JSON.stringify(lastState)}`);
+};
+
+const readBreakpointOverrideControls = async (client) => {
+  const controls = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="editor-breakpoint-override"]');
+    const layoutButton = document.querySelector('[data-testid="editor-breakpoint-reset-layout"]');
+    return {
+      panelText: panel?.textContent || '',
+      layoutReset: layoutButton instanceof HTMLButtonElement
+        ? { exists: true, disabled: layoutButton.disabled, title: layoutButton.getAttribute('title') || '' }
+        : { exists: false },
+    };
+  })()`);
+
+  assert(controls?.panelText, `Unable to read breakpoint override controls: ${JSON.stringify(controls)}`);
+  return controls;
+};
+
+const assertMobileBreakpointAuthoring = async (client) => {
+  const headingId = `frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`;
+  await selectLayerById(client, headingId);
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  await selectLayerById(client, headingId);
+  const desktopBefore = (await readEditorElementState(client, [headingId]))[headingId];
+
+  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  await selectLayerById(client, headingId);
+  await setLayoutNumberInput(client, 'X', 24);
+  await setLayoutNumberInput(client, 'Width', 320);
+
+  const mobileAfter = await waitForElementState(
+    client,
+    headingId,
+    (state) => state.x === 24 && state.width === 320,
+    'Mobile heading override did not update editor element state',
+  );
+  const overrideControls = await readBreakpointOverrideControls(client);
+  assert(
+    /mobile override/i.test(overrideControls.panelText) && overrideControls.layoutReset.exists && overrideControls.layoutReset.disabled === false,
+    `Mobile override controls did not expose active layout state: ${JSON.stringify(overrideControls)}`,
+  );
+
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  const desktopAfter = (await readEditorElementState(client, [headingId]))[headingId];
+  assert(
+    desktopAfter.x === desktopBefore.x && desktopAfter.width === desktopBefore.width,
+    `Desktop layout changed while authoring mobile override: ${JSON.stringify({ desktopBefore, desktopAfter })}`,
+  );
+
+  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  await waitForElementState(
+    client,
+    headingId,
+    (state) => state.x === 24 && state.width === 320,
+    'Mobile heading override did not hydrate after breakpoint switch',
+  );
+
+  return {
+    headingId,
+    desktopBefore,
+    desktopAfter,
+    mobileAfter,
+    overridePanel: overrideControls.panelText,
+  };
+};
+
 const navigateToBlogCreate = async (client) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&designTemplate=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
@@ -567,6 +811,15 @@ const assertAutosaveWritten = async (client, slug) => {
         }
         return Array.isArray(element.children) && element.children.some(visit);
       };
+      const find = (elements, elementId) => {
+        for (const element of elements || []) {
+          if (element?.id === elementId) return element;
+          const child = find(element?.children, elementId);
+          if (child) return child;
+        }
+        return null;
+      };
+      const heading = find(parsed?.canvasElements || [], 'frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading');
       return {
         hasDraft: Boolean(parsed),
         slug: parsed?.slug || null,
@@ -576,6 +829,7 @@ const assertAutosaveWritten = async (client, slug) => {
         canvasCount: parsed?.canvasElements?.length || 0,
         designTemplateId: parsed?.designTemplateId || null,
         hasFrontendTemplateRoot: Array.isArray(parsed?.canvasElements) && parsed.canvasElements.some(visit),
+        mobileOverride: heading?.responsive?.mobile || null,
         badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
       };
     })()`);
@@ -594,6 +848,7 @@ const assertAutosaveWritten = async (client, slug) => {
   assert(state.canvasCount > 0, `Autosave did not retain canvas elements: ${JSON.stringify(state)}`);
   assert(state.designTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Autosave did not retain frontend template id: ${JSON.stringify(state)}`);
   assert(state.hasFrontendTemplateRoot === true, `Autosave did not retain frontend template canvas root: ${JSON.stringify(state)}`);
+  assert(state.mobileOverride?.x === 24 && state.mobileOverride?.width === 320, `Autosave did not retain mobile breakpoint override: ${JSON.stringify(state)}`);
   return state;
 };
 
@@ -778,7 +1033,7 @@ const createPreviewFromUi = async (client) => {
       const browserErrors = client.events
         .filter((event) => (
           event.method === 'Runtime.exceptionThrown'
-          || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+          || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error' && !isIgnorableBrowserLogError(event))
         ))
         .map((event) => event.params)
         .slice(0, 5);
@@ -839,6 +1094,7 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   assert(wrapper?.type === 'section', `Frontend blog template wrapper missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
   assert(wrapper.props?.frontendTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Frontend blog wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
   assert(heading?.props?.content === 'Smoke Blog Create', `Frontend blog heading does not use post title: ${JSON.stringify(heading?.props)}`);
+  assert(heading?.responsive?.mobile?.x === 24 && heading?.responsive?.mobile?.width === 320, `Frontend blog heading did not persist mobile breakpoint override: ${JSON.stringify(heading?.responsive)}`);
   assert(Array.isArray(bodyRegion?.props?.bindingHints) && bodyRegion.props.bindingHints.length === 2, `Frontend blog body region missing binding hints: ${JSON.stringify(bodyRegion?.props)}`);
   assert(canvasSize.width === 1260 && canvasSize.height >= 940, `Frontend blog canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-blog-primary'), `Frontend blog custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
@@ -858,6 +1114,7 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
       canvasSize,
       wrapperId: wrapper.id,
       heading: heading?.props?.content,
+      headingMobileOverride: heading?.responsive?.mobile,
       customCssStored: typeof content.customCSS === 'string',
     },
   };
@@ -939,6 +1196,7 @@ const main = async () => {
     const initialRender = await navigateToBlogCreate(client);
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
     const focusMode = await assertCanvasFocusMode(client);
+    const mobileBreakpoint = await assertMobileBreakpointAuthoring(client);
     const filled = await fillBlogCreateForm(client, slug);
     const mediaPicker = await assertFeaturedMediaPicker(client);
     const autosave = await assertAutosaveWritten(client, slug);
@@ -952,7 +1210,7 @@ const main = async () => {
     const browserErrors = client.events
       .filter((event) => (
         event.method === 'Runtime.exceptionThrown'
-        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error' && !isIgnorableBrowserLogError(event))
       ))
       .map((event) => event.params);
 
@@ -968,6 +1226,7 @@ const main = async () => {
         viewport: desktopVisual.viewport,
       },
       focusMode,
+      mobileBreakpoint,
       filled,
       mediaPicker,
       autosave,

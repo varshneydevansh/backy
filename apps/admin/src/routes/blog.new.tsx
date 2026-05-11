@@ -374,6 +374,14 @@ function hasFrontendBlogTemplateRoot(elements: CanvasElement[], template: SiteFr
     return elements.some(visit);
 }
 
+function getFrontendBlogTemplateCanvasSize(template: SiteFrontendDesignTemplate, elements: CanvasElement[]): CanvasSize {
+    return {
+        ...DEFAULT_CANVAS_SIZE,
+        width: template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width,
+        height: Math.max(template.canvasSize?.height || DEFAULT_CANVAS_SIZE.height, getCanvasHeightForElements(elements)),
+    };
+}
+
 function NewBlogPostPage() {
     const navigate = useNavigate();
     const search = Route.useSearch();
@@ -1212,7 +1220,10 @@ function NewBlogPostPage() {
                 excerpt,
             })
             : canvasElements;
-        const content = serializeCanvasContent(contentElements, canvasSize, selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined, {
+        const contentCanvasSize = selectedFrontendTemplate
+            ? getFrontendBlogTemplateCanvasSize(selectedFrontendTemplate, contentElements)
+            : canvasSize;
+        const content = serializeCanvasContent(contentElements, contentCanvasSize, selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined, {
             documentId: `new-post-${slugValue || title || 'draft'}`,
             kind: 'post',
             title,
