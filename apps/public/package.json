@@ -14,7 +14,8 @@
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
         "test:media-quota": "node scripts/media-quota-smoke.mjs",
         "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx",
-        "test:admin-contract": "node scripts/admin-contract-smoke.mjs"
+        "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
+        "test:public-security": "node scripts/public-security-regression-smoke.mjs"
     },
     "dependencies": {
         "@backy-cms/core": "*",
