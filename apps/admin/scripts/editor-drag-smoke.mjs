@@ -19,6 +19,7 @@ const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
+const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -2873,6 +2874,120 @@ const testZoomControls = async (client) => {
     afterZoomIn,
     afterFit,
   };
+};
+
+const readAlignmentGuideState = async (client, label) => (
+  evaluate(client, `(() => {
+    const guides = Array.from(document.querySelectorAll('[data-testid="editor-alignment-guide"]')).map((guide) => {
+      const rect = guide.getBoundingClientRect();
+      return {
+        orientation: guide.getAttribute('data-guide-orientation') || '',
+        position: Number(guide.getAttribute('data-guide-position') || 0),
+        width: rect.width,
+        height: rect.height,
+      };
+    });
+
+    return {
+      label: ${JSON.stringify(label)},
+      count: guides.length,
+      verticalCount: guides.filter((guide) => guide.orientation === 'vertical').length,
+      horizontalCount: guides.filter((guide) => guide.orientation === 'horizontal').length,
+      guides,
+    };
+  })()`)
+);
+
+const readCanvasScale = async (client) => {
+  const scale = await evaluate(client, `(() => {
+    const surface = document.querySelector('[data-testid="editor-canvas-scale-surface"]');
+    return Number(surface?.getAttribute('data-canvas-scale') || 1);
+  })()`);
+
+  assert(Number.isFinite(scale) && scale > 0, `Invalid canvas scale for alignment guide smoke: ${scale}`);
+  return scale;
+};
+
+const dragElementToCanvasPositionWithGuideProbe = async (client, elementId, targetCanvasX, targetCanvasY) => {
+  await scrollElementIntoView(client, elementId);
+  const before = await getElementBox(client, elementId);
+  assert(before, `Missing draggable element ${elementId}`);
+
+  const canvasScale = await readCanvasScale(client);
+  const startPoint = await getElementDragStartPoint(client, elementId, before);
+  const deltaX = Math.round((targetCanvasX - before.canvasX) * canvasScale);
+  const deltaY = Math.round((targetCanvasY - before.canvasY) * canvasScale);
+  const endX = startPoint.x + deltaX;
+  const endY = startPoint.y + deltaY;
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: startPoint.x,
+    y: startPoint.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: startPoint.x,
+    y: startPoint.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+
+  for (let step = 1; step <= 12; step += 1) {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: Math.round(startPoint.x + (deltaX * step) / 12),
+      y: Math.round(startPoint.y + (deltaY * step) / 12),
+      button: 'left',
+      buttons: 1,
+    });
+    await sleep(35);
+  }
+
+  await sleep(120);
+  const during = await getElementBox(client, elementId);
+  const guidesDuringDrag = await readAlignmentGuideState(client, 'during drag');
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: endX,
+    y: endY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(300);
+
+  const after = await getElementBox(client, elementId);
+  const guidesAfterRelease = await readAlignmentGuideState(client, 'after release');
+
+  return {
+    elementId,
+    targetCanvasX,
+    targetCanvasY,
+    canvasScale,
+    before,
+    during,
+    after,
+    guidesDuringDrag,
+    guidesAfterRelease,
+  };
+};
+
+const testAlignmentGuideControls = async (client) => {
+  const drag = await dragElementToCanvasPositionWithGuideProbe(client, 'smoke-image', 124, 104);
+
+  assert(drag.guidesDuringDrag.verticalCount >= 1, `Expected at least one vertical alignment guide during drag: ${JSON.stringify(drag.guidesDuringDrag)}`);
+  assert(drag.guidesDuringDrag.horizontalCount >= 1, `Expected at least one horizontal alignment guide during drag: ${JSON.stringify(drag.guidesDuringDrag)}`);
+  assert(drag.guidesDuringDrag.guides.some((guide) => guide.orientation === 'vertical' && Math.abs(guide.position - 120) <= 1), `Expected vertical guide at peer x=120: ${JSON.stringify(drag.guidesDuringDrag)}`);
+  assert(drag.guidesDuringDrag.guides.some((guide) => guide.orientation === 'horizontal' && Math.abs(guide.position - 100) <= 1), `Expected horizontal guide at peer y=100: ${JSON.stringify(drag.guidesDuringDrag)}`);
+  assert(Math.abs(drag.after.canvasX - 120) <= 1, `Smart guide snap did not align x to peer edge: ${JSON.stringify(drag.after)}`);
+  assert(Math.abs(drag.after.canvasY - 100) <= 1, `Smart guide snap did not align y to peer edge: ${JSON.stringify(drag.after)}`);
+  assert(drag.guidesAfterRelease.count === 0, `Alignment guides should clear after drag release: ${JSON.stringify(drag.guidesAfterRelease)}`);
+
+  return drag;
 };
 
 const dragElement = async (client, elementId, deltaX, deltaY, options = {}) => {
@@ -6445,7 +6560,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -6580,6 +6695,19 @@ const main = async () => {
         mode: 'zoom',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         zoomControls,
+      }, null, 2));
+      return;
+    }
+
+    if (ALIGNMENT_GUIDES_SMOKE) {
+      assert(!EDITOR_PATH, 'Alignment guide smoke currently requires an internally created smoke page');
+      const alignmentGuides = await testAlignmentGuideControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'alignment-guides',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        alignmentGuides,
       }, null, 2));
       return;
     }

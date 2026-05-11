@@ -1967,6 +1967,9 @@ export function Canvas({
         <div
           key={`${guide.orientation}-${guide.position}-${index}`}
           className="pointer-events-none absolute z-[60] bg-fuchsia-500/80 shadow-[0_0_0_1px_rgba(217,70,239,0.22)]"
+          data-testid="editor-alignment-guide"
+          data-guide-orientation={guide.orientation}
+          data-guide-position={guide.position}
           style={guide.orientation === 'vertical'
             ? {
                 left: guide.position,

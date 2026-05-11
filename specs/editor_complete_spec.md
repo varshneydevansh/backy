@@ -92,11 +92,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Handle drop events
 - Grid background in edit mode
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
+- Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - **Issues:** None major
 - **Improvements Needed:**
     - Pan/scroll navigation
     - Rulers
-    - Guidelines/smart guides
 
 ### 3. Element Drag
 **File:** `Canvas.tsx` (handleMouseDown, handleMouseMove, handleMouseUp)
@@ -262,10 +262,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - 10px grid
 - Elements snap when dragging
+- Smart alignment guides appear during drag when element edges/centers approach sibling or canvas targets.
+- Guide-assisted snapping aligns dragged elements to peer/canvas edges and clears the guide overlay after release.
+- Focused smoke coverage: `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - **Improvements Needed:**
     - Toggle snap on/off
     - Configurable grid size
-    - Show alignment guides
 
 ### 19. Layers Panel
 **Current State:** ✅ Working
@@ -322,6 +324,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added explicit keydown passthrough so editor consumers can layer additional shortcuts.
@@ -386,7 +389,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Nice to Have**
 - ✅ Multi-select elements
 - ✅ Copy/Paste
-- ❌ Alignment guides
+- ✅ Alignment guides
 - ✅ Zoom controls
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
@@ -426,7 +429,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Phase 4: Polish**
 - Copy/Paste
 - Zoom controls ✅
-- Alignment guides
+- Alignment guides ✅
 - Responsive breakpoints
 - Media upload
 
