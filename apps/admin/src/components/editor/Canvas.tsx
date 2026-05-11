@@ -63,6 +63,32 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const resolveMediaSource = (value: unknown): string => {
+  const direct = sanitizeText(value);
+  if (direct) {
+    return direct;
+  }
+
+  if (!isRecord(value)) {
+    return '';
+  }
+
+  return sanitizeText(value.url)
+    || sanitizeText(value.src)
+    || sanitizeText(value.publicUrl)
+    || sanitizeText(value.path);
+};
+
+const resolveElementMediaSource = (props: Record<string, unknown>, key: string): string => (
+  resolveMediaSource(props[key])
+    || resolveMediaSource(props[`${key}Url`])
+    || resolveMediaSource(props.media)
+);
+
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
 const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
 const IMAGE_DECODING_VALUES = ['async', 'sync', 'auto'] as const;
@@ -1979,10 +2005,13 @@ function CanvasElementComponent({
           </div>
         );
 
-      case 'image':
+      case 'image': {
+        const imageSrc = resolveElementMediaSource(p as Record<string, unknown>, 'src')
+          || 'https://via.placeholder.com/300x200?text=Add+Image';
+
         return (
           <img
-            src={p.src ?? 'https://via.placeholder.com/300x200?text=Add+Image'}
+            src={imageSrc}
             alt={p.alt ?? ''}
             title={sanitizeText(p.title) || undefined}
             loading={normalizeIframeLoading(p.loading)}
@@ -2001,6 +2030,7 @@ function CanvasElementComponent({
             }}
           />
         );
+      }
 
       case 'button': {
         const target = typeof p.target === 'string' ? p.target : '_self';
@@ -2176,8 +2206,11 @@ function CanvasElementComponent({
           </div>
         );
 
-      case 'video':
-        if (!p.src) {
+      case 'video': {
+        const videoSrc = resolveElementMediaSource(p as Record<string, unknown>, 'src');
+        const posterSrc = resolveMediaSource(p.poster);
+
+        if (!videoSrc) {
           return (
             <div
               style={{
@@ -2200,8 +2233,8 @@ function CanvasElementComponent({
         }
       return (
         <video
-          src={p.src}
-          poster={typeof p.poster === 'string' && p.poster.trim() ? p.poster : undefined}
+          src={videoSrc}
+          poster={posterSrc || undefined}
           controls={isPreview ? (p.controls ?? true) : false}
           autoPlay={isPreview ? Boolean(p.autoplay ?? p.autoPlay) : false}
           loop={Boolean(p.loop)}
@@ -2216,6 +2249,7 @@ function CanvasElementComponent({
           }}
         />
       );
+      }
 
       case 'embed':
         const embedSrc = normalizeEmbedUrl(p.src || p.url);
