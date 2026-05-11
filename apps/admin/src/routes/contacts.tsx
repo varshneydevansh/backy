@@ -33,9 +33,11 @@ import {
   promoteContactToCustomer,
   promoteContactToUser,
   saveContactSavedList,
+  syncFormContacts,
   listForms,
   updateContact,
   type AdminContact,
+  type ContactSyncDelivery,
   type ContactSavedList,
   type ContactSegmentAnalytics,
   type ContactStatus,
@@ -245,6 +247,8 @@ function ContactsRoute() {
     notes: '',
   });
   const [savedListName, setSavedListName] = useState('');
+  const [contactSyncTarget, setContactSyncTarget] = useState('');
+  const [lastContactSync, setLastContactSync] = useState<ContactSyncDelivery | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -277,6 +281,9 @@ function ContactsRoute() {
     : '';
   const contactPromoteCustomerUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}/promote-customer`
+    : '';
+  const contactSyncUrl = apiForm
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/sync`
     : '';
   const contactCreateUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts`
@@ -536,6 +543,7 @@ function ContactsRoute() {
         update: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
         promoteUser: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}/promote`,
         promoteCustomer: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}/promote-customer`,
+        sync: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/sync`,
         create: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts`,
         import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
@@ -586,6 +594,12 @@ function ContactsRoute() {
       formIds: list.formIds,
     })),
     lifecycleStates: ['new', 'contacted', 'qualified', 'archived'],
+    sync: {
+      selectedEndpoint: contactSyncUrl,
+      lastStatus: lastContactSync?.status || null,
+      lastCount: lastContactSync?.count || 0,
+      lastTarget: lastContactSync?.target || null,
+    },
     filters: {
       formId: selectedFormId,
       status: statusFilter,
@@ -675,6 +689,7 @@ function ContactsRoute() {
     contactCreateUrl,
     contactImportUrl,
     contactListsUrl,
+    contactSyncUrl,
     contactPromoteCustomerUrl,
     contactSavedLists,
     contactSegments,
@@ -690,6 +705,7 @@ function ContactsRoute() {
     filteredContacts.length,
     forms,
     metrics,
+    lastContactSync,
     adminBaseUrl,
     qualityFilter,
     searchQuery,
@@ -895,6 +911,72 @@ function ContactsRoute() {
       setNotice(`${updatedContacts.length} contact${updatedContacts.length === 1 ? '' : 's'} moved to ${bulkContactStatus}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update selected contacts');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleSyncSelectedContacts = async () => {
+    if (isContactsBusy) return;
+
+    const targetUrl = contactSyncTarget.trim();
+    if (selectedContacts.length === 0) {
+      setNotice('Select at least one visible contact before syncing.');
+      setError(null);
+      return;
+    }
+    if (!/^https?:\/\//i.test(targetUrl)) {
+      setNotice(null);
+      setError('Enter a valid http(s) webhook URL before syncing selected contacts.');
+      return;
+    }
+
+    const contactsBySourceForm = selectedContacts.reduce((groups, contact) => {
+      groups.set(contact.formId, [...(groups.get(contact.formId) || []), contact]);
+      return groups;
+    }, new Map<string, AdminContact[]>());
+
+    setUpdatingId('sync-contacts');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const results = await Promise.allSettled(
+        Array.from(contactsBySourceForm.entries()).map(([formId, contacts]) => (
+          syncFormContacts(activeSiteId, formId, {
+            contactIds: contacts.map((contact) => contact.id),
+            targetUrl,
+            includeSourceValues: true,
+            reason: 'manual-admin-sync',
+          })
+        )),
+      );
+      const fulfilled = results
+        .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof syncFormContacts>>> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      const failed = results.filter((result) => result.status === 'rejected');
+      const syncedCount = fulfilled.reduce((sum, result) => sum + result.delivery.count, 0);
+      const failedCount = failed.length;
+      const lastDelivery = fulfilled.at(-1)?.delivery || null;
+
+      setLastContactSync(lastDelivery
+        ? {
+          ...lastDelivery,
+          count: syncedCount,
+          status: failedCount > 0 || fulfilled.some((result) => result.delivery.status === 'failed') ? 'failed' : lastDelivery.status,
+        }
+        : {
+          target: targetUrl,
+          status: 'failed',
+          count: 0,
+          contactIds: [],
+          error: failed[0]?.reason instanceof Error ? failed[0].reason.message : 'Unable to sync contacts',
+        });
+      if (failedCount > 0) {
+        setError(`${failedCount} contact source ${failedCount === 1 ? 'form' : 'forms'} failed to sync.`);
+      } else {
+        setNotice(`Synced ${syncedCount} selected contact${syncedCount === 1 ? '' : 's'} to webhook.`);
+      }
     } finally {
       setUpdatingId(null);
     }
@@ -1854,11 +1936,12 @@ function ContactsRoute() {
                 <MetaTile label="Selected" value={`${selectedContactIds.length} contact${selectedContactIds.length === 1 ? '' : 's'}`} />
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-6">
                 <ApiSnippet label="List contacts" value={contactsUrl} />
                 <ApiSnippet label="Update contact" value={contactUpdateUrl} />
                 <ApiSnippet label="Promote user" value={contactPromoteUserUrl} />
                 <ApiSnippet label="Promote customer" value={contactPromoteCustomerUrl} />
+                <ApiSnippet label="Sync contacts" value={contactSyncUrl} />
                 <ApiSnippet label="Create contact" value={contactCreateUrl} />
                 <ApiSnippet label="Import contacts" value={contactImportUrl} />
               </div>
@@ -2110,6 +2193,26 @@ function ContactsRoute() {
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="url"
+                  value={contactSyncTarget}
+                  disabled={isContactsBusy}
+                  onChange={(event) => setContactSyncTarget(event.target.value)}
+                  placeholder="https://crm.example.com/backy/contacts"
+                  className="min-h-10 min-w-[18rem] rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Contact sync webhook URL"
+                  data-testid="contacts-sync-webhook-url"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isContactsBusy || selectedContacts.length === 0 || !contactSyncTarget.trim()}
+                  onClick={() => void handleSyncSelectedContacts()}
+                  iconStart={<Upload className="size-4" />}
+                  data-testid="contacts-sync-webhook"
+                >
+                  Sync selected
+                </Button>
                 <select
                   value={bulkContactStatus}
                   disabled={isContactsBusy || selectedContacts.length === 0}
@@ -2142,6 +2245,14 @@ function ContactsRoute() {
                 </Button>
               </div>
             </div>
+            {lastContactSync ? (
+              <div className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Last sync: <span className="font-semibold text-foreground">{lastContactSync.status}</span>
+                {' '}for {lastContactSync.count} contact{lastContactSync.count === 1 ? '' : 's'} to{' '}
+                <span className="break-all font-mono">{lastContactSync.target}</span>
+                {lastContactSync.statusCode ? ` (${lastContactSync.statusCode})` : ''}
+              </div>
+            ) : null}
           </div>
 
           {isLoading && allContacts.length === 0 ? (

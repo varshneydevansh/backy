@@ -412,6 +412,7 @@ type AuditEventStatus = (typeof AUDIT_EVENT_STATUSES)[number];
 type WebhookEventKind =
   | 'form-submission'
   | 'contact-shared'
+  | 'contact-sync'
   | 'contact-status'
   | 'comment-submitted'
   | 'comment-status'

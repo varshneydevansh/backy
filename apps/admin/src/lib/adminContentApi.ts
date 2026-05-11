@@ -725,6 +725,18 @@ interface ApiContactSavedListsResponse {
   };
 }
 
+interface ApiContactSyncResponse {
+  success: boolean;
+  data?: {
+    formId: string;
+    delivery: ContactSyncDelivery;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiContactResponse {
   success: boolean;
   data?: {
@@ -1683,6 +1695,20 @@ export interface ContactPromotionResult {
     inviteUrl: string;
     expiresAt: string;
   } | null;
+}
+
+export interface ContactSyncDelivery {
+  target: string;
+  status: 'queued' | 'succeeded' | 'failed';
+  statusCode?: number | null;
+  error?: string | null;
+  count: number;
+  contactIds: string[];
+}
+
+export interface ContactSyncResult {
+  formId: string;
+  delivery: ContactSyncDelivery;
 }
 
 export interface ContactCustomerPromotionResult {
@@ -3695,6 +3721,31 @@ export async function promoteContactToCustomer(
     record: toCollectionRecord(record),
     existingRecord: Boolean(payload.data?.existingRecord),
     createdCollection: Boolean(payload.data?.createdCollection),
+  };
+}
+
+export async function syncFormContacts(
+  siteId: string,
+  formId: string,
+  input: { contactIds: string[]; targetUrl: string; includeSourceValues?: boolean; reason?: string | null },
+): Promise<ContactSyncResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/sync`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactSyncResponse>(response);
+  const delivery = payload.data?.delivery;
+
+  if (!response.ok || !payload.success || !payload.data?.formId || !delivery) {
+    throw new Error(payload.error?.message || 'Unable to sync contacts');
+  }
+
+  return {
+    formId: payload.data.formId,
+    delivery,
   };
 }
 

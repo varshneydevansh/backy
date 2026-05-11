@@ -11,7 +11,7 @@ interface RouteParams {
   }>;
 }
 
-type AuditKind = 'form-submission' | 'contact-shared' | 'contact-status' | 'comment-submitted' | 'comment-status' | 'comment-reported' | 'all';
+type AuditKind = 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'comment-submitted' | 'comment-status' | 'comment-reported' | 'all';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -52,6 +52,7 @@ function parseKind(raw: string | null): AuditKind {
   if (
     raw === 'form-submission' ||
     raw === 'contact-shared' ||
+    raw === 'contact-sync' ||
     raw === 'contact-status' ||
     raw === 'comment-submitted' ||
     raw === 'comment-status' ||

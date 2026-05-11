@@ -2,6 +2,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +11,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const SITE_ID = process.env.BACKY_CONTACTS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CONTACTS_CDP_PORT || 9380);
+const SYNC_PORT = Number(process.env.BACKY_CONTACTS_SYNC_PORT || 9480);
 const SCREENSHOT_PATH = process.env.BACKY_CONTACTS_SCREENSHOT || path.join(os.tmpdir(), 'backy-contacts-smoke.png');
 let apiAdminSessionToken = '';
 
@@ -39,6 +41,43 @@ const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) =>
 
   childProcess.once('exit', onExit);
 });
+
+const startContactSyncReceiver = () => {
+  const received = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      let body = {};
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch {
+        body = { raw };
+      }
+      received.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ ok: true }));
+    });
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(SYNC_PORT, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve({
+        url: `http://127.0.0.1:${SYNC_PORT}/contacts-sync`,
+        received,
+        close: () => new Promise((closeResolve) => server.close(() => closeResolve())),
+      });
+    });
+  });
+};
 
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -697,6 +736,63 @@ const promoteContactToCustomerInUi = async (client, formId, contact) => {
   throw new Error(`Contact was not promoted to customer: ${contact.email}`);
 };
 
+const syncContactInUi = async (client, formId, contact, targetUrl) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((item) => (item.innerText || '').includes(${JSON.stringify(contact.email)}));
+      const checkbox = card?.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+      const input = document.querySelector('[data-testid="contacts-sync-webhook-url"]');
+      const button = document.querySelector('[data-testid="contacts-sync-webhook"]');
+      if (!(card instanceof HTMLElement) || !(checkbox instanceof HTMLInputElement) || !(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'sync-controls-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (!checkbox.checked) checkbox.click();
+      setInputValue(input, ${JSON.stringify(targetUrl)});
+      if (button.disabled) return { ok: false, reason: 'sync-disabled', selected: checkbox.checked, value: input.value };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to sync contact in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const eventPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=contact-sync&formId=${encodeURIComponent(formId)}&contactId=${encodeURIComponent(contact.id)}&limit=20`);
+    const events = eventPayload.data?.events || eventPayload.events || [];
+    const succeeded = events.find((event) => event.status === 'succeeded' && event.target === targetUrl);
+    const uiState = await evaluate(client, `(() => ({
+      hasLastSync: document.body?.innerText?.includes('Last sync:') || false,
+      hasSyncEndpoint: document.body?.innerText?.includes('/contacts/sync') || false,
+    }))()`);
+    if (succeeded && uiState.hasLastSync && uiState.hasSyncEndpoint) {
+      await evaluate(client, `(() => {
+        const panel = document.querySelector('[data-testid="contacts-bulk-actions"]');
+        const clear = Array.from(panel?.querySelectorAll('button') || []).find((button) => (button.textContent || '').trim() === 'Clear');
+        if (clear instanceof HTMLButtonElement && !clear.disabled) clear.click();
+        return true;
+      })()`);
+      return { event: succeeded };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Contact sync event was not recorded for ${contact.email}`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -723,6 +819,9 @@ const assertLayout = async (client) => {
       hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
         document.body?.innerText?.includes('/contacts/{contactId}/promote-customer') &&
         document.body?.innerText?.includes('Promoted customer'),
+      hasContactSync: Boolean(document.querySelector('[data-testid="contacts-sync-webhook"]')) &&
+        document.body?.innerText?.includes('/contacts/sync') &&
+        document.body?.innerText?.includes('Last sync:'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -740,6 +839,7 @@ const assertLayout = async (client) => {
     && layout.hasSavedLists
     && layout.hasPromoteUser
     && layout.hasPromoteCustomer
+    && layout.hasContactSync
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -789,6 +889,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  const syncReceiver = await startContactSyncReceiver();
   await loginAdminApi();
   const form = await createLeadForm();
   let savedListId;
@@ -841,6 +942,12 @@ const main = async () => {
     promotedCustomerCleanup = promotedCustomer.promotion.createdCollection && !existingCustomerCollection
       ? { collectionId: promotedCustomer.promotion.collectionId, recordId: null }
       : { collectionId: promotedCustomer.promotion.collectionId, recordId: promotedCustomer.promotion.recordId };
+    const syncedContact = await syncContactInUi(client, form.id, promotedCustomer.contact, syncReceiver.url);
+    assert(syncReceiver.received.some((delivery) => (
+      delivery.body?.kind === 'contact-sync'
+      && delivery.body?.contactIds?.includes(promotedCustomer.contact.id)
+      && delivery.body?.contacts?.some((item) => item.email === promotedCustomer.contact.email)
+    )), `Contact sync receiver did not receive promoted contact: ${JSON.stringify(syncReceiver.received).slice(0, 500)}`);
     const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
@@ -907,6 +1014,11 @@ const main = async () => {
         recordId: promotedCustomer.record.id,
         email: promotedCustomer.record.values.email,
       },
+      syncedContact: {
+        contactId: promotedCustomer.contact.id,
+        target: syncReceiver.url,
+        eventId: syncedContact.event.id,
+      },
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
         archivedId: mergedDuplicateContacts.archived.id,
@@ -952,6 +1064,7 @@ const main = async () => {
     }
 
     await cleanupBrowser({ client, childProcess, userDataDir });
+    await syncReceiver.close();
   }
 };
 
