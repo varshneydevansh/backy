@@ -1901,7 +1901,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
     backyAction;
 
   const isBackyAction = Boolean(backyAction && configuredAction === backyAction);
-  const method = ((props.method as string) || 'POST').toUpperCase();
+  const method = (getNameClass(props.method) || 'POST').toUpperCase();
   const formActive = props.formActive !== false && getNameClass(props.formActive).toLowerCase() !== 'false';
   const rawAudience = getNameClass(props.formAudience);
   const formAudience = rawAudience === 'authenticated' || rawAudience === 'adminOnly' ? rawAudience : 'public';
@@ -1923,6 +1923,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
     'Thanks. Your message was sent.';
+  const formTitle = getNameClass(props.formTitle);
   const contactShareOverride = buildContactShareOverride(props as Record<string, unknown>);
   const requestId = useRef<string>(`f-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
 
@@ -2084,7 +2085,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         }}
         onSubmit={handleSubmit}
       >
-        {props.formTitle ? <h3>{getNameClass(props.formTitle)}</h3> : null}
+        {formTitle ? <h3>{formTitle}</h3> : null}
 
         {isBackyAction && pageId ? (
           <input type="hidden" name="pageId" value={pageId} />
