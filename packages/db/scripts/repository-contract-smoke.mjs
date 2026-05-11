@@ -882,6 +882,20 @@ const form = (await formRepository.create({
   successMessage: 'Thanks',
   enableHoneypot: true,
   enableCaptcha: false,
+  spamSettings: {
+    minFillMs: 1500,
+    rateLimitWindowMs: 60000,
+    rateLimitMax: 4,
+    duplicateWindowMs: 300000,
+    blockedTerms: ['blocked'],
+  },
+  consentSettings: {
+    policyLabel: 'Repository consent policy',
+    retentionDays: 30,
+    deleteAfterDays: 365,
+    requestEmail: 'privacy@example.com',
+    exportIncludesIp: false,
+  },
   moderationMode: 'manual',
   contactShare: {
     enabled: true,
@@ -893,10 +907,25 @@ const form = (await formRepository.create({
   updatedBy: 'user_admin',
 })).item;
 assert(form.id === 'formDefinitions_1', 'Expected fake form id');
+assert(form.spamSettings?.minFillMs === 1500, 'Expected form spam settings to roundtrip through repository settings');
+assert(form.consentSettings?.policyLabel === 'Repository consent policy', 'Expected form consent settings to roundtrip through repository settings');
+assert(db.state.formDefinitions[0].settings?.spam?.blockedTerms?.includes('blocked'), 'Expected form spam settings to persist in DB settings JSON');
+assert(db.state.formDefinitions[0].settings?.consent?.requestEmail === 'privacy@example.com', 'Expected form consent settings to persist in DB settings JSON');
 assert((await formRepository.list({ siteId: site.id, pageId: publishedPage.id })).items.length === 1, 'Expected form page filter');
 assert((await formRepository.getById(site.id, form.id))?.title === 'Contact us', 'Expected form getById');
-const updatedForm = (await formRepository.update(site.id, form.id, { title: 'Contact the team', isActive: false })).item;
+const updatedForm = (await formRepository.update(site.id, form.id, {
+  title: 'Contact the team',
+  isActive: false,
+  spamSettings: {
+    rateLimitMax: 8,
+  },
+  consentSettings: {
+    retentionDays: 45,
+  },
+})).item;
 assert(updatedForm.title === 'Contact the team' && !updatedForm.isActive, 'Expected form update');
+assert(updatedForm.spamSettings?.minFillMs === 1500 && updatedForm.spamSettings?.rateLimitMax === 8, 'Expected form spam settings update to merge with existing settings');
+assert(updatedForm.consentSettings?.retentionDays === 45 && updatedForm.consentSettings?.requestEmail === 'privacy@example.com', 'Expected form consent settings update to merge with existing settings');
 
 const submission = (await formRepository.createSubmission({
   siteId: site.id,

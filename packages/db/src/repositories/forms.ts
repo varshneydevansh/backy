@@ -152,6 +152,23 @@ const toForm = (row: FormRow): FormDefinition => {
     };
 };
 
+const mergeFormSettings = (
+    settings: unknown,
+    spamSettings?: FormDefinition['spamSettings'],
+    consentSettings?: FormDefinition['consentSettings'],
+): Record<string, unknown> => {
+    const base = isRecord(settings) ? settings : {};
+    return {
+        ...base,
+        ...(spamSettings !== undefined
+            ? { spam: { ...(isRecord(base.spam) ? base.spam : {}), ...spamSettings } }
+            : {}),
+        ...(consentSettings !== undefined
+            ? { consent: { ...(isRecord(base.consent) ? base.consent : {}), ...consentSettings } }
+            : {}),
+    };
+};
+
 const toSubmission = (row: SubmissionRow): FormSubmission => ({
     id: row.id,
     siteId: row.siteId,
@@ -233,7 +250,7 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 moderationMode: input.moderationMode || 'manual',
                 contactShare: input.contactShare || {},
                 collectionTarget: input.collectionTarget || {},
-                settings: input.settings || {},
+                settings: mergeFormSettings(input.settings, input.spamSettings, input.consentSettings),
                 createdBy: input.createdBy || null,
                 updatedBy: input.updatedBy || null,
                 updatedAt: new Date(),
@@ -260,7 +277,22 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.moderationMode !== undefined) updates.moderationMode = input.moderationMode;
             if (input.contactShare !== undefined) updates.contactShare = input.contactShare || {};
             if (input.collectionTarget !== undefined) updates.collectionTarget = input.collectionTarget || {};
-            if (input.settings !== undefined) updates.settings = input.settings || {};
+            if (
+                input.settings !== undefined ||
+                input.spamSettings !== undefined ||
+                input.consentSettings !== undefined
+            ) {
+                const existing = input.settings !== undefined
+                    ? null
+                    : await firstOrNull<FormRow>(
+                        database.select().from(formDefinitions).where(and(eq(formDefinitions.siteId, siteId), eq(formDefinitions.id, formId))).limit(1),
+                    );
+                updates.settings = mergeFormSettings(
+                    input.settings !== undefined ? input.settings : existing?.settings,
+                    input.spamSettings,
+                    input.consentSettings,
+                );
+            }
             if (input.updatedBy !== undefined) updates.updatedBy = input.updatedBy;
 
             const [row] = await database.update(formDefinitions).set(updates).where(and(eq(formDefinitions.siteId, siteId), eq(formDefinitions.id, formId))).returning() as FormRow[];

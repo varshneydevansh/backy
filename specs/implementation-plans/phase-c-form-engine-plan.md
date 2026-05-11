@@ -74,6 +74,7 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - Admins can retry a failed form notification email through `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/email-retry`, which records retry queued/succeeded/failed email-channel events.
   - `/forms` now persists per-form spam controls for minimum fill time, rate window, maximum submissions, duplicate window, and blocked terms; public submissions apply those settings before persistence or delivery.
   - Captcha-enabled public forms now verify provider tokens before persistence or delivery. Runtime supports Turnstile, hCaptcha, reCAPTCHA, and a development mock provider; OpenAPI advertises the token aliases used by generated and custom frontends.
+  - The form repository now persists spam and consent settings into the durable form settings JSON for direct database-mode consumers, and `supabase/migrations/002_forms_contacts_persistence.sql` creates durable Supabase/Postgres form definition, submission, and contact tables with RLS policies and query indexes.
   - `test:forms` starts local webhook and Resend-compatible receivers, configures the rendered form builder, verifies configured email delivery events, verifies webhook headers/payload delivery, forces initial failed deliveries, refreshes the rendered Forms delivery panel, retries failed email and webhook deliveries from the UI, and asserts failed plus retry queued/succeeded event history.
 
 ### Task 1.5: Export/filter and analytics hooks
