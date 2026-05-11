@@ -60,6 +60,20 @@ if (navSecond.notModified) {
   console.log('Reuse your cached navigation tree.');
 }
 
+const pageFirst = await backy.pagesCached({ path: '/about' });
+const pageSecond = await backy.pagesCached({ path: '/about', etag: pageFirst.meta.etag });
+
+if (pageSecond.notModified) {
+  console.log('Reuse your cached page payload.');
+}
+
+const blogFirst = await backy.blogCached({ limit: 10 });
+const blogSecond = await backy.blogCached({ limit: 10, etag: blogFirst.meta.etag });
+
+if (blogSecond.notModified) {
+  console.log('Reuse your cached blog index.');
+}
+
 const seoFirst = await backy.seoCached();
 const seoSecond = await backy.seoCached({ etag: seoFirst.meta.etag });
 

@@ -385,6 +385,35 @@ assert(cachedRender.body.data.content?.elements, 'renderCached() did not return 
 const revalidatedRender = await client.renderCached(smokePath, { etag: cachedRender.meta.etag });
 assert(revalidatedRender.notModified === true, 'renderCached() did not return notModified for matching ETag');
 
+const pageDetail = await client.pages({ path: smokePath });
+assert(pageDetail.data.page, 'pages() path lookup missing page detail');
+const cachedPageDetail = await client.pagesCached({ path: smokePath });
+assert(cachedPageDetail.notModified === false, 'pagesCached() first path request should return a body');
+assert(cachedPageDetail.body.data.page, 'pagesCached() path lookup missing page detail');
+assert(cachedPageDetail.meta.etag, 'pagesCached() missing response ETag');
+const revalidatedPageDetail = await client.pagesCached({ path: smokePath, etag: cachedPageDetail.meta.etag });
+assert(revalidatedPageDetail.notModified === true, 'pagesCached() did not return notModified for matching ETag');
+
+const blogList = await client.blog({ limit: 5 });
+assert(Array.isArray(blogList.data.posts), 'blog() missing posts array');
+const cachedBlogList = await client.blogCached({ limit: 5 });
+assert(cachedBlogList.notModified === false, 'blogCached() first list request should return a body');
+assert(Array.isArray(cachedBlogList.body.data.posts), 'blogCached() missing posts array');
+assert(cachedBlogList.meta.etag, 'blogCached() missing response ETag');
+const revalidatedBlogList = await client.blogCached({ limit: 5, etag: cachedBlogList.meta.etag });
+assert(revalidatedBlogList.notModified === true, 'blogCached() did not return notModified for matching ETag');
+const firstBlogPost = blogList.data.posts?.find?.((post) => typeof post.slug === 'string' && post.slug.length > 0);
+if (firstBlogPost) {
+  const blogDetail = await client.blog({ slug: firstBlogPost.slug });
+  assert(blogDetail.data.post?.id === firstBlogPost.id, 'blog() slug lookup returned wrong post');
+  const cachedBlogDetail = await client.blogCached({ slug: firstBlogPost.slug });
+  assert(cachedBlogDetail.notModified === false, 'blogCached() first slug request should return a body');
+  assert(cachedBlogDetail.body.data.post?.id === firstBlogPost.id, 'blogCached() slug lookup returned wrong post');
+  assert(cachedBlogDetail.meta.etag, 'blogCached() slug lookup missing response ETag');
+  const revalidatedBlogDetail = await client.blogCached({ slug: firstBlogPost.slug, etag: cachedBlogDetail.meta.etag });
+  assert(revalidatedBlogDetail.notModified === true, 'blogCached() slug lookup did not return notModified for matching ETag');
+}
+
 const navigation = await client.navigation();
 assert(navigation.data.navigation, 'navigation() missing navigation data');
 const cachedNavigation = await client.navigationCached();
@@ -761,6 +790,10 @@ console.log(JSON.stringify({
     'resolve',
     'render',
     'renderCached',
+    'pages',
+    'pagesCached',
+    'blog',
+    'blogCached',
     'navigation',
     'navigationCached',
     'seo',

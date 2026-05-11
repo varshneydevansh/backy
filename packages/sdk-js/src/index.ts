@@ -623,6 +623,13 @@ export interface BackyMediaListOptions extends BackyListOptions {
   postId?: string;
 }
 
+export interface BackyPageListOptions extends BackyListOptions {
+  path?: string;
+  slug?: string;
+  previewToken?: string;
+  siteId?: string;
+}
+
 export interface BackyCollectionRecordListOptions extends BackyListOptions {
   slug?: string;
   q?: string;
@@ -1046,9 +1053,20 @@ export class BackyClient {
     });
   }
 
-  pages(options: { path?: string; previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
-    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages`, {
-      query: { path: options.path, previewToken: options.previewToken },
+  pages(options: BackyPageListOptions = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
+    const { requestId, siteId, ...query } = options;
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
+      query,
+      requestId,
+    });
+  }
+
+  pagesCached(options: BackyPageListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
     });
   }
 
@@ -1057,6 +1075,17 @@ export class BackyClient {
     const { siteId: _siteId, ...query } = options;
     void _siteId;
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query });
+  }
+
+  blogCached(options: Record<string, string | number | boolean | undefined> & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
+    const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
+    const { requestId, etag, siteId: _siteId, ...query } = options;
+    void _siteId;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId)}/blog`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
   }
 
   media(options: BackyMediaListOptions = {}): Promise<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>> {
