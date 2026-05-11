@@ -2596,6 +2596,7 @@ function CanvasElementComponent({
           const helpText = formatHelpText(p.helpText);
           const optionItems = parseFormOptions(p.options);
           const required = getBoolean(p.required);
+          const disabled = getBoolean(p.disabled);
           const selectedValues = parseFormInputValues(
             p.defaultValue !== undefined ? p.defaultValue : p.value
           );
@@ -2649,6 +2650,7 @@ function CanvasElementComponent({
                         name={typeof p.name === 'string' ? p.name : element.type === 'radio' ? `${element.id}-group` : undefined}
                         value={option}
                         required={element.type === 'checkbox' ? optionIndex === 0 && required : required}
+                        disabled={!isPreview || disabled}
                         checked={Boolean(isChecked)}
                         readOnly
                         onChange={() => {}}

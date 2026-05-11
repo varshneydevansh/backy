@@ -2883,6 +2883,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
   );
   const defaultSet = new Set(defaultValues);
   const required = getBoolean(props.required);
+  const disabled = getBoolean(props.disabled);
   const label = getNameClass(props.label);
   const helpText = getNameClass(props.helpText);
   const wrapperStyle: React.CSSProperties = {
@@ -2921,6 +2922,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
               name={name}
               value={defaultValue || 'on'}
               required={required}
+              disabled={disabled}
               defaultChecked={defaultSet.has(defaultValue)}
             />
             {getNameClass(props.label) || 'Option'}
@@ -2936,6 +2938,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
                 name={name}
                 value={option}
                 required={required}
+                disabled={disabled}
                 defaultChecked={defaultSet.has(option)}
               />
               <span>{option}</span>
@@ -2969,6 +2972,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
               name={name}
               value={getNameClass(props.value) || 'on'}
               required={required}
+              disabled={disabled}
               defaultChecked={defaultSet.has(getNameClass(props.value) || 'on')}
             />
             {getNameClass(props.label) || 'Option'}
@@ -2985,6 +2989,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
                 value={option}
                 defaultChecked={defaultSet.has(option)}
                 required={option === options[0] && required}
+                disabled={disabled}
               />
               <span>{option}</span>
             </label>

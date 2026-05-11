@@ -374,6 +374,7 @@ const content: PageContent = {
         label: 'Channels field',
         name: 'styled_channels',
         required: true,
+        disabled: true,
         options: ['Email', 'SMS'],
         value: 'SMS',
         defaultValue: 'SMS',
@@ -594,6 +595,8 @@ assert(!stringFalseInput.includes('required'), `String false required was treate
 assert(!stringFalseInput.includes('disabled'), `String false disabled was treated as true: ${stringFalseInput}`);
 assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered: ${html}`);
 assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
+const disabledCheckbox = html.match(/<input[^>]*name="styled_channels"[^>]*value="SMS"[^>]*>/)?.[0] || '';
+assert(disabledCheckbox.includes('disabled=""'), `Checkbox disabled state was not rendered: ${disabledCheckbox}`);
 assert(html.includes('border-color:#7c2d12'), `Checkbox wrapper border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 5px 14px rgba(124, 45, 18, 0.2)'), `Checkbox wrapper shadow was not rendered: ${html}`);
 assert(html.includes('action="/api/sites/site_renderer_smoke/forms/contact_form/submissions"'), `Form Backy action was not rendered: ${html}`);
