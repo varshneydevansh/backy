@@ -104,18 +104,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const parentId = nullableString(body.parentId);
-    if (repositories && parentId && !await repositories.media.getFolderById(site.id, parentId)) {
-      return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+    if (parentId) {
+      const parentFolder = repositories
+        ? await repositories.media.getFolderById(site.id, parentId)
+        : listMediaFolders(site.id).find((folder) => folder.id === parentId);
+
+      if (!parentFolder) {
+        return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+      }
     }
+    const sortOrder = numberFromInput(body.sortOrder);
 
     const folder = repositories
       ? (await repositories.media.createFolder({
           siteId: site.id,
           name,
           parentId,
-          sortOrder: numberFromInput(body.sortOrder),
+          sortOrder,
         })).item
-      : createMediaFolder(site.id, body);
+      : createMediaFolder(site.id, { name, parentId, sortOrder });
     await recordAdminAudit({
       repositories,
       siteId: site.id,
