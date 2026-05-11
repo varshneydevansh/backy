@@ -38,7 +38,7 @@ const order = await backy.createCommerceOrder({
 console.log(order.data.order.orderNumber, order.data.order.paymentStatus);
 ```
 
-Conditional discovery/render/navigation/SEO/media/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
+Conditional discovery/frontend-design/render/navigation/SEO/media/data helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
 
 ```ts
 const first = await backy.renderCached('/');
@@ -51,6 +51,13 @@ const second = await backy.renderCached('/', { etag: first.meta.etag });
 
 if (second.notModified) {
   console.log('Reuse your cached render payload.');
+}
+
+const designFirst = await backy.frontendDesignCached();
+const designSecond = await backy.frontendDesignCached({ etag: designFirst.meta.etag });
+
+if (designSecond.notModified) {
+  console.log('Reuse your cached frontend design contract.');
 }
 
 const navFirst = await backy.navigationCached();
@@ -110,8 +117,8 @@ if (fontsSecond.notModified) {
 }
 ```
 
-The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
-The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, frontend-design contract, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
+The default return types expose Backy contract shapes such as `BackyFrontendDesignContract`, `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 

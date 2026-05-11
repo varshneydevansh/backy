@@ -359,6 +359,19 @@ assert(cachedManifest.body.data.capabilities?.renderPayload === true, 'manifestC
 const revalidatedManifest = await client.manifestCached({ etag: cachedManifest.meta.etag });
 assert(revalidatedManifest.notModified === true, 'manifestCached() did not return notModified for matching ETag');
 
+const frontendDesign = await client.frontendDesign();
+assert(frontendDesign.data.schemaVersion === 'backy.frontend-design-response.v1', 'frontendDesign() did not return the frontend design response schema');
+assert(frontendDesign.data.frontendDesign?.schemaVersion === 'backy.frontend-design.v1', 'frontendDesign() missing frontend design contract');
+assert(Array.isArray(frontendDesign.data.frontendDesign.templates), 'frontendDesign() missing template registry');
+assert(Array.isArray(frontendDesign.data.frontendDesign.editableMap), 'frontendDesign() missing editable map');
+assert(typeof frontendDesign.data.capabilities?.hasContract === 'boolean', 'frontendDesign() missing capability summary');
+const cachedFrontendDesign = await client.frontendDesignCached();
+assert(cachedFrontendDesign.notModified === false, 'frontendDesignCached() first request should return a body');
+assert(cachedFrontendDesign.meta.etag, 'frontendDesignCached() missing response ETag');
+assert(cachedFrontendDesign.body.data.frontendDesign?.schemaVersion === 'backy.frontend-design.v1', 'frontendDesignCached() missing frontend design contract');
+const revalidatedFrontendDesign = await client.frontendDesignCached({ etag: cachedFrontendDesign.meta.etag });
+assert(revalidatedFrontendDesign.notModified === true, 'frontendDesignCached() did not return notModified for matching ETag');
+
 const openapi = await client.openapi();
 assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 document');
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
@@ -785,6 +798,8 @@ console.log(JSON.stringify({
     'sites',
     'manifest',
     'manifestCached',
+    'frontendDesign',
+    'frontendDesignCached',
     'openapi',
     'openapiCached',
     'resolve',
