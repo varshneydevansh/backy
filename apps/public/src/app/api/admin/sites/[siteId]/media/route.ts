@@ -263,7 +263,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         visibility: visibilityFromInput(searchParams.get('visibility')) || 'all',
         search: searchParams.get('search') || undefined,
         folderId: searchParams.has('folderId') ? searchParams.get('folderId') : undefined,
-        limit: 100,
+        limit: 10000,
         offset: 0,
       });
       const filtered = result.items

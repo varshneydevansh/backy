@@ -53,7 +53,7 @@ type MediaRow = typeof media.$inferSelect;
 type MediaFolderRow = typeof mediaFolders.$inferSelect;
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 10000;
 
 const asDb = (db: DatabaseInstance): QueryDatabase => db as unknown as QueryDatabase;
 
