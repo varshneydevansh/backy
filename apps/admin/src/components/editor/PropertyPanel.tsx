@@ -1077,6 +1077,7 @@ function ContentProperties({
               type="text"
               value={element.props.label || ''}
               onChange={(e) => onChange({ label: e.target.value })}
+              data-testid="editor-button-label"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'

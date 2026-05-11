@@ -1281,6 +1281,8 @@ function ButtonElement({ element }: ElementRendererProps) {
     borderRadius: getLength(props.borderRadius, '8px'),
     fontSize: getLength(props.fontSize, '16px'),
     fontWeight: getNameClass(props.fontWeight) || '500',
+    boxShadow: getNameClass(props.boxShadow) || undefined,
+    margin: getLength(props.margin),
     cursor: 'pointer',
     textDecoration: 'none',
     transition: 'all 0.2s ease',

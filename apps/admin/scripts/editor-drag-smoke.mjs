@@ -3945,18 +3945,29 @@ const testButtonLinkBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-child-button');
   await switchToPropertiesPanel(client);
 
+  await setFormControlByTestId(client, 'editor-button-label', 'Smoke signup button');
   await setFormControlByTestId(client, 'editor-button-href', '/signup');
   await setFormControlByTestId(client, 'editor-button-target', '_blank');
   await setFormControlByTestId(client, 'editor-button-rel', 'noopener noreferrer nofollow');
   await setFormControlByTestId(client, 'editor-button-aria-label', 'Open signup page');
   await setFormControlByTestId(client, 'editor-button-title', 'Start signup');
   await setFormControlByTestId(client, 'editor-button-type', 'button');
+  await setFormControlByTestId(client, 'editor-style-font-size', '18');
+  await setFormControlByTestId(client, 'editor-style-font-weight', '700');
+  await setFormControlByTestId(client, 'editor-style-text-color', '#ffffff');
+  await setFormControlByTestId(client, 'editor-style-background-color', '#16a34a');
+  await ensurePropertySectionExpanded(client, 'Appearance');
+  await setFormControlByTestId(client, 'editor-appearance-border-radius', '12');
+  await setFormControlByTestId(client, 'editor-appearance-padding', '14');
+  await setFormControlByTestId(client, 'editor-appearance-box-shadow', '0 8px 16px rgba(22, 163, 74, 0.25)');
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
     const node = document.querySelector('[data-element-id="smoke-child-button"]');
     const interactive = node?.querySelector('a, button');
+    const style = interactive ? getComputedStyle(interactive) : null;
     return {
+      label: value('editor-button-label'),
       href: value('editor-button-href'),
       target: value('editor-button-target'),
       rel: value('editor-button-rel'),
@@ -3964,14 +3975,40 @@ const testButtonLinkBehaviorControls = async (client) => {
       title: value('editor-button-title'),
       type: value('editor-button-type'),
       previewText: interactive?.textContent || '',
+      fontSize: value('editor-style-font-size'),
+      fontWeight: value('editor-style-font-weight'),
+      color: value('editor-style-text-color'),
+      backgroundColor: value('editor-style-background-color'),
+      borderRadius: value('editor-appearance-border-radius'),
+      padding: value('editor-appearance-padding'),
+      boxShadow: value('editor-appearance-box-shadow'),
+      previewFontSize: style?.fontSize || '',
+      previewFontWeight: style?.fontWeight || '',
+      previewColor: style?.color || '',
+      previewBackgroundColor: style?.backgroundColor || '',
+      previewBorderRadius: style?.borderRadius || '',
+      previewPadding: style?.padding || '',
+      previewBoxShadow: style?.boxShadow || '',
     };
   })()`);
 
+  assert(state.label === 'Smoke signup button' && state.previewText === 'Smoke signup button', `Button label mismatch: ${JSON.stringify(state)}`);
   assert(state.href === '/signup', `Button href control mismatch: ${JSON.stringify(state)}`);
   assert(state.target === '_blank', `Button target control mismatch: ${JSON.stringify(state)}`);
   assert(state.rel === 'noopener noreferrer nofollow', `Button rel control mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Open signup page' && state.title === 'Start signup', `Button accessibility/title controls mismatch: ${JSON.stringify(state)}`);
   assert(state.type === 'button', `Button type control mismatch: ${JSON.stringify(state)}`);
+  assert(state.fontSize === '18' && state.previewFontSize === '18px', `Button font size mismatch: ${JSON.stringify(state)}`);
+  assert(state.fontWeight === '700' && state.previewFontWeight === '700', `Button font weight mismatch: ${JSON.stringify(state)}`);
+  assert(state.color === '#ffffff' && /255,\s*255,\s*255/.test(state.previewColor), `Button text color mismatch: ${JSON.stringify(state)}`);
+  assert(state.backgroundColor === '#16a34a' && /22,\s*163,\s*74/.test(state.previewBackgroundColor), `Button background mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderRadius === '12' && state.previewBorderRadius === '12px', `Button radius mismatch: ${JSON.stringify(state)}`);
+  assert(state.padding === '14' && state.previewPadding === '14px', `Button padding mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.boxShadow === '0 8px 16px rgba(22, 163, 74, 0.25)' &&
+      /rgba\(22,\s*163,\s*74,\s*0\.25\)/.test(state.previewBoxShadow),
+    `Button shadow mismatch: ${JSON.stringify(state)}`,
+  );
 
   return state;
 };
@@ -3983,12 +4020,20 @@ const assertPersistedButtonLinkBehavior = async (pageId) => {
   const props = button?.props || {};
 
   assert(button, `Persisted smoke-child-button missing: ${JSON.stringify(elements)}`);
+  assert(props.label === 'Smoke signup button', `Persisted button label mismatch: ${JSON.stringify(props)}`);
   assert(props.href === '/signup', `Persisted button href mismatch: ${JSON.stringify(props)}`);
   assert(props.target === '_blank', `Persisted button target mismatch: ${JSON.stringify(props)}`);
   assert(props.rel === 'noopener noreferrer nofollow', `Persisted button rel mismatch: ${JSON.stringify(props)}`);
   assert(props.ariaLabel === 'Open signup page', `Persisted button aria label mismatch: ${JSON.stringify(props)}`);
   assert(props.title === 'Start signup', `Persisted button title mismatch: ${JSON.stringify(props)}`);
   assert(props.type === 'button', `Persisted button type mismatch: ${JSON.stringify(props)}`);
+  assert(props.fontSize === 18, `Persisted button font size mismatch: ${JSON.stringify(props)}`);
+  assert(props.fontWeight === '700', `Persisted button font weight mismatch: ${JSON.stringify(props)}`);
+  assert(props.color === '#ffffff', `Persisted button text color mismatch: ${JSON.stringify(props)}`);
+  assert(props.backgroundColor === '#16a34a', `Persisted button background mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderRadius === 12, `Persisted button radius mismatch: ${JSON.stringify(props)}`);
+  assert(props.padding === 14, `Persisted button padding mismatch: ${JSON.stringify(props)}`);
+  assert(props.boxShadow === '0 8px 16px rgba(22, 163, 74, 0.25)', `Persisted button shadow mismatch: ${JSON.stringify(props)}`);
 
   return props;
 };

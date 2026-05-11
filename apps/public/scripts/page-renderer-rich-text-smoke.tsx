@@ -107,6 +107,29 @@ const content: PageContent = {
         },
       ],
     },
+    {
+      id: 'styled-button',
+      type: 'button',
+      x: 580,
+      y: 168,
+      width: 220,
+      height: 56,
+      props: {
+        label: 'Styled CTA',
+        href: '/signup',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        ariaLabel: 'Open signup',
+        title: 'Signup CTA',
+        backgroundColor: '#16a34a',
+        color: '#ffffff',
+        fontSize: 18,
+        fontWeight: '700',
+        borderRadius: 12,
+        padding: 14,
+        boxShadow: '0 8px 16px rgba(22, 163, 74, 0.25)',
+      },
+    },
   ],
 };
 
@@ -135,6 +158,13 @@ assert(html.includes('border-width:3px'), `Container border width was not render
 assert(html.includes('border-style:dashed'), `Container border style was not rendered: ${html}`);
 assert(html.includes('border-color:#0891b2'), `Container border color was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 10px 20px rgba(8, 145, 178, 0.25)'), `Container shadow was not rendered: ${html}`);
+assert(html.includes('href="/signup"'), `Button href was not rendered: ${html}`);
+assert(html.includes('aria-label="Open signup"'), `Button aria label was not rendered: ${html}`);
+assert(html.includes('Styled CTA'), `Button label was not rendered: ${html}`);
+assert(html.includes('background-color:#16a34a'), `Button background was not rendered: ${html}`);
+assert(html.includes('font-size:18px'), `Button font size was not rendered: ${html}`);
+assert(html.includes('border-radius:12px'), `Button border radius was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 8px 16px rgba(22, 163, 74, 0.25)'), `Button shadow was not rendered: ${html}`);
 
 console.log(JSON.stringify({
   ok: true,
@@ -145,5 +175,6 @@ console.log(JSON.stringify({
     quote: true,
     citation: true,
     styledBox: true,
+    styledButton: true,
   },
 }, null, 2));
