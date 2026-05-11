@@ -22,6 +22,9 @@ import {
   AlignVerticalJustifyStart,
   AlignVerticalDistributeCenter,
   ArrowLeft,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  BringToFront,
   CheckSquare,
   ClipboardPaste,
   Copy,
@@ -37,6 +40,7 @@ import {
   Tablet,
   Smartphone,
   RefreshCw,
+  SendToBack,
   Trash2,
   Undo,
   Redo,
@@ -115,6 +119,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 type CanvasDistribution = 'horizontal' | 'vertical';
+type CanvasZOrderAction = 'front' | 'forward' | 'backward' | 'back';
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorSaveMode = 'manual' | 'autosave';
 type ReusableSectionInstanceMeta = {
@@ -178,6 +183,61 @@ const formatAutosaveTime = (value: Date | null) => (
     ? value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : ''
 );
+
+const normalizeSiblingZIndexes = (siblings: CanvasElement[]): CanvasElement[] => (
+  siblings.map((element, index) => ({
+    ...element,
+    zIndex: index + 1,
+  }))
+);
+
+const haveSameLayerOrder = (left: CanvasElement[], right: CanvasElement[]): boolean => (
+  left.length === right.length && left.every((element, index) => element.id === right[index]?.id)
+);
+
+const reorderSelectedSiblingStack = (
+  siblings: CanvasElement[],
+  selectedLayerIds: Set<string>,
+  action: CanvasZOrderAction,
+): { siblings: CanvasElement[]; moved: boolean } => {
+  if (selectedLayerIds.size === 0 || siblings.length < 2) {
+    return { siblings, moved: false };
+  }
+
+  let next = [...siblings];
+  if (action === 'front') {
+    next = [
+      ...siblings.filter((element) => !selectedLayerIds.has(element.id)),
+      ...siblings.filter((element) => selectedLayerIds.has(element.id)),
+    ];
+  } else if (action === 'back') {
+    next = [
+      ...siblings.filter((element) => selectedLayerIds.has(element.id)),
+      ...siblings.filter((element) => !selectedLayerIds.has(element.id)),
+    ];
+  } else if (action === 'forward') {
+    for (let index = next.length - 2; index >= 0; index -= 1) {
+      if (selectedLayerIds.has(next[index].id) && !selectedLayerIds.has(next[index + 1].id)) {
+        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      }
+    }
+  } else {
+    for (let index = 1; index < next.length; index += 1) {
+      if (selectedLayerIds.has(next[index].id) && !selectedLayerIds.has(next[index - 1].id)) {
+        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      }
+    }
+  }
+
+  if (haveSameLayerOrder(next, siblings)) {
+    return { siblings, moved: false };
+  }
+
+  return {
+    siblings: normalizeSiblingZIndexes(next),
+    moved: true,
+  };
+};
 
 const formatChangeCount = (count: number) => `${count} unsaved ${count === 1 ? 'change' : 'changes'}`;
 
@@ -1847,6 +1907,60 @@ export function CanvasEditor({
     updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
   }, [cloneElementTreeWithFreshIds, getSelectedSiblingEntries, updateElementsWithHistory]);
 
+  const handleZOrderChange = useCallback((action: CanvasZOrderAction) => {
+    const currentElements = elementsRef.current;
+    const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
+    if (entries.length === 0) {
+      return;
+    }
+
+    const parentId = entries[0].parentId;
+    const selectedLayerIds = new Set(entries.map((entry) => entry.element.id));
+    const selectedSnapshot = entries.map((entry) => entry.element.id);
+    const nextSelectedId = selectedSnapshot[0] ?? selectedId;
+
+    const reorderSiblings = (siblings: CanvasElement[]) => (
+      reorderSelectedSiblingStack(siblings, selectedLayerIds, action)
+    );
+
+    let moved = false;
+    let nextElements = currentElements;
+    if (parentId === null) {
+      const result = reorderSiblings(currentElements);
+      moved = result.moved;
+      nextElements = result.siblings;
+    } else {
+      const updateParentChildren = (nodes: CanvasElement[]): CanvasElement[] => (
+        nodes.map((element) => {
+          if (element.id === parentId) {
+            const result = reorderSiblings(element.children || []);
+            moved = result.moved;
+            return result.moved
+              ? { ...element, children: result.siblings }
+              : element;
+          }
+
+          if (!element.children?.length) {
+            return element;
+          }
+
+          const nextChildren = updateParentChildren(element.children);
+          return nextChildren === element.children ? element : { ...element, children: nextChildren };
+        })
+      );
+
+      nextElements = updateParentChildren(currentElements);
+    }
+
+    if (!moved) {
+      return;
+    }
+
+    setSelectedId(nextSelectedId);
+    setSelectedIds(selectedSnapshot);
+    updateElementsWithHistory(nextElements, nextSelectedId, selectedSnapshot);
+  }, [getSelectedSiblingEntries, selectedId, updateElementsWithHistory]);
+
   const handleLayerSelect = useCallback((ids: string[]) => {
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
     setSelectedIds(nextIds);
@@ -2390,6 +2504,15 @@ export function CanvasEditor({
       .filter((item) => item.visible !== false && !item.locked)
       .map((item) => item.id);
   }, [elements, findElementEntry, selectedId]);
+  const selectedSiblingLayerCount = useMemo(() => {
+    const selectedEntry = selectedId ? findElementEntry(elements, selectedId) : null;
+    const parentId = selectedEntry?.parentId ?? null;
+    const siblings = parentId
+      ? findElementEntry(elements, parentId)?.element.children || []
+      : elements;
+
+    return siblings.length;
+  }, [elements, findElementEntry, selectedId]);
   const canGroupSelected = selectedEntries.length > 1
     && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
   const canUngroupSelected = selectedEntries.length === 1
@@ -2397,6 +2520,9 @@ export function CanvasEditor({
     && canAcceptNestedDrop(selectedEntries[0].element.type)
     && Boolean(selectedEntries[0].element.children?.length);
   const canAlignSelected = !!selectedElement && !selectedElement.locked;
+  const canZOrderSelected = selectedEntries.length > 0
+    && selectedSiblingLayerCount > selectedEntries.length
+    && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
   const canDistributeSelected = selectedEntries.length >= 3
     && selectedEntries.every((entry) => (
       entry.parentId === selectedParentId &&
@@ -3855,6 +3981,55 @@ export function CanvasEditor({
               <Ungroup className="h-4 w-4" />
               <span className="hidden 2xl:inline">Ungroup</span>
             </button>
+
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+
+            <div className="flex items-center gap-0.5" aria-label="Layer order controls">
+              <button
+                type="button"
+                onClick={() => handleZOrderChange('back')}
+                disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Send to back"
+                aria-label="Send to back"
+                data-testid="editor-send-to-back"
+              >
+                <SendToBack className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZOrderChange('backward')}
+                disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Send backward"
+                aria-label="Send backward"
+                data-testid="editor-send-backward"
+              >
+                <ArrowDownToLine className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZOrderChange('forward')}
+                disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Bring forward"
+                aria-label="Bring forward"
+                data-testid="editor-bring-forward"
+              >
+                <ArrowUpToLine className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZOrderChange('front')}
+                disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Bring to front"
+                aria-label="Bring to front"
+                data-testid="editor-bring-to-front"
+              >
+                <BringToFront className="h-4 w-4" />
+              </button>
+            </div>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
 

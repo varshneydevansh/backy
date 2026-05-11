@@ -23,7 +23,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 9 | Undo/Redo Buttons | ✅ | Toolbar and shortcut undo/redo restore distinct canvas states |
 | 10 | Save Button | ❌ | UI exists, not functional |
 | 11 | Page Settings | ❌ | Button exists, not functional |
-| 12 | Z-Index Control | ⚠️ | In PropertyPanel but no bring front/back |
+| 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ❌ | No way to delete |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
 | 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
@@ -210,18 +210,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 12. Z-Index Control (Bring to Front/Back)
 **File:** `PropertyPanel.tsx` (Layout section)
-**Current State:** ⚠️ Partial
-- Z-Index number input exists
-- No quick "Bring to Front" / "Send to Back" buttons
-- **Required Implementation:** Add to PropertyPanel Layout section:
-    ```tsx
-    <div className="flex gap-2">
-      <button onClick={() => bringToFront(element.id)}>Bring to Front</button>
-      <button onClick={() => sendToBack(element.id)}>Send to Back</button>
-      <button onClick={() => moveUp(element.id)}>Move Up</button>
-      <button onClick={() => moveDown(element.id)}>Move Down</button>
-    </div>
-    ```
+**Current State:** ✅ Working
+- Z-Index number input exists in the Layout section.
+- Toolbar quick controls support Send to back, Send backward, Bring forward, and Bring to front.
+- Z-order changes operate within the selected sibling scope, preserve multi-selection ordering, skip locked selections, update normalized sibling `zIndex` values, and flow through editor history.
+- `BACKY_EDITOR_Z_ORDER_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers the quick controls plus undo/redo as a focused regression.
 
 ### 13. Delete Element
 **Current State:** ❌ Not Implemented
@@ -394,7 +387,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Important (Should Have)**
 - ❌ Page Settings modal
 - ❌ Duplicate element
-- ❌ Z-Index quick controls (bring front/back)
+- ✅ Z-Index quick controls (bring/send forward/back)
 - ❌ Keyboard shortcuts
 - ❌ Emoji picker for icons
 - ❌ Layers panel
@@ -432,7 +425,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Save page to database
 - Load existing page
 - Page Settings modal
-- Z-Index quick controls
 - Duplicate element
 
 **Phase 3: Usability**

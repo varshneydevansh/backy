@@ -11,6 +11,7 @@ const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
+const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -1371,10 +1372,10 @@ const blurActiveElement = async (client) => {
   await sleep(100);
 };
 
-const scrollEditorToolbarIntoView = async (client) => {
+const scrollEditorToolbarIntoView = async (client, ariaLabel = 'Undo') => {
   await evaluate(client, `(() => {
-    const undo = document.querySelector('button[aria-label="Undo"]');
-    undo?.scrollIntoView?.({ block: 'center', inline: 'center' });
+    const button = document.querySelector('button[aria-label="${ariaLabel}"]');
+    button?.scrollIntoView?.({ block: 'center', inline: 'center' });
     return true;
   })()`);
   await sleep(150);
@@ -2643,17 +2644,29 @@ const assertGroupingControls = async (client) => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
     const selectSiblingsButton = document.querySelector('[data-testid="editor-select-sibling-layers"]');
+    const sendToBackButton = document.querySelector('[data-testid="editor-send-to-back"]');
+    const sendBackwardButton = document.querySelector('[data-testid="editor-send-backward"]');
+    const bringForwardButton = document.querySelector('[data-testid="editor-bring-forward"]');
+    const bringToFrontButton = document.querySelector('[data-testid="editor-bring-to-front"]');
     const distributeHorizontalButton = document.querySelector('[data-testid="editor-distribute-horizontal"]');
     const distributeVerticalButton = document.querySelector('[data-testid="editor-distribute-vertical"]');
     return {
       hasGroupButton: Boolean(groupButton),
       hasUngroupButton: Boolean(ungroupButton),
       hasSelectSiblingsButton: Boolean(selectSiblingsButton),
+      hasSendToBackButton: Boolean(sendToBackButton),
+      hasSendBackwardButton: Boolean(sendBackwardButton),
+      hasBringForwardButton: Boolean(bringForwardButton),
+      hasBringToFrontButton: Boolean(bringToFrontButton),
       hasDistributeHorizontalButton: Boolean(distributeHorizontalButton),
       hasDistributeVerticalButton: Boolean(distributeVerticalButton),
       groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
       ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
       selectSiblingsDisabled: selectSiblingsButton instanceof HTMLButtonElement ? selectSiblingsButton.disabled : null,
+      sendToBackDisabled: sendToBackButton instanceof HTMLButtonElement ? sendToBackButton.disabled : null,
+      sendBackwardDisabled: sendBackwardButton instanceof HTMLButtonElement ? sendBackwardButton.disabled : null,
+      bringForwardDisabled: bringForwardButton instanceof HTMLButtonElement ? bringForwardButton.disabled : null,
+      bringToFrontDisabled: bringToFrontButton instanceof HTMLButtonElement ? bringToFrontButton.disabled : null,
       distributeHorizontalDisabled: distributeHorizontalButton instanceof HTMLButtonElement ? distributeHorizontalButton.disabled : null,
       distributeVerticalDisabled: distributeVerticalButton instanceof HTMLButtonElement ? distributeVerticalButton.disabled : null,
     };
@@ -2662,9 +2675,77 @@ const assertGroupingControls = async (client) => {
   assert(state?.hasGroupButton, `Group control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasUngroupButton, `Ungroup control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasSelectSiblingsButton, `Select sibling layers control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasSendToBackButton, `Send-to-back control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasSendBackwardButton, `Send-backward control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasBringForwardButton, `Bring-forward control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasBringToFrontButton, `Bring-to-front control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasDistributeHorizontalButton, `Horizontal distribute control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasDistributeVerticalButton, `Vertical distribute control missing from editor toolbar: ${JSON.stringify(state)}`);
   return state;
+};
+
+const readSelectedZIndexControl = async (client, elementId) => {
+  await selectLayerIds(client, [elementId]);
+  await switchToPropertiesPanel(client);
+  await ensurePropertySectionExpanded(client, 'Layout');
+
+  const state = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="editor-layout-z-index"]');
+    return {
+      ok: input instanceof HTMLInputElement,
+      value: input instanceof HTMLInputElement ? Number(input.value) : null,
+      rawValue: input instanceof HTMLInputElement ? input.value : null,
+      inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent?.slice(0, 500) || '',
+    };
+  })()`);
+
+  assert(state?.ok && Number.isFinite(state.value), `Unable to read selected Z-index control for ${elementId}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testZOrderQuickControls = async (client, elementId) => {
+  const before = await readSelectedZIndexControl(client, elementId);
+  await scrollEditorToolbarIntoView(client, 'Bring to front');
+
+  await clickEnabledButtonByAriaLabel(client, 'Bring to front');
+  const front = await readSelectedZIndexControl(client, elementId);
+  assert(front.value > before.value, `Bring to front did not raise ${elementId}: ${JSON.stringify({ before, front })}`);
+
+  await scrollEditorToolbarIntoView(client, 'Send to back');
+  await clickEnabledButtonByAriaLabel(client, 'Send to back');
+  const back = await readSelectedZIndexControl(client, elementId);
+  assert(back.value === 1, `Send to back did not move ${elementId} to z-index 1: ${JSON.stringify({ front, back })}`);
+
+  await scrollEditorToolbarIntoView(client, 'Bring forward');
+  await clickEnabledButtonByAriaLabel(client, 'Bring forward');
+  const forward = await readSelectedZIndexControl(client, elementId);
+  assert(forward.value === back.value + 1, `Bring forward did not raise ${elementId} by one layer: ${JSON.stringify({ back, forward })}`);
+
+  await scrollEditorToolbarIntoView(client, 'Send backward');
+  await clickEnabledButtonByAriaLabel(client, 'Send backward');
+  const backward = await readSelectedZIndexControl(client, elementId);
+  assert(backward.value === back.value, `Send backward did not lower ${elementId} by one layer: ${JSON.stringify({ forward, backward })}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undone = await readSelectedZIndexControl(client, elementId);
+  assert(undone.value === forward.value, `Z-order undo did not restore previous layer: ${JSON.stringify({ forward, backward, undone })}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const redone = await readSelectedZIndexControl(client, elementId);
+  assert(redone.value === backward.value, `Z-order redo did not restore lowered layer: ${JSON.stringify({ backward, undone, redone })}`);
+
+  return {
+    elementId,
+    before,
+    front,
+    back,
+    forward,
+    backward,
+    undone,
+    redone,
+  };
 };
 
 const testSiblingScopeSelectionShortcut = async (client, requiredElementIds) => {
@@ -5407,8 +5488,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -5445,6 +5526,23 @@ const main = async () => {
         url: `${ADMIN_BASE_URL}${editorPath}`,
         targetElementId,
         clipboardEditing,
+        savedStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (Z_ORDER_SMOKE) {
+      const targetElementId = EDITOR_PATH ? 'home-heading' : 'smoke-heading';
+      const zOrderControls = await testZOrderQuickControls(client, targetElementId);
+      await clickSave(client);
+      const savedStatus = await waitForEditorMutationReady(client, 'after z-order smoke save');
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'z-order',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        targetElementId,
+        zOrderControls,
         savedStatus,
       }, null, 2));
       return;
