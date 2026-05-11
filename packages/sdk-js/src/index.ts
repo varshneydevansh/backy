@@ -27,6 +27,10 @@ export interface BackyErrorEnvelope {
     details?: unknown;
   };
   data?: unknown;
+  validation?: BackyFormSubmissionValidationDetail[];
+  spamFlags?: string[];
+  status?: string;
+  message?: string;
 }
 
 export interface BackyResponseMeta {
@@ -686,7 +690,10 @@ export interface BackyCollectionRecordListOptions extends BackyListOptions {
 }
 
 export interface BackyFormSubmissionInput {
-  values: Record<string, unknown>;
+  values?: Record<string, unknown>;
+  fields?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  submission?: Record<string, unknown>;
   requestId?: string;
   pageId?: string;
   postId?: string;
@@ -694,6 +701,14 @@ export interface BackyFormSubmissionInput {
   startedAt?: string | number;
   rateLimitBypass?: boolean;
   contactShareOverride?: unknown;
+  [fieldKey: string]: unknown;
+}
+
+export interface BackyFormSubmissionValidationDetail {
+  field: string;
+  code: string;
+  message: string;
+  label?: string;
 }
 
 export interface BackyCommentInput {
@@ -964,6 +979,9 @@ export class BackyApiError extends Error {
   readonly requestId?: string;
   readonly code: string;
   readonly details?: unknown;
+  readonly validation?: BackyFormSubmissionValidationDetail[];
+  readonly spamFlags?: string[];
+  readonly submissionStatus?: string;
 
   constructor(status: number, envelope: BackyErrorEnvelope) {
     super(envelope.error.message);
@@ -972,6 +990,9 @@ export class BackyApiError extends Error {
     this.requestId = envelope.requestId;
     this.code = envelope.error.code;
     this.details = envelope.error.details;
+    this.validation = envelope.validation;
+    this.spamFlags = envelope.spamFlags;
+    this.submissionStatus = envelope.status;
   }
 }
 

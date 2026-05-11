@@ -794,6 +794,40 @@ const submitInvalidRegistration = async (formId) => {
   return payload;
 };
 
+const assertOpenApiFormSubmissionContract = async () => {
+  const openapi = await requestApi(`/api/sites/${SITE_ID}/openapi`);
+  const submissionsPath = openapi.paths?.[`/api/sites/${SITE_ID}/forms/{formId}/submissions`];
+  const requestSchemaRef = submissionsPath?.post?.requestBody?.content?.['application/json']?.schema?.$ref;
+  assert(
+    requestSchemaRef === '#/components/schemas/FormSubmissionRequest',
+    `Form submission OpenAPI request schema is not reusable/typed: ${JSON.stringify(requestSchemaRef)}`,
+  );
+
+  const requestSchema = openapi.components?.schemas?.FormSubmissionRequest;
+  assert(
+    requestSchema?.properties?.values && requestSchema.properties.fields && requestSchema.properties.data && requestSchema.properties.submission,
+    `Form submission OpenAPI request schema does not expose payload aliases: ${JSON.stringify(requestSchema)}`,
+  );
+  assert(
+    requestSchema.additionalProperties === true,
+    `Form submission OpenAPI request schema does not allow direct field-key payloads: ${JSON.stringify(requestSchema)}`,
+  );
+
+  const validationResponse = submissionsPath?.post?.responses?.['422']?.content?.['application/json']?.schema?.$ref;
+  assert(
+    validationResponse === '#/components/schemas/FormSubmissionValidationErrorEnvelope',
+    `Form submission OpenAPI 422 response is not the validation envelope: ${JSON.stringify(validationResponse)}`,
+  );
+  const validationDetail = openapi.components?.schemas?.FormSubmissionValidationDetail;
+  assert(
+    validationDetail?.properties?.field &&
+      validationDetail.properties.code?.enum?.includes('min_length') &&
+      validationDetail.properties.message &&
+      validationDetail.properties.label,
+    `Form submission OpenAPI validation detail is not machine-readable: ${JSON.stringify(validationDetail)}`,
+  );
+};
+
 const refreshForms = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
@@ -953,6 +987,7 @@ const main = async () => {
     await editFormBuilderInUi(client, createdFormId, smokeCollection.id);
 
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
+    await assertOpenApiFormSubmissionContract();
     assert(definition.data?.form?.title === 'Registration edited', `Edited registration title did not persist: ${definition.data?.form?.title}`);
     assert(definition.data?.form?.fields?.length === 6, 'Edited registration definition did not expose six fields');
     assert(

@@ -44,6 +44,25 @@ const envelopeSchema = (dataSchema: Record<string, unknown>) => ({
   },
 });
 
+const formSubmissionValidationCodes = [
+  'required',
+  'min_length',
+  'max_length',
+  'pattern',
+  'invalid_pattern',
+  'min',
+  'max',
+  'invalid_email',
+  'invalid_url',
+  'invalid_option',
+  'invalid_options',
+  'missing_options',
+  'unique',
+  'collection_unavailable',
+  'public_create_disabled',
+  'record_create_failed',
+];
+
 const pathParameter = (name: string, description?: string, enumValues?: string[]) => ({
   name,
   in: 'path',
@@ -861,18 +880,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               required: true,
               content: {
                 'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      values: { type: 'object', additionalProperties: true },
-                      requestId: { type: 'string' },
-                      pageId: { type: 'string' },
-                      postId: { type: 'string' },
-                      honeypot: { type: 'string' },
-                      startedAt: { oneOf: [{ type: 'string' }, { type: 'number' }] },
-                    },
-                    required: ['values'],
-                  },
+                  schema: { $ref: '#/components/schemas/FormSubmissionRequest' },
                 },
               },
             },
@@ -886,7 +894,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
               '400': {
-                description: 'Validation error',
+                description: 'Invalid submission payload',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/ErrorEnvelope' },
+                  },
+                },
+              },
+              '422': {
+                description: 'Machine-readable field validation or spam rejection',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormSubmissionValidationErrorEnvelope' },
+                  },
+                },
               },
             },
           },
@@ -2216,6 +2237,58 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               collectionRecordErrors: { type: 'array', items: { type: 'object', additionalProperties: true } },
             },
           }),
+          FormSubmissionRequest: {
+            type: 'object',
+            additionalProperties: true,
+            description: 'Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, rateLimitBypass, and contactShareOverride are reserved transport metadata keys.',
+            properties: {
+              values: { type: 'object', additionalProperties: true, description: 'Preferred field value map.' },
+              fields: { type: 'object', additionalProperties: true, description: 'Alias accepted for generated form integrations.' },
+              data: { type: 'object', additionalProperties: true, description: 'Alias accepted for custom frontend integrations.' },
+              submission: { type: 'object', additionalProperties: true, description: 'Alias accepted for legacy submitters.' },
+              requestId: { type: 'string' },
+              pageId: { type: 'string' },
+              postId: { type: 'string' },
+              honeypot: { type: 'string' },
+              startedAt: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+              rateLimitBypass: { type: 'boolean' },
+              contactShareOverride: { type: 'object', additionalProperties: true },
+            },
+          },
+          FormSubmissionValidationDetail: {
+            type: 'object',
+            required: ['field', 'code', 'message'],
+            properties: {
+              field: { type: 'string' },
+              code: { type: 'string', enum: formSubmissionValidationCodes },
+              message: { type: 'string' },
+              label: { type: 'string' },
+            },
+          },
+          FormSubmissionValidationErrorEnvelope: {
+            type: 'object',
+            required: ['success', 'requestId', 'error', 'validation'],
+            properties: {
+              success: { const: false },
+              requestId: { type: 'string' },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { const: 'VALIDATION_ERROR' },
+                  message: { type: 'string' },
+                },
+              },
+              errorMessage: { type: 'string' },
+              status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] },
+              validation: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/FormSubmissionValidationDetail' },
+              },
+              spamFlags: { type: 'array', items: { type: 'string' } },
+              message: { type: 'string' },
+            },
+          },
           FormContactsEnvelope: envelopeSchema({
             type: 'object',
             required: ['form', 'contacts', 'pagination'],

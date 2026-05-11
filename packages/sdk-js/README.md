@@ -147,6 +147,7 @@ if (fontsSecond.notModified) {
 
 The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, frontend-design contract, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, blog taxonomy, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
 The default return types expose Backy contract shapes such as `BackyFrontendDesignContract`, `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyBlogCategory`, `BackyBlogTag`, `BackyBlogAuthor`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+`submitForm()` accepts field values under `values`, `fields`, `data`, `submission`, or direct field keys for custom frontend compatibility. Validation failures throw `BackyApiError` with `code === "VALIDATION_ERROR"` and a `validation` array of `{ field, code, message, label? }` details.
 
 ## Local validation
 

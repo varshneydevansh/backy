@@ -24,6 +24,9 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - Payloads with alias keys normalize to same internal map.
 - **Validation**:
   - Matrix tests for `text/email/url/file/select/checkbox/radio/list`.
+- **Progress**:
+  - Public submission parsing now accepts `values`, `fields`, `data`, `submission`, and direct field-key payloads while preserving reserved transport metadata.
+  - OpenAPI exposes `FormSubmissionRequest` with those aliases and direct field-key support; `test:forms` asserts the contract.
 
 ### Task 1.2: Form pipeline strict validation
 - **Location**: `apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts`, `apps/public/src/lib/backyStore.ts`
@@ -36,6 +39,10 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - Invalid payloads return 400 with machine-readable errors and no persistence mutation.
 - **Validation**:
   - API call suite for required fields, pattern validation, and type mismatch.
+- **Progress**:
+  - Invalid submissions now return a typed `VALIDATION_ERROR` envelope with `validation: [{ field, code, message, label? }]`.
+  - Public validation currently uses HTTP `422` for semantic field/spam rejection and keeps `400` for malformed submit payloads.
+  - OpenAPI exposes `FormSubmissionValidationErrorEnvelope`, and the SDK preserves validation details on `BackyApiError.validation`.
 
 ### Task 1.3: Moderation lifecycle and admin controls
 - **Location**: `apps/admin/src/routes/sites.$siteId.tsx`, `apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts`, `apps/public/src/lib/backyStore.ts`
