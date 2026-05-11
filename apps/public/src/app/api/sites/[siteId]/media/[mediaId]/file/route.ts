@@ -53,6 +53,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return jsonError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const publishState = site as { isPublished?: boolean; status?: string };
+    if (publishState.isPublished === false || (publishState.isPublished === undefined && publishState.status !== 'published')) {
+      return jsonError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
     const media = repositories
       ? await repositories.media.getById(site.id, mediaId)
       : getMediaById(site.id, mediaId);
