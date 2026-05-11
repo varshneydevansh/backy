@@ -5,6 +5,9 @@ import { createBackyClient } from '../dist/index.js';
 const baseUrl = (process.env.BACKY_SDK_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const configuredIdentifier = process.env.BACKY_SDK_SITE_IDENTIFIER || '';
 const runWriteSmoke = process.env.BACKY_SDK_SKIP_WRITE_SMOKE !== '1';
+const configuredAdminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
+let adminRequestApiKey = configuredAdminApiKey;
+let adminSessionToken = '';
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -13,7 +16,20 @@ const assert = (condition, message) => {
 };
 
 async function request(path, init) {
-  const response = await fetch(`${baseUrl}${path}`, init);
+  const headers = new Headers(init?.headers || {});
+
+  if (path.startsWith('/api/admin/')) {
+    if (adminRequestApiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+      headers.set('x-backy-admin-key', adminRequestApiKey);
+    } else if (adminSessionToken && !headers.has('authorization')) {
+      headers.set('authorization', `Bearer ${adminSessionToken}`);
+    }
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers,
+  });
   const text = await response.text();
   let json = null;
 
@@ -26,7 +42,43 @@ async function request(path, init) {
   return { response, json, text, url: `${baseUrl}${path}` };
 }
 
+async function loginAdminApi() {
+  if (adminRequestApiKey || adminSessionToken) {
+    return;
+  }
+
+  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const json = await response.json().catch(() => ({}));
+
+  if (!response.ok || json.success === false || !json.data?.session?.token) {
+    throw new Error(`Unable to create admin session for SDK smoke: ${JSON.stringify(json).slice(0, 500)}`);
+  }
+
+  adminSessionToken = json.data.session.token;
+}
+
+function adminClientHeaders() {
+  if (adminRequestApiKey) {
+    return { 'x-backy-admin-key': adminRequestApiKey };
+  }
+
+  if (adminSessionToken) {
+    return { authorization: `Bearer ${adminSessionToken}` };
+  }
+
+  return {};
+}
+
 async function createSdkSmokeFixture() {
+  await loginAdminApi();
+
   const unique = Date.now();
   const siteSlug = `sdk-smoke-site-${unique}`;
   const pageSlug = `sdk-smoke-page-${unique}`;
@@ -320,6 +372,12 @@ const seo = await client.seo();
 assert(Array.isArray(seo.data.routes), 'seo() missing route metadata');
 assert(seo.data.sitemap?.url, 'seo() missing sitemap URL');
 assert(Array.isArray(seo.data.defaults?.jsonLd), 'seo() missing JSON-LD defaults array');
+const cachedSeo = await client.seoCached();
+assert(cachedSeo.notModified === false, 'seoCached() first request should return a body');
+assert(cachedSeo.meta.etag, 'seoCached() missing response ETag');
+assert(Array.isArray(cachedSeo.body.data.routes), 'seoCached() missing route metadata');
+const revalidatedSeo = await client.seoCached({ etag: cachedSeo.meta.etag });
+assert(revalidatedSeo.notModified === true, 'seoCached() did not return notModified for matching ETag');
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');
@@ -371,6 +429,7 @@ if (runWriteSmoke) {
     const writeClient = createBackyClient({
       baseUrl,
       requestIdFactory: () => 'sdk-write-smoke-request',
+      defaultHeaders: adminClientHeaders(),
     });
     await writeClient.discoverSite(fixture.siteSlug);
 
@@ -592,6 +651,7 @@ console.log(JSON.stringify({
     'renderCached',
     'navigation',
     'seo',
+    'seoCached',
     'media',
     'mediaFileUrl',
     'mediaTransformUrl',

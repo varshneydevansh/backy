@@ -989,6 +989,13 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/seo`);
   }
 
+  seoCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackySeoDiscovery>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/seo`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
   pages(options: { path?: string; previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages`, {
       query: { path: options.path, previewToken: options.previewToken },
