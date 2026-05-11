@@ -324,6 +324,7 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
         },
 
         async deleteFolder(siteId: string, folderId: string): Promise<boolean> {
+            await database.update(mediaFolders).set({ parentId: null }).where(and(eq(mediaFolders.siteId, siteId), eq(mediaFolders.parentId, folderId))).returning();
             await database.update(media).set({ folderId: null, updatedAt: new Date() }).where(and(eq(media.siteId, siteId), eq(media.folderId, folderId))).returning();
             await database.delete(mediaFolders).where(and(eq(mediaFolders.siteId, siteId), eq(mediaFolders.id, folderId)));
             return true;

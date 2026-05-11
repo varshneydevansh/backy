@@ -6282,6 +6282,15 @@ export function deleteMediaFolder(siteId: string, folderId: string): boolean {
 
   MEDIA_FOLDERS.splice(index, 1);
 
+  for (let folderIndex = 0; folderIndex < MEDIA_FOLDERS.length; folderIndex += 1) {
+    if (MEDIA_FOLDERS[folderIndex].siteId === siteId && MEDIA_FOLDERS[folderIndex].parentId === folderId) {
+      MEDIA_FOLDERS[folderIndex] = {
+        ...MEDIA_FOLDERS[folderIndex],
+        parentId: null,
+      };
+    }
+  }
+
   for (let mediaIndex = 0; mediaIndex < MEDIA_LIBRARY.length; mediaIndex += 1) {
     if (MEDIA_LIBRARY[mediaIndex].siteId === siteId && MEDIA_LIBRARY[mediaIndex].folderId === folderId) {
       MEDIA_LIBRARY[mediaIndex] = {
