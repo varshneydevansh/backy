@@ -2657,6 +2657,7 @@ function CanvasElementComponent({
                 backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
                 border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
                 borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
+                display: 'flex',
                 flexDirection: 'column',
                 gap: 8,
                 boxSizing: 'border-box',
@@ -2671,7 +2672,7 @@ function CanvasElementComponent({
                   return (
                     <label
                       key={`${element.id}-${option}-${optionIndex}`}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: p.fontSize ?? 14 }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: p.fontSize ?? 14 }}
                     >
                       <input
                         type={element.type}
