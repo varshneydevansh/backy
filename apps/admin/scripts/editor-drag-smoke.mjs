@@ -883,6 +883,43 @@ const setFormControlByTestId = async (client, testId, value) => {
   return changed;
 };
 
+const setInputValueByTestId = async (client, testId, value) => {
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return {
+      ok: input.value === ${JSON.stringify(String(value))},
+      value: input.value,
+      testId: ${JSON.stringify(testId)},
+    };
+  })()`);
+
+  assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
+  await sleep(250);
+  return changed;
+};
+
+const blurActiveElement = async (client) => {
+  await evaluate(client, `(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    document.body?.focus?.();
+    return true;
+  })()`);
+  await sleep(100);
+};
+
 const switchToPropertiesPanel = async (client) => {
   const clicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="editor-tab-properties"]');
@@ -1347,6 +1384,36 @@ const testKeyboardNudge = async (client, elementId) => {
   };
 };
 
+const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
+  await selectElement(client, elementId);
+  const before = await readEditorElementState(client, [elementId]);
+  await pressKey(client, 'ArrowRight', { shiftKey: true });
+  const nudged = await readEditorElementState(client, [elementId]);
+
+  assert(
+    nudged[elementId].x === before[elementId].x + 10 &&
+    nudged[elementId].y === before[elementId].y,
+    `${elementId} keyboard nudge before undo failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(nudged[elementId])}`,
+  );
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undone = await readEditorElementState(client, [elementId]);
+  assertElementState(undone, before, `${elementId} keyboard Ctrl+Z`);
+
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const redone = await readEditorElementState(client, [elementId]);
+  assertElementState(redone, nudged, `${elementId} keyboard Ctrl+Shift+Z`);
+
+  return {
+    elementId,
+    before: before[elementId],
+    nudged: nudged[elementId],
+    undone: undone[elementId],
+    redone: redone[elementId],
+  };
+};
+
 const testUndoRedoAfterDrag = async (client, elementId) => {
   const before = await readEditorElementState(client, [elementId]);
   const drag = await dragElement(client, elementId, 30, 20);
@@ -1367,6 +1434,66 @@ const testUndoRedoAfterDrag = async (client, elementId) => {
     moved: moved[elementId],
     undone: undone[elementId],
     redone: redone[elementId],
+  };
+};
+
+const testUndoRedoAfterInspectorLayoutChange = async (client, elementId) => {
+  await selectLayerById(client, elementId);
+  const before = await readEditorElementState(client, [elementId]);
+  const targetX = before[elementId].x + 37;
+  await setInputValueByTestId(client, 'editor-layout-x', targetX);
+  const changed = await readEditorElementState(client, [elementId]);
+
+  assert(
+    Math.abs(changed[elementId].x - targetX) <= 1,
+    `${elementId} inspector layout change failed: expected x ${targetX}, got ${JSON.stringify(changed[elementId])}`,
+  );
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undone = await readEditorElementState(client, [elementId]);
+  assertElementState(undone, before, `${elementId} inspector Ctrl+Z`);
+
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const redone = await readEditorElementState(client, [elementId]);
+  assertElementState(redone, changed, `${elementId} inspector Ctrl+Shift+Z`);
+
+  return {
+    elementId,
+    before: before[elementId],
+    changed: changed[elementId],
+    undone: undone[elementId],
+    redone: redone[elementId],
+  };
+};
+
+const testUndoRedoAfterLayerVisibilityToggle = async (client, elementId) => {
+  await setLayerHiddenState(client, elementId, false);
+  const before = await readLayerActionState(client, elementId);
+  await setLayerHiddenState(client, elementId, true);
+  const hidden = await readLayerActionState(client, elementId);
+  assert(hidden.hidden === true, `${elementId} layer visibility toggle did not hide layer: ${JSON.stringify(hidden)}`);
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undone = await readLayerActionState(client, elementId);
+  assert(undone.hidden === before.hidden, `${elementId} layer visibility Ctrl+Z mismatch: before ${JSON.stringify(before)}, after ${JSON.stringify(undone)}`);
+
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const redone = await readLayerActionState(client, elementId);
+  assert(redone.hidden === true, `${elementId} layer visibility Ctrl+Shift+Z mismatch: ${JSON.stringify(redone)}`);
+
+  await pressKey(client, 'z', { ctrlKey: true });
+  const restored = await readLayerActionState(client, elementId);
+  assert(restored.hidden === before.hidden, `${elementId} layer visibility restore mismatch: before ${JSON.stringify(before)}, after ${JSON.stringify(restored)}`);
+
+  return {
+    elementId,
+    before,
+    hidden,
+    undone,
+    redone,
+    restored,
   };
 };
 
@@ -2954,7 +3081,15 @@ const main = async () => {
             await testUndoRedoAfterDrag(client, 'smoke-box'),
           ],
         };
+    const nonDragUndoRedo = EDITOR_PATH
+      ? null
+      : {
+          inspectorLayout: await testUndoRedoAfterInspectorLayoutChange(client, 'smoke-top-edge'),
+          keyboardNudge: await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge'),
+          layerVisibility: await testUndoRedoAfterLayerVisibilityToggle(client, 'smoke-form'),
+        };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
+    await switchToPropertiesPanel(client);
     const dirtySaveStatus = await readEditorSaveStatus(client);
     assert(
       /Unsaved|Autosaving|Saving|Saved|Save failed/.test(dirtySaveStatus.text),
@@ -3133,6 +3268,7 @@ const main = async () => {
       editingMoveHandleDrags,
       resizes,
       keyboard,
+      nonDragUndoRedo,
       inspector,
       dirtySaveStatus,
       fontPicker,
