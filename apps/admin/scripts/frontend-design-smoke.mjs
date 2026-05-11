@@ -4,6 +4,7 @@ import { validateAiFrontendManifest } from '../../public/scripts/validate-ai-ren
 
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_FRONTEND_DESIGN_SMOKE_SITE_ID || 'site-demo';
+const PRODUCT_COLLECTION_SLUG = 'products';
 let apiAdminSessionToken = '';
 
 const assert = (condition, message) => {
@@ -98,6 +99,14 @@ const getManifest = async () => {
   return payload.data;
 };
 
+const getProductCollection = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
+  const collections = payload.data?.collections || [];
+  const collection = collections.find((candidate) => candidate.slug === PRODUCT_COLLECTION_SLUG);
+  assert(collection?.id, `Products collection was not found: ${JSON.stringify(collections).slice(0, 1000)}`);
+  return collection;
+};
+
 const smokeContract = () => ({
   schemaVersion: 'backy.frontend-design.v1',
   status: 'synced',
@@ -160,6 +169,109 @@ const smokeContract = () => ({
         { role: 'post.title', binding: 'post.title' },
       ],
     },
+    {
+      id: 'smoke-form-template',
+      type: 'form',
+      name: 'Smoke Form Template',
+      routePattern: '/forms/{slug}',
+      content: {
+        name: 'Smoke Lead Form',
+        title: 'Smoke Lead Form',
+        description: 'Lead form seeded from the connected frontend design contract.',
+        successMessage: 'Thanks. We received your request.',
+        fields: [
+          { id: 'smoke-form-name', key: 'name', label: 'Name', type: 'text', required: true },
+          { id: 'smoke-form-email', key: 'email', label: 'Email', type: 'email', required: true },
+        ],
+        settings: {
+          layout: 'stacked',
+          submitLabel: 'Send request',
+        },
+      },
+      bindingHints: [
+        { role: 'form.title', binding: 'form.title' },
+        { role: 'form.fields', binding: 'form.fields' },
+      ],
+    },
+    {
+      id: 'smoke-section-template',
+      type: 'section',
+      name: 'Smoke Section Template',
+      routePattern: '/sections/smoke',
+      content: {
+        name: 'Smoke Hero Section',
+        category: 'layout',
+        tags: ['frontend-design'],
+        section: {
+          elements: [
+            {
+              id: 'smoke-section-root',
+              type: 'section',
+              x: 0,
+              y: 0,
+              width: 1200,
+              height: 360,
+              props: { background: '#ffffff' },
+            },
+          ],
+        },
+      },
+      bindingHints: [
+        { role: 'section.root', binding: 'section.content' },
+      ],
+    },
+    {
+      id: 'smoke-collection-template',
+      type: 'collection',
+      name: 'Smoke Directory Collection',
+      routePattern: '/directory/:recordSlug',
+      content: {
+        name: 'Smoke Directory',
+        slug: 'smoke-directory',
+        status: 'published',
+        routePattern: '/directory/:recordSlug',
+        listRoutePattern: '/directory',
+        fields: [
+          { id: 'smoke-directory-title', key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
+          { id: 'smoke-directory-summary', key: 'summary', label: 'Summary', type: 'textarea', required: false, unique: false, sortOrder: 20 },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      },
+      bindingHints: [
+        { role: 'collection.list', binding: 'collection.records' },
+      ],
+    },
+    {
+      id: 'smoke-product-template',
+      type: 'product',
+      name: 'Smoke Product Template',
+      routePattern: '/products/smoke-design-product',
+      content: {
+        slug: 'smoke-design-product',
+        values: {
+          title: 'Smoke design product',
+          sku: 'SMOKE-DESIGN-PRODUCT',
+          price: 49,
+          currency: 'USD',
+          inventory: 7,
+          productType: 'digital',
+          shippingRequired: false,
+          imageUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
+          description: 'Product seeded from the connected frontend design contract.',
+          featured: true,
+          taxable: true,
+        },
+      },
+      bindingHints: [
+        { role: 'product.title', binding: 'product.title' },
+        { role: 'product.price', binding: 'product.price' },
+      ],
+    },
   ],
   editableMap: [
     {
@@ -189,6 +301,11 @@ const main = async () => {
   const unique = Date.now().toString(36);
   let createdPageId = null;
   let createdPostId = null;
+  let createdFormId = null;
+  let createdSectionId = null;
+  let createdCollectionId = null;
+  let createdProductRecordId = null;
+  let productCollectionId = null;
 
   try {
     const patchPayload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
@@ -198,7 +315,7 @@ const main = async () => {
     const patched = patchPayload.data?.frontendDesign;
     assert(patched.status === 'synced', `Patched status was not synced: ${patched.status}`);
     assert(patched.source?.type === 'custom-frontend', `Patched source type was not custom frontend: ${patched.source?.type}`);
-    assert(patched.templates?.length === 2, `Patched template count was unexpected: ${patched.templates?.length}`);
+    assert(patched.templates?.length === 6, `Patched template count was unexpected: ${patched.templates?.length}`);
     assert(patched.chrome?.header?.component === 'SiteHeader', 'Patched chrome header was not preserved');
     await assertFrontendDesignAudit(
       'frontendDesign.update',
@@ -207,7 +324,7 @@ const main = async () => {
         entry.before?.schemaVersion === 'backy.frontend-design.v1' &&
         entry.after?.status === 'synced' &&
         entry.metadata?.sourceType === 'custom-frontend' &&
-        entry.metadata?.templateCount === 2
+        entry.metadata?.templateCount === 6
       ),
       'Frontend design update audit log was not recorded',
     );
@@ -219,7 +336,7 @@ const main = async () => {
     validateAiFrontendManifest({ success: true, requestId: 'frontend-design-smoke', data: manifestAfterPatch }, 'frontend design manifest after patch');
     assert(manifestAfterPatch.site?.frontendDesign?.status === 'synced', 'Manifest did not expose synced frontend design contract');
     assert(manifestAfterPatch.capabilities?.frontendDesignContract === true, 'Manifest did not advertise frontend design capability');
-    assert(manifestAfterPatch.endpoints?.frontendDesign?.includes('#data.site.frontendDesign'), 'Manifest did not expose frontend design endpoint anchor');
+    assert(manifestAfterPatch.endpoints?.frontendDesign === `/api/sites/${SITE_ID}/frontend-design`, 'Manifest did not expose frontend design endpoint');
 
     const seededPage = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
       method: 'POST',
@@ -252,6 +369,72 @@ const main = async () => {
     assert(seededPost.data?.post?.meta?.frontendDesignChrome?.header?.component === 'SiteHeader', 'Template-seeded post did not preserve frontend chrome');
     assert(Array.isArray(seededPost.data?.post?.content?.elements) && seededPost.data.post.content.elements.length > 0, 'Template-seeded post did not create editable content');
 
+    const seededForm = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Smoke Lead Form ${unique}`,
+        title: `Smoke Lead Form ${unique}`,
+        frontendDesignTemplateId: 'smoke-form-template',
+      }),
+    });
+    createdFormId = seededForm.data?.form?.id;
+    assert(createdFormId, 'Template-seeded form create did not return a form id');
+    assert(seededForm.data?.form?.settings?.frontendDesignTemplateId === 'smoke-form-template', 'Template-seeded form did not preserve template metadata');
+    assert(seededForm.data?.form?.settings?.frontendDesignChrome?.footer?.component === 'SiteFooter', 'Template-seeded form did not preserve frontend chrome');
+    assert(seededForm.data?.form?.settings?.frontendDesignTokens?.colors?.primary === '#0f766e', 'Template-seeded form did not preserve frontend tokens');
+    assert(Array.isArray(seededForm.data?.form?.fields) && seededForm.data.form.fields.length === 2, 'Template-seeded form did not preserve frontend fields');
+
+    const seededSection = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Smoke Hero Section ${unique}`,
+        slug: `smoke-hero-section-${unique}`,
+        frontendDesignTemplateId: 'smoke-section-template',
+      }),
+    });
+    createdSectionId = seededSection.data?.section?.id;
+    assert(createdSectionId, 'Template-seeded reusable section create did not return a section id');
+    assert(seededSection.data?.section?.metadata?.frontendDesignTemplateId === 'smoke-section-template', 'Template-seeded section did not preserve template metadata');
+    assert(seededSection.data?.section?.metadata?.frontendDesignSource?.type === 'custom-frontend', 'Template-seeded section did not preserve frontend source');
+    assert(Array.isArray(seededSection.data?.section?.content?.elements) && seededSection.data.section.content.elements.length > 0, 'Template-seeded section did not preserve frontend elements');
+
+    const seededCollection = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Smoke Directory ${unique}`,
+        slug: `smoke-directory-${unique}`,
+        routePattern: `/directory-${unique}/:recordSlug`,
+        listRoutePattern: `/directory-${unique}`,
+        frontendDesignTemplateId: 'smoke-collection-template',
+      }),
+    });
+    createdCollectionId = seededCollection.data?.collection?.id;
+    assert(createdCollectionId, 'Template-seeded collection create did not return a collection id');
+    assert(seededCollection.data?.collection?.metadata?.frontendDesignTemplateId === 'smoke-collection-template', 'Template-seeded collection did not preserve template metadata');
+    assert(seededCollection.data?.collection?.metadata?.frontendDesignTokens?.fonts?.heading === 'Inter', 'Template-seeded collection did not preserve frontend tokens');
+    assert(Array.isArray(seededCollection.data?.collection?.fields) && seededCollection.data.collection.fields.length === 2, 'Template-seeded collection did not preserve frontend fields');
+
+    const productCollection = await getProductCollection();
+    productCollectionId = productCollection.id;
+    const seededProductRecord = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records`, {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: `smoke-design-product-${unique}`,
+        status: 'published',
+        frontendDesignTemplateId: 'smoke-product-template',
+        values: {
+          title: `Smoke design product ${unique}`,
+          sku: `SMOKE-DESIGN-${unique.toUpperCase()}`,
+        },
+      }),
+    });
+    createdProductRecordId = seededProductRecord.data?.record?.id;
+    assert(createdProductRecordId, 'Template-seeded product record create did not return a record id');
+    assert(seededProductRecord.data?.record?.values?.frontendDesignTemplateId === 'smoke-product-template', 'Template-seeded product did not preserve template metadata');
+    assert(seededProductRecord.data?.record?.values?.frontendDesignRoutePattern === '/products/smoke-design-product', 'Template-seeded product did not preserve frontend route pattern');
+    assert(seededProductRecord.data?.record?.values?.frontendDesignChrome?.header?.component === 'SiteHeader', 'Template-seeded product did not preserve frontend chrome');
+    assert(seededProductRecord.data?.record?.values?.price === 49, 'Template-seeded product did not preserve template values');
+
     const { captured, payload: capturePayload } = await captureSiteDefaults();
     assert(captured.chrome?.navigation, 'Capture did not include navigation chrome');
     await assertFrontendDesignAudit(
@@ -276,6 +459,18 @@ const main = async () => {
     }
     if (createdPostId) {
       await requestApi(`/api/admin/sites/${SITE_ID}/blog/${createdPostId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    if (createdFormId) {
+      await requestApi(`/api/admin/sites/${SITE_ID}/forms/${createdFormId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    if (createdSectionId) {
+      await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${createdSectionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    if (createdProductRecordId && productCollectionId) {
+      await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollectionId}/records/${createdProductRecordId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    if (createdCollectionId) {
+      await requestApi(`/api/admin/sites/${SITE_ID}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
     }
     await patchFrontendDesign(original);
   }
