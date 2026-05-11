@@ -28,6 +28,7 @@ import {
   deleteContactSavedList,
   getAdminApiBase,
   importFormContactsCsv,
+  listAdminAuditLogs,
   listContactSavedLists,
   listContactSegments,
   listFormContacts,
@@ -37,6 +38,7 @@ import {
   syncFormContacts,
   listForms,
   updateContact,
+  type AdminAuditLog,
   type AdminContact,
   type ContactConsentRetentionResult,
   type ContactSyncDelivery,
@@ -70,6 +72,12 @@ const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email',
 const CONTACT_IMPORT_COLUMNS = ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'] as const;
 const CONTACT_PROMOTION_SOURCE_KEY = '__backyPromotion';
 const CONTACT_CUSTOMER_PROMOTION_SOURCE_KEY = '__backyCustomerPromotion';
+const CONTACT_ACCESS_PERMISSIONS = [
+  { key: 'forms.view', detail: 'Load source forms, private contacts, segments, and saved lead lists.' },
+  { key: 'forms.manage', detail: 'Create, update, import, promote, sync, merge, and apply contact retention.' },
+  { key: 'forms.export', detail: 'Export lead CSV files and contact consent evidence.' },
+  { key: 'activity.export', detail: 'Read contact, form, and settings audit activity for this site.' },
+] as const;
 
 const normalizeContactEmail = (value?: string | null) => value?.trim().toLowerCase() || '';
 
@@ -253,6 +261,9 @@ function ContactsRoute() {
   const [lastContactSync, setLastContactSync] = useState<ContactSyncDelivery | null>(null);
   const [contactRetentionDays, setContactRetentionDays] = useState('0');
   const [lastContactRetention, setLastContactRetention] = useState<ContactConsentRetentionResult | null>(null);
+  const [contactAuditLogs, setContactAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingContactAudit, setIsLoadingContactAudit] = useState(false);
+  const [contactAuditError, setContactAuditError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -616,6 +627,11 @@ function ContactsRoute() {
       lastAnonymized: lastContactRetention?.anonymized || 0,
       consentFieldKeys: lastContactRetention?.consentFieldKeys || [],
     },
+    access: {
+      permissions: CONTACT_ACCESS_PERMISSIONS,
+      auditLogCount: contactAuditLogs.length,
+      auditActions: Array.from(new Set(contactAuditLogs.map((log) => log.action))),
+    },
     filters: {
       formId: selectedFormId,
       status: statusFilter,
@@ -709,6 +725,7 @@ function ContactsRoute() {
     contactRetentionDays,
     contactSyncUrl,
     contactPromoteCustomerUrl,
+    contactAuditLogs,
     contactSavedLists,
     contactSegments,
     contactSegmentsUrl,
@@ -802,6 +819,21 @@ function ContactsRoute() {
     }
   };
 
+  const loadContactAuditLogs = async () => {
+    setIsLoadingContactAudit(true);
+    setContactAuditError(null);
+
+    try {
+      const result = await listAdminAuditLogs({ siteId: activeSiteId, limit: 40 });
+      setContactAuditLogs(result.logs.filter(isContactAuditLog).slice(0, 8));
+    } catch (auditError) {
+      setContactAuditLogs([]);
+      setContactAuditError(auditError instanceof Error ? auditError.message : 'Unable to load contact audit activity.');
+    } finally {
+      setIsLoadingContactAudit(false);
+    }
+  };
+
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
@@ -835,6 +867,7 @@ function ContactsRoute() {
 
   useEffect(() => {
     void loadContacts();
+    void loadContactAuditLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
 
@@ -996,6 +1029,7 @@ function ContactsRoute() {
       } else {
         setNotice(`Synced ${syncedCount} selected contact${syncedCount === 1 ? '' : 's'} to webhook.`);
       }
+      void loadContactAuditLogs();
     } finally {
       setUpdatingId(null);
     }
@@ -1129,6 +1163,7 @@ function ContactsRoute() {
       });
       setSelectedContactIds([]);
       setNotice(`Anonymized consent evidence for ${combined.anonymized} due contact${combined.anonymized === 1 ? '' : 's'}.`);
+      void loadContactAuditLogs();
     } catch (retentionError) {
       setError(retentionError instanceof Error ? retentionError.message : 'Unable to run contact retention');
     } finally {
@@ -1233,6 +1268,7 @@ function ContactsRoute() {
       setNotice(result.invite?.inviteUrl
         ? `Promoted ${result.user.email} to an invited user. Invite link is ready in the contact metadata.`
         : `Promoted ${result.user.email} to ${result.existingUser ? 'an existing' : 'a new'} user account.`);
+      void loadContactAuditLogs();
     } catch (promotionError) {
       setError(promotionError instanceof Error ? promotionError.message : 'Unable to promote contact to user');
     } finally {
@@ -1253,6 +1289,7 @@ function ContactsRoute() {
       });
       updateContactInState(result.contact);
       setNotice(`Promoted ${contact.email || result.record.slug} to ${result.existingRecord ? 'an existing' : 'a new'} customer profile.`);
+      void loadContactAuditLogs();
     } catch (promotionError) {
       setError(promotionError instanceof Error ? promotionError.message : 'Unable to promote contact to customer');
     } finally {
@@ -1486,6 +1523,7 @@ function ContactsRoute() {
       setContactSavedLists(result.lists);
       setSavedListName('');
       setNotice(`Saved list "${result.list.name}" for ${filteredContacts.length} visible contact${filteredContacts.length === 1 ? '' : 's'}.`);
+      void loadContactAuditLogs();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save contact list');
     } finally {
@@ -1524,6 +1562,7 @@ function ContactsRoute() {
       await deleteContactSavedList(activeSiteId, list.id);
       setContactSavedLists((current) => current.filter((item) => item.id !== list.id));
       setNotice(`Deleted saved list "${list.name}".`);
+      void loadContactAuditLogs();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete saved contact list');
     } finally {
@@ -1964,6 +2003,68 @@ function ContactsRoute() {
         <code className="mt-4 block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
           {contactListsUrl}
         </code>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-border bg-card p-4" data-testid="contacts-access-audit">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Contacts access and audit</h2>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Contact APIs are permission-gated, and recent contact activity is read from the admin audit log endpoint.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void loadContactAuditLogs()}
+            disabled={isLoadingContactAudit}
+            iconStart={<RefreshCw className={cn('size-4', isLoadingContactAudit && 'animate-spin')} />}
+          >
+            Refresh audit
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+          <div className="rounded-lg border border-border bg-background p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permission contract</h3>
+            <div className="mt-3 grid gap-2">
+              {CONTACT_ACCESS_PERMISSIONS.map((permission) => (
+                <div key={permission.key} className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="font-mono text-xs font-semibold text-foreground">{permission.key}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{permission.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent activity</h3>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                activity.export
+              </span>
+            </div>
+            {contactAuditError ? (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {contactAuditError}
+              </div>
+            ) : isLoadingContactAudit ? (
+              <div className="mt-3 flex h-28 items-center justify-center rounded-md border border-dashed border-border">
+                <div className="size-6 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+              </div>
+            ) : contactAuditLogs.length === 0 ? (
+              <div className="mt-3 rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                No contact audit activity yet for this site.
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                {contactAuditLogs.map((log) => (
+                  <ContactAuditLogCard key={log.id} log={log} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <Panel id="contacts-inbox" className="scroll-mt-24">
@@ -2561,6 +2662,75 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function isContactAuditLog(log: AdminAuditLog): boolean {
+  if (log.entity === 'contact') return true;
+  if (String(log.action).startsWith('contact') || String(log.action).startsWith('contacts.')) return true;
+  if (log.action === 'contactList.create' || log.action === 'contactList.update' || log.action === 'contactList.delete') return true;
+  if (log.entity === 'form' && (log.action === 'contacts.sync' || log.action === 'contact.consentRetention')) return true;
+  return Boolean(typeof log.metadata?.contactId === 'string' || Array.isArray(log.metadata?.contactIds));
+}
+
+function auditValue(log: AdminAuditLog, key: string): string {
+  const value = log.metadata?.[key];
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.length > 0 ? `${value.length} selected` : '';
+  return '';
+}
+
+function contactAuditTitle(log: AdminAuditLog): string {
+  if (log.action === 'contactList.create') return 'Saved lead list created';
+  if (log.action === 'contactList.update') return 'Saved lead list updated';
+  if (log.action === 'contactList.delete') return 'Saved lead list deleted';
+  if (log.action === 'contact.promote.user') return 'Contact promoted to user';
+  if (log.action === 'contact.promote.customer') return 'Contact promoted to customer';
+  if (log.action === 'contacts.sync') return 'Selected contacts synced';
+  if (log.action === 'contact.consentRetention') return 'Contact retention applied';
+  return log.action.replace(/[._-]+/g, ' ');
+}
+
+function contactAuditDescription(log: AdminAuditLog): string {
+  if (log.action === 'contacts.sync') {
+    return `${auditValue(log, 'count') || '0'} contact${auditValue(log, 'count') === '1' ? '' : 's'} to ${auditValue(log, 'target') || 'webhook'}.`;
+  }
+  if (log.action === 'contact.consentRetention') {
+    return `${auditValue(log, 'anonymized') || '0'} anonymized from ${auditValue(log, 'scanned') || '0'} scanned contact${auditValue(log, 'scanned') === '1' ? '' : 's'}.`;
+  }
+  if (log.action === 'contact.promote.user') {
+    return `${auditValue(log, 'email') || log.entityId} into ${auditValue(log, 'role') || 'viewer'} access.`;
+  }
+  if (log.action === 'contact.promote.customer') {
+    return `${auditValue(log, 'email') || log.entityId} into ${auditValue(log, 'collectionId') || 'customers'}.`;
+  }
+  if (log.action.startsWith('contactList.')) {
+    return `${log.entityId}${auditValue(log, 'status') ? ` | ${auditValue(log, 'status')}` : ''}`;
+  }
+  return [log.entity, log.entityId].filter(Boolean).join(' | ');
+}
+
+function ContactAuditLogCard({ log }: { log: AdminAuditLog }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-foreground">{contactAuditTitle(log)}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{contactAuditDescription(log)}</div>
+        </div>
+        <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
+          {formatDate(log.createdAt)}
+        </time>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span className="rounded bg-muted px-2 py-1">{log.actorId || 'admin'}</span>
+        <span className="rounded bg-muted px-2 py-1">{log.entity}</span>
+        {log.requestId ? (
+          <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

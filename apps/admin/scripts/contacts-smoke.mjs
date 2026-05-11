@@ -863,6 +863,37 @@ const applyContactRetentionInUi = async (client, formId, contact) => {
   throw new Error(`Contact retention did not anonymize consent evidence for ${contact.email}`);
 };
 
+const waitForContactAuditPanel = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="contacts-access-audit"]');
+      const text = panel?.textContent || '';
+      return {
+        ok: Boolean(panel) &&
+          text.includes('forms.view') &&
+          text.includes('forms.manage') &&
+          text.includes('forms.export') &&
+          text.includes('activity.export') &&
+          text.includes('Contact retention applied') &&
+          text.includes('Selected contacts synced') &&
+          text.includes('Contact promoted to user') &&
+          text.includes('Contact promoted to customer'),
+        text: text.slice(0, 1200),
+      };
+    })()`);
+
+    if (state.ok) return state;
+
+    if (attempt === 79) {
+      throw new Error(`Contact access/audit panel did not show expected activity: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -895,6 +926,11 @@ const assertLayout = async (client) => {
       hasContactRetention: Boolean(document.querySelector('[data-testid="contacts-retention-apply"]')) &&
         document.body?.innerText?.includes('/contacts/consent-retention') &&
         document.body?.innerText?.includes('Last retention:'),
+      hasAccessAudit: Boolean(document.querySelector('[data-testid="contacts-access-audit"]')) &&
+        document.body?.innerText?.includes('Contacts access and audit') &&
+        document.body?.innerText?.includes('forms.manage') &&
+        document.body?.innerText?.includes('activity.export') &&
+        document.body?.innerText?.includes('Contact retention applied'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -914,6 +950,7 @@ const assertLayout = async (client) => {
     && layout.hasPromoteCustomer
     && layout.hasContactSync
     && layout.hasContactRetention
+    && layout.hasAccessAudit
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -1024,6 +1061,7 @@ const main = async () => {
     )), `Contact sync receiver did not receive promoted contact: ${JSON.stringify(syncReceiver.received).slice(0, 500)}`);
     const retentionExport = await exportContactRetention(form.id, contact);
     const retainedContact = await applyContactRetentionInUi(client, form.id, contact);
+    const contactAudit = await waitForContactAuditPanel(client);
     const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
@@ -1099,6 +1137,9 @@ const main = async () => {
         contactId: retainedContact.id,
         consent: retainedContact.sourceValues?.consent,
         exportedDue: retentionExport.due,
+      },
+      contactAudit: {
+        visible: contactAudit.ok,
       },
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
