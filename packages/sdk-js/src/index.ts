@@ -699,7 +699,6 @@ export interface BackyFormSubmissionInput {
   postId?: string;
   honeypot?: string;
   startedAt?: string | number;
-  rateLimitBypass?: boolean;
   contactShareOverride?: unknown;
   [fieldKey: string]: unknown;
 }
@@ -722,7 +721,6 @@ export interface BackyCommentInput {
   threadId?: string;
   commentThreadId?: string;
   moderationMode?: 'manual' | 'auto-approve';
-  rateLimitBypass?: boolean;
 }
 
 export interface BackyCommentListOptions extends BackyListOptions {

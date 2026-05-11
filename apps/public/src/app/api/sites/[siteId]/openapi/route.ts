@@ -2247,7 +2247,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           FormSubmissionRequest: {
             type: 'object',
             additionalProperties: true,
-            description: 'Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, rateLimitBypass, contactShareOverride, and captcha token fields are reserved transport metadata keys.',
+            description: 'Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, contactShareOverride, and captcha token fields are reserved transport metadata keys.',
             properties: {
               values: { type: 'object', additionalProperties: true, description: 'Preferred field value map.' },
               fields: { type: 'object', additionalProperties: true, description: 'Alias accepted for generated form integrations.' },
@@ -2258,7 +2258,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               postId: { type: 'string' },
               honeypot: { type: 'string' },
               startedAt: { oneOf: [{ type: 'string' }, { type: 'number' }] },
-              rateLimitBypass: { type: 'boolean' },
               captchaToken: { type: 'string', description: 'Captcha provider token for forms with captcha enabled.' },
               captchaResponse: { type: 'string', description: 'Alias for captchaToken.' },
               turnstileToken: { type: 'string', description: 'Cloudflare Turnstile token alias.' },
@@ -2353,7 +2352,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               moderationMode: { type: 'string', enum: ['manual', 'auto-approve'] },
               startedAt: { type: ['string', 'number'] },
               honeypot: { type: 'string' },
-              rateLimitBypass: { type: 'boolean' },
             },
           },
           CommentBulkUpdateRequest: {

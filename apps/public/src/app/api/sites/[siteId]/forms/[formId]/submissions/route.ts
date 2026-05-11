@@ -169,7 +169,6 @@ function parseRequestBody(raw: unknown) {
           key !== 'pageId' &&
           key !== 'postId' &&
           key !== 'requestId' &&
-          key !== 'rateLimitBypass' &&
           key !== 'startedAt' &&
           !CAPTCHA_TRANSPORT_KEYS.has(key)
         ) {
@@ -219,7 +218,6 @@ function parseRequestBody(raw: unknown) {
     requestId: typeof (raw as { requestId?: unknown }).requestId === 'string'
       ? (raw as { requestId: string }).requestId
       : undefined,
-    rateLimitBypass: (raw as { rateLimitBypass?: unknown }).rateLimitBypass === true,
     startedAt: typeof (raw as { startedAt?: unknown }).startedAt === 'number'
       ? (raw as { startedAt: number }).startedAt
       : typeof (raw as { startedAt?: unknown }).startedAt === 'string'
@@ -1000,7 +998,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           honeypot: parsed.honeypot,
           ipHash,
           requestId,
-          rateLimitBypass: parsed.rateLimitBypass,
           startedAt: parsed.startedAt,
         },
       );
@@ -1146,7 +1143,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         honeypot: parsed.honeypot,
         ipHash,
         requestId,
-        rateLimitBypass: parsed.rateLimitBypass,
         startedAt: parsed.startedAt,
       },
     );

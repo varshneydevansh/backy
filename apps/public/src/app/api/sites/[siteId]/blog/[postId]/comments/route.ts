@@ -46,29 +46,6 @@ function parseTextInput(raw: unknown) {
   return typeof raw === 'string' ? raw.trim() : '';
 }
 
-function parseBoolean(raw: unknown): boolean | undefined {
-  if (typeof raw === 'boolean') {
-    return raw;
-  }
-
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return raw !== 0;
-  }
-
-  if (typeof raw === 'string') {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
-      return true;
-    }
-
-    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
-      return false;
-    }
-  }
-
-  return undefined;
-}
-
 function parseStartedAt(raw: unknown): number | undefined {
   if (typeof raw === 'number' && Number.isFinite(raw)) {
     return raw;
@@ -289,7 +266,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const requestId = generateRequestId(parseTextInput(body.requestId) || undefined);
       const startedAt = parseStartedAt(body.startedAt);
       const honeypot = parseTextInput(body.honeypot);
-      const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
       const ipHash = extractIpHash(request);
 
       if (!policy.enabled) {
@@ -400,7 +376,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ipHash,
         requestId,
         startedAt,
-        rateLimitBypass,
         blockedTerms: policy.blockedTerms,
       });
 
@@ -519,7 +494,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const requestId = generateRequestId(parseTextInput(body.requestId) || undefined);
     const startedAt = parseStartedAt(body.startedAt);
     const honeypot = parseTextInput(body.honeypot);
-    const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
     const ipHash = extractIpHash(request);
 
     if (!policy.enabled) {
@@ -630,7 +604,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ipHash,
       requestId,
       startedAt,
-      rateLimitBypass,
       blockedTerms: policy.blockedTerms,
     });
 
