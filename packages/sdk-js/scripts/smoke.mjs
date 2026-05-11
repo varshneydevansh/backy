@@ -481,6 +481,24 @@ assert(Array.isArray(comments.data.comments), 'siteComments() missing comments a
 const events = await client.events({ limit: 5 });
 assert(Array.isArray(events.data.events), 'events() missing events array');
 
+let commerceCatalogChecked = false;
+try {
+  const commerceCatalog = await client.commerceCatalog({ limit: 5 });
+  assert(commerceCatalog.data.schemaVersion === 'backy.commerce-catalog.v1', 'commerceCatalog() missing schema version');
+  assert(Array.isArray(commerceCatalog.data.products), 'commerceCatalog() missing products array');
+  const cachedCommerceCatalog = await client.commerceCatalogCached({ limit: 5 });
+  assert(cachedCommerceCatalog.notModified === false, 'commerceCatalogCached() first request should return a body');
+  assert(cachedCommerceCatalog.body.data.schemaVersion === 'backy.commerce-catalog.v1', 'commerceCatalogCached() missing schema version');
+  assert(cachedCommerceCatalog.meta.etag, 'commerceCatalogCached() missing response ETag');
+  const revalidatedCommerceCatalog = await client.commerceCatalogCached({ limit: 5, etag: cachedCommerceCatalog.meta.etag });
+  assert(revalidatedCommerceCatalog.notModified === true, 'commerceCatalogCached() did not return notModified for matching ETag');
+  commerceCatalogChecked = true;
+} catch (error) {
+  if (error?.status !== 404 || !['PRODUCT_CATALOG_NOT_FOUND', 'SITE_NOT_FOUND'].includes(error?.code)) {
+    throw error;
+  }
+}
+
 const writeChecks = [];
 let fixture = null;
 
@@ -743,6 +761,7 @@ console.log(JSON.stringify({
     'formDefinitionCached',
     'siteComments',
     'events',
+    ...(commerceCatalogChecked ? ['commerceCatalog', 'commerceCatalogCached'] : []),
   ],
   writeChecked: writeChecks,
 }, null, 2));

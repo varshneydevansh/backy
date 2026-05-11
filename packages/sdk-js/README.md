@@ -74,6 +74,13 @@ if (recordsSecond.notModified) {
   console.log('Reuse your cached collection records.');
 }
 
+const catalogFirst = await backy.commerceCatalogCached({ featured: true });
+const catalogSecond = await backy.commerceCatalogCached({ featured: true, etag: catalogFirst.meta.etag });
+
+if (catalogSecond.notModified) {
+  console.log('Reuse your cached product catalog.');
+}
+
 const fontsFirst = await backy.mediaFontsCached();
 const fontsSecond = await backy.mediaFontsCached({ etag: fontsFirst.meta.etag });
 

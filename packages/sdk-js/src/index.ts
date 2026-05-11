@@ -1188,6 +1188,15 @@ export class BackyClient {
     });
   }
 
+  commerceCatalogCached(options: BackyCommerceCatalogOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceCatalog>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
+  }
+
   commerceOrderContract(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyCommerceOrderContract>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`);
   }
