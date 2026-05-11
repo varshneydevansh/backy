@@ -517,6 +517,11 @@ export interface BackyFormSubmission {
   [key: string]: unknown;
 }
 
+export interface BackyRenderFrontendDesign {
+  site: BackyFrontendDesignContract | null;
+  content: BackyFrontendDesignProvenance | null;
+}
+
 export interface BackyContact {
   id: string;
   status?: string;
@@ -809,6 +814,7 @@ export interface BackyFrontendManifest {
 export interface BackyRenderPayload {
   site: BackySiteSummary;
   navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown };
+  frontendDesign?: BackyRenderFrontendDesign;
   route: Record<string, unknown>;
   content: BackyContentDocument;
   assets: {

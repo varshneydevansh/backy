@@ -214,6 +214,96 @@
           }
         }
       }
+    },
+    "frontendDesignContract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.frontend-design.v1" },
+            "status": { "enum": ["unconfigured", "captured", "synced", "stale"] },
+            "source": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "type": { "enum": ["managed-site", "custom-frontend", "manual"] },
+                "label": { "type": "string" },
+                "url": { "type": "string" },
+                "repository": { "type": "string" },
+                "branch": { "type": "string" },
+                "capturedAt": { "type": "string" }
+              },
+              "required": ["type"]
+            },
+            "tokens": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "chrome": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "templates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "type": { "enum": ["page", "blogPost", "form", "product", "collection", "section"] },
+                  "name": { "type": "string", "minLength": 1 },
+                  "routePattern": { "type": "string" },
+                  "description": { "type": "string" },
+                  "content": { "type": "object", "additionalProperties": true },
+                  "bindingHints": { "type": "array" }
+                },
+                "required": ["id", "type", "name"]
+              }
+            },
+            "editableMap": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "notes": { "type": "string" },
+            "updatedAt": { "type": "string" }
+          },
+          "required": ["schemaVersion", "status", "source", "templates", "editableMap"]
+        },
+        { "type": "null" }
+      ]
+    },
+    "frontendDesignProvenance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "templateId": { "type": "string", "minLength": 1 },
+            "templateName": { "type": "string" },
+            "routePattern": { "type": "string" },
+            "source": { "type": "object", "additionalProperties": true },
+            "chrome": { "type": "object", "additionalProperties": true },
+            "tokens": { "type": "object", "additionalProperties": true },
+            "customCss": { "type": "string" },
+            "bindingHints": { "type": "array" }
+          },
+          "required": ["templateId"]
+        },
+        { "type": "null" }
+      ]
+    },
+    "renderFrontendDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "site": { "$ref": "#/$defs/frontendDesignContract" },
+        "content": { "$ref": "#/$defs/frontendDesignProvenance" }
+      },
+      "required": ["site", "content"]
     }
   },
   "properties": {
@@ -269,6 +359,9 @@
             }
           },
           "required": ["primary"]
+        },
+        "frontendDesign": {
+          "$ref": "#/$defs/renderFrontendDesign"
         },
         "content": {
           "type": "object",

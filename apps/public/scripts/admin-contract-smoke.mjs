@@ -1384,6 +1384,11 @@ try {
     assert(revalidatedRender.response.headers.get('etag') === renderEtag, `${revalidatedRender.url} expected matching render etag`);
     assert(revalidatedRender.response.headers.get('x-backy-cache-revision') === renderCacheRevision, `${revalidatedRender.url} expected matching render cache revision`);
     validateAiRenderPayload(renderPayload.json, 'page render payload');
+    assert(renderPayload.json?.data?.frontendDesign?.site?.schemaVersion === 'backy.frontend-design.v1', `${renderPayload.url} missing render site frontend design contract`);
+    assert(renderPayload.json?.data?.frontendDesign?.site?.templates?.some((template) => template.id === 'captured-page-template'), `${renderPayload.url} missing render frontend design templates`);
+    assert(renderPayload.json?.data?.frontendDesign?.content?.templateId === 'contract-page-template', `${renderPayload.url} missing render page frontend design provenance`);
+    assert(renderPayload.json?.data?.frontendDesign?.content?.chrome?.header?.component === 'ContractPageHeader', `${renderPayload.url} missing render page frontend design chrome`);
+    assert(renderPayload.json?.data?.frontendDesign?.content?.tokens?.colors?.primary === '#2563eb', `${renderPayload.url} missing render page frontend design tokens`);
     assert(
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.id === 'contract-nav-page' && item.pageId === createdPageId),
       `${renderPayload.url} missing configured render navigation manifest`,
@@ -2698,6 +2703,8 @@ try {
     validateAiRenderPayload(visibleScheduledPostRender.json, 'scheduled post render payload');
     assert(visibleScheduledPostRender.json?.data?.content?.kind === 'post', `${visibleScheduledPostRender.url} expected post render content`);
     assert(visibleScheduledPostRender.json?.data?.content?.id === createdPostId, `${visibleScheduledPostRender.url} returned wrong rendered post`);
+    assert(visibleScheduledPostRender.json?.data?.frontendDesign?.content?.templateId === 'contract-blog-template', `${visibleScheduledPostRender.url} missing render blog frontend design provenance`);
+    assert(visibleScheduledPostRender.json?.data?.frontendDesign?.content?.chrome?.header?.component === 'ContractBlogHeader', `${visibleScheduledPostRender.url} missing render blog frontend chrome`);
 
     const update = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',
@@ -2723,6 +2730,7 @@ try {
     assert(renderedPost.json?.data?.route?.type === 'post', `${renderedPost.url} expected post render route`);
     assert(renderedPost.json?.data?.content?.kind === 'post', `${renderedPost.url} expected post content kind`);
     assert(renderedPost.json?.data?.content?.id === createdPostId, `${renderedPost.url} returned wrong rendered post`);
+    assert(renderedPost.json?.data?.frontendDesign?.content?.tokens?.fonts?.heading === 'Newsreader', `${renderedPost.url} missing render blog frontend tokens`);
     assert(
       renderedPost.json?.data?.interactions?.comments?.some((thread) => thread.targetType === 'post' && thread.targetId === createdPostId),
       `${renderedPost.url} missing post comment interaction`,

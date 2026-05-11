@@ -20,6 +20,7 @@ import {
   type StoreSite,
 } from './backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
+import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 
 type JsonObject = Record<string, unknown>;
 
@@ -54,6 +55,11 @@ interface CanonicalContentPayloadInput {
   version: string;
   elements: RenderElement[];
 }
+
+const buildRenderFrontendDesign = (site: StoreSite, contentMetadata?: unknown) => ({
+  site: site.settings?.frontendDesign || null,
+  content: frontendDesignProvenanceFromMetadata(contentMetadata) || null,
+});
 
 const isRecord = (value: unknown): value is JsonObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -1427,6 +1433,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         themeTokens: buildThemeTokens(site),
       },
       navigation,
+      frontendDesign: buildRenderFrontendDesign(site, page.meta),
       route: {
         type: 'page',
         path: options.path,
@@ -1527,6 +1534,7 @@ export function buildPublicCollectionListRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
+      frontendDesign: buildRenderFrontendDesign(site),
       route: {
         type: 'dynamicList',
         path: options.path,
@@ -1627,6 +1635,7 @@ export function buildPublicCollectionItemRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
+      frontendDesign: buildRenderFrontendDesign(site),
       route: {
         type: 'dynamicItem',
         path: options.path,
@@ -1723,6 +1732,7 @@ export function buildPublicBlogPostRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
+      frontendDesign: buildRenderFrontendDesign(site, post.meta),
       route: {
         type: 'post',
         path: options.path,
