@@ -829,7 +829,7 @@ const getFormLabelStyle = (
 
 const getFormHelpStyle = (props: Record<string, any>): CSSProperties => ({
   margin: 0,
-  fontSize: toCssLength(props.helpTextFontSize) ?? 11,
+  fontSize: toCssLength(props.helpTextFontSize) ?? 12,
   lineHeight: 1.4,
   color: sanitizeText(props.helpTextColor) || '#6b7280',
 });
