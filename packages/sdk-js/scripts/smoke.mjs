@@ -387,6 +387,12 @@ assert(revalidatedRender.notModified === true, 'renderCached() did not return no
 
 const navigation = await client.navigation();
 assert(navigation.data.navigation, 'navigation() missing navigation data');
+const cachedNavigation = await client.navigationCached();
+assert(cachedNavigation.notModified === false, 'navigationCached() first request should return a body');
+assert(cachedNavigation.body.data.navigation, 'navigationCached() missing navigation data');
+assert(cachedNavigation.meta.etag, 'navigationCached() missing response ETag');
+const revalidatedNavigation = await client.navigationCached({ etag: cachedNavigation.meta.etag });
+assert(revalidatedNavigation.notModified === true, 'navigationCached() did not return notModified for matching ETag');
 
 const seo = await client.seo();
 assert(Array.isArray(seo.data.routes), 'seo() missing route metadata');
@@ -439,9 +445,21 @@ assert(revalidatedMediaFonts.notModified === true, 'mediaFontsCached() did not r
 
 const reusableSections = await client.reusableSections();
 assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
+const cachedReusableSections = await client.reusableSectionsCached();
+assert(cachedReusableSections.notModified === false, 'reusableSectionsCached() first request should return a body');
+assert(Array.isArray(cachedReusableSections.body.data.sections), 'reusableSectionsCached() missing sections array');
+assert(cachedReusableSections.meta.etag, 'reusableSectionsCached() missing response ETag');
+const revalidatedReusableSections = await client.reusableSectionsCached({ etag: cachedReusableSections.meta.etag });
+assert(revalidatedReusableSections.notModified === true, 'reusableSectionsCached() did not return notModified for matching ETag');
 if (reusableSections.data.sections.length > 0) {
   const reusableSection = await client.reusableSection(reusableSections.data.sections[0].id);
   assert(reusableSection.data.section?.content?.elements, 'reusableSection() missing reusable section content');
+  const cachedReusableSection = await client.reusableSectionCached(reusableSections.data.sections[0].id);
+  assert(cachedReusableSection.notModified === false, 'reusableSectionCached() first request should return a body');
+  assert(cachedReusableSection.body.data.section?.id === reusableSections.data.sections[0].id, 'reusableSectionCached() returned wrong section');
+  assert(cachedReusableSection.meta.etag, 'reusableSectionCached() missing response ETag');
+  const revalidatedReusableSection = await client.reusableSectionCached(reusableSections.data.sections[0].id, { etag: cachedReusableSection.meta.etag });
+  assert(revalidatedReusableSection.notModified === true, 'reusableSectionCached() did not return notModified for matching ETag');
 }
 
 const forms = await client.forms();
@@ -707,6 +725,7 @@ console.log(JSON.stringify({
     'render',
     'renderCached',
     'navigation',
+    'navigationCached',
     'seo',
     'seoCached',
     'media',
@@ -717,6 +736,8 @@ console.log(JSON.stringify({
     'mediaFileUrl',
     'mediaTransformUrl',
     'reusableSections',
+    'reusableSectionsCached',
+    'reusableSectionCached',
     'forms',
     'formDefinition',
     'formDefinitionCached',

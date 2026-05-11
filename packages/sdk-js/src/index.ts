@@ -1028,6 +1028,13 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/navigation`);
   }
 
+  navigationCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown } }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/navigation`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
   seo(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackySeoDiscovery>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/seo`);
   }
@@ -1128,8 +1135,26 @@ export class BackyClient {
     });
   }
 
+  reusableSectionsCached(
+    options: { category?: string; tag?: string; search?: string } & BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<{ sections: BackyReusableSection[]; pagination: BackyPagination }>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
+  }
+
   reusableSection(sectionId: string, siteId = this.requireSiteId()): Promise<BackyEnvelope<{ section: BackyReusableSection }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/reusable-sections/${encodeURIComponent(sectionId)}`);
+  }
+
+  reusableSectionCached(sectionId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ section: BackyReusableSection }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/reusable-sections/${encodeURIComponent(sectionId)}`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   records<TValues extends Record<string, unknown> = Record<string, unknown>>(
