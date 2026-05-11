@@ -529,6 +529,7 @@ const normalizeRendererType = (value: string): KnownElementType => {
     'checkbox',
     'radio',
     'list',
+    'repeater',
     'table',
     'embed',
     'html',

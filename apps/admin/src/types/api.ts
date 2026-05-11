@@ -38,7 +38,8 @@ export type ElementType =
     | 'form'
     | 'icon'
     | 'columns'
-    | 'map';
+    | 'map'
+    | 'repeater';
 
 // ============================================
 // PAGE ELEMENT (Frontend-readable format)

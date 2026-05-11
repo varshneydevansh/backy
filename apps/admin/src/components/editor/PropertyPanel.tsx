@@ -217,6 +217,7 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'list',
     'link',
     'quote',
+    'repeater',
     'comment',
   ];
 
@@ -2622,6 +2623,461 @@ const getBindingModeForField = (field?: CollectionField | null, targetPath = '')
   return 'text';
 };
 
+const getObjectProp = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const fieldExists = (collection: Collection | null, key: string): boolean => (
+  Boolean(collection?.fields.some((field) => field.key === key))
+);
+
+const defaultFieldKey = (
+  collection: Collection | null,
+  preferredKeys: string[],
+  preferredTypes: string[] = [],
+  options: { fallbackToFirst?: boolean } = {},
+): string => {
+  if (!collection) return '';
+  const fallbackToFirst = options.fallbackToFirst ?? true;
+
+  for (const key of preferredKeys) {
+    const field = collection.fields.find((candidate) => candidate.key === key);
+    if (field) return field.key;
+  }
+
+  const typedField = collection.fields.find((field) => preferredTypes.includes(field.type));
+  return typedField?.key || (fallbackToFirst ? collection.fields[0]?.key : '') || '';
+};
+
+const normalizedNumberInput = (value: unknown): string => (
+  typeof value === 'number' && Number.isFinite(value)
+    ? String(value)
+    : typeof value === 'string'
+      ? value
+      : ''
+);
+
+interface RepeaterDataPropertiesProps {
+  element: CanvasElement;
+  collections: Collection[];
+  onChange: (updates: Partial<CanvasElement>) => void;
+}
+
+function RepeaterDataProperties({
+  element,
+  collections,
+  onChange,
+}: RepeaterDataPropertiesProps) {
+  const props = element.props || {};
+  const query = getObjectProp(props.query);
+  const selectedCollectionId = typeof props.collectionId === 'string' ? props.collectionId : '';
+  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) || null;
+  const selectedDatasetId = typeof props.datasetId === 'string' && props.datasetId.trim()
+    ? props.datasetId
+    : selectedCollectionId
+      ? `dataset_${selectedCollectionId}_${element.id}`
+      : '';
+  const selectedTitleField = typeof props.titleField === 'string'
+    ? props.titleField
+    : typeof props.repeaterTitleField === 'string'
+      ? props.repeaterTitleField
+      : defaultFieldKey(selectedCollection, ['title', 'name', 'label'], ['text']);
+  const selectedDescriptionField = typeof props.descriptionField === 'string'
+    ? props.descriptionField
+    : typeof props.repeaterDescriptionField === 'string'
+      ? props.repeaterDescriptionField
+      : defaultFieldKey(selectedCollection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']);
+  const selectedImageField = typeof props.imageField === 'string'
+    ? props.imageField
+    : typeof props.repeaterImageField === 'string'
+      ? props.repeaterImageField
+      : defaultFieldKey(selectedCollection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false });
+  const selectedSearch = typeof query.q === 'string'
+    ? query.q
+    : typeof query.search === 'string'
+      ? query.search
+      : '';
+  const selectedFilterField = typeof query.fieldKey === 'string' ? query.fieldKey : '';
+  const selectedFilterValue = typeof query.fieldValue === 'string' || typeof query.fieldValue === 'number' || typeof query.fieldValue === 'boolean'
+    ? String(query.fieldValue)
+    : '';
+  const selectedSortBy = typeof query.sortBy === 'string'
+    ? query.sortBy
+    : typeof props.sortBy === 'string'
+      ? props.sortBy
+      : '';
+  const selectedSortDirection = query.sortDirection === 'desc' || props.sortDirection === 'desc' ? 'desc' : 'asc';
+  const selectedLimit = normalizedNumberInput(props.limit ?? query.limit);
+  const selectedOffset = normalizedNumberInput(props.offset ?? query.offset);
+  const selectedColumns = normalizedNumberInput(props.columns || 3);
+  const selectedGap = normalizedNumberInput(props.gap ?? 16);
+  const selectedEmptyMessage = typeof props.emptyMessage === 'string' ? props.emptyMessage : 'No records yet.';
+
+  const updateRepeater = (updates: {
+    collectionId?: string;
+    datasetId?: string;
+    titleField?: string;
+    descriptionField?: string;
+    imageField?: string;
+    search?: string;
+    filterField?: string;
+    filterValue?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+    limit?: string;
+    offset?: string;
+    columns?: string;
+    gap?: string;
+    emptyMessage?: string;
+  }) => {
+    const collectionId = updates.collectionId ?? selectedCollectionId;
+    const collection = collections.find((item) => item.id === collectionId) || null;
+
+    if (!collection) {
+      const nextProps = { ...props };
+      delete nextProps.collectionId;
+      delete nextProps.datasetId;
+      delete nextProps.query;
+      delete nextProps.limit;
+      delete nextProps.offset;
+      delete nextProps.sortBy;
+      delete nextProps.sortDirection;
+      onChange({ props: nextProps });
+      return;
+    }
+
+    const titleField = updates.titleField
+      ?? (fieldExists(collection, selectedTitleField) ? selectedTitleField : defaultFieldKey(collection, ['title', 'name', 'label'], ['text']));
+    const descriptionField = updates.descriptionField
+      ?? (fieldExists(collection, selectedDescriptionField) ? selectedDescriptionField : defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']));
+    const imageField = updates.imageField
+      ?? (fieldExists(collection, selectedImageField) ? selectedImageField : defaultFieldKey(collection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false }));
+    const datasetId = (updates.datasetId ?? selectedDatasetId) || `dataset_${collection.id}_${element.id}`;
+    const search = updates.search ?? selectedSearch;
+    const filterField = updates.filterField ?? selectedFilterField;
+    const filterValue = updates.filterValue ?? selectedFilterValue;
+    const sortBy = updates.sortBy ?? selectedSortBy;
+    const sortDirection = updates.sortDirection ?? selectedSortDirection;
+    const limit = updates.limit ?? selectedLimit;
+    const offset = updates.offset ?? selectedOffset;
+    const columns = updates.columns ?? selectedColumns;
+    const gap = updates.gap ?? selectedGap;
+    const emptyMessage = updates.emptyMessage ?? selectedEmptyMessage;
+
+    const nextQuery: Record<string, unknown> = {};
+    if (search.trim()) nextQuery.q = search.trim();
+    if (filterField.trim()) nextQuery.fieldKey = filterField.trim();
+    if (filterValue.trim()) nextQuery.fieldValue = filterValue.trim();
+    if (sortBy.trim()) {
+      nextQuery.sortBy = sortBy.trim();
+      nextQuery.sortDirection = sortDirection;
+    }
+
+    const nextProps: Record<string, unknown> = {
+      ...props,
+      collectionId: collection.id,
+      datasetId: datasetId.trim() || `dataset_${collection.id}_${element.id}`,
+      titleField,
+      descriptionField,
+      emptyMessage,
+      ...(imageField ? { imageField } : {}),
+      ...(Object.keys(nextQuery).length > 0 ? { query: nextQuery } : {}),
+    };
+
+    if (!imageField) delete nextProps.imageField;
+
+    const parsedLimit = Number.parseInt(limit, 10);
+    const parsedOffset = Number.parseInt(offset, 10);
+    const parsedColumns = Number.parseInt(columns, 10);
+    const parsedGap = Number.parseInt(gap, 10);
+    if (Number.isInteger(parsedLimit) && parsedLimit > 0) nextProps.limit = Math.min(parsedLimit, 100);
+    else delete nextProps.limit;
+    if (Number.isInteger(parsedOffset) && parsedOffset >= 0) nextProps.offset = parsedOffset;
+    else delete nextProps.offset;
+    if (Number.isInteger(parsedColumns)) nextProps.columns = Math.max(1, Math.min(parsedColumns, 6));
+    if (Number.isInteger(parsedGap)) nextProps.gap = Math.max(0, Math.min(parsedGap, 96));
+
+    delete nextProps.sortBy;
+    delete nextProps.sortDirection;
+
+    onChange({ props: nextProps });
+  };
+
+  return (
+    <div className="space-y-3" data-testid="editor-repeater-controls">
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">
+          Repeater collection
+        </label>
+        <select
+          value={selectedCollectionId}
+          onChange={(event) => updateRepeater({ collectionId: event.target.value })}
+          data-testid="editor-repeater-collection"
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+        >
+          <option value="">Unbound</option>
+          {collections.map((collection) => (
+            <option key={collection.id} value={collection.id}>
+              {collection.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selectedCollection && (
+        <>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Dataset ID
+            </label>
+            <input
+              type="text"
+              value={selectedDatasetId}
+              onChange={(event) => updateRepeater({ datasetId: event.target.value })}
+              data-testid="editor-repeater-dataset-id"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Title field
+              </label>
+              <select
+                value={fieldExists(selectedCollection, selectedTitleField) ? selectedTitleField : ''}
+                onChange={(event) => updateRepeater({ titleField: event.target.value })}
+                data-testid="editor-repeater-title-field"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                {selectedCollection.fields.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Description
+              </label>
+              <select
+                value={fieldExists(selectedCollection, selectedDescriptionField) ? selectedDescriptionField : ''}
+                onChange={(event) => updateRepeater({ descriptionField: event.target.value })}
+                data-testid="editor-repeater-description-field"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                {selectedCollection.fields.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Image field
+            </label>
+            <select
+              value={fieldExists(selectedCollection, selectedImageField) ? selectedImageField : ''}
+              onChange={(event) => updateRepeater({ imageField: event.target.value })}
+              data-testid="editor-repeater-image-field"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="">None</option>
+              {selectedCollection.fields.map((field) => (
+                <option key={field.key} value={field.key}>
+                  {field.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-repeater-query-controls">
+            <div className="mb-2 text-xs font-medium text-foreground">Dataset query</div>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={selectedSearch}
+                onChange={(event) => updateRepeater({ search: event.target.value })}
+                data-testid="editor-repeater-search"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Search records"
+              />
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <select
+                  value={selectedFilterField}
+                  onChange={(event) => updateRepeater({ filterField: event.target.value })}
+                  data-testid="editor-repeater-filter-field"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="">No filter</option>
+                  {selectedCollection.fields.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  value={selectedFilterValue}
+                  onChange={(event) => updateRepeater({ filterValue: event.target.value })}
+                  data-testid="editor-repeater-filter-value"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="Exact value"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <select
+                  value={selectedSortBy}
+                  onChange={(event) => updateRepeater({ sortBy: event.target.value })}
+                  data-testid="editor-repeater-sort-by"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="">Default sort</option>
+                  {selectedCollection.fields.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedSortDirection}
+                  onChange={(event) => updateRepeater({ sortDirection: event.target.value === 'desc' ? 'desc' : 'asc' })}
+                  data-testid="editor-repeater-sort-direction"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-repeater-layout-controls">
+            <div className="mb-2 text-xs font-medium text-foreground">Layout</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={selectedLimit}
+                onChange={(event) => updateRepeater({ limit: event.target.value })}
+                data-testid="editor-repeater-limit"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Limit"
+              />
+              <input
+                type="number"
+                min={0}
+                value={selectedOffset}
+                onChange={(event) => updateRepeater({ offset: event.target.value })}
+                data-testid="editor-repeater-offset"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Offset"
+              />
+              <input
+                type="number"
+                min={1}
+                max={6}
+                value={selectedColumns}
+                onChange={(event) => updateRepeater({ columns: event.target.value })}
+                data-testid="editor-repeater-columns"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Columns"
+              />
+              <input
+                type="number"
+                min={0}
+                max={96}
+                value={selectedGap}
+                onChange={(event) => updateRepeater({ gap: event.target.value })}
+                data-testid="editor-repeater-gap"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Gap"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Empty state
+            </label>
+            <input
+              type="text"
+              value={selectedEmptyMessage}
+              onChange={(event) => updateRepeater({ emptyMessage: event.target.value })}
+              data-testid="editor-repeater-empty-message"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            />
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Dataset: {selectedDatasetId}
+            {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
+            {selectedLimit ? ` • limit ${selectedLimit}` : ''}
+            {selectedColumns ? ` • ${selectedColumns} columns` : ''}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DataBindingProperties({
   element,
   collections,
@@ -2764,6 +3220,16 @@ function DataBindingProperties({
       <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         No collections available.
       </div>
+    );
+  }
+
+  if (normalizeCanvasElementType(element.type) === 'repeater') {
+    return (
+      <RepeaterDataProperties
+        element={element}
+        collections={collections}
+        onChange={onChange}
+      />
     );
   }
 

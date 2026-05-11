@@ -189,6 +189,24 @@ const createSmokePage = async () => {
               borderRadius: 8,
             },
           },
+          {
+            id: 'smoke-repeater',
+            type: 'repeater',
+            x: 520,
+            y: 500,
+            width: 430,
+            height: 260,
+            zIndex: 6,
+            props: {
+              columns: 2,
+              gap: 14,
+              limit: 4,
+              titleField: 'title',
+              descriptionField: 'summary',
+              backgroundColor: '#f8fafc',
+              borderRadius: 8,
+            },
+          },
         ],
         canvasSize: {
           width: 1200,
@@ -2479,6 +2497,148 @@ const assertPersistedDataBinding = async (pageId, collectionId) => {
   return binding;
 };
 
+const testRepeaterControls = async (client, collectionId) => {
+  await selectLayerById(client, 'smoke-repeater');
+
+  let dataPanel = null;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    dataPanel = await evaluate(client, `(() => {
+      const collection = document.querySelector('[data-testid="editor-repeater-collection"]');
+      if (!collection) {
+        const dataButton = Array.from(document.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').trim() === 'Data'
+        ));
+        if (dataButton instanceof HTMLButtonElement) {
+          dataButton.click();
+        }
+      }
+      const select = document.querySelector('[data-testid="editor-repeater-collection"]');
+      return {
+        hasCollectionSelect: select instanceof HTMLSelectElement,
+        hasTargetCollection: select instanceof HTMLSelectElement
+          ? Array.from(select.options).some((option) => option.value === ${JSON.stringify(collectionId)})
+          : false,
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    })()`);
+
+    if (dataPanel.hasCollectionSelect && dataPanel.hasTargetCollection) {
+      break;
+    }
+
+    await sleep(200);
+  }
+
+  assert(dataPanel?.hasCollectionSelect && dataPanel?.hasTargetCollection, `Repeater controls did not load target collection: ${JSON.stringify(dataPanel)}`);
+
+  await setFormControlByTestId(client, 'editor-repeater-collection', collectionId);
+  let controlsReady = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    controlsReady = await evaluate(client, `(() => {
+      const optionValues = (testId) => {
+        const select = document.querySelector('[data-testid="' + testId + '"]');
+        return select instanceof HTMLSelectElement
+          ? Array.from(select.options).map((option) => option.value)
+          : [];
+      };
+      return {
+        titleFields: optionValues('editor-repeater-title-field'),
+        descriptionFields: optionValues('editor-repeater-description-field'),
+        filterFields: optionValues('editor-repeater-filter-field'),
+        sortFields: optionValues('editor-repeater-sort-by'),
+        hasLayoutControls: Boolean(document.querySelector('[data-testid="editor-repeater-layout-controls"]')),
+      };
+    })()`);
+    if (
+      controlsReady.titleFields.includes('title') &&
+      controlsReady.descriptionFields.includes('summary') &&
+      controlsReady.filterFields.includes('category') &&
+      controlsReady.sortFields.includes('rank') &&
+      controlsReady.hasLayoutControls
+    ) {
+      break;
+    }
+    await sleep(200);
+  }
+
+  assert(
+    controlsReady?.titleFields?.includes('title') &&
+      controlsReady?.descriptionFields?.includes('summary') &&
+      controlsReady?.filterFields?.includes('category') &&
+      controlsReady?.sortFields?.includes('rank') &&
+      controlsReady?.hasLayoutControls,
+    `Repeater field/query/layout controls did not render: ${JSON.stringify(controlsReady)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-repeater-dataset-id', `dataset_${collectionId}_smoke_repeater`);
+  await setFormControlByTestId(client, 'editor-repeater-title-field', 'title');
+  await setFormControlByTestId(client, 'editor-repeater-description-field', 'summary');
+  await setFormControlByTestId(client, 'editor-repeater-search', 'featured');
+  await setFormControlByTestId(client, 'editor-repeater-filter-field', 'category');
+  await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Featured');
+  await setFormControlByTestId(client, 'editor-repeater-sort-by', 'rank');
+  await setFormControlByTestId(client, 'editor-repeater-sort-direction', 'desc');
+  await setFormControlByTestId(client, 'editor-repeater-limit', '2');
+  await setFormControlByTestId(client, 'editor-repeater-offset', '0');
+  await setFormControlByTestId(client, 'editor-repeater-columns', '2');
+  await setFormControlByTestId(client, 'editor-repeater-gap', '18');
+  await setFormControlByTestId(client, 'editor-repeater-empty-message', 'No matching records.');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const summary = Array.from(document.querySelectorAll('[data-testid="editor-repeater-controls"]'))
+      .map((node) => node.textContent || '')
+      .join(' ');
+    return {
+      collectionId: value('editor-repeater-collection'),
+      datasetId: value('editor-repeater-dataset-id'),
+      titleField: value('editor-repeater-title-field'),
+      descriptionField: value('editor-repeater-description-field'),
+      search: value('editor-repeater-search'),
+      filterField: value('editor-repeater-filter-field'),
+      filterValue: value('editor-repeater-filter-value'),
+      sortBy: value('editor-repeater-sort-by'),
+      sortDirection: value('editor-repeater-sort-direction'),
+      limit: value('editor-repeater-limit'),
+      offset: value('editor-repeater-offset'),
+      columns: value('editor-repeater-columns'),
+      gap: value('editor-repeater-gap'),
+      emptyMessage: value('editor-repeater-empty-message'),
+      summary,
+    };
+  })()`);
+
+  assert(state.collectionId === collectionId, `Repeater did not select collection: ${JSON.stringify(state)}`);
+  assert(state.datasetId === `dataset_${collectionId}_smoke_repeater`, `Repeater dataset id mismatch: ${JSON.stringify(state)}`);
+  assert(state.titleField === 'title' && state.descriptionField === 'summary', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
+  assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
+  assert(state.sortBy === 'rank' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
+  assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
+  assert(/sort rank desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedRepeater = async (pageId, collectionId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const repeater = findCanvasElement(elements, 'smoke-repeater');
+  const props = repeater?.props || {};
+
+  assert(repeater?.type === 'repeater', `Persisted repeater missing: ${JSON.stringify(repeater)}`);
+  assert(props.collectionId === collectionId, `Persisted repeater collection mismatch: ${JSON.stringify(props)}`);
+  assert(props.datasetId === `dataset_${collectionId}_smoke_repeater`, `Persisted repeater dataset mismatch: ${JSON.stringify(props)}`);
+  assert(props.titleField === 'title' && props.descriptionField === 'summary', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
+  assert(props.query?.q === 'featured', `Persisted repeater search mismatch: ${JSON.stringify(props)}`);
+  assert(props.query?.fieldKey === 'category' && props.query?.fieldValue === 'Featured', `Persisted repeater filter mismatch: ${JSON.stringify(props)}`);
+  assert(props.query?.sortBy === 'rank' && props.query?.sortDirection === 'desc', `Persisted repeater sort mismatch: ${JSON.stringify(props)}`);
+  assert(props.limit === 2 && props.offset === 0 && props.columns === 2 && props.gap === 18, `Persisted repeater layout mismatch: ${JSON.stringify(props)}`);
+  assert(props.emptyMessage === 'No matching records.', `Persisted repeater empty state mismatch: ${JSON.stringify(props)}`);
+  assert(!props.imageField, `Persisted repeater should not default imageField without an image field: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -2742,7 +2902,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -2832,6 +2992,9 @@ const main = async () => {
     const dataBindingQueryControls = tempCollection
       ? await testCollectionDataBindingControls(client, tempCollection.id)
       : null;
+    const repeaterControls = tempCollection
+      ? await testRepeaterControls(client, tempCollection.id)
+      : null;
 
     let persistedState = null;
     let reloadedState = null;
@@ -2840,8 +3003,9 @@ const main = async () => {
     let postSaveInspector = null;
     let savedStatus = null;
     let persistedDataBinding = null;
+    let persistedRepeater = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -2875,11 +3039,14 @@ const main = async () => {
       persistedDataBinding = tempCollection
         ? await assertPersistedDataBinding(tempPageId, tempCollection.id)
         : null;
+      persistedRepeater = tempCollection
+        ? await assertPersistedRepeater(tempPageId, tempCollection.id)
+        : null;
 
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -2980,12 +3147,14 @@ const main = async () => {
       syncedReusableSection,
       afterReusableMutationReady,
       dataBindingQueryControls,
+      repeaterControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
       savedStatus,
       persistedState,
       persistedDataBinding,
+      persistedRepeater,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,

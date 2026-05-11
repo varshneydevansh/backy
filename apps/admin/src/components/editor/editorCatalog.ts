@@ -811,6 +811,22 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     description: 'Body paragraph text',
   },
   {
+    type: 'repeater',
+    name: 'Repeater',
+    icon: 'Database',
+    category: 'advanced',
+    defaultProps: {
+      columns: 3,
+      gap: 16,
+      titleField: 'title',
+      descriptionField: 'summary',
+      limit: 6,
+      emptyMessage: 'No records yet.',
+    },
+    defaultSize: { width: 680, height: 320 },
+    description: 'Collection-backed grid',
+  },
+  {
     type: 'comment',
     name: 'Comments',
     icon: 'MessageSquare',

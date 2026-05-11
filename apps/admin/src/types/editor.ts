@@ -70,6 +70,7 @@ export type ElementType =
   | 'list'     // For bullet/numbered lists
   | 'link'     // For hyperlinks
   | 'quote'    // For blockquotes
+  | 'repeater' // For collection-backed repeaters
   | 'comment'; // For comment/thread blocks
 
 /** Base element interface */

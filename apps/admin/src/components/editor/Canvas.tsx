@@ -2938,6 +2938,64 @@ function CanvasElementComponent({
           </div>
         );
 
+      case 'repeater': {
+        const repeaterColumns = Math.max(1, Math.min(6, Math.floor(Number(p.columns) || 3)));
+        const repeaterLimit = Math.max(1, Math.min(12, Math.floor(Number(p.limit) || repeaterColumns * 2)));
+        const previewCards = Array.from({ length: Math.min(repeaterLimit, repeaterColumns * 2) });
+        const collectionLabel = typeof p.collectionId === 'string' && p.collectionId
+          ? `Collection: ${p.collectionId}`
+          : 'Select a collection in Data';
+
+        return (
+          <div
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              display: 'grid',
+              gridTemplateColumns: `repeat(${repeaterColumns}, minmax(0, 1fr))`,
+              gap: toCssLength(p.gap ?? 16),
+              padding: toCssLength(p.padding ?? 12),
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#f8fafc',
+              border: sharedStyle.border ?? '1px dashed #94a3b8',
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
+              color: sharedStyle.color ?? '#334155',
+              overflow: 'hidden',
+              alignContent: 'start',
+            }}
+            data-backy-editor-repeater={element.id}
+          >
+            {previewCards.map((_, index) => (
+              <div
+                key={`${element.id}-repeater-preview-${index}`}
+                style={{
+                  minWidth: 0,
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  background: '#ffffff',
+                  padding: 12,
+                  boxShadow: '0 8px 18px rgba(15,23,42,0.06)',
+                }}
+              >
+                <div style={{ height: 10, width: '70%', borderRadius: 999, background: '#0f172a', opacity: 0.18 }} />
+                <div style={{ height: 8, width: '92%', borderRadius: 999, background: '#64748b', opacity: 0.16, marginTop: 10 }} />
+                <div style={{ height: 8, width: '58%', borderRadius: 999, background: '#64748b', opacity: 0.14, marginTop: 6 }} />
+              </div>
+            ))}
+            <div
+              style={{
+                gridColumn: `1 / span ${repeaterColumns}`,
+                fontSize: 12,
+                color: '#64748b',
+                paddingTop: 2,
+              }}
+            >
+              {collectionLabel}
+            </div>
+          </div>
+        );
+      }
+
       case 'map':
         const mapSrc = normalizeMapUrl(p.src || p.address);
         if (!mapSrc) {

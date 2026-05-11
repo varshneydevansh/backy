@@ -107,6 +107,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'list',
   'link',
   'quote',
+  'repeater',
   'comment',
 ];
 
