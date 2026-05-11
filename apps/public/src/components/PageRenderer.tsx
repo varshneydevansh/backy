@@ -599,6 +599,10 @@ function getBoolean(value: unknown): boolean {
   return Boolean(value);
 }
 
+function getBooleanWithFallback(value: unknown, fallback: boolean): boolean {
+  return value === undefined || value === null ? fallback : parseBooleanSetting(value, fallback);
+}
+
 function parseBooleanSetting(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') {
     return value;
@@ -1065,21 +1069,24 @@ function ImageElement({ element }: ElementRendererProps) {
  */
 function VideoElement({ element }: ElementRendererProps) {
   const { props, styles, width, height } = element;
+  const autoPlay = getBooleanWithFallback(props.autoplay ?? props.autoPlay, false);
+  const muted = getBooleanWithFallback(props.muted, autoPlay);
 
   return (
     <video
       src={props.src as string}
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
-      autoPlay={getBoolean(props.autoPlay)}
-      loop={getBoolean(props.loop)}
-      muted={getBoolean(props.muted)}
-      controls={getBoolean(props.controls)}
+      poster={getNameClass(props.poster) || undefined}
+      autoPlay={autoPlay}
+      loop={getBooleanWithFallback(props.loop, false)}
+      muted={muted}
+      controls={getBooleanWithFallback(props.controls, true)}
       style={{
         objectFit: (props.objectFit as React.CSSProperties['objectFit']) || 'cover',
         ...styles,
       }}
-      playsInline
+      playsInline={getBooleanWithFallback(props.playsInline, true)}
     />
   );
 }

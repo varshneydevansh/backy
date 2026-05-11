@@ -2128,7 +2128,12 @@ function CanvasElementComponent({
       return (
         <video
           src={p.src}
+          poster={typeof p.poster === 'string' && p.poster.trim() ? p.poster : undefined}
           controls={isPreview ? (p.controls ?? true) : false}
+          autoPlay={isPreview ? Boolean(p.autoplay ?? p.autoPlay) : false}
+          loop={Boolean(p.loop)}
+          muted={Boolean(p.muted)}
+          playsInline={p.playsInline !== false}
           style={{
             ...sharedStyle,
             width: '100%',

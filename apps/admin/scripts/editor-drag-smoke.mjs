@@ -12,6 +12,8 @@ const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
+const SMOKE_VIDEO_SRC = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%230f172a%22%2F%3E%3C%2Fsvg%3E';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -125,6 +127,25 @@ const createSmokePage = async () => {
             props: {
               src: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
               alt: 'Workspace',
+              objectFit: 'cover',
+            },
+          },
+          {
+            id: 'smoke-video',
+            type: 'video',
+            x: 820,
+            y: 120,
+            width: 320,
+            height: 180,
+            zIndex: 7,
+            props: {
+              src: SMOKE_VIDEO_SRC,
+              poster: '',
+              controls: true,
+              autoplay: false,
+              loop: false,
+              muted: false,
+              playsInline: true,
               objectFit: 'cover',
             },
           },
@@ -905,6 +926,32 @@ const setInputValueByTestId = async (client, testId, value) => {
   })()`);
 
   assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
+  await sleep(250);
+  return changed;
+};
+
+const setCheckboxByTestId = async (client, testId, checked) => {
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+
+    if (input.checked !== ${checked ? 'true' : 'false'}) {
+      input.click();
+    }
+    return {
+      ok: input.checked === ${checked ? 'true' : 'false'},
+      checked: input.checked,
+      testId: ${JSON.stringify(testId)},
+    };
+  })()`);
+
+  assert(changed?.ok, `Unable to set ${testId} checked=${checked}: ${JSON.stringify(changed)}`);
   await sleep(250);
   return changed;
 };
@@ -2842,6 +2889,63 @@ const assertPersistedButtonLinkBehavior = async (pageId) => {
   return props;
 };
 
+const testVideoBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-video');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-video-src', SMOKE_VIDEO_SRC);
+  await setFormControlByTestId(client, 'editor-video-poster', SMOKE_VIDEO_POSTER);
+  await setFormControlByTestId(client, 'editor-video-object-fit', 'contain');
+  await setCheckboxByTestId(client, 'editor-video-controls', true);
+  await setCheckboxByTestId(client, 'editor-video-autoplay', true);
+  await setCheckboxByTestId(client, 'editor-video-loop', true);
+  await setCheckboxByTestId(client, 'editor-video-muted', true);
+  await setCheckboxByTestId(client, 'editor-video-playsInline', true);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-video"]');
+    const video = node?.querySelector('video');
+    return {
+      src: value('editor-video-src'),
+      poster: value('editor-video-poster'),
+      objectFit: value('editor-video-object-fit'),
+      controls: checked('editor-video-controls'),
+      autoplay: checked('editor-video-autoplay'),
+      loop: checked('editor-video-loop'),
+      muted: checked('editor-video-muted'),
+      playsInline: checked('editor-video-playsInline'),
+      previewObjectFit: video ? getComputedStyle(video).objectFit : '',
+    };
+  })()`);
+
+  assert(state.src === SMOKE_VIDEO_SRC, `Video src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.poster === SMOKE_VIDEO_POSTER, `Video poster control mismatch: ${JSON.stringify(state)}`);
+  assert(state.objectFit === 'contain' && state.previewObjectFit === 'contain', `Video object-fit mismatch: ${JSON.stringify(state)}`);
+  assert(state.controls === true && state.autoplay === true && state.loop === true && state.muted === true && state.playsInline === true, `Video toggle controls mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedVideoBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const video = findCanvasElement(elements, 'smoke-video');
+  const props = video?.props || {};
+
+  assert(video?.type === 'video', `Persisted smoke-video missing: ${JSON.stringify(video)}`);
+  assert(props.src === SMOKE_VIDEO_SRC, `Persisted video src mismatch: ${JSON.stringify(props)}`);
+  assert(props.poster === SMOKE_VIDEO_POSTER, `Persisted video poster mismatch: ${JSON.stringify(props)}`);
+  assert(props.objectFit === 'contain', `Persisted video objectFit mismatch: ${JSON.stringify(props)}`);
+  assert(props.controls === true && props.autoplay === true && props.loop === true && props.muted === true && props.playsInline === true, `Persisted video toggles mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -3105,7 +3209,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3219,6 +3323,9 @@ const main = async () => {
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
+    const videoBehaviorControls = EDITOR_PATH
+      ? null
+      : await testVideoBehaviorControls(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -3230,8 +3337,9 @@ const main = async () => {
     let persistedDataBinding = null;
     let persistedRepeater = null;
     let persistedButtonLinkBehavior = null;
+    let persistedVideoBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3287,11 +3395,14 @@ const main = async () => {
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
+      persistedVideoBehavior = videoBehaviorControls
+        ? await assertPersistedVideoBehavior(tempPageId)
+        : null;
 
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-form', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -3395,6 +3506,7 @@ const main = async () => {
       dataBindingQueryControls,
       repeaterControls,
       buttonLinkBehaviorControls,
+      videoBehaviorControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
@@ -3404,6 +3516,7 @@ const main = async () => {
       persistedDataBinding,
       persistedRepeater,
       persistedButtonLinkBehavior,
+      persistedVideoBehavior,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,

@@ -764,6 +764,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.src || ''}
                 onChange={(e) => onChange({ src: e.target.value })}
+                data-testid="editor-video-src"
                 className={cn(
                   'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -789,15 +790,60 @@ function ContentProperties({
               Enter a direct video URL (.mp4, .webm)
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Poster Image URL
+            </label>
             <input
-              type="checkbox"
-              id="autoplay"
-              checked={element.props.autoplay || false}
-              onChange={(e) => onChange({ autoplay: e.target.checked })}
-              className="rounded"
+              type="text"
+              value={element.props.poster || ''}
+              onChange={(e) => onChange({ poster: e.target.value })}
+              data-testid="editor-video-poster"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="https://example.com/poster.jpg"
             />
-            <label htmlFor="autoplay" className="text-sm">Autoplay (preview only)</label>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Object Fit
+            </label>
+            <select
+              value={element.props.objectFit || 'cover'}
+              onChange={(e) => onChange({ objectFit: e.target.value })}
+              data-testid="editor-video-object-fit"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="fill">Fill</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'controls', label: 'Show controls', fallback: true },
+              { key: 'autoplay', label: 'Autoplay', fallback: false },
+              { key: 'loop', label: 'Loop', fallback: false },
+              { key: 'muted', label: 'Muted', fallback: false },
+              { key: 'playsInline', label: 'Play inline', fallback: true },
+            ].map((setting) => (
+              <label key={setting.key} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={parseBooleanSetting(element.props[setting.key], setting.fallback)}
+                  onChange={(e) => onChange({ [setting.key]: e.target.checked })}
+                  data-testid={`editor-video-${setting.key}`}
+                  className="rounded"
+                />
+                {setting.label}
+              </label>
+            ))}
           </div>
         </div>
       )}
