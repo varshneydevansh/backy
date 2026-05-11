@@ -26,10 +26,12 @@ import {
   createFormContact,
   getAdminApiBase,
   importFormContactsCsv,
+  listContactSegments,
   listFormContacts,
   listForms,
   updateContact,
   type AdminContact,
+  type ContactSegmentAnalytics,
   type ContactStatus,
   type FormDefinition,
 } from '@/lib/adminContentApi';
@@ -183,6 +185,7 @@ function ContactsRoute() {
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [contactsByForm, setContactsByForm] = useState<Record<string, ContactInbox>>({});
+  const [contactSegments, setContactSegments] = useState<ContactSegmentAnalytics | null>(null);
   const [selectedFormId, setSelectedFormId] = useState<string>(routeSearch.formId || 'all');
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(routeSearch.status || 'all');
   const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>(routeSearch.quality || 'all');
@@ -228,6 +231,7 @@ function ContactsRoute() {
   const contactImportUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/import?upsertByEmail=true`
     : '';
+  const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments${apiForm ? `?formId=${encodeURIComponent(apiForm.id)}` : ''}`;
   const allContacts = useMemo(
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
     [contactsByForm],
@@ -309,6 +313,12 @@ function ContactsRoute() {
     qualified: allContacts.filter((contact) => contact.status === 'qualified').length,
     archived: allContacts.filter((contact) => contact.status === 'archived').length,
   }), [allContacts]);
+  const backendSegmentsById = useMemo(() => new Map(
+    (contactSegments?.segments || []).map((segment) => [segment.id, segment]),
+  ), [contactSegments]);
+  const backendSegmentHighlights = useMemo(() => (
+    ['ready-to-promote', 'duplicate-email', 'missing-email', 'needs-notes'] as const
+  ).map((id) => backendSegmentsById.get(id)).filter((segment): segment is NonNullable<typeof segment> => Boolean(segment)), [backendSegmentsById]);
   const pipelineReadiness = useMemo(() => {
     if (apiForm) {
       return null;
@@ -473,6 +483,7 @@ function ContactsRoute() {
         create: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts`,
         import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
+      segments: contactSegmentsUrl,
     },
     controlRoutes: {
       forms: `/forms?siteId=${encodeURIComponent(activeSiteId)}`,
@@ -498,6 +509,16 @@ function ContactsRoute() {
       checks: commandReadiness.checks,
     },
     metrics,
+    backendSegments: contactSegments ? {
+      summary: contactSegments.summary,
+      segments: contactSegments.segments.map((segment) => ({
+        id: segment.id,
+        label: segment.label,
+        kind: segment.kind,
+        count: segment.count,
+        formIds: segment.formIds,
+      })),
+    } : null,
     lifecycleStates: ['new', 'contacted', 'qualified', 'archived'],
     filters: {
       formId: selectedFormId,
@@ -587,6 +608,8 @@ function ContactsRoute() {
     canMergeSelectedContacts,
     contactCreateUrl,
     contactImportUrl,
+    contactSegments,
+    contactSegmentsUrl,
     commandReadiness.checks,
     commandReadiness.score,
     contactUpdateUrl,
@@ -640,7 +663,10 @@ function ContactsRoute() {
     setNotice(null);
 
     try {
-      const loadedForms = await listForms(activeSiteId);
+      const [loadedForms, loadedSegments] = await Promise.all([
+        listForms(activeSiteId),
+        listContactSegments(activeSiteId),
+      ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
           const result = await listFormContacts(activeSiteId, form.id, { limit: 100 });
@@ -654,6 +680,7 @@ function ContactsRoute() {
 
       setForms(loadedForms);
       setContactsByForm(Object.fromEntries(inboxPairs));
+      setContactSegments(loadedSegments);
       const loadedContactIds = new Set(inboxPairs.flatMap(([, inbox]) => inbox.contacts.map((contact) => contact.id)));
       setSelectedContactIds((current) => current.filter((id) => loadedContactIds.has(id)));
       setSelectedFormId((current) => (
@@ -1396,6 +1423,45 @@ function ContactsRoute() {
         <Metric label="Contacted" value={metrics.contacted} icon={<Phone className="size-4" />} />
         <Metric label="Qualified" value={metrics.qualified} icon={<UserCheck className="size-4" />} />
         <Metric label="Archived" value={metrics.archived} icon={<Archive className="size-4" />} />
+      </div>
+
+      <div className="mb-6 rounded-lg border border-border bg-card p-4" data-testid="contacts-segment-analytics">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Filter className="size-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Backend contact segments</h2>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Private API counts for lifecycle and lead-quality lists used by the inbox, exports, promotion handoff, and custom CRM views.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void copyContactApiText(contactSegmentsUrl, 'Contact segments URL')}
+            disabled={isContactsBusy}
+            iconStart={<Copy className="size-4" />}
+          >
+            Copy endpoint
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {backendSegmentHighlights.map((segment) => (
+            <div key={segment.id} className="rounded-lg border border-border bg-background px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">{segment.label}</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold capitalize text-muted-foreground">
+                  {segment.kind}
+                </span>
+              </div>
+              <div className="mt-1 font-mono text-2xl font-semibold">{segment.count}</div>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{segment.description}</p>
+            </div>
+          ))}
+        </div>
+        <code className="mt-4 block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+          {contactSegmentsUrl}
+        </code>
       </div>
 
       <Panel id="contacts-inbox" className="scroll-mt-24">

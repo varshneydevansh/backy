@@ -11,6 +11,7 @@ const SITE_ID = process.env.BACKY_CONTACTS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CONTACTS_CDP_PORT || 9380);
 const SCREENSHOT_PATH = process.env.BACKY_CONTACTS_SCREENSHOT || path.join(os.tmpdir(), 'backy-contacts-smoke.png');
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -44,6 +45,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -54,6 +56,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const createLeadForm = async () => {
@@ -125,6 +148,14 @@ const listContacts = async (formId) => {
   return payload.data?.contacts || payload.contacts || [];
 };
 
+const listContactSegments = async (formId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/contact-segments?formId=${encodeURIComponent(formId)}`);
+  return payload.data?.analytics || {
+    segments: payload.segments || [],
+    summary: payload.summary,
+  };
+};
+
 const createContactDirectly = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
     method: 'POST',
@@ -175,7 +206,10 @@ const importContactsCsv = async (formId) => {
   ].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
   const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/import?upsertByEmail=true`, {
     method: 'POST',
-    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      ...(apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+    },
     body: csv,
   });
   const payload = await response.json().catch(() => ({}));
@@ -251,8 +285,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -531,6 +576,9 @@ const assertLayout = async (client) => {
       hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
       hasImportTemplate: Boolean(document.querySelector('[data-testid="contacts-import-template"]')),
       hasMergeDuplicates: Boolean(document.querySelector('[data-testid="contacts-merge-duplicates"]')),
+      hasSegmentAnalytics: Boolean(document.querySelector('[data-testid="contacts-segment-analytics"]')) &&
+        document.body?.innerText?.includes('Backend contact segments') &&
+        document.body?.innerText?.includes('/forms/contact-segments'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -544,6 +592,7 @@ const assertLayout = async (client) => {
     && layout.hasImportCsv
     && layout.hasImportTemplate
     && layout.hasMergeDuplicates
+    && layout.hasSegmentAnalytics
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -593,6 +642,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  await loginAdminApi();
   const form = await createLeadForm();
   let cleaned = false;
   let client;
@@ -604,12 +654,18 @@ const main = async () => {
     const duplicateContacts = await createDuplicateContacts(form.id);
     const submission = await submitLead(form.id);
     const contacts = await listContacts(form.id);
+    const contactSegments = await listContactSegments(form.id);
+    const duplicateSegment = contactSegments.segments?.find((segment) => segment.id === 'duplicate-email');
+    const readySegment = contactSegments.segments?.find((segment) => segment.id === 'ready-to-promote');
     const contact = contacts.find((item) => item.email === 'contacts-smoke@example.com');
     assert(contact?.id, `Lead submission did not create a contact: ${JSON.stringify(contacts).slice(0, 500)}`);
     assert(contact.status === 'new', `New contact should start with new status: ${contact.status}`);
     assert(contacts.some((item) => item.id === directContact.id && item.status === 'contacted'), 'Direct contact create did not persist.');
     assert(contacts.some((item) => item.id === importedContact.id && item.status === 'qualified'), 'Imported contact did not persist.');
     assert(duplicateContacts.every((duplicate) => contacts.some((item) => item.id === duplicate.id)), 'Duplicate contacts did not persist.');
+    assert(contactSegments.summary?.contacts >= contacts.length, `Contact segments did not include current contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
+    assert(duplicateSegment?.count >= 2, `Duplicate contact segment did not report duplicate contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
+    assert(readySegment?.count >= 3, `Ready-to-promote segment did not include qualified contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
 
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -622,7 +678,7 @@ const main = async () => {
     await client.send('DOM.enable');
     await client.send('Log.enable');
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: AUTH_STORAGE_SCRIPT,
+      source: authStorageScript(apiAdminSessionToken),
     });
 
     await navigateToContacts(client, form.id);
@@ -674,6 +730,11 @@ const main = async () => {
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
         archivedId: mergedDuplicateContacts.archived.id,
+      },
+      contactSegments: {
+        contacts: contactSegments.summary?.contacts,
+        duplicateEmail: duplicateSegment?.count,
+        readyToPromote: readySegment?.count,
       },
       layout,
       cleaned,

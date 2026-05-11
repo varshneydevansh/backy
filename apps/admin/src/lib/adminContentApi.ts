@@ -692,6 +692,18 @@ interface ApiListContactsResponse {
   };
 }
 
+interface ApiContactSegmentsResponse {
+  success: boolean;
+  data?: {
+    analytics: ContactSegmentAnalytics;
+  };
+  segments?: ContactSegment[];
+  summary?: ContactSegmentSummary;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiContactResponse {
   success: boolean;
   data?: {
@@ -1534,6 +1546,46 @@ export interface ContactListResult {
   contacts: AdminContact[];
   count: number;
   pagination: ApiPagination;
+}
+
+export interface ContactSegment {
+  id: ContactStatus | 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote' | 'duplicate-email';
+  label: string;
+  kind: 'system' | 'lifecycle' | 'quality';
+  count: number;
+  contactIds: string[];
+  formIds: string[];
+  description: string;
+}
+
+export interface ContactSegmentSummary {
+  forms: number;
+  contacts: number;
+  lifecycle: Record<ContactStatus, number>;
+  quality: {
+    missingEmail: number;
+    missingPhone: number;
+    needsNotes: number;
+    hasSourceValues: number;
+    readyToPromote: number;
+    duplicateEmail: number;
+    duplicateEmailGroups: number;
+  };
+}
+
+export interface ContactSegmentAnalytics {
+  summary: ContactSegmentSummary;
+  segments: ContactSegment[];
+  forms: Array<{
+    id: string;
+    name: string;
+    title: string | null;
+    isActive: boolean;
+    contactShare: {
+      enabled: boolean;
+      dedupeByEmail: boolean;
+    };
+  }>;
 }
 
 export interface ContactInput {
@@ -3394,6 +3446,27 @@ export async function listFormContacts(
     count,
     pagination,
   };
+}
+
+export async function listContactSegments(
+  siteId: string,
+  filters: { formId?: string } = {},
+): Promise<ContactSegmentAnalytics> {
+  const query = new URLSearchParams();
+  if (filters.formId) query.set('formId', filters.formId);
+  const queryString = query.toString();
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/contact-segments${queryString ? `?${queryString}` : ''}`);
+  const payload = await readJson<ApiContactSegmentsResponse>(response);
+  const analytics = payload.data?.analytics || (payload.segments && payload.summary
+    ? { segments: payload.segments, summary: payload.summary, forms: [] }
+    : undefined);
+
+  if (!response.ok || !payload.success || !analytics) {
+    throw new Error(payload.error?.message || 'Unable to load contact segments');
+  }
+
+  return analytics;
 }
 
 export async function updateContact(
