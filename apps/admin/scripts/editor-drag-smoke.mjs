@@ -303,6 +303,29 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-quote',
+            type: 'quote',
+            x: 360,
+            y: 920,
+            width: 360,
+            height: 90,
+            zIndex: 5,
+            props: {
+              content: [
+                {
+                  type: 'blockquote',
+                  children: [{ text: 'Initial smoke quote' }],
+                },
+              ],
+              citation: 'Initial source',
+              fontSize: 18,
+              fontStyle: 'italic',
+              color: '#334155',
+              quoteBorderColor: '#cbd5e1',
+              quoteBorderWidth: 4,
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -454,7 +477,7 @@ const createSmokePage = async () => {
         ],
         canvasSize: {
           width: 1200,
-          height: 900,
+          height: 1040,
         },
       },
     }),
@@ -3481,6 +3504,56 @@ const assertPersistedSpacerBehavior = async (pageId) => {
   return { width: spacer.width, height: spacer.height, props };
 };
 
+const testQuoteBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-quote');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-quote-citation', 'Smoke source');
+  await setFormControlByTestId(client, 'editor-quote-border-color', '#7c3aed');
+  await setFormControlByTestId(client, 'editor-quote-border-width', '6');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-quote"]');
+    const surface = node?.firstElementChild;
+    const style = surface ? getComputedStyle(surface) : null;
+    return {
+      citation: value('editor-quote-citation'),
+      borderColor: value('editor-quote-border-color'),
+      borderWidth: value('editor-quote-border-width'),
+      previewCitation: surface?.querySelector('cite')?.textContent?.trim() || '',
+      previewBorderLeftWidth: style?.borderLeftWidth || '',
+      previewBorderLeftColor: style?.borderLeftColor || '',
+      previewText: surface?.textContent?.trim() || '',
+    };
+  })()`);
+
+  assert(state.citation === 'Smoke source' && state.previewCitation === 'Smoke source', `Quote citation mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderColor === '#7c3aed' && /124,\s*58,\s*237/.test(state.previewBorderLeftColor), `Quote border color mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderWidth === '6' && state.previewBorderLeftWidth === '6px', `Quote border width mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewText.includes('Initial smoke quote'), `Quote rich text preview missing Slate content: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedQuoteBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const quote = findCanvasElement(elements, 'smoke-quote');
+  const props = quote?.props || {};
+  const quoteText = Array.isArray(props.content)
+    ? props.content.map((node) => JSON.stringify(node)).join(' ')
+    : String(props.content || '');
+
+  assert(quote?.type === 'quote', `Persisted smoke-quote missing: ${JSON.stringify(quote)}`);
+  assert(quoteText.includes('Initial smoke quote'), `Persisted quote Slate content mismatch: ${JSON.stringify(props.content)}`);
+  assert(props.citation === 'Smoke source', `Persisted quote citation mismatch: ${JSON.stringify(props)}`);
+  assert(props.quoteBorderColor === '#7c3aed', `Persisted quote border color mismatch: ${JSON.stringify(props)}`);
+  assert(props.quoteBorderWidth === 6, `Persisted quote border width mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -4292,9 +4365,9 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4304,7 +4377,9 @@ const main = async () => {
             ? 'smoke-nav'
             : COMPONENT_SMOKE === 'spacer'
               ? 'smoke-spacer'
-              : 'smoke-list';
+              : COMPONENT_SMOKE === 'quote'
+                ? 'smoke-quote'
+                : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
         : COMPONENT_SMOKE === 'columns'
@@ -4313,7 +4388,9 @@ const main = async () => {
             ? await testNavBehaviorControls(client)
             : COMPONENT_SMOKE === 'spacer'
               ? await testSpacerBehaviorControls(client)
-              : await testListBehaviorControls(client);
+              : COMPONENT_SMOKE === 'quote'
+                ? await testQuoteBehaviorControls(client)
+                : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = COMPONENT_SMOKE === 'divider'
@@ -4324,7 +4401,9 @@ const main = async () => {
             ? await assertPersistedNavBehavior(tempPageId)
             : COMPONENT_SMOKE === 'spacer'
               ? await assertPersistedSpacerBehavior(tempPageId)
-              : await assertPersistedListBehavior(tempPageId);
+              : COMPONENT_SMOKE === 'quote'
+                ? await assertPersistedQuoteBehavior(tempPageId)
+                : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -4484,6 +4563,9 @@ const main = async () => {
     const spacerBehaviorControls = EDITOR_PATH
       ? null
       : await testSpacerBehaviorControls(client);
+    const quoteBehaviorControls = EDITOR_PATH
+      ? null
+      : await testQuoteBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4544,6 +4626,7 @@ const main = async () => {
     let persistedColumnsBehavior = null;
     let persistedNavBehavior = null;
     let persistedSpacerBehavior = null;
+    let persistedQuoteBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4554,7 +4637,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4628,6 +4711,9 @@ const main = async () => {
       persistedSpacerBehavior = spacerBehaviorControls
         ? await assertPersistedSpacerBehavior(tempPageId)
         : null;
+      persistedQuoteBehavior = quoteBehaviorControls
+        ? await assertPersistedQuoteBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4659,7 +4745,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4769,6 +4855,7 @@ const main = async () => {
       columnsBehaviorControls,
       navBehaviorControls,
       spacerBehaviorControls,
+      quoteBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4793,6 +4880,7 @@ const main = async () => {
       persistedColumnsBehavior,
       persistedNavBehavior,
       persistedSpacerBehavior,
+      persistedQuoteBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

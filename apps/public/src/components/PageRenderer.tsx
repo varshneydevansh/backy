@@ -1625,20 +1625,35 @@ function RepeaterElement({ element }: ElementRendererProps) {
  */
 function QuoteElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
+  const quoteText = getNameClass(props.content) || getSlateText(props.content) || getNameClass(props.text);
+  const citation = getNameClass(props.citation);
 
   return (
     <blockquote
       style={{
         margin: 0,
-        paddingLeft: '1rem',
-        borderLeft: '4px solid rgba(0,0,0,0.2)',
+        paddingLeft: getLength(props.quotePaddingLeft, '1rem'),
+        borderLeft: `${getLength(props.quoteBorderWidth, '4px')} solid ${getNameClass(props.quoteBorderColor) || 'rgba(0,0,0,0.2)'}`,
         color: getNameClass(props.color) || '#334155',
         fontStyle: 'italic',
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
       }}
     >
-      {getNameClass(props.content) || getNameClass(props.text) || ''}
+      {quoteText}
+      {citation ? (
+        <cite
+          style={{
+            display: 'block',
+            marginTop: '0.5rem',
+            color: getNameClass(props.citationColor) || '#64748b',
+            fontSize: getLength(props.citationFontSize, '0.875em'),
+            fontStyle: 'normal',
+          }}
+        >
+          {citation}
+        </cite>
+      ) : null}
     </blockquote>
   );
 }

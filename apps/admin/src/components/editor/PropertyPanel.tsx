@@ -650,6 +650,7 @@ function ContentProperties({
   const hasLinkContent = normalizedType === 'link';
   const hasButtonContent = normalizedType === 'button';
   const hasNavContent = normalizedType === 'nav';
+  const hasQuoteContent = normalizedType === 'quote';
   const hasInputContent = normalizedType === 'input';
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
   const hasFormContent = normalizedType === 'form';
@@ -681,6 +682,49 @@ function ContentProperties({
             onElementContentChange={updateTextContent}
           />
         )}
+
+      {/* Quote Properties */}
+      {hasQuoteContent && (
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Citation
+            </label>
+            <input
+              type="text"
+              value={element.props.citation || ''}
+              onChange={(e) => onChange({ citation: e.target.value })}
+              data-testid="editor-quote-citation"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Author or source"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Border Color
+            </label>
+            <ColorInput
+              value={element.props.quoteBorderColor || '#cbd5e1'}
+              onChange={(value) => onChange({ quoteBorderColor: value })}
+              testId="editor-quote-border-color"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Border Width
+            </label>
+            <NumberInput
+              value={toNumber(element.props.quoteBorderWidth, 4)}
+              onChange={(value) => onChange({ quoteBorderWidth: value })}
+              suffix="px"
+              testId="editor-quote-border-width"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Image Source */}
       {hasImageContent && (

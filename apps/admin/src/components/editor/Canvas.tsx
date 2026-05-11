@@ -2686,7 +2686,17 @@ function CanvasElementComponent({
       case 'quote':
         return (
         <div
-            style={{ ...sharedStyle, width: '100%', height: '100%' }}
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              borderLeft: `${toCssLength(p.quoteBorderWidth ?? 4)} solid ${p.quoteBorderColor ?? '#cbd5e1'}`,
+              paddingLeft: toCssLength(p.quotePaddingLeft ?? 16),
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: 6,
+            }}
             onDoubleClick={() => onDoubleClick()}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
@@ -2716,6 +2726,17 @@ function CanvasElementComponent({
               }}
               placeholder="Quote..."
             />
+            {typeof p.citation === 'string' && p.citation.trim() ? (
+              <cite
+                style={{
+                  color: p.citationColor ?? sharedStyle.color ?? '#64748b',
+                  fontSize: p.citationFontSize ?? 13,
+                  fontStyle: 'normal',
+                }}
+              >
+                {p.citation}
+              </cite>
+            ) : null}
           </div>
         );
 
