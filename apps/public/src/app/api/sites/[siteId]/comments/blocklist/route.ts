@@ -1,9 +1,10 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   deleteCommentBlocklistEntries,
   getSiteByIdOrSlug,
   listCommentBlocklist,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -57,6 +58,10 @@ const parseIds = (raw: unknown): string[] => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'comments.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;
@@ -101,6 +106,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'comments.manage' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;

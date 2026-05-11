@@ -2142,7 +2142,7 @@ const getAdminSessionToken = (): string => {
   }
 };
 
-const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
+export const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
   const apiKey = getAdminApiKey();
   const sessionToken = getAdminSessionToken();
   const headers = new Headers(init.headers);

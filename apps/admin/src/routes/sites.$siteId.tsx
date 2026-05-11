@@ -52,6 +52,7 @@ import {
   updateSiteFrontendDesign,
   updateSite as updateSiteFromApi,
   captureSiteFrontendDesignDefaults,
+  adminFetch,
 } from '@/lib/adminContentApi';
 import type {
   AdminFrontendDesignResponse,
@@ -1254,7 +1255,7 @@ function EditSitePage() {
     setState((prev) => ({ ...prev, commentsLoading: true, errorMessage: null }));
     try {
       const query = buildCommentFilterQuery();
-      const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/comments?${query}`));
+      const response = await adminFetch(buildApiUrl(`/api/sites/${siteApiId}/comments?${query}`));
       if (!response.ok) {
         throw new Error('Unable to load comments.');
       }
@@ -1417,7 +1418,7 @@ function EditSitePage() {
     try {
       const effectiveRequestId = requestId?.trim() || comment.requestId || undefined;
 
-      const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/comments/${comment.id}`), {
+      const response = await adminFetch(buildApiUrl(`/api/sites/${siteApiId}/comments/${comment.id}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1581,7 +1582,7 @@ function EditSitePage() {
         query.set('limit', `${limit}`);
         query.set('offset', `${offset}`);
 
-        const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/comments?${query.toString()}`));
+        const response = await adminFetch(buildApiUrl(`/api/sites/${siteApiId}/comments?${query.toString()}`));
         if (!response.ok) {
           throw new Error('Unable to load comments for export.');
         }
@@ -1635,7 +1636,7 @@ function EditSitePage() {
     if (!siteApiId || state.selectedCommentIds.length === 0) return;
     setActionBusyId('bulk-comment');
     try {
-      const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/comments`), {
+      const response = await adminFetch(buildApiUrl(`/api/sites/${siteApiId}/comments`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

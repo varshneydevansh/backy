@@ -1,10 +1,11 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   bulkClearCommentReports,
   bulkUpdateCommentStatus,
   getSiteByIdOrSlug,
   listComments,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   clearRepositoryCommentReports,
   resolveRepositorySite,
@@ -157,6 +158,10 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;
@@ -266,6 +271,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.manage' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;
