@@ -443,6 +443,25 @@ assert(cachedMediaFonts.meta.etag, 'mediaFontsCached() missing response ETag');
 const revalidatedMediaFonts = await client.mediaFontsCached({ etag: cachedMediaFonts.meta.etag });
 assert(revalidatedMediaFonts.notModified === true, 'mediaFontsCached() did not return notModified for matching ETag');
 
+const collections = await client.collections();
+assert(Array.isArray(collections.data.collections), 'collections() missing collections array');
+const cachedCollections = await client.collectionsCached();
+assert(cachedCollections.notModified === false, 'collectionsCached() first request should return a body');
+assert(Array.isArray(cachedCollections.body.data.collections), 'collectionsCached() missing collections array');
+assert(cachedCollections.meta.etag, 'collectionsCached() missing response ETag');
+const revalidatedCollections = await client.collectionsCached({ etag: cachedCollections.meta.etag });
+assert(revalidatedCollections.notModified === true, 'collectionsCached() did not return notModified for matching ETag');
+if (collections.data.collections.length > 0) {
+  const collection = await client.collection(collections.data.collections[0].id);
+  assert(collection.data.collection?.id === collections.data.collections[0].id, 'collection() returned wrong collection');
+  const cachedCollection = await client.collectionCached(collections.data.collections[0].id);
+  assert(cachedCollection.notModified === false, 'collectionCached() first request should return a body');
+  assert(cachedCollection.body.data.collection?.id === collections.data.collections[0].id, 'collectionCached() returned wrong collection');
+  assert(cachedCollection.meta.etag, 'collectionCached() missing response ETag');
+  const revalidatedCollection = await client.collectionCached(collections.data.collections[0].id, { etag: cachedCollection.meta.etag });
+  assert(revalidatedCollection.notModified === true, 'collectionCached() did not return notModified for matching ETag');
+}
+
 const reusableSections = await client.reusableSections();
 assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
 const cachedReusableSections = await client.reusableSectionsCached();
@@ -753,6 +772,9 @@ console.log(JSON.stringify({
     'mediaFontsCached',
     'mediaFileUrl',
     'mediaTransformUrl',
+    'collections',
+    'collectionsCached',
+    'collectionCached',
     'reusableSections',
     'reusableSectionsCached',
     'reusableSectionCached',

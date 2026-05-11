@@ -1124,8 +1124,22 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }
 
+  collectionsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ collections: BackyCollectionSchema[] }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
   collection(collectionId: string): Promise<BackyEnvelope<{ collection: BackyCollectionSchema }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`);
+  }
+
+  collectionCached(collectionId: string, options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   reusableSections(options: { category?: string; tag?: string; search?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ sections: BackyReusableSection[]; pagination: BackyPagination }>> {
