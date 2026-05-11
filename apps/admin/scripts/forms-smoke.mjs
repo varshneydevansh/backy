@@ -563,6 +563,11 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const firstPlaceholder = inputs.find((input) => input.value === 'Ada Lovelace');
       const notificationEmail = panel.querySelector('[data-testid="form-notification-email-input"]');
       const notificationWebhook = panel.querySelector('[data-testid="form-notification-webhook-input"]');
+      const spamMinFill = panel.querySelector('[data-testid="form-spam-min-fill-ms-input"]');
+      const spamRateWindow = panel.querySelector('[data-testid="form-spam-rate-window-seconds-input"]');
+      const spamRateMax = panel.querySelector('[data-testid="form-spam-rate-limit-max-input"]');
+      const spamDuplicateWindow = panel.querySelector('[data-testid="form-spam-duplicate-window-seconds-input"]');
+      const spamBlockedTerms = panel.querySelector('[data-testid="form-spam-blocked-terms-input"]');
       const addButton = Array.from(panel.querySelectorAll('button')).find((button) => (
         (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add field'
       ));
@@ -573,6 +578,11 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
         !(firstPlaceholder instanceof HTMLInputElement) ||
         !(notificationEmail instanceof HTMLInputElement) ||
         !(notificationWebhook instanceof HTMLInputElement) ||
+        !(spamMinFill instanceof HTMLInputElement) ||
+        !(spamRateWindow instanceof HTMLInputElement) ||
+        !(spamRateMax instanceof HTMLInputElement) ||
+        !(spamDuplicateWindow instanceof HTMLInputElement) ||
+        !(spamBlockedTerms instanceof HTMLTextAreaElement) ||
         !(addButton instanceof HTMLButtonElement)
       ) {
         return {
@@ -597,6 +607,21 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
 
       notificationWebhook.focus();
       setInputValue(notificationWebhook, ${JSON.stringify(webhookUrl)});
+
+      spamMinFill.focus();
+      setInputValue(spamMinFill, '2000');
+
+      spamRateWindow.focus();
+      setInputValue(spamRateWindow, '45');
+
+      spamRateMax.focus();
+      setInputValue(spamRateMax, '6');
+
+      spamDuplicateWindow.focus();
+      setInputValue(spamDuplicateWindow, '300');
+
+      spamBlockedTerms.focus();
+      setInputValue(spamBlockedTerms, 'blocky-spam');
 
       addButton.click();
       return { ok: true };
@@ -798,9 +823,18 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
     );
     const placeholder = form?.fields?.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper');
     const notificationTargets = form?.notificationEmail === 'forms-smoke-leads@example.com' && form?.notificationWebhook === webhookUrl;
+    const spam = form?.settings?.spam || form?.spamSettings || {};
+    const spamSettings = (
+      Number(spam.minFillMs) === 2000 &&
+      Number(spam.rateLimitWindowMs) === 45000 &&
+      Number(spam.rateLimitMax) === 6 &&
+      Number(spam.duplicateWindowMs) === 300000 &&
+      Array.isArray(spam.blockedTerms) &&
+      spam.blockedTerms.includes('blocky-spam')
+    );
 
-    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets) {
-      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets && spamSettings) {
+      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets, spamSettings };
     }
 
     if (attempt === 79) {
@@ -810,6 +844,7 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
         notificationEmail: form?.notificationEmail,
         notificationWebhook: form?.notificationWebhook,
         collectionTarget,
+        spam,
         fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
       })}`);
     }
@@ -872,6 +907,34 @@ const submitInvalidRegistration = async (formId) => {
   assert(
     payload.validation?.some((detail) => detail.field === 'company' && detail.code === 'min_length' && detail.message === 'Company must be at least 4 characters.'),
     `Invalid registration did not return machine-readable field errors: ${serialized}`,
+  );
+  return payload;
+};
+
+const submitBlockedSpamRegistration = async (formId) => {
+  const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      requestId: `forms-spam-${Date.now().toString(36)}`,
+      startedAt: Date.now() - 3000,
+      honeypot: '',
+      values: {
+        full_name: 'Spam Blocked User',
+        email: 'forms-spam@example.com',
+        phone: '+1 555 0100',
+        member_type: 'Creator',
+        consent: true,
+        company: 'blocky-spam labs',
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  const serialized = JSON.stringify(payload);
+  assert(response.status === 422, `Blocked spam registration should return 422: ${response.status} ${serialized}`);
+  assert(
+    payload.spamFlags?.includes('blocked-term') || payload.data?.spamFlags?.includes('blocked-term'),
+    `Blocked spam registration did not expose blocked-term flag: ${serialized}`,
   );
   return payload;
 };
@@ -1369,6 +1432,7 @@ const main = async () => {
     );
 
     const invalidSubmission = await submitInvalidRegistration(createdFormId);
+    const spamSubmission = await submitBlockedSpamRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
     webhookFailure = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'failed');
     emailDelivery = await waitForEmailNotification(createdFormId, submitted);
@@ -1424,6 +1488,7 @@ const main = async () => {
         notificationWebhook: Boolean(definition.data.form.notificationWebhook),
       },
       invalidSubmissionRejected: Boolean(invalidSubmission.error || invalidSubmission.errorMessage),
+      spamSubmissionRejected: spamSubmission.spamFlags || spamSubmission.data?.spamFlags || [],
       submission: {
         id: submitted.id,
         initialStatus: submitted.status,

@@ -2208,6 +2208,9 @@ const SUBMISSION_RATE_WINDOW_MS = 60 * 1000;
 const SUBMISSION_RATE_LIMIT = 8;
 const FORM_SUBMISSION_SIGNATURES = new Map<string, number[]>();
 const FORM_SUBMISSION_MIN_FILL_MS = 900;
+const FORM_SPAM_MIN_FILL_MS_MAX = 120_000;
+const FORM_SPAM_RATE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
+const FORM_SPAM_DUPLICATE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
 const COMMENT_RATE_WINDOWS = new Map<string, SubmissionRateState>();
 const COMMENT_SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
 const COMMENT_RATE_WINDOW_MS = 45 * 1000;
@@ -3452,6 +3455,43 @@ function makeSubmissionSignature(values: Record<string, unknown>) {
     .join('&');
 }
 
+function readPositiveNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+function readFormSpamSettings(form: FormDefinition) {
+  const settingsRecord = isObjectRecord(form.settings) ? form.settings : {};
+  const settingsSpam = isObjectRecord(settingsRecord.spam) ? settingsRecord.spam : {};
+  const directSpam = isObjectRecord((form as { spamSettings?: unknown }).spamSettings)
+    ? (form as { spamSettings: Record<string, unknown> }).spamSettings
+    : {};
+  const merged = { ...settingsSpam, ...directSpam };
+  const blockedTerms = Array.isArray(merged.blockedTerms)
+    ? merged.blockedTerms.map(sanitizeString).filter(Boolean).slice(0, 100)
+    : [];
+
+  return {
+    minFillMs: readPositiveNumber(merged.minFillMs, FORM_SUBMISSION_MIN_FILL_MS, 0, FORM_SPAM_MIN_FILL_MS_MAX),
+    rateLimitWindowMs: readPositiveNumber(merged.rateLimitWindowMs, SUBMISSION_RATE_WINDOW_MS, 1_000, FORM_SPAM_RATE_WINDOW_MS_MAX),
+    rateLimitMax: readPositiveNumber(merged.rateLimitMax, SUBMISSION_RATE_LIMIT, 1, 1_000),
+    duplicateWindowMs: readPositiveNumber(merged.duplicateWindowMs, SUBMISSION_SIGNATURE_WINDOW_MS, 1_000, FORM_SPAM_DUPLICATE_WINDOW_MS_MAX),
+    blockedTerms,
+  };
+}
+
+function submittedValuesContainBlockedTerm(values: Record<string, unknown>, blockedTerms: string[]): string | null {
+  if (blockedTerms.length === 0) return null;
+  const haystack = Object.values(values)
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => sanitizeString(value).toLowerCase())
+    .filter(Boolean)
+    .join('\n');
+
+  return blockedTerms.find((term) => haystack.includes(term.toLowerCase())) || null;
+}
+
 function checkSubmissionSpamSignals(
   form: FormDefinition,
   body: {
@@ -3464,6 +3504,7 @@ function checkSubmissionSpamSignals(
 ): SpamCheckResult {
   const flags: string[] = [];
   const now = Date.now();
+  const spamSettings = readFormSpamSettings(form);
 
   if (form.enableHoneypot && sanitizeString(body.honeypot).length > 0) {
     return {
@@ -3479,12 +3520,22 @@ function checkSubmissionSpamSignals(
       ? Date.parse(String(body.startedAt))
       : NaN;
 
-  if (Number.isFinite(startedAt) && now - startedAt < FORM_SUBMISSION_MIN_FILL_MS) {
+  if (Number.isFinite(startedAt) && now - startedAt < spamSettings.minFillMs) {
     flags.push('timing');
     return {
       status: 'spam',
       flags,
       errors: 'Submission rejected: too quick to be a human response.',
+    };
+  }
+
+  const blockedTerm = submittedValuesContainBlockedTerm(values, spamSettings.blockedTerms);
+  if (blockedTerm) {
+    flags.push('blocked-term');
+    return {
+      status: 'spam',
+      flags,
+      errors: `Submission contains a blocked term: ${blockedTerm}`,
     };
   }
 
@@ -3495,7 +3546,7 @@ function checkSubmissionSpamSignals(
   };
 
   const windowStarted = rateState.lastSubmissionAt !== null
-    ? now - rateState.lastSubmissionAt <= SUBMISSION_RATE_WINDOW_MS
+    ? now - rateState.lastSubmissionAt <= spamSettings.rateLimitWindowMs
     : false;
   if (!windowStarted) {
     rateState.total = 0;
@@ -3505,19 +3556,19 @@ function checkSubmissionSpamSignals(
   rateState.total += 1;
   SUBMISSION_RATE_WINDOWS.set(key, rateState);
 
-  if (rateState.total > SUBMISSION_RATE_LIMIT) {
+  if (rateState.total > spamSettings.rateLimitMax) {
     flags.push('rate-limit');
     return {
       status: 'spam',
       flags,
-      errors: `Too many submissions. Please wait ${Math.max(10, Math.round(SUBMISSION_RATE_WINDOW_MS / 1000))} seconds.`,
+      errors: `Too many submissions. Please wait ${Math.max(1, Math.round(spamSettings.rateLimitWindowMs / 1000))} seconds.`,
     };
   }
 
   const signature = makeSubmissionSignature(values) || `empty-${now}`;
   const signatureKey = `${key}:signature:${signature}`;
   const signatures = FORM_SUBMISSION_SIGNATURES.get(signatureKey) || [];
-  const activeSignatures = signatures.filter((value) => now - value <= SUBMISSION_SIGNATURE_WINDOW_MS);
+  const activeSignatures = signatures.filter((value) => now - value <= spamSettings.duplicateWindowMs);
   if (activeSignatures.length > 0) {
     activeSignatures.push(now);
     FORM_SUBMISSION_SIGNATURES.set(signatureKey, activeSignatures);

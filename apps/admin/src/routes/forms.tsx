@@ -78,6 +78,7 @@ const SUBMISSION_STATUS_FILTERS: SubmissionStatusFilter[] = ['all', 'pending', '
 const FORM_FIELD_TYPES = ['text', 'email', 'number', 'textarea', 'select', 'checkbox', 'radio', 'date', 'tel', 'url', 'file'] as const;
 type FormValidationRule = NonNullable<FormFieldDefinition['validation']>[number];
 type FormValidationRuleType = 'minLength' | 'maxLength' | 'pattern' | 'min' | 'max';
+type FormSpamSettings = NonNullable<FormDefinition['spamSettings']>;
 const FORM_VALIDATION_RULES: Array<{
   type: FormValidationRuleType;
   label: string;
@@ -90,6 +91,35 @@ const FORM_VALIDATION_RULES: Array<{
   { type: 'min', label: 'Min value', valuePlaceholder: '1', valueMode: 'number' },
   { type: 'max', label: 'Max value', valuePlaceholder: '100', valueMode: 'number' },
 ];
+const DEFAULT_FORM_SPAM_SETTINGS: Required<FormSpamSettings> = {
+  minFillMs: 900,
+  rateLimitWindowMs: 60_000,
+  rateLimitMax: 8,
+  duplicateWindowMs: 600_000,
+  blockedTerms: [],
+};
+
+const readNumberSetting = (value: unknown, fallback: number): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const readFormSpamSettings = (form?: FormDefinition | null): Required<FormSpamSettings> => {
+  const settingsRecord = isPlainRecord(form?.settings) ? form.settings : {};
+  const settingsSpam = isPlainRecord(settingsRecord.spam) ? settingsRecord.spam : {};
+  const directSpam = isPlainRecord(form?.spamSettings) ? form.spamSettings : {};
+  const merged = { ...settingsSpam, ...directSpam } as Record<string, unknown>;
+
+  return {
+    minFillMs: Math.max(0, Math.round(readNumberSetting(merged.minFillMs, DEFAULT_FORM_SPAM_SETTINGS.minFillMs))),
+    rateLimitWindowMs: Math.max(1_000, Math.round(readNumberSetting(merged.rateLimitWindowMs, DEFAULT_FORM_SPAM_SETTINGS.rateLimitWindowMs))),
+    rateLimitMax: Math.max(1, Math.round(readNumberSetting(merged.rateLimitMax, DEFAULT_FORM_SPAM_SETTINGS.rateLimitMax))),
+    duplicateWindowMs: Math.max(1_000, Math.round(readNumberSetting(merged.duplicateWindowMs, DEFAULT_FORM_SPAM_SETTINGS.duplicateWindowMs))),
+    blockedTerms: Array.isArray(merged.blockedTerms)
+      ? merged.blockedTerms.map((term) => String(term).trim()).filter(Boolean).slice(0, 100)
+      : [],
+  };
+};
 
 const isFormSourceFilter = (value: unknown): value is FormSourceFilter => (
   typeof value === 'string' && FORM_SOURCE_FILTERS.includes(value as FormSourceFilter)
@@ -1131,6 +1161,28 @@ function FormsRoute() {
 
   const patchFormDraft = (patch: Partial<FormDefinition>) => {
     setFormDraft((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const patchFormDraftSpamSettings = (patch: Partial<FormSpamSettings>) => {
+    setFormDraft((current) => {
+      if (!current) return current;
+
+      const currentSpam = readFormSpamSettings(current);
+      return {
+        ...current,
+        spamSettings: {
+          ...currentSpam,
+          ...patch,
+        },
+        settings: {
+          ...(current.settings || {}),
+          spam: {
+            ...currentSpam,
+            ...patch,
+          },
+        },
+      };
+    });
   };
 
   const patchFormDraftField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
@@ -2484,6 +2536,81 @@ function FormsRoute() {
                           </label>
                         </div>
 
+                        <div data-testid="form-spam-settings-panel" className="rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold">Spam controls</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Tune timing, rate-limit, duplicate, and blocked-term rules for this public form.
+                              </p>
+                            </div>
+                            <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                              API enforced
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Min fill ms
+                              <input
+                                type="number"
+                                min={0}
+                                max={120000}
+                                value={readFormSpamSettings(formDraft).minFillMs}
+                                onChange={(event) => patchFormDraftSpamSettings({ minFillMs: Number(event.target.value) })}
+                                data-testid="form-spam-min-fill-ms-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Rate window sec
+                              <input
+                                type="number"
+                                min={1}
+                                max={86400}
+                                value={Math.round(readFormSpamSettings(formDraft).rateLimitWindowMs / 1000)}
+                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitWindowMs: Number(event.target.value) * 1000 })}
+                                data-testid="form-spam-rate-window-seconds-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Max submissions
+                              <input
+                                type="number"
+                                min={1}
+                                max={1000}
+                                value={readFormSpamSettings(formDraft).rateLimitMax}
+                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitMax: Number(event.target.value) })}
+                                data-testid="form-spam-rate-limit-max-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Duplicate window sec
+                              <input
+                                type="number"
+                                min={1}
+                                max={86400}
+                                value={Math.round(readFormSpamSettings(formDraft).duplicateWindowMs / 1000)}
+                                onChange={(event) => patchFormDraftSpamSettings({ duplicateWindowMs: Number(event.target.value) * 1000 })}
+                                data-testid="form-spam-duplicate-window-seconds-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                          </div>
+                          <label className="mt-3 grid gap-1.5 text-sm font-medium">
+                            Blocked terms
+                            <textarea
+                              value={readFormSpamSettings(formDraft).blockedTerms.join('\n')}
+                              onChange={(event) => patchFormDraftSpamSettings({ blockedTerms: parseLines(event.target.value).slice(0, 100) })}
+                              rows={3}
+                              data-testid="form-spam-blocked-terms-input"
+                              placeholder="One term per line"
+                              className="min-h-24 resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                        </div>
+
                         {formDraft.collectionTarget?.enabled && (
                           <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="form-collection-target-panel">
                             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3442,6 +3569,10 @@ const parseOptionsText = (value: string): string[] | undefined => {
   return options.length > 0 ? options : undefined;
 };
 
+const parseLines = (value: string): string[] => (
+  value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
+);
+
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
@@ -3686,6 +3817,16 @@ const buildDefaultCollectionFieldMap = (
 };
 
 const buildFormUpdatePayload = (form: FormDefinition) => ({
+  ...(() => {
+    const spamSettings = readFormSpamSettings(form);
+    return {
+      spamSettings,
+      settings: {
+        ...(form.settings || {}),
+        spam: spamSettings,
+      },
+    };
+  })(),
   name: form.name.trim(),
   title: normalizeOptionalText(form.title),
   description: normalizeOptionalText(form.description),
@@ -3713,7 +3854,6 @@ const buildFormUpdatePayload = (form: FormDefinition) => ({
   collectionTarget: form.collectionTarget?.enabled
     ? form.collectionTarget
     : { enabled: false, collectionId: form.collectionTarget?.collectionId || '', fieldMap: form.collectionTarget?.fieldMap || {} },
-  settings: form.settings || {},
 });
 
 const formatSubmissionValue = (value: unknown): string => {

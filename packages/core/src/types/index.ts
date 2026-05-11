@@ -1130,6 +1130,24 @@ export interface FormDefinition {
   enableHoneypot?: boolean;
   enableCaptcha?: boolean;
 
+  /** Optional per-form spam controls layered on top of global defaults */
+  spamSettings?: {
+    /** Minimum client fill time before a public submission is accepted */
+    minFillMs?: number;
+
+    /** Sliding rate-limit window in milliseconds */
+    rateLimitWindowMs?: number;
+
+    /** Maximum submissions per rate-limit window */
+    rateLimitMax?: number;
+
+    /** Duplicate submission signature window in milliseconds */
+    duplicateWindowMs?: number;
+
+    /** Lowercase-insensitive submitted value terms that are rejected as spam */
+    blockedTerms?: string[];
+  };
+
   /** Optional webhook URL invoked on form submission */
   notificationWebhook?: string | null;
 

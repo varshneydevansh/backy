@@ -1325,6 +1325,13 @@ export interface FormDefinition {
   successMessage?: string | null;
   enableHoneypot?: boolean;
   enableCaptcha?: boolean;
+  spamSettings?: {
+    minFillMs?: number;
+    rateLimitWindowMs?: number;
+    rateLimitMax?: number;
+    duplicateWindowMs?: number;
+    blockedTerms?: string[];
+  };
   notificationWebhook?: string | null;
   moderationMode?: 'manual' | 'auto-approve';
   contactShare?: {
