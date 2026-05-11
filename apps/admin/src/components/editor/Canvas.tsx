@@ -2302,10 +2302,13 @@ function CanvasElementComponent({
               <input
                 type={p.inputType ?? 'text'}
                 placeholder={p.placeholder ?? 'Enter text...'}
-                value={p.value ?? ''}
+                value={p.value ?? p.defaultValue ?? ''}
                 disabled={!isPreview}
                 required={Boolean(p.required)}
                 name={typeof p.name === 'string' ? p.name : undefined}
+                pattern={typeof p.pattern === 'string' && p.pattern.trim() ? p.pattern : undefined}
+                minLength={typeof p.minLength === 'number' && Number.isFinite(p.minLength) ? p.minLength : undefined}
+                maxLength={typeof p.maxLength === 'number' && Number.isFinite(p.maxLength) ? p.maxLength : undefined}
                 style={{
                   ...sharedStyle,
                   width: '100%',

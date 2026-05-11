@@ -2230,30 +2230,69 @@ function InputElement({ element }: ElementRendererProps) {
   const fieldName = getNameClass(props.name) || `field-${element.id}`;
   const minLength = parseNumericAttribute(props.minLength);
   const maxLength = parseNumericAttribute(props.maxLength);
+  const label = getNameClass(props.label);
+  const helpText = getNameClass(props.helpText);
 
   return (
-    <input
-      type={inputType || 'text'}
-      name={fieldName}
-      placeholder={getNameClass(props.placeholder)}
-      required={getBoolean(props.required)}
-      min={getNameClass(props.min)}
-      max={getNameClass(props.max)}
-      step={getNameClass(props.step)}
-      pattern={getNameClass(props.pattern)}
-      disabled={getBoolean(props.disabled)}
-      minLength={Number.isFinite(minLength) ? minLength : undefined}
-      maxLength={maxLength}
-      defaultValue={getNameClass(props.defaultValue)}
+    <div
       style={{
-        padding: '12px 16px',
-        border: getNameClass(props.border) || '1px solid #d1d5db',
-        borderRadius: getLength(props.borderRadius, '8px'),
-        fontSize: getLength(props.fontSize, '16px'),
+        display: 'flex',
+        flexDirection: 'column',
+        gap: getLength(props.fieldGap, '6px'),
         width: '100%',
-        ...styles,
+        height: '100%',
       }}
-    />
+    >
+      {label ? (
+        <label
+          htmlFor={`field-${element.id}`}
+          style={{
+            color: getNameClass(props.labelColor) || getNameClass(props.color) || '#374151',
+            fontWeight: getNameClass(props.labelFontWeight) || 500,
+            fontSize: getLength(props.labelFontSize, '14px'),
+          }}
+        >
+          {label}
+          {getBoolean(props.required) ? ' *' : ''}
+        </label>
+      ) : null}
+      <input
+        id={`field-${element.id}`}
+        type={inputType || 'text'}
+        name={fieldName}
+        placeholder={getNameClass(props.placeholder)}
+        required={getBoolean(props.required)}
+        min={getNameClass(props.min)}
+        max={getNameClass(props.max)}
+        step={getNameClass(props.step)}
+        pattern={getNameClass(props.pattern)}
+        disabled={getBoolean(props.disabled)}
+        minLength={Number.isFinite(minLength) ? minLength : undefined}
+        maxLength={maxLength}
+        defaultValue={getNameClass(props.defaultValue)}
+        style={{
+          padding: '12px 16px',
+          border: getNameClass(props.border) || '1px solid #d1d5db',
+          borderRadius: getLength(props.borderRadius, '8px'),
+          fontSize: getLength(props.fontSize, '16px'),
+          width: '100%',
+          minHeight: getLength(props.inputHeight, '40px'),
+          ...styles,
+        }}
+      />
+      {helpText ? (
+        <p
+          style={{
+            margin: 0,
+            color: getNameClass(props.helpTextColor) || '#6b7280',
+            fontSize: getLength(props.helpTextFontSize, '12px'),
+            lineHeight: 1.4,
+          }}
+        >
+          {helpText}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

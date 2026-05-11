@@ -1156,6 +1156,7 @@ function ContentProperties({
               type="text"
               value={element.props.label || ''}
               onChange={(e) => onChange({ label: e.target.value })}
+              data-testid="editor-field-label"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1171,6 +1172,7 @@ function ContentProperties({
               type="text"
               value={element.props.name || ''}
               onChange={(e) => onChange({ name: e.target.value })}
+              data-testid="editor-field-name"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1184,6 +1186,7 @@ function ContentProperties({
               id={`required-${element.id}`}
               checked={Boolean(element.props.required)}
               onChange={(e) => onChange({ required: e.target.checked })}
+              data-testid="editor-field-required"
             />
             <label htmlFor={`required-${element.id}`} className="text-xs text-muted-foreground">
               Required field
@@ -1197,6 +1200,7 @@ function ContentProperties({
               type="text"
               value={element.props.placeholder || ''}
               onChange={(e) => onChange({ placeholder: e.target.value })}
+              data-testid="editor-field-placeholder"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1212,6 +1216,7 @@ function ContentProperties({
               type="text"
               value={element.props.helpText || ''}
               onChange={(e) => onChange({ helpText: e.target.value })}
+              data-testid="editor-field-help-text"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1229,6 +1234,7 @@ function ContentProperties({
                 <select
                   value={element.props.inputType || 'text'}
                   onChange={(e) => onChange({ inputType: e.target.value })}
+                  data-testid="editor-input-type"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1251,6 +1257,7 @@ function ContentProperties({
                   type="text"
                   value={(element.props.pattern as string) || ''}
                   onChange={(e) => onChange({ pattern: e.target.value })}
+                  data-testid="editor-input-pattern"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1267,7 +1274,8 @@ function ContentProperties({
                 type="number"
                 min={0}
                 value={(element.props.minLength as number) || ''}
-                onChange={(e) => onChange({ minLength: Number(e.target.value) })}
+                onChange={(e) => onChange({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                data-testid="editor-input-min-length"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1282,13 +1290,30 @@ function ContentProperties({
                 type="number"
                 min={0}
                 value={(element.props.maxLength as number) || ''}
-                onChange={(e) => onChange({ maxLength: Number(e.target.value) })}
+                onChange={(e) => onChange({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                data-testid="editor-input-max-length"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
               />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Default Value
+                </label>
+                <input
+                  type="text"
+                  value={element.props.defaultValue || ''}
+                  onChange={(e) => onChange({ defaultValue: e.target.value })}
+                  data-testid="editor-input-default-value"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="Initial field value"
+                />
               </div>
             </>
           )}

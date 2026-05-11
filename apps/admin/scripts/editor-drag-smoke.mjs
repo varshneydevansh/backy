@@ -249,6 +249,24 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-input',
+            type: 'input',
+            x: 520,
+            y: 820,
+            width: 320,
+            height: 88,
+            zIndex: 5,
+            props: {
+              label: 'Initial input',
+              name: 'initial_input',
+              inputType: 'text',
+              placeholder: 'Initial placeholder',
+              required: false,
+              borderRadius: 4,
+              borderColor: '#d1d5db',
+            },
+          },
+          {
             id: 'smoke-repeater',
             type: 'repeater',
             x: 520,
@@ -2943,6 +2961,90 @@ const assertPersistedImageBehavior = async (pageId) => {
   return props;
 };
 
+const testInputFieldBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-input');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-field-label', 'Smoke input label');
+  await setFormControlByTestId(client, 'editor-field-name', 'smoke_email');
+  await setCheckboxByTestId(client, 'editor-field-required', true);
+  await setFormControlByTestId(client, 'editor-field-placeholder', 'name@example.com');
+  await setFormControlByTestId(client, 'editor-field-help-text', 'Use a reachable email address.');
+  await setFormControlByTestId(client, 'editor-input-type', 'email');
+  await setFormControlByTestId(client, 'editor-input-pattern', '.+@example[.]com');
+  await setFormControlByTestId(client, 'editor-input-min-length', '6');
+  await setFormControlByTestId(client, 'editor-input-max-length', '64');
+  await setFormControlByTestId(client, 'editor-input-default-value', 'test@example.com');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-input"]');
+    const label = node?.querySelector('label');
+    const input = node?.querySelector('input');
+    const help = node?.querySelector('p');
+    return {
+      label: value('editor-field-label'),
+      name: value('editor-field-name'),
+      required: checked('editor-field-required'),
+      placeholder: value('editor-field-placeholder'),
+      helpText: value('editor-field-help-text'),
+      inputType: value('editor-input-type'),
+      pattern: value('editor-input-pattern'),
+      minLength: value('editor-input-min-length'),
+      maxLength: value('editor-input-max-length'),
+      defaultValue: value('editor-input-default-value'),
+      previewLabel: label?.textContent || '',
+      previewName: input?.getAttribute('name') || '',
+      previewRequired: input instanceof HTMLInputElement ? input.required : null,
+      previewPlaceholder: input?.getAttribute('placeholder') || '',
+      previewType: input?.getAttribute('type') || '',
+      previewPattern: input?.getAttribute('pattern') || '',
+      previewMinLength: input?.getAttribute('minlength') || '',
+      previewMaxLength: input?.getAttribute('maxlength') || '',
+      previewValue: input instanceof HTMLInputElement ? input.value : '',
+      previewHelpText: help?.textContent || '',
+    };
+  })()`);
+
+  assert(state.label === 'Smoke input label' && state.previewLabel.includes('Smoke input label'), `Input label mismatch: ${JSON.stringify(state)}`);
+  assert(state.name === 'smoke_email' && state.previewName === 'smoke_email', `Input name mismatch: ${JSON.stringify(state)}`);
+  assert(state.required === true && state.previewRequired === true && state.previewLabel.includes('*'), `Input required mismatch: ${JSON.stringify(state)}`);
+  assert(state.placeholder === 'name@example.com' && state.previewPlaceholder === 'name@example.com', `Input placeholder mismatch: ${JSON.stringify(state)}`);
+  assert(state.helpText === 'Use a reachable email address.' && state.previewHelpText === 'Use a reachable email address.', `Input help text mismatch: ${JSON.stringify(state)}`);
+  assert(state.inputType === 'email' && state.previewType === 'email', `Input type mismatch: ${JSON.stringify(state)}`);
+  assert(state.pattern === '.+@example[.]com' && state.previewPattern === '.+@example[.]com', `Input pattern mismatch: ${JSON.stringify(state)}`);
+  assert(state.minLength === '6' && state.previewMinLength === '6', `Input minLength mismatch: ${JSON.stringify(state)}`);
+  assert(state.maxLength === '64' && state.previewMaxLength === '64', `Input maxLength mismatch: ${JSON.stringify(state)}`);
+  assert(state.defaultValue === 'test@example.com' && state.previewValue === 'test@example.com', `Input default value mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedInputFieldBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const input = findCanvasElement(elements, 'smoke-input');
+  const props = input?.props || {};
+
+  assert(input?.type === 'input', `Persisted smoke-input missing: ${JSON.stringify(input)}`);
+  assert(props.label === 'Smoke input label', `Persisted input label mismatch: ${JSON.stringify(props)}`);
+  assert(props.name === 'smoke_email', `Persisted input name mismatch: ${JSON.stringify(props)}`);
+  assert(props.required === true, `Persisted input required mismatch: ${JSON.stringify(props)}`);
+  assert(props.placeholder === 'name@example.com', `Persisted input placeholder mismatch: ${JSON.stringify(props)}`);
+  assert(props.helpText === 'Use a reachable email address.', `Persisted input help text mismatch: ${JSON.stringify(props)}`);
+  assert(props.inputType === 'email', `Persisted input type mismatch: ${JSON.stringify(props)}`);
+  assert(props.pattern === '.+@example[.]com', `Persisted input pattern mismatch: ${JSON.stringify(props)}`);
+  assert(props.minLength === 6, `Persisted input minLength mismatch: ${JSON.stringify(props)}`);
+  assert(props.maxLength === 64, `Persisted input maxLength mismatch: ${JSON.stringify(props)}`);
+  assert(props.defaultValue === 'test@example.com', `Persisted input default value mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testButtonLinkBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-child-button');
   await switchToPropertiesPanel(client);
@@ -3450,7 +3552,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3564,6 +3666,9 @@ const main = async () => {
     const imageBehaviorControls = EDITOR_PATH
       ? null
       : await testImageBehaviorControls(client);
+    const inputFieldBehaviorControls = EDITOR_PATH
+      ? null
+      : await testInputFieldBehaviorControls(client);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -3587,12 +3692,13 @@ const main = async () => {
     let persistedDataBinding = null;
     let persistedRepeater = null;
     let persistedImageBehavior = null;
+    let persistedInputFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3648,6 +3754,9 @@ const main = async () => {
       persistedImageBehavior = imageBehaviorControls
         ? await assertPersistedImageBehavior(tempPageId)
         : null;
+      persistedInputFieldBehavior = inputFieldBehaviorControls
+        ? await assertPersistedInputFieldBehavior(tempPageId)
+        : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
@@ -3664,7 +3773,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -3768,6 +3877,7 @@ const main = async () => {
       dataBindingQueryControls,
       repeaterControls,
       imageBehaviorControls,
+      inputFieldBehaviorControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
@@ -3781,6 +3891,7 @@ const main = async () => {
       persistedDataBinding,
       persistedRepeater,
       persistedImageBehavior,
+      persistedInputFieldBehavior,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
