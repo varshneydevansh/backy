@@ -804,6 +804,21 @@ function readFormValue(values: Record<string, unknown>, keys: string[]): string 
   return '';
 }
 
+function serializeFormFieldMap(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value)
+    .map(([source, target]) => [
+      source.trim(),
+      typeof target === 'string' ? target.trim() : '',
+    ] as const)
+    .filter(([source, target]) => source.length > 0 && target.length > 0);
+
+  return entries.length > 0 ? JSON.stringify(Object.fromEntries(entries)) : undefined;
+}
+
 function parseAttributeString(value: unknown): string | undefined {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -1868,9 +1883,17 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const enableHoneypot = parseBooleanSetting(props.enableHoneypot, false);
   const enableCaptcha = parseBooleanSetting(props.enableCaptcha, false);
   const contactShareEnabled = parseBooleanSetting(props.contactShareEnabled, false);
+  const contactShareNameField = getNameClass(props.contactShareNameField);
+  const contactShareEmailField = getNameClass(props.contactShareEmailField);
+  const contactSharePhoneField = getNameClass(props.contactSharePhoneField);
+  const contactShareNotesField = getNameClass(props.contactShareNotesField);
+  const contactShareDedupeByEmail = props.contactShareDedupeByEmail === undefined
+    ? undefined
+    : parseBooleanSetting(props.contactShareDedupeByEmail, true);
   const collectionWriteEnabled = parseBooleanSetting(props.collectionWriteEnabled, false);
   const collectionWriteCollectionId = getNameClass(props.collectionWriteCollectionId || props.collectionId);
   const collectionWriteSlugField = getNameClass(props.collectionWriteSlugField);
+  const collectionWriteFieldMap = serializeFormFieldMap(props.collectionWriteFieldMap);
   const successRedirectUrl = getNameClass(props.successRedirectUrl || props.redirectUrl);
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
@@ -2018,9 +2041,15 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         data-backy-form-audience={formAudience}
         data-backy-captcha-required={enableCaptcha ? 'true' : 'false'}
         data-backy-contact-share={contactShareEnabled ? 'true' : 'false'}
+        data-backy-contact-name-field={contactShareEnabled && contactShareNameField ? contactShareNameField : undefined}
+        data-backy-contact-email-field={contactShareEnabled && contactShareEmailField ? contactShareEmailField : undefined}
+        data-backy-contact-phone-field={contactShareEnabled && contactSharePhoneField ? contactSharePhoneField : undefined}
+        data-backy-contact-notes-field={contactShareEnabled && contactShareNotesField ? contactShareNotesField : undefined}
+        data-backy-contact-dedupe-by-email={contactShareEnabled && contactShareDedupeByEmail !== undefined ? String(contactShareDedupeByEmail) : undefined}
         data-backy-collection-write={collectionWriteEnabled ? 'true' : 'false'}
         data-backy-collection-id={collectionWriteEnabled && collectionWriteCollectionId ? collectionWriteCollectionId : undefined}
         data-backy-collection-slug-field={collectionWriteEnabled && collectionWriteSlugField ? collectionWriteSlugField : undefined}
+        data-backy-collection-field-map={collectionWriteEnabled ? collectionWriteFieldMap : undefined}
         style={{
           display: 'flex',
           flexDirection: 'column',

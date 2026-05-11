@@ -379,9 +379,18 @@ const content: PageContent = {
         enableHoneypot: true,
         enableCaptcha: true,
         contactShareEnabled: true,
+        contactShareNameField: 'name',
+        contactShareEmailField: 'email',
+        contactSharePhoneField: 'phone',
+        contactShareNotesField: 'message',
+        contactShareDedupeByEmail: false,
         collectionWriteEnabled: true,
         collectionWriteCollectionId: 'leads_collection',
         collectionWriteSlugField: 'name',
+        collectionWriteFieldMap: {
+          name: 'title',
+          message: 'summary',
+        },
         gap: 12,
         borderWidth: 2,
         borderStyle: 'solid',
@@ -570,9 +579,17 @@ assert(html.includes('data-backy-form-active="true"'), `Form active contract att
 assert(html.includes('data-backy-form-audience="authenticated"'), `Form audience contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-captcha-required="true"'), `Form captcha contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-contact-share="true"'), `Form contact-share contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-name-field="name"'), `Form contact name field contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-email-field="email"'), `Form contact email field contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-phone-field="phone"'), `Form contact phone field contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-notes-field="message"'), `Form contact notes field contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-dedupe-by-email="false"'), `Form contact dedupe contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-collection-write="true"'), `Form collection-write contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-collection-id="leads_collection"'), `Form collection id contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-collection-slug-field="name"'), `Form collection slug field contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-collection-field-map='), `Form collection field map attribute was not rendered: ${html}`);
+assert(html.includes('&quot;name&quot;:&quot;title&quot;'), `Form collection name field map was not rendered: ${html}`);
+assert(html.includes('&quot;message&quot;:&quot;summary&quot;'), `Form collection message field map was not rendered: ${html}`);
 assert(html.includes('name="captchaToken"'), `Form captcha token transport field was not rendered: ${html}`);
 assert(html.includes('action="/api/custom-lead-submit"'), `Custom form action was not rendered: ${html}`);
 assert(html.includes('Custom Action Form'), `Custom form title was not rendered: ${html}`);
