@@ -361,6 +361,19 @@ function updateFrontendBlogTemplateText(
     return elements.map(updateElement);
 }
 
+function hasFrontendBlogTemplateRoot(elements: CanvasElement[], template: SiteFrontendDesignTemplate): boolean {
+    const templateRootId = `frontend-blog-template-${template.id}`;
+    const visit = (element: CanvasElement): boolean => {
+        if (element.id === templateRootId || element.props?.frontendTemplateId === template.id) {
+            return true;
+        }
+
+        return Array.isArray(element.children) && element.children.some(visit);
+    };
+
+    return elements.some(visit);
+}
+
 function NewBlogPostPage() {
     const navigate = useNavigate();
     const search = Route.useSearch();
@@ -679,14 +692,19 @@ function NewBlogPostPage() {
     }, [designTemplateId, frontendBlogTemplates, frontendDesign]);
 
     useEffect(() => {
-        if (!selectedFrontendTemplate || appliedSearchTemplateRef.current === selectedFrontendTemplate.id) {
+        if (!selectedFrontendTemplate) {
+            return;
+        }
+
+        const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate);
+        if (appliedSearchTemplateRef.current === selectedFrontendTemplate.id && templateCanvasApplied) {
             return;
         }
 
         appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
         applyFrontendTemplate(selectedFrontendTemplate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedFrontendTemplate]);
+    }, [canvasElements, selectedFrontendTemplate]);
 
     const adminBlogUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog`,
@@ -1179,8 +1197,17 @@ function NewBlogPostPage() {
 
     const buildPostInput = (nextStatus: BlogPostInput['status'] = status): BlogPostInput => {
         const resolvedStatus = nextStatus || status;
+        const frontendTemplateElements = selectedFrontendTemplate && hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate)
+            ? canvasElements
+            : selectedFrontendTemplate
+                ? buildFrontendBlogTemplateElements(selectedFrontendTemplate, {
+                    title,
+                    slug: slugValue,
+                    excerpt,
+                })
+                : canvasElements;
         const contentElements = selectedFrontendTemplate
-            ? updateFrontendBlogTemplateText(canvasElements, selectedFrontendTemplate, {
+            ? updateFrontendBlogTemplateText(frontendTemplateElements, selectedFrontendTemplate, {
                 title,
                 excerpt,
             })

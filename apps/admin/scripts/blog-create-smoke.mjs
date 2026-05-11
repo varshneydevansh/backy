@@ -11,6 +11,9 @@ const SITE_ID = process.env.BACKY_BLOG_CREATE_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_BLOG_CREATE_CDP_PORT || 9371);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_CREATE_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-create-smoke.png');
+const VISUAL_SCREENSHOT_DIR = process.env.BACKY_BLOG_CREATE_VISUAL_DIR || path.join(os.tmpdir(), 'backy-blog-create-visual');
+const DESKTOP_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-desktop.png');
+const FOCUS_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-focus.png');
 const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-contract-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
 let apiAdminSessionToken = '';
@@ -241,6 +244,106 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
+const captureScreenshot = async (client, screenshotPath, options = {}) => {
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: true,
+    ...options,
+  });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
+
+const assertBlogCreateVisualState = async (client, label, screenshotPath, { focus = false } = {}) => {
+  await evaluate(client, `(() => {
+    window.scrollTo(0, 0);
+    return true;
+  })()`);
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const bodyText = document.body?.innerText || '';
+    const commandCenter = document.querySelector('[data-testid="blog-create-command-center"]');
+    const workspaceGrid = document.querySelector('[data-testid="blog-create-workspace-grid"]');
+    const canvasShell = document.querySelector('[data-testid="blog-create-canvas-shell"]');
+    const editorCanvas = document.querySelector('[data-testid="editor-canvas"]');
+    const componentLibrary = document.querySelector('[data-testid="editor-component-library"]');
+    const inspector = document.querySelector('[data-testid="editor-inspector"]');
+    const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
+    const frontendTemplatePanel = document.querySelector('[data-testid="blog-frontend-template-panel"]');
+    const activeTemplate = document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]');
+    const payload = document.querySelector('[data-testid="blog-create-payload"]');
+    const rect = (node) => {
+      const box = node?.getBoundingClientRect();
+      return box ? {
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+        top: Math.round(box.top),
+      } : null;
+    };
+
+    return {
+      label: ${JSON.stringify(label)},
+      focus: ${JSON.stringify(focus)},
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      documentWidth: document.documentElement.scrollWidth,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      commandVisible: Boolean(commandCenter && rect(commandCenter)?.width > 320 && rect(commandCenter)?.height > 120),
+      workspaceVisible: Boolean(workspaceGrid && rect(workspaceGrid)?.width > 320 && rect(workspaceGrid)?.height > 400),
+      canvasVisible: Boolean(canvasShell && rect(canvasShell)?.width > 320 && rect(canvasShell)?.height > 500),
+      editorCanvasVisible: Boolean(editorCanvas && rect(editorCanvas)?.width > 260 && rect(editorCanvas)?.height > 240),
+      componentLibraryVisible: Boolean(componentLibrary && rect(componentLibrary)?.width > 180 && rect(componentLibrary)?.height > 240),
+      inspectorVisible: Boolean(inspector && rect(inspector)?.width > 180 && rect(inspector)?.height > 240),
+      focusBannerVisible: Boolean(focusBanner && rect(focusBanner)?.width > 320 && rect(focusBanner)?.height > 80),
+      draftPanel: Boolean(document.querySelector('#blog-create-draft')),
+      seoPanel: Boolean(document.querySelector('#blog-create-seo')),
+      mediaPanel: Boolean(document.querySelector('#blog-create-media')),
+      publishPanel: Boolean(document.querySelector('#blog-create-publish')),
+      taxonomyPanel: Boolean(document.querySelector('#blog-create-taxonomy')),
+      frontendTemplatePanel: Boolean(frontendTemplatePanel),
+      activeTemplate: activeTemplate?.getAttribute('data-active') || '',
+      payloadTemplateId: (() => {
+        try {
+          return JSON.parse(payload?.textContent || '{}')?.template?.id || '';
+        } catch {
+          return 'invalid-json';
+        }
+      })(),
+      hasSavePreviewAction: bodyText.includes('Save draft and preview'),
+      hasFocusAction: bodyText.includes('Focus canvas'),
+      hasShowPanelsAction: bodyText.includes('Show panels'),
+      hasGroupingMeta: bodyText.includes('Cmd/Ctrl+G grouping'),
+      hasBreakpointControls: bodyText.includes('Desktop') && bodyText.includes('Tablet') && bodyText.includes('Mobile'),
+      hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+      body: bodyText.slice(0, 3000),
+    };
+  })()`);
+
+  assert(state.workspaceVisible, `${label} workspace grid was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.canvasVisible && state.editorCanvasVisible, `${label} editor canvas was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.componentLibraryVisible && state.inspectorVisible, `${label} editor side panels were not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.hasBreakpointControls && state.hasGroupingMeta, `${label} editor breakpoint/grouping controls missing: ${JSON.stringify(state)}`);
+  assert(state.hasSavePreviewAction, `${label} save-preview action missing: ${JSON.stringify(state)}`);
+  assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
+  assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+
+  if (focus) {
+    assert(state.focusBannerVisible && state.hasShowPanelsAction, `${label} focus banner/actions missing: ${JSON.stringify(state)}`);
+    assert(!state.commandVisible && !state.draftPanel && !state.publishPanel, `${label} focus mode did not hide create panels: ${JSON.stringify(state)}`);
+  } else {
+    assert(state.commandVisible, `${label} command center missing: ${JSON.stringify(state)}`);
+    assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
+    assert(state.frontendTemplatePanel && state.activeTemplate === 'true' && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `${label} frontend template handoff missing: ${JSON.stringify(state)}`);
+    assert(state.hasFocusAction, `${label} focus canvas action missing: ${JSON.stringify(state)}`);
+  }
+
+  await captureScreenshot(client, screenshotPath);
+  return { ...state, screenshotPath };
+};
+
 const navigateToBlogCreate = async (client) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&designTemplate=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
@@ -393,6 +496,8 @@ const assertCanvasFocusMode = async (client) => {
     await sleep(200);
   }
 
+  const focusVisualState = await assertBlogCreateVisualState(client, 'blog create focus', FOCUS_VISUAL_SCREENSHOT_PATH, { focus: true });
+
   let restored = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     restored = await evaluate(client, `(() => {
@@ -439,6 +544,11 @@ const assertCanvasFocusMode = async (client) => {
 
   return {
     focused,
+    focusVisualState: {
+      screenshotPath: focusVisualState.screenshotPath,
+      horizontalOverflow: focusVisualState.horizontalOverflow,
+      viewport: focusVisualState.viewport,
+    },
     normal,
   };
 };
@@ -450,6 +560,13 @@ const assertAutosaveWritten = async (client, slug) => {
     state = await evaluate(client, `(() => {
       const raw = localStorage.getItem('backy:blog-new:draft:v1');
       const parsed = raw ? JSON.parse(raw) : null;
+      const visit = (element) => {
+        if (!element || typeof element !== 'object') return false;
+        if (element.id === 'frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}' || element.props?.frontendTemplateId === '${FRONTEND_BLOG_TEMPLATE_ID}') {
+          return true;
+        }
+        return Array.isArray(element.children) && element.children.some(visit);
+      };
       return {
         hasDraft: Boolean(parsed),
         slug: parsed?.slug || null,
@@ -457,6 +574,8 @@ const assertAutosaveWritten = async (client, slug) => {
         seoDescription: parsed?.seoDescription || null,
         noIndex: parsed?.noIndex ?? null,
         canvasCount: parsed?.canvasElements?.length || 0,
+        designTemplateId: parsed?.designTemplateId || null,
+        hasFrontendTemplateRoot: Array.isArray(parsed?.canvasElements) && parsed.canvasElements.some(visit),
         badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
       };
     })()`);
@@ -473,6 +592,8 @@ const assertAutosaveWritten = async (client, slug) => {
   assert(state.slug === slug, `Autosave draft slug mismatch: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Autosave did not retain robots toggle: ${JSON.stringify(state)}`);
   assert(state.canvasCount > 0, `Autosave did not retain canvas elements: ${JSON.stringify(state)}`);
+  assert(state.designTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Autosave did not retain frontend template id: ${JSON.stringify(state)}`);
+  assert(state.hasFrontendTemplateRoot === true, `Autosave did not retain frontend template canvas root: ${JSON.stringify(state)}`);
   return state;
 };
 
@@ -816,6 +937,7 @@ const main = async () => {
     });
 
     const initialRender = await navigateToBlogCreate(client);
+    const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
     const focusMode = await assertCanvasFocusMode(client);
     const filled = await fillBlogCreateForm(client, slug);
     const mediaPicker = await assertFeaturedMediaPicker(client);
@@ -825,8 +947,7 @@ const main = async () => {
     postId = preview.editPath.split('/').filter(Boolean).at(-1);
     const frontendBlogPost = await assertCreatedFrontendBlogPost(postId, slug);
 
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+    await captureScreenshot(client, SCREENSHOT_PATH);
 
     const browserErrors = client.events
       .filter((event) => (
@@ -841,6 +962,11 @@ const main = async () => {
       ok: true,
       url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}`,
       initialRender,
+      desktopVisual: {
+        screenshotPath: desktopVisual.screenshotPath,
+        horizontalOverflow: desktopVisual.horizontalOverflow,
+        viewport: desktopVisual.viewport,
+      },
       focusMode,
       filled,
       mediaPicker,
