@@ -1347,6 +1347,8 @@ function ContentProperties({
                   <option value="email">Email</option>
                   <option value="password">Password</option>
                   <option value="number">Number</option>
+                  <option value="search">Search</option>
+                  <option value="file">File</option>
                   <option value="date">Date</option>
                   <option value="tel">Phone</option>
                   <option value="url">URL</option>

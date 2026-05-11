@@ -76,6 +76,25 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const normalizeInputType = (value: unknown): string => {
+  const inputType = sanitizeText(value).toLowerCase();
+
+  if (
+    inputType === 'email' ||
+    inputType === 'number' ||
+    inputType === 'date' ||
+    inputType === 'tel' ||
+    inputType === 'url' ||
+    inputType === 'password' ||
+    inputType === 'search' ||
+    inputType === 'file'
+  ) {
+    return inputType;
+  }
+
+  return 'text';
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -2365,6 +2384,8 @@ function CanvasElementComponent({
           const disabled = getBoolean(p.disabled);
           const minLength = toNumericAttribute(p.minLength);
           const maxLength = toNumericAttribute(p.maxLength);
+          const inputType = normalizeInputType(p.inputType ?? p.type);
+          const inputValue = p.value ?? p.defaultValue ?? '';
           return (
             <div style={{
               display: 'flex',
@@ -2386,9 +2407,9 @@ function CanvasElementComponent({
                 </label>
               ) : null}
               <input
-                type={p.inputType ?? 'text'}
+                type={inputType}
                 placeholder={p.placeholder ?? 'Enter text...'}
-                value={p.value ?? p.defaultValue ?? ''}
+                {...(inputType === 'file' ? {} : { value: inputValue })}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
