@@ -52,6 +52,8 @@ type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
 type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
+type MediaImageObjectFit = 'cover' | 'contain';
+type MediaImageAspectRatio = 'original' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16';
 
 interface MediaSearch {
   siteId?: string;
@@ -66,6 +68,21 @@ interface MediaSearch {
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced'];
+const MEDIA_IMAGE_OBJECT_FIT_OPTIONS: MediaImageObjectFit[] = ['cover', 'contain'];
+const MEDIA_IMAGE_ASPECT_RATIO_OPTIONS: Array<{ value: MediaImageAspectRatio; label: string; cssValue: string }> = [
+  { value: 'original', label: 'Original', cssValue: '1 / 1' },
+  { value: '1:1', label: 'Square', cssValue: '1 / 1' },
+  { value: '4:3', label: 'Landscape 4:3', cssValue: '4 / 3' },
+  { value: '3:4', label: 'Portrait 3:4', cssValue: '3 / 4' },
+  { value: '16:9', label: 'Wide 16:9', cssValue: '16 / 9' },
+  { value: '9:16', label: 'Story 9:16', cssValue: '9 / 16' },
+];
+const DEFAULT_IMAGE_PRESENTATION = {
+  focalX: 50,
+  focalY: 50,
+  objectFit: 'cover' as MediaImageObjectFit,
+  aspectRatio: 'original' as MediaImageAspectRatio,
+};
 
 const MEDIA_UPLOAD_INTAKE_RULES = [
   {
@@ -105,6 +122,45 @@ const isMediaVisibilityFilter = (value: unknown): value is MediaVisibilityFilter
 
 const isMediaUsageFilter = (value: unknown): value is MediaUsageFilter => (
   typeof value === 'string' && MEDIA_USAGE_FILTERS.includes(value as MediaUsageFilter)
+);
+
+const isMediaImageObjectFit = (value: unknown): value is MediaImageObjectFit => (
+  typeof value === 'string' && MEDIA_IMAGE_OBJECT_FIT_OPTIONS.includes(value as MediaImageObjectFit)
+);
+
+const isMediaImageAspectRatio = (value: unknown): value is MediaImageAspectRatio => (
+  typeof value === 'string' && MEDIA_IMAGE_ASPECT_RATIO_OPTIONS.some((option) => option.value === value)
+);
+
+const clampPercent = (value: unknown, fallback = 50): number => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+};
+
+const getImagePresentationMetadata = (metadata: Record<string, unknown> | undefined) => {
+  const presentation = metadata?.imagePresentation;
+  const record = presentation && typeof presentation === 'object' && !Array.isArray(presentation)
+    ? presentation as Record<string, unknown>
+    : {};
+  const focalPoint = record.focalPoint && typeof record.focalPoint === 'object' && !Array.isArray(record.focalPoint)
+    ? record.focalPoint as Record<string, unknown>
+    : {};
+
+  return {
+    focalX: clampPercent(focalPoint.x, DEFAULT_IMAGE_PRESENTATION.focalX),
+    focalY: clampPercent(focalPoint.y, DEFAULT_IMAGE_PRESENTATION.focalY),
+    objectFit: isMediaImageObjectFit(record.objectFit)
+      ? record.objectFit
+      : DEFAULT_IMAGE_PRESENTATION.objectFit,
+    aspectRatio: isMediaImageAspectRatio(record.aspectRatio)
+      ? record.aspectRatio
+      : DEFAULT_IMAGE_PRESENTATION.aspectRatio,
+  };
+};
+
+const getImageAspectRatioCssValue = (aspectRatio: MediaImageAspectRatio): string => (
+  MEDIA_IMAGE_ASPECT_RATIO_OPTIONS.find((option) => option.value === aspectRatio)?.cssValue || '1 / 1'
 );
 
 const normalizedSearchString = (value: unknown): string | undefined => {
@@ -413,6 +469,10 @@ function MediaPage() {
     fontStyle: 'normal' as 'normal' | 'italic' | 'oblique',
     fontFallback: 'system-ui, sans-serif',
     fontDisplay: 'swap' as 'auto' | 'block' | 'swap' | 'fallback' | 'optional',
+    imageFocalX: DEFAULT_IMAGE_PRESENTATION.focalX,
+    imageFocalY: DEFAULT_IMAGE_PRESENTATION.focalY,
+    imageObjectFit: DEFAULT_IMAGE_PRESENTATION.objectFit,
+    imageAspectRatio: DEFAULT_IMAGE_PRESENTATION.aspectRatio,
     folderId: '',
     visibility: 'public' as 'public' | 'private',
   });
@@ -1179,6 +1239,7 @@ function MediaPage() {
   }, [siteId]);
 
   const openMetadataEditor = (asset: MediaAsset) => {
+    const imagePresentation = getImagePresentationMetadata(asset.metadata);
     setSelectedAsset(asset);
     updateMediaRouteSearch({ assetId: asset.id });
     setAssetDeliveryError(null);
@@ -1205,6 +1266,10 @@ function MediaPage() {
         asset.metadata?.fontDisplay === 'swap'
         ? asset.metadata.fontDisplay
         : 'swap',
+      imageFocalX: imagePresentation.focalX,
+      imageFocalY: imagePresentation.focalY,
+      imageObjectFit: imagePresentation.objectFit,
+      imageAspectRatio: imagePresentation.aspectRatio,
       folderId: asset.folderId || '',
       visibility: asset.visibility || 'public',
     });
@@ -1595,16 +1660,31 @@ function MediaPage() {
         altText: metadataForm.altText,
         caption: metadataForm.caption,
         tags: metadataForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-        metadata: selectedAsset.type === 'font'
-          ? {
-              ...selectedAsset.metadata,
-              fontFamily: metadataForm.fontFamily.trim() || metadataForm.name.replace(/\.[a-z0-9]+$/i, ''),
-              fontWeight: metadataForm.fontWeight.trim() || '400',
-              fontStyle: metadataForm.fontStyle,
-              fontFallback: metadataForm.fontFallback.trim() || 'system-ui, sans-serif',
-              fontDisplay: metadataForm.fontDisplay,
-            }
-          : selectedAsset.metadata,
+        metadata: {
+          ...selectedAsset.metadata,
+          ...(selectedAsset.type === 'font'
+            ? {
+                fontFamily: metadataForm.fontFamily.trim() || metadataForm.name.replace(/\.[a-z0-9]+$/i, ''),
+                fontWeight: metadataForm.fontWeight.trim() || '400',
+                fontStyle: metadataForm.fontStyle,
+                fontFallback: metadataForm.fontFallback.trim() || 'system-ui, sans-serif',
+                fontDisplay: metadataForm.fontDisplay,
+              }
+            : {}),
+          ...(selectedAsset.type === 'image'
+            ? {
+                imagePresentation: {
+                  focalPoint: {
+                    x: clampPercent(metadataForm.imageFocalX),
+                    y: clampPercent(metadataForm.imageFocalY),
+                  },
+                  objectFit: metadataForm.imageObjectFit,
+                  aspectRatio: metadataForm.imageAspectRatio,
+                  updatedAt: new Date().toISOString(),
+                },
+              }
+            : {}),
+        },
         folderId: metadataForm.folderId || null,
         visibility: metadataForm.visibility,
       }, siteId);
@@ -3524,7 +3604,15 @@ function MediaPage() {
             <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[220px_1fr]">
               <div className="aspect-square overflow-hidden rounded-lg bg-muted">
                 {selectedAsset.type === 'image' && selectedAsset.url ? (
-                  <img src={selectedAsset.url} alt={metadataForm.altText || selectedAsset.name} className="h-full w-full object-cover" />
+                  <img
+                    src={selectedAsset.url}
+                    alt={metadataForm.altText || selectedAsset.name}
+                    className="h-full w-full"
+                    style={{
+                      objectFit: metadataForm.imageObjectFit,
+                      objectPosition: `${metadataForm.imageFocalX}% ${metadataForm.imageFocalY}%`,
+                    }}
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
                     <File className="h-12 w-12 text-muted-foreground" />
@@ -3571,6 +3659,101 @@ function MediaPage() {
                     ariaLabel="Media asset tags"
                   />
                 </div>
+
+                {selectedAsset.type === 'image' && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-4" data-testid="media-image-presentation-editor">
+                    <div className="mb-3">
+                      <div className="text-sm font-semibold">Image presentation</div>
+                      <div className="text-xs text-muted-foreground">
+                        Persist focal point, crop fit, and target aspect metadata for frontend image components.
+                      </div>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                      <div
+                        className="overflow-hidden rounded-lg border border-border bg-background"
+                        style={{ aspectRatio: getImageAspectRatioCssValue(metadataForm.imageAspectRatio) }}
+                      >
+                        <img
+                          src={selectedAsset.url}
+                          alt={metadataForm.altText || selectedAsset.name}
+                          className="h-full w-full"
+                          style={{
+                            objectFit: metadataForm.imageObjectFit,
+                            objectPosition: `${metadataForm.imageFocalX}% ${metadataForm.imageFocalY}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="grid gap-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium">Focal X</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={metadataForm.imageFocalX}
+                              onChange={(event) => setMetadataForm((current) => ({
+                                ...current,
+                                imageFocalX: clampPercent(event.target.value),
+                              }))}
+                              className="w-full rounded-lg border bg-background px-3 py-2"
+                            />
+                          </label>
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium">Focal Y</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={metadataForm.imageFocalY}
+                              onChange={(event) => setMetadataForm((current) => ({
+                                ...current,
+                                imageFocalY: clampPercent(event.target.value),
+                              }))}
+                              className="w-full rounded-lg border bg-background px-3 py-2"
+                            />
+                          </label>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <label className="block font-medium">Crop fit</label>
+                          <select
+                            value={metadataForm.imageObjectFit}
+                            onChange={(event) => setMetadataForm((current) => ({
+                              ...current,
+                              imageObjectFit: isMediaImageObjectFit(event.target.value)
+                                ? event.target.value
+                                : DEFAULT_IMAGE_PRESENTATION.objectFit,
+                            }))}
+                            className="w-full rounded-lg border bg-background px-3 py-2"
+                          >
+                            <option value="cover">Cover crop</option>
+                            <option value="contain">Contain full image</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <label className="block font-medium">Aspect ratio</label>
+                          <select
+                            value={metadataForm.imageAspectRatio}
+                            onChange={(event) => setMetadataForm((current) => ({
+                              ...current,
+                              imageAspectRatio: isMediaImageAspectRatio(event.target.value)
+                                ? event.target.value
+                                : DEFAULT_IMAGE_PRESENTATION.aspectRatio,
+                            }))}
+                            className="w-full rounded-lg border bg-background px-3 py-2"
+                          >
+                            {MEDIA_IMAGE_ASPECT_RATIO_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                          {metadataForm.imageFocalX}% {metadataForm.imageFocalY}% focal point with {metadataForm.imageObjectFit} fit.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {selectedAsset.type === 'font' && (
                   <div className="rounded-xl border border-border bg-muted/30 p-4">

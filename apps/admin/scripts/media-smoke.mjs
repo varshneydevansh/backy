@@ -11,6 +11,7 @@ const SITE_ID = process.env.BACKY_MEDIA_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_MEDIA_CDP_PORT || 9384);
 const SCREENSHOT_PATH = process.env.BACKY_MEDIA_SCREENSHOT || path.join(os.tmpdir(), 'backy-media-smoke.png');
+let apiAdminSessionToken = '';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
@@ -49,6 +50,9 @@ const requestApi = async (endpoint, options = {}) => {
   if (options.body && !(options.body instanceof FormData) && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -61,6 +65,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const readSettings = async () => {
@@ -239,8 +264,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = () => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: apiAdminSessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -811,6 +847,7 @@ const main = async () => {
   const tempFiles = [replacementPath];
 
   try {
+    await loginAdminApi();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     const existing = await listMedia(marker);
@@ -862,7 +899,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript() });
 
     await navigateToMedia(client, marker);
     await waitForMediaPageAsset(client, imageName);
@@ -895,6 +932,10 @@ const main = async () => {
       item.metadata.generatedTransforms.variants.length > 0
     ));
     assert(transformedImage.metadata.generatedTransforms.preparedBy === 'admin', 'UI transform preparation did not record the admin actor.');
+    await setDetailsField(client, 'Focal X', 28);
+    await setDetailsField(client, 'Focal Y', 72);
+    await setDetailsField(client, 'Crop fit', 'contain');
+    await setDetailsField(client, 'Aspect ratio', '16:9');
     await setDetailsField(client, 'Alt text', updatedAltText);
     await setDetailsField(client, 'Visibility', 'private');
     await saveDetails(client);
@@ -902,6 +943,10 @@ const main = async () => {
     assert(updatedImage.folderId === folderId, 'Media metadata save lost the folder assignment.');
     assert(Array.isArray(updatedImage.metadata?.replacementVersions) && updatedImage.metadata.replacementVersions.length === 1, 'Media metadata save lost replacement history.');
     assert(Array.isArray(updatedImage.metadata?.generatedTransforms?.variants) && updatedImage.metadata.generatedTransforms.variants.length > 0, 'Media metadata save lost generated transforms.');
+    assert(updatedImage.metadata?.imagePresentation?.focalPoint?.x === 28, 'Media metadata save did not persist focal X.');
+    assert(updatedImage.metadata?.imagePresentation?.focalPoint?.y === 72, 'Media metadata save did not persist focal Y.');
+    assert(updatedImage.metadata?.imagePresentation?.objectFit === 'contain', 'Media metadata save did not persist crop fit.');
+    assert(updatedImage.metadata?.imagePresentation?.aspectRatio === '16:9', 'Media metadata save did not persist aspect ratio.');
     await closeMediaDetails(client);
 
     await openMediaDetails(client, privateName);
