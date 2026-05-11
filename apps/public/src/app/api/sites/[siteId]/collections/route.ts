@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listCollections } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { withCollectionFrontendDesign } from '@/lib/publicCollectionResources';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -52,7 +53,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
-      const collections = payload.items.filter((collection) => collection.permissions.publicRead);
+      const collections = payload.items
+        .filter((collection) => collection.permissions.publicRead)
+        .map(withCollectionFrontendDesign);
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
         scope: 'content',
@@ -90,7 +93,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const collections = listCollections(site.id);
+    const collections = listCollections(site.id).map(withCollectionFrontendDesign);
     const pagination = {
       total: collections.length,
       limit: collections.length,

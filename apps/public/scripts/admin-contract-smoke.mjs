@@ -2869,11 +2869,44 @@ try {
     assert(capturedTemplateCollectionId, `${createCollectionFromTemplate.url} missing captured template collection id`);
     assert(createCollectionFromTemplate.json?.data?.collection?.metadata?.frontendDesignTemplateId === 'captured-collection-template', `${createCollectionFromTemplate.url} missing captured collection provenance`);
     assert(createCollectionFromTemplate.json?.data?.collection?.fields?.some((field) => field.key === 'title'), `${createCollectionFromTemplate.url} did not seed captured collection fields`);
+    const publicCapturedTemplateCollection = await request(`/api/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}`);
+    assert(publicCapturedTemplateCollection.response.status === 200, `${publicCapturedTemplateCollection.url} expected public captured collection`);
+    assert(publicCapturedTemplateCollection.json?.data?.collection?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateCollection.url} missing normalized collection frontend design`);
+    assert(publicCapturedTemplateCollection.json?.data?.collection?.frontendDesign?.routePattern === '/directory/:recordSlug', `${publicCapturedTemplateCollection.url} missing normalized collection route pattern`);
+    const publicCollectionsWithCapturedTemplate = await request(`/api/sites/${createdSiteId}/collections`);
+    assert(publicCollectionsWithCapturedTemplate.response.status === 200, `${publicCollectionsWithCapturedTemplate.url} expected public collections with captured template`);
+    assert(publicCollectionsWithCapturedTemplate.json?.data?.collections?.some((collection) => (
+      collection.id === capturedTemplateCollectionId &&
+      collection.frontendDesign?.templateId === 'captured-collection-template'
+    )), `${publicCollectionsWithCapturedTemplate.url} missing normalized collection frontend design in list`);
+    const createRecordFromCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        frontendDesignTemplateId: 'captured-collection-template',
+        slug: `captured-template-record-${unique}`,
+        status: 'published',
+        values: {
+          title: 'Captured Template Directory Record',
+        },
+      }),
+    });
+    assert(createRecordFromCollectionTemplate.response.status === 201, `${createRecordFromCollectionTemplate.url} expected captured template record`);
+    const capturedTemplateRecordId = createRecordFromCollectionTemplate.json?.data?.record?.id;
+    assert(capturedTemplateRecordId, `${createRecordFromCollectionTemplate.url} missing captured template record id`);
+    assert(createRecordFromCollectionTemplate.json?.data?.record?.values?.frontendDesignTemplateId === 'captured-collection-template', `${createRecordFromCollectionTemplate.url} missing captured collection record provenance`);
+    const publicCapturedTemplateRecords = await request(`/api/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}/records?slug=captured-template-record-${unique}`);
+    assert(publicCapturedTemplateRecords.response.status === 200, `${publicCapturedTemplateRecords.url} expected public captured template record`);
+    assert(publicCapturedTemplateRecords.json?.data?.collection?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecords.url} missing normalized record collection frontend design`);
+    assert(publicCapturedTemplateRecords.json?.data?.records?.[0]?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecords.url} missing normalized collection record frontend design`);
     const capturedTemplateCollectionRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/directory-captured-${unique}`)}`);
     assert(capturedTemplateCollectionRender.response.status === 200, `${capturedTemplateCollectionRender.url} expected captured collection render`);
     validateAiRenderPayload(capturedTemplateCollectionRender.json, 'captured collection render payload');
     assert(capturedTemplateCollectionRender.json?.data?.frontendDesign?.content?.templateId === 'captured-collection-template', `${capturedTemplateCollectionRender.url} missing render collection frontend design provenance`);
     assert(capturedTemplateCollectionRender.json?.data?.frontendDesign?.content?.routePattern === '/directory/:recordSlug', `${capturedTemplateCollectionRender.url} missing render collection frontend route pattern`);
+    await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}/records/${capturedTemplateRecordId}`, { method: 'DELETE' });
     await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}`, { method: 'DELETE' });
 
     const duplicateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {

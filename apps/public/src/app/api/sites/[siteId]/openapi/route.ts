@@ -491,6 +491,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             responses: {
               '200': {
                 description: 'Collection list',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CollectionListEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/collections/{collectionId}`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'Fetch a public CMS collection schema',
+            operationId: 'getBackyCollection',
+            parameters: [
+              {
+                name: 'collectionId',
+                in: 'path',
+                required: true,
+                schema: { type: 'string', enum: collectionIds.length > 0 ? collectionIds : undefined },
+              },
+            ],
+            responses: {
+              '200': {
+                description: 'Collection schema',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CollectionEnvelope' },
+                  },
+                },
+              },
+              '404': {
+                description: 'Collection not found or not public',
               },
             },
           },
@@ -598,6 +631,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             responses: {
               '200': {
                 description: 'Collection records',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CollectionRecordListEnvelope' },
+                  },
+                },
               },
             },
           },
@@ -631,6 +669,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             responses: {
               '201': {
                 description: 'Draft record created',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CollectionRecordEnvelope' },
+                  },
+                },
               },
             },
           },
@@ -1841,6 +1884,77 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 type: 'array',
                 items: { type: 'object', additionalProperties: true },
               },
+            },
+          },
+          CollectionListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['collections', 'pagination'],
+            properties: {
+              collections: { type: 'array', items: { $ref: '#/components/schemas/CollectionSchema' } },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CollectionEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['collection'],
+            properties: {
+              collection: { $ref: '#/components/schemas/CollectionSchema' },
+            },
+          }),
+          CollectionRecordListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['collection', 'records', 'pagination'],
+            properties: {
+              collection: { $ref: '#/components/schemas/CollectionSchema' },
+              records: { type: 'array', items: { $ref: '#/components/schemas/CollectionRecord' } },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CollectionRecordEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['record'],
+            properties: {
+              record: { $ref: '#/components/schemas/CollectionRecord' },
+            },
+          }),
+          CollectionSchema: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'slug', 'name', 'fields', 'permissions'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              description: { type: ['string', 'null'] },
+              status: { type: 'string', enum: ['draft', 'published', 'scheduled', 'archived'] },
+              fields: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              permissions: { type: 'object', additionalProperties: { type: 'boolean' } },
+              metadata: { type: 'object', additionalProperties: true },
+              recordsUrl: { type: 'string' },
+              listRoutePattern: { type: ['string', 'null'] },
+              routePattern: { type: ['string', 'null'] },
+              frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          CollectionRecord: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'slug', 'values'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              collectionId: { type: 'string' },
+              slug: { type: 'string' },
+              status: { type: 'string', enum: ['draft', 'published', 'scheduled', 'archived'] },
+              values: { type: 'object', additionalProperties: true },
+              frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
+              publishedAt: { type: ['string', 'null'], format: 'date-time' },
+              scheduledAt: { type: ['string', 'null'], format: 'date-time' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
             },
           },
           ReusableSection: {

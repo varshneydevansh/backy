@@ -35,8 +35,17 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const adminJson = (body: Record<string, unknown>, requestId: string, status = 200) => {
+  const response = NextResponse.json(body, { status });
+  response.headers.set('cache-control', 'no-store');
+  response.headers.set('x-backy-cache-scope', 'admin');
+  response.headers.set('x-backy-admin-contract-version', 'backy.admin.v1');
+  response.headers.set('x-backy-request-id', requestId);
+  return response;
+};
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: Record<string, unknown>) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, ...(details ? { details } : {}) } }, { status })
+  adminJson({ success: false, requestId, error: { code, message, ...(details ? { details } : {}) } }, requestId, status)
 );
 
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
@@ -167,7 +176,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
 
-      return NextResponse.json({
+      return adminJson({
         success: true,
         requestId,
         data: {
@@ -177,7 +186,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           section: updated,
           cacheInvalidation,
         },
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -241,7 +250,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
 
-    return NextResponse.json({
+    return adminJson({
       success: true,
       requestId,
       data: {
@@ -250,7 +259,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         version: reusableSectionVersionFromMetadata(updated.metadata),
         section: updated,
       },
-    });
+    }, requestId);
   } catch (error) {
     console.error('Admin reusable section version restore API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

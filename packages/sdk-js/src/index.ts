@@ -256,6 +256,7 @@ export interface BackyCollectionSchema {
   dynamicRoutePattern?: string;
   dynamicRouteResolveUrl?: string;
   dynamicRouteRenderUrl?: string;
+  frontendDesign?: BackyFrontendDesignProvenance;
   [key: string]: unknown;
 }
 
@@ -264,6 +265,7 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
   slug: string;
   status?: string;
   values: TValues;
+  frontendDesign?: BackyFrontendDesignProvenance;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: unknown;

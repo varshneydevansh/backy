@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getCollectionByIdOrSlug, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { withCollectionFrontendDesign } from '@/lib/publicCollectionResources';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -56,13 +57,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         scope: 'content',
       }) || undefined;
 
+      const publicCollection = withCollectionFrontendDesign(collection);
+
       return publicContractJson({
         success: true,
         requestId,
         data: {
-          collection,
+          collection: publicCollection,
         },
-        collection,
+        collection: publicCollection,
       }, {
         requestId,
         request,
@@ -83,13 +86,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
+    const publicCollection = withCollectionFrontendDesign(collection);
+
     return publicContractJson({
       success: true,
       requestId,
       data: {
-        collection,
+        collection: publicCollection,
       },
-      collection,
+      collection: publicCollection,
     }, {
       requestId,
       request,

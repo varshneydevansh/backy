@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyJsonValue } from '@backy-cms/core';
+import type { BackyCollectionRecord, BackyJsonValue } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -19,6 +19,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { withCollectionFrontendDesign, withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -72,6 +73,10 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const isPublishedRecord = (record: BackyCollectionRecord | null | undefined): record is BackyCollectionRecord => (
+  record?.status === 'published'
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -121,11 +126,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             limit,
             offset,
           });
-      const records = payload.items.filter((record) => record?.status === 'published');
+      const records = payload.items
+        .filter(isPublishedRecord)
+        .map(withCollectionRecordFrontendDesign);
 
       if (slug && records.length === 0) {
         return errorResponse(404, 'COLLECTION_RECORD_NOT_FOUND', 'Collection record not found', requestId);
       }
+      const publicCollection = withCollectionFrontendDesign(collection);
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
         scope: 'content',
@@ -135,7 +143,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          collection,
+          collection: publicCollection,
           records,
           pagination: {
             ...payload.pagination,
@@ -143,7 +151,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             hasMore: false,
           },
         },
-        collection,
+        collection: publicCollection,
         records,
         pagination: {
           ...payload.pagination,
@@ -188,16 +196,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_RECORD_NOT_FOUND', 'Collection record not found', requestId);
     }
 
+    const publicCollection = withCollectionFrontendDesign(collection);
+    const records = payload.records.map(withCollectionRecordFrontendDesign);
+
     return publicContractJson({
       success: true,
       requestId,
       data: {
-        collection,
-        records: payload.records,
+        collection: publicCollection,
+        records,
         pagination: payload.pagination,
       },
-      collection,
-      records: payload.records,
+      collection: publicCollection,
+      records,
       pagination: payload.pagination,
     }, {
       requestId,
