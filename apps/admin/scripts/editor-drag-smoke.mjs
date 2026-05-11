@@ -1563,11 +1563,30 @@ const readEditorSaveStatus = async (client) => {
       exists: Boolean(node),
       text: node?.textContent || '',
       title: node?.getAttribute('title') || '',
+      saveState: node?.getAttribute('data-save-state') || '',
+      saveMode: node?.getAttribute('data-save-mode') || '',
+      pendingChanges: Number(node?.getAttribute('data-pending-changes') || 0),
+      lastSavedAt: node?.getAttribute('data-last-saved-at') || '',
+      lastError: node?.getAttribute('data-last-error') || '',
     };
   })()`);
 
   assert(status.exists, `Editor save status is missing: ${JSON.stringify(status)}`);
   return status;
+};
+
+const waitForEditorSaveStatus = async (client, predicate, label = 'editor save status') => {
+  let lastStatus = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastStatus = await readEditorSaveStatus(client);
+    if (predicate(lastStatus)) {
+      return lastStatus;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`${label}: status did not match expectation: ${JSON.stringify(lastStatus)}`);
 };
 
 const waitForEditorMutationReady = async (client, label = 'editor mutation readiness') => {
@@ -1583,6 +1602,11 @@ const waitForEditorMutationReady = async (client, label = 'editor mutation readi
       return {
         statusText: status?.textContent || '',
         statusTitle: status?.getAttribute('title') || '',
+        saveState: status?.getAttribute('data-save-state') || '',
+        saveMode: status?.getAttribute('data-save-mode') || '',
+        pendingChanges: Number(status?.getAttribute('data-pending-changes') || 0),
+        lastSavedAt: status?.getAttribute('data-last-saved-at') || '',
+        lastError: status?.getAttribute('data-last-error') || '',
         saveDisabled: saveButton instanceof HTMLButtonElement ? saveButton.disabled : null,
       };
     })()`);
@@ -3095,6 +3119,16 @@ const main = async () => {
       /Unsaved|Autosaving|Saving|Saved|Save failed/.test(dirtySaveStatus.text),
       `Editor save status did not expose a known state: ${JSON.stringify(dirtySaveStatus)}`,
     );
+    assert(
+      ['dirty', 'autosaving', 'saving', 'saved', 'error'].includes(dirtySaveStatus.saveState),
+      `Editor save status did not expose a structured state: ${JSON.stringify(dirtySaveStatus)}`,
+    );
+    if (dirtySaveStatus.saveState === 'dirty') {
+      assert(
+        /Autosave queued/.test(dirtySaveStatus.title) && dirtySaveStatus.pendingChanges > 0,
+        `Dirty save status did not expose autosave queue details: ${JSON.stringify(dirtySaveStatus)}`,
+      );
+    }
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
     const siblingScopeSelection = await testSiblingScopeSelectionShortcut(
@@ -3137,6 +3171,7 @@ const main = async () => {
     let reloadedResponsiveEditing = null;
     let postSaveInspector = null;
     let savedStatus = null;
+    let queuedAutosaveStatus = null;
     let persistedDataBinding = null;
     let persistedRepeater = null;
     if (tempPageId) {
@@ -3154,12 +3189,28 @@ const main = async () => {
         }),
       };
       await clickButtonByAriaLabel(client, 'Desktop canvas');
+      await selectElement(client, 'smoke-heading');
+      await pressKey(client, 'ArrowRight');
+      queuedAutosaveStatus = await waitForEditorSaveStatus(
+        client,
+        (status) => (
+          status.saveState === 'dirty' &&
+          status.pendingChanges > 0 &&
+          /Autosave queued/.test(status.title) &&
+          /unsaved change/.test(status.title)
+        ),
+        'autosave queued status after desktop edit',
+      );
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
-      savedStatus = await readEditorSaveStatus(client);
+      savedStatus = await waitForEditorMutationReady(client, 'after manual save');
       assert(
-        /Saved|Saving|Autosaving/.test(savedStatus.text),
-        `Editor save status did not update after save: ${JSON.stringify(savedStatus)}`,
+        /Saved/.test(savedStatus.statusText) &&
+          savedStatus.saveState === 'saved' &&
+          savedStatus.saveMode === 'manual' &&
+          savedStatus.pendingChanges === 0 &&
+          Boolean(savedStatus.lastSavedAt),
+        `Editor save status did not expose manual saved metadata: ${JSON.stringify(savedStatus)}`,
       );
       postSaveInspector = await readInspectorState(client);
       assert(
@@ -3287,6 +3338,7 @@ const main = async () => {
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
+      queuedAutosaveStatus,
       savedStatus,
       persistedState,
       persistedDataBinding,

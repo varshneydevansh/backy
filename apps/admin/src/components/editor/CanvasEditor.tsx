@@ -114,6 +114,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 type CanvasDistribution = 'horizontal' | 'vertical';
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
+type EditorSaveMode = 'manual' | 'autosave';
 type ReusableSectionInstanceMeta = {
   mode: 'synced' | 'detached';
   sectionId: string;
@@ -143,6 +144,14 @@ const formatSavedTime = (value: Date | null) => {
     minute: '2-digit',
   });
 };
+
+const formatAutosaveTime = (value: Date | null) => (
+  value
+    ? value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : ''
+);
+
+const formatChangeCount = (count: number) => `${count} unsaved ${count === 1 ? 'change' : 'changes'}`;
 
 const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
 const RESPONSIVE_LAYER_STATE_FIELDS = ['visible', 'locked'] as const;
@@ -715,6 +724,10 @@ export function CanvasEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('saved');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [lastSaveMode, setLastSaveMode] = useState<EditorSaveMode | null>(null);
+  const [lastSaveError, setLastSaveError] = useState<string | null>(null);
+  const [pendingChangeCount, setPendingChangeCount] = useState(0);
+  const [autosaveDueAt, setAutosaveDueAt] = useState<Date | null>(null);
   const isCanvasMutationDisabled = isSaving || isPreview;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
@@ -759,10 +772,14 @@ export function CanvasEditor({
     [breakpoint, elements],
   );
   const saveStatusMeta = useMemo(() => {
+    const pendingLabel = formatChangeCount(pendingChangeCount);
+
     if (isSaving && saveStatus !== 'autosaving') {
       return {
         label: 'Saving',
-        detail: 'Writing to backend',
+        detail: pendingChangeCount > 0
+          ? `Manual save writing ${pendingLabel} to backend`
+          : 'Manual save writing latest canvas state to backend',
         className: 'border-sky-200 bg-sky-50 text-sky-700',
       };
     }
@@ -770,7 +787,9 @@ export function CanvasEditor({
     if (saveStatus === 'autosaving') {
       return {
         label: 'Autosaving',
-        detail: 'Writing to backend',
+        detail: pendingChangeCount > 0
+          ? `Autosave writing ${pendingLabel} to backend`
+          : 'Autosave writing latest canvas state to backend',
         className: 'border-sky-200 bg-sky-50 text-sky-700',
       };
     }
@@ -778,25 +797,33 @@ export function CanvasEditor({
     if (saveStatus === 'error') {
       return {
         label: 'Save failed',
-        detail: 'Retry from the toolbar',
+        detail: `${lastSaveError || 'Retry from the toolbar'}${pendingChangeCount > 0 ? ` • ${pendingLabel}` : ''}`,
         className: 'border-red-200 bg-red-50 text-red-700',
       };
     }
 
     if (hasUnsavedChanges || saveStatus === 'dirty') {
+      const queuedFor = formatAutosaveTime(autosaveDueAt);
       return {
         label: 'Unsaved',
-        detail: 'Autosave pending',
+        detail: `Autosave queued${queuedFor ? ` for ${queuedFor}` : ''} • ${pendingLabel}`,
         className: 'border-amber-200 bg-amber-50 text-amber-700',
       };
     }
 
+    const savedTime = formatSavedTime(lastSavedAt);
+    const modeLabel = lastSaveMode === 'autosave'
+      ? 'via autosave'
+      : lastSaveMode === 'manual'
+        ? 'via manual save'
+        : '';
+
     return {
       label: 'Saved',
-      detail: formatSavedTime(lastSavedAt),
+      detail: `${savedTime}${modeLabel ? ` • ${modeLabel}` : ''}`,
       className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     };
-  }, [hasUnsavedChanges, isSaving, lastSavedAt, saveStatus]);
+  }, [autosaveDueAt, hasUnsavedChanges, isSaving, lastSaveError, lastSaveMode, lastSavedAt, pendingChangeCount, saveStatus]);
 
   const clampCanvasZoom = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -817,7 +844,9 @@ export function CanvasEditor({
 
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
+    setPendingChangeCount((current) => current + 1);
     setHasUnsavedChanges(true);
+    setLastSaveError(null);
     setSaveStatus('dirty');
   }, []);
 
@@ -2982,6 +3011,8 @@ export function CanvasEditor({
     if (validationMessage) {
       setHasUnsavedChanges(true);
       setSaveStatus('error');
+      setLastSaveError(validationMessage);
+      setAutosaveDueAt(null);
       if (!silent) {
         setEditorNotice(validationMessage);
       }
@@ -2996,15 +3027,25 @@ export function CanvasEditor({
         setHasUnsavedChanges(false);
         setSaveStatus('saved');
         setLastSavedAt(new Date());
+        setLastSaveMode(silent ? 'autosave' : 'manual');
+        setPendingChangeCount(0);
+        setAutosaveDueAt(null);
+        setLastSaveError(null);
       } else {
         setSaveStatus('dirty');
+        setAutosaveDueAt(new Date(Date.now() + 2000));
       }
       return true;
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : 'Unable to save page. Please try again.';
       setHasUnsavedChanges(true);
       setSaveStatus('error');
+      setLastSaveError(message);
+      setAutosaveDueAt(null);
       if (!silent) {
-        setEditorNotice('Unable to save page. Please try again.');
+        setEditorNotice(message);
       } else {
         console.error('Auto-save failed');
       }
@@ -3060,6 +3101,9 @@ export function CanvasEditor({
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
     setSaveStatus('saved');
+    setPendingChangeCount(0);
+    setAutosaveDueAt(null);
+    setLastSaveError(null);
     changeSequenceRef.current += 1;
     setShowReloadConfirm(false);
     if (onChange) {
@@ -3232,12 +3276,16 @@ export function CanvasEditor({
 
   useEffect(() => {
     if (!hasUnsavedChanges || isSaving) {
+      setAutosaveDueAt(null);
       return;
     }
 
     if (autosaveTimeoutRef.current) {
       clearTimeout(autosaveTimeoutRef.current);
     }
+
+    const dueAt = new Date(Date.now() + 2000);
+    setAutosaveDueAt(dueAt);
 
     autosaveTimeoutRef.current = window.setTimeout(() => {
       void handleSaveWrapper(undefined, true);
@@ -3373,6 +3421,11 @@ export function CanvasEditor({
                   saveStatusMeta.className,
                 )}
                 data-testid="editor-save-status"
+                data-save-state={saveStatus}
+                data-save-mode={lastSaveMode || ''}
+                data-pending-changes={pendingChangeCount}
+                data-last-saved-at={lastSavedAt?.toISOString() || ''}
+                data-last-error={lastSaveError || ''}
                 title={saveStatusMeta.detail}
               >
                 <span className={cn('size-1.5 rounded-full bg-current', (isSaving || saveStatus === 'autosaving') && 'animate-pulse')} aria-hidden="true" />
@@ -3386,6 +3439,11 @@ export function CanvasEditor({
                 saveStatusMeta.className,
               )}
               data-testid="editor-save-status"
+              data-save-state={saveStatus}
+              data-save-mode={lastSaveMode || ''}
+              data-pending-changes={pendingChangeCount}
+              data-last-saved-at={lastSavedAt?.toISOString() || ''}
+              data-last-error={lastSaveError || ''}
               title={saveStatusMeta.detail}
             >
               <span className={cn('size-2 rounded-full bg-current', (isSaving || saveStatus === 'autosaving') && 'animate-pulse')} aria-hidden="true" />
