@@ -13,6 +13,7 @@ const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
+const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -2645,6 +2646,7 @@ const assertGroupingControls = async (client) => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
     const selectSiblingsButton = document.querySelector('[data-testid="editor-select-sibling-layers"]');
+    const deleteButton = document.querySelector('[data-testid="editor-delete-selection"]');
     const sendToBackButton = document.querySelector('[data-testid="editor-send-to-back"]');
     const sendBackwardButton = document.querySelector('[data-testid="editor-send-backward"]');
     const bringForwardButton = document.querySelector('[data-testid="editor-bring-forward"]');
@@ -2655,6 +2657,7 @@ const assertGroupingControls = async (client) => {
       hasGroupButton: Boolean(groupButton),
       hasUngroupButton: Boolean(ungroupButton),
       hasSelectSiblingsButton: Boolean(selectSiblingsButton),
+      hasDeleteButton: Boolean(deleteButton),
       hasSendToBackButton: Boolean(sendToBackButton),
       hasSendBackwardButton: Boolean(sendBackwardButton),
       hasBringForwardButton: Boolean(bringForwardButton),
@@ -2664,6 +2667,7 @@ const assertGroupingControls = async (client) => {
       groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
       ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
       selectSiblingsDisabled: selectSiblingsButton instanceof HTMLButtonElement ? selectSiblingsButton.disabled : null,
+      deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
       sendToBackDisabled: sendToBackButton instanceof HTMLButtonElement ? sendToBackButton.disabled : null,
       sendBackwardDisabled: sendBackwardButton instanceof HTMLButtonElement ? sendBackwardButton.disabled : null,
       bringForwardDisabled: bringForwardButton instanceof HTMLButtonElement ? bringForwardButton.disabled : null,
@@ -2676,6 +2680,7 @@ const assertGroupingControls = async (client) => {
   assert(state?.hasGroupButton, `Group control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasUngroupButton, `Ungroup control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasSelectSiblingsButton, `Select sibling layers control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasDeleteButton, `Delete control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasSendToBackButton, `Send-to-back control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasSendBackwardButton, `Send-backward control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasBringForwardButton, `Bring-forward control missing from editor toolbar: ${JSON.stringify(state)}`);
@@ -2746,6 +2751,139 @@ const testZOrderQuickControls = async (client, elementId) => {
     backward,
     undone,
     redone,
+  };
+};
+
+const readElementPresence = async (client, elementIds) => (
+  evaluate(client, `(() => {
+    const ids = ${JSON.stringify(elementIds)};
+    const state = {
+      elements: {},
+      layers: {},
+      layersPanelOpen: Boolean(document.querySelector('[data-layer-id]')),
+    };
+
+    for (const id of ids) {
+      state.elements[id] = Boolean(document.querySelector('[data-element-id="' + CSS.escape(id) + '"]'));
+      state.layers[id] = Boolean(document.querySelector('[data-layer-id="' + CSS.escape(id) + '"]'));
+    }
+
+    return state;
+  })()`)
+);
+
+const waitForElementPresence = async (client, elementId, present, label) => {
+  let lastPresence = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastPresence = await readElementPresence(client, [elementId]);
+    const elementMatches = Boolean(lastPresence.elements?.[elementId]) === present;
+    const layerMatches = !lastPresence.layersPanelOpen || Boolean(lastPresence.layers?.[elementId]) === present;
+
+    if (elementMatches && layerMatches) {
+      return lastPresence;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`${label}: element ${elementId} presence did not become ${present}: ${JSON.stringify(lastPresence)}`);
+};
+
+const waitForPersistedElementPresence = async (pageId, expected) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const elements = payload.data?.page?.content?.elements || [];
+    const deleted = Object.fromEntries((expected.deleted || []).map((id) => [id, findCanvasElement(elements, id) === null]));
+    const present = Object.fromEntries((expected.present || []).map((id) => {
+      const element = findCanvasElement(elements, id);
+      return [id, element ? { exists: true, locked: element.locked === true } : { exists: false, locked: false }];
+    }));
+    lastState = { deleted, present };
+
+    const deletedOk = Object.values(deleted).every(Boolean);
+    const presentOk = Object.values(present).every((entry) => entry.exists);
+    const lockedOk = Object.entries(expected.locked || {}).every(([id, locked]) => present[id]?.locked === locked);
+
+    if (deletedOk && presentOk && lockedOk) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted delete state did not match: ${JSON.stringify({ expected, lastState })}`);
+};
+
+const testDeleteEditingControls = async (client, pageId) => {
+  const toolbarId = 'smoke-divider';
+  const keyboardId = 'smoke-spacer';
+  const lockedId = 'smoke-icon';
+
+  await waitForElementPresence(client, toolbarId, true, 'before toolbar delete');
+  await waitForElementPresence(client, keyboardId, true, 'before keyboard delete');
+  await waitForElementPresence(client, lockedId, true, 'before locked delete');
+
+  await selectLayerIds(client, [toolbarId]);
+  await scrollEditorToolbarIntoView(client, 'Delete');
+  await clickEnabledButtonByAriaLabel(client, 'Delete');
+  const toolbarDeleted = await waitForElementPresence(client, toolbarId, false, 'after toolbar delete');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const toolbarUndone = await waitForElementPresence(client, toolbarId, true, 'after toolbar delete undo');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const toolbarRedone = await waitForElementPresence(client, toolbarId, false, 'after toolbar delete redo');
+
+  await selectLayerIds(client, [keyboardId]);
+  await blurActiveElement(client);
+  await pressKey(client, 'Delete');
+  const keyboardDeleted = await waitForElementPresence(client, keyboardId, false, 'after keyboard delete');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true });
+  const keyboardUndone = await waitForElementPresence(client, keyboardId, true, 'after keyboard delete undo');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const keyboardRedone = await waitForElementPresence(client, keyboardId, false, 'after keyboard delete redo');
+
+  await setLayerLockedState(client, lockedId, true);
+  await selectLayerIds(client, [lockedId]);
+  await scrollEditorToolbarIntoView(client, 'Delete');
+  await clickEnabledButtonByAriaLabel(client, 'Delete');
+  const lockedAfterToolbar = await waitForElementPresence(client, lockedId, true, 'after locked toolbar delete attempt');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'Delete');
+  const lockedAfterKeyboard = await waitForElementPresence(client, lockedId, true, 'after locked keyboard delete attempt');
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after delete smoke save');
+  const persisted = await waitForPersistedElementPresence(pageId, {
+    deleted: [toolbarId, keyboardId],
+    present: [lockedId],
+    locked: {
+      [lockedId]: true,
+    },
+  });
+
+  return {
+    toolbarId,
+    keyboardId,
+    lockedId,
+    toolbarDeleted,
+    toolbarUndone,
+    toolbarRedone,
+    keyboardDeleted,
+    keyboardUndone,
+    keyboardRedone,
+    lockedAfterToolbar,
+    lockedAfterKeyboard,
+    savedStatus,
+    persisted,
   };
 };
 
@@ -5665,8 +5803,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -5721,6 +5859,19 @@ const main = async () => {
         targetElementId,
         zOrderControls,
         savedStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (DELETE_SMOKE) {
+      assert(!EDITOR_PATH, 'Delete smoke currently requires an internally created smoke page');
+      const deleteEditing = await testDeleteEditingControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'delete',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        deleteEditing,
       }, null, 2));
       return;
     }

@@ -3290,10 +3290,11 @@ export function CanvasEditor({
    * Delete selected element
    */
   const deleteElement = useCallback(() => {
-    const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
+    const currentElements = elementsRef.current;
+    const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
     if (entries.length === 0) return;
 
-    let nextElements = elements;
+    let nextElements = currentElements;
     let parentSelection: string | null = entries[0]?.parentId ?? null;
     let removed = false;
     for (const entry of entries) {
@@ -3310,7 +3311,7 @@ export function CanvasEditor({
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
     updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
-  }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
+  }, [getSelectedSiblingEntries, updateElementsWithHistory]);
 
   const handleCut = useCallback(() => {
     const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
@@ -4126,6 +4127,7 @@ export function CanvasEditor({
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               title="Delete (Delete)"
               aria-label="Delete"
+              data-testid="editor-delete-selection"
             >
               <Trash2 className="h-4 w-4" />
             </button>

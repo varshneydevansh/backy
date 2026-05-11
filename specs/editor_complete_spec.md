@@ -24,7 +24,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 10 | Save Button | ❌ | UI exists, not functional |
 | 11 | Page Settings | ✅ | Modal edits title, slug, status/schedule, SEO, JSON-LD, keywords, and social image with persistence coverage |
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
-| 13 | Delete Element | ❌ | No way to delete |
+| 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
 | 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
@@ -214,24 +214,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - `BACKY_EDITOR_Z_ORDER_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers the quick controls plus undo/redo as a focused regression.
 
 ### 13. Delete Element
-**Current State:** ❌ Not Implemented
-- **Required Implementation:**
-    - Delete button in PropertyPanel
-    - Keyboard: Delete or Backspace
-    - Confirmation for complex elements
-    ```typescript
-    // In Canvas.tsx
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-        deleteElement(selectedId);
-      }
-    };
-    // Delete function
-    const deleteElement = (id: string) => {
-      setElements(prev => prev.filter(el => el.id !== id));
-      setSelectedId(null);
-    };
-    ```
+**Current State:** ✅ Working
+- Toolbar delete removes the selected unlocked element or unlocked sibling multi-selection.
+- Keyboard Delete and Backspace use the same deletion path, while editor shortcut guards prevent deletes from leaking out of active form controls.
+- Locked selections are skipped, preserving locked layers even when the toolbar button or keyboard shortcut is invoked.
+- Delete operations flow through editor history, so undo/redo restores and reapplies the removal.
+- Manual save persists the deleted element tree; `BACKY_EDITOR_DELETE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers toolbar delete, keyboard delete, locked-layer protection, undo/redo, and persisted page payload.
 
 ### 14. Duplicate Element
 **Current State:** ✅ Working
@@ -374,7 +362,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ## Missing Features List
 **Critical (Must Have)**
-- ❌ Delete element
+- ✅ Delete element
 - ❌ Save page to database
 - ❌ Load existing page on edit
 - ❌ Undo/Redo functionality
