@@ -101,6 +101,13 @@ const toStringArray = (value: unknown): string[] => (
     Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
 );
 
+const normalizeUuid = (value: string | null | undefined): string | null => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)
+        ? trimmed
+        : null;
+};
+
 const normalizeMetadata = (value: unknown): MediaMetadata => (
     isRecord(value) ? value as MediaMetadata : {}
 );
@@ -211,7 +218,7 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
                 metadata,
                 altText: input.altText || null,
                 caption: input.caption || null,
-                uploadedBy: input.uploadedBy || null,
+                uploadedBy: normalizeUuid(input.uploadedBy),
                 updatedAt: new Date(),
             }).returning() as MediaRow[];
             return { item: toMediaItem(row) };
