@@ -27,6 +27,7 @@ const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
 const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
+const SMOKE_ICON_PICKER_EMOJI = '\u{1F680}';
 const CHECKBOX_BEHAVIOR_SPEC = {
   label: 'Smoke checkbox label',
   name: 'smoke_channels',
@@ -4546,7 +4547,24 @@ const testIconBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-icon');
   await switchToPropertiesPanel(client);
 
-  await setFormControlByTestId(client, 'editor-icon-symbol', '✓');
+  await clickControlByTestId(client, 'editor-icon-emoji-picker');
+  const emojiPicker = await evaluate(client, `(() => {
+    const modal = document.querySelector('[data-testid="editor-emoji-picker-modal"]');
+    const option = document.querySelector('[data-testid="editor-emoji-option-2"]');
+    return {
+      hasModal: Boolean(modal),
+      optionEmoji: option?.getAttribute('data-emoji') || '',
+      modalText: modal?.textContent?.slice(0, 200) || '',
+    };
+  })()`);
+  assert(
+    emojiPicker.hasModal && emojiPicker.optionEmoji === SMOKE_ICON_PICKER_EMOJI,
+    `Icon emoji picker did not open with expected common option: ${JSON.stringify(emojiPicker)}`,
+  );
+  await clickControlByTestId(client, 'editor-emoji-option-2');
+  const emojiPickerClosed = await evaluate(client, `(() => !document.querySelector('[data-testid="editor-emoji-picker-modal"]'))()`);
+  assert(emojiPickerClosed === true, 'Icon emoji picker did not close after selecting a common emoji');
+
   await setFormControlByTestId(client, 'editor-icon-size', '40');
   await setFormControlByTestId(client, 'editor-icon-color', '#0e7490');
   await setFormControlByTestId(client, 'editor-icon-title', 'Smoke icon title');
@@ -4570,13 +4588,16 @@ const testIconBehaviorControls = async (client) => {
     };
   })()`);
 
-  assert(state.icon === '✓' && state.previewText === '✓', `Icon symbol mismatch: ${JSON.stringify(state)}`);
+  assert(state.icon === SMOKE_ICON_PICKER_EMOJI && state.previewText === SMOKE_ICON_PICKER_EMOJI, `Icon picker symbol mismatch: ${JSON.stringify(state)}`);
   assert(state.size === '40' && state.previewFontSize === '40px', `Icon size mismatch: ${JSON.stringify(state)}`);
   assert(state.color === '#0e7490' && /14,\s*116,\s*144/.test(state.previewColor), `Icon color mismatch: ${JSON.stringify(state)}`);
   assert(state.title === 'Smoke icon title' && state.previewTitle === 'Smoke icon title', `Icon title mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Smoke check icon' && state.previewAriaLabel === 'Smoke check icon', `Icon aria label mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  return {
+    emojiPicker,
+    state,
+  };
 };
 
 const assertPersistedIconBehavior = async (pageId) => {
@@ -4586,7 +4607,7 @@ const assertPersistedIconBehavior = async (pageId) => {
   const props = icon?.props || {};
 
   assert(icon?.type === 'icon', `Persisted smoke-icon missing: ${JSON.stringify(icon)}`);
-  assert(props.icon === '✓', `Persisted icon symbol mismatch: ${JSON.stringify(props)}`);
+  assert(props.icon === SMOKE_ICON_PICKER_EMOJI, `Persisted icon symbol mismatch: ${JSON.stringify(props)}`);
   assert(props.size === 40, `Persisted icon size mismatch: ${JSON.stringify(props)}`);
   assert(props.color === '#0e7490', `Persisted icon color mismatch: ${JSON.stringify(props)}`);
   assert(props.title === 'Smoke icon title', `Persisted icon title mismatch: ${JSON.stringify(props)}`);

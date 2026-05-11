@@ -1,6 +1,17 @@
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import { createPortal } from 'react-dom';
 
+const COMMON_EMOJIS = [
+  { emoji: '\u{2B50}', label: 'star' },
+  { emoji: '\u{2705}', label: 'check mark' },
+  { emoji: '\u{1F680}', label: 'rocket' },
+  { emoji: '\u{1F4A1}', label: 'light bulb' },
+  { emoji: '\u{1F525}', label: 'fire' },
+  { emoji: '\u{1F389}', label: 'party popper' },
+  { emoji: '\u{1F4CC}', label: 'pin' },
+  { emoji: '\u{1F4AF}', label: 'hundred points' },
+];
+
 interface EmojiPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -81,6 +92,7 @@ export function EmojiPickerModal({
       role="dialog"
       aria-modal="true"
       aria-label="Emoji picker"
+      data-testid="editor-emoji-picker-modal"
     >
       <div
         className="absolute inset-0 bg-black/20 backdrop-blur-[1px] pointer-events-auto"
@@ -107,7 +119,29 @@ export function EmojiPickerModal({
           event.stopPropagation();
         }}
       >
-        <div className="h-full w-full overflow-auto">
+        <div className="border-b border-border bg-muted/40 p-2" data-testid="editor-emoji-common-options">
+          <div className="grid grid-cols-8 gap-1">
+            {COMMON_EMOJIS.map((option, index) => (
+              <button
+                key={option.label}
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-lg hover:bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label={`Pick ${option.label} emoji`}
+                data-testid={`editor-emoji-option-${index}`}
+                data-emoji={option.emoji}
+                onClick={() => {
+                  onSelect(option.emoji);
+                  if (closeOnSelect) {
+                    onClose();
+                  }
+                }}
+              >
+                {option.emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="h-[calc(100%-49px)] w-full overflow-auto">
           <EmojiPicker
             onEmojiClick={(emojiData: EmojiClickData) => {
               onSelect(emojiData.emoji);

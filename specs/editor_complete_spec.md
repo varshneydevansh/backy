@@ -29,7 +29,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
-| 18 | Emoji Picker | ❌ | Not implemented |
+| 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
 | 19 | Grid/Snap | ✅ | 10px grid snap |
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
@@ -250,12 +250,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Font family/size/style props now resolve through shared renderer style layer and are applied on save-preview and initial render.
 
 ### 17. Emoji Picker
-**Current State:** ❌ Not Implemented
-- For Icon element, need an emoji picker dropdown.
-- **Required Implementation:**
-    - Use emoji-picker-react npm package
-    - Or create simple grid of common emojis
-    - Add to PropertyPanel for icon element type
+**Current State:** ✅ Working for icon elements
+- Icon elements expose a symbol input plus a `Pick` button in `PropertyPanel`.
+- The picker uses `emoji-picker-react` and includes a deterministic common-emoji strip for fast selection and stable smoke coverage.
+- Selecting an emoji updates the icon preview, closes the picker, and persists through the page canvas payload.
+- Focused component smoke: `BACKY_EDITOR_COMPONENT_SMOKE=icon npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ### 18. Grid/Snap
 **Current State:** ✅ Working
@@ -378,7 +377,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Duplicate element
 - ✅ Z-Index quick controls (bring/send forward/back)
 - ✅ Keyboard shortcuts
-- ❌ Emoji picker for icons
+- ✅ Emoji picker for icons
 - ✅ Layers panel
 
 **Nice to Have**
@@ -417,7 +416,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 **Phase 3: Usability**
 - Keyboard shortcuts ✅
-- Emoji picker
+- Emoji picker ✅
 - Layers panel ✅
 - Multi-select
 
