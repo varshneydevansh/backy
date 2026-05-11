@@ -497,6 +497,14 @@ const normalizeRendererType = (value: string): KnownElementType => {
     return 'checkbox';
   }
 
+  if (normalized === 'radiobuttons') {
+    return 'radio';
+  }
+
+  if (normalized === 'checkinput') {
+    return 'checkbox';
+  }
+
   if (normalized.includes('dropdown') || normalized.includes('select')) {
     return 'select';
   }
@@ -2876,7 +2884,7 @@ function SelectElement({ element }: ElementRendererProps) {
  */
 function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
   const { props, styles, children } = element;
-  const inputType = element.type === 'checkbox' ? 'checkbox' : 'radio';
+  const inputType = normalizeRendererType(element.type) === 'checkbox' ? 'checkbox' : 'radio';
   const name = getNameClass(props.name) || `field-${element.id}`;
   const options = parseOptionValues(props.options);
   const defaultValues = toFormInputValueList(
