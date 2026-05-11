@@ -2260,7 +2260,7 @@ function CanvasElementComponent({
         );
 
       case 'divider':
-        const dividerThickness = p.thickness ?? '1px';
+        const dividerThickness = toCssLength(p.thickness ?? '1px') ?? '1px';
         const dividerColor = p.borderColor || p.color || '#e5e7eb';
         const dividerStyle = p.borderStyle || 'solid';
         return (

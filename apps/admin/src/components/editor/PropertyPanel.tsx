@@ -2361,6 +2361,18 @@ function ContentProperties({
             <ColorInput
               value={element.props.borderColor || '#e5e7eb'}
               onChange={(value) => onChange({ borderColor: value })}
+              testId="editor-divider-color"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Divider Thickness
+            </label>
+            <NumberInput
+              value={toNumber(element.props.thickness, 1)}
+              onChange={(value) => onChange({ thickness: value })}
+              suffix="px"
+              testId="editor-divider-thickness"
             />
           </div>
           <div>
@@ -2370,6 +2382,7 @@ function ContentProperties({
             <select
               value={element.props.borderStyle || 'solid'}
               onChange={(e) => onChange({ borderStyle: e.target.value })}
+              data-testid="editor-divider-style"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2379,6 +2392,17 @@ function ContentProperties({
               <option value="dashed">Dashed</option>
               <option value="dotted">Dotted</option>
             </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Divider Margin
+            </label>
+            <NumberInput
+              value={toNumber(element.props.margin, 0)}
+              onChange={(value) => onChange({ margin: value })}
+              suffix="px"
+              testId="editor-divider-margin"
+            />
           </div>
         </div>
       )}
@@ -4083,9 +4107,10 @@ function NumberInput({ label, value, onChange, suffix, ariaLabel, testId }: Numb
 interface ColorInputProps {
   value: string;
   onChange: (value: string) => void;
+  testId?: string;
 }
 
-function ColorInput({ value, onChange }: ColorInputProps) {
+function ColorInput({ value, onChange, testId }: ColorInputProps) {
   return (
     <div className="flex items-center gap-2">
       <input
@@ -4098,6 +4123,7 @@ function ColorInput({ value, onChange }: ColorInputProps) {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        data-testid={testId}
         className={cn(
           'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
           'focus:outline-none focus:ring-2 focus:ring-ring'

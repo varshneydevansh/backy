@@ -243,6 +243,21 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-divider',
+            type: 'divider',
+            x: 980,
+            y: 290,
+            width: 280,
+            height: 12,
+            zIndex: 5,
+            props: {
+              borderColor: '#e5e7eb',
+              borderStyle: 'solid',
+              thickness: 1,
+              margin: 0,
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -3207,6 +3222,56 @@ const assertPersistedListBehavior = async (pageId) => {
   return props;
 };
 
+const testDividerBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-divider');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-divider-color', '#dc2626');
+  await setFormControlByTestId(client, 'editor-divider-thickness', '6');
+  await setFormControlByTestId(client, 'editor-divider-style', 'dashed');
+  await setFormControlByTestId(client, 'editor-divider-margin', '12');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-divider"]');
+    const divider = node?.querySelector('hr');
+    const style = divider ? getComputedStyle(divider) : null;
+    return {
+      color: value('editor-divider-color'),
+      thickness: value('editor-divider-thickness'),
+      borderStyle: value('editor-divider-style'),
+      margin: value('editor-divider-margin'),
+      previewBorderTopColor: style?.borderTopColor || '',
+      previewBorderTopWidth: style?.borderTopWidth || '',
+      previewBorderTopStyle: style?.borderTopStyle || '',
+      previewMarginTop: style?.marginTop || '',
+      previewMarginBottom: style?.marginBottom || '',
+    };
+  })()`);
+
+  assert(state.color === '#dc2626' && /220,\s*38,\s*38/.test(state.previewBorderTopColor), `Divider color mismatch: ${JSON.stringify(state)}`);
+  assert(state.thickness === '6' && state.previewBorderTopWidth === '6px', `Divider thickness mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderStyle === 'dashed' && state.previewBorderTopStyle === 'dashed', `Divider style mismatch: ${JSON.stringify(state)}`);
+  assert(state.margin === '12' && state.previewMarginTop === '12px' && state.previewMarginBottom === '12px', `Divider margin mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedDividerBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const divider = findCanvasElement(elements, 'smoke-divider');
+  const props = divider?.props || {};
+
+  assert(divider?.type === 'divider', `Persisted smoke-divider missing: ${JSON.stringify(divider)}`);
+  assert(props.borderColor === '#dc2626', `Persisted divider color mismatch: ${JSON.stringify(props)}`);
+  assert(props.thickness === 6, `Persisted divider thickness mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderStyle === 'dashed', `Persisted divider style mismatch: ${JSON.stringify(props)}`);
+  assert(props.margin === 12, `Persisted divider margin mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -4018,20 +4083,25 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list') {
-      assert(tempPageId, 'List component smoke requires an internally created smoke page');
-      const listBehaviorControls = await testListBehaviorControls(client);
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider') {
+      assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
+      const targetElementId = COMPONENT_SMOKE === 'divider' ? 'smoke-divider' : 'smoke-list';
+      const behaviorControls = COMPONENT_SMOKE === 'divider'
+        ? await testDividerBehaviorControls(client)
+        : await testListBehaviorControls(client);
       await clickSave(client);
-      const savedStatus = await waitForEditorMutationReady(client, 'after list component smoke save');
-      const persistedListBehavior = await assertPersistedListBehavior(tempPageId);
+      const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
+      const persistedBehavior = COMPONENT_SMOKE === 'divider'
+        ? await assertPersistedDividerBehavior(tempPageId)
+        : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-list']);
-        reloadedState = await readEditorElementState(reloadClient, ['smoke-list']);
+        await waitForEditorElements(reloadClient, [targetElementId]);
+        reloadedState = await readEditorElementState(reloadClient, [targetElementId]);
       } finally {
         if (reloadClient) {
           try {
@@ -4047,9 +4117,9 @@ const main = async () => {
         ok: true,
         mode: COMPONENT_SMOKE,
         url: `${ADMIN_BASE_URL}${editorPath}`,
-        listBehaviorControls,
+        behaviorControls,
         savedStatus,
-        persistedListBehavior,
+        persistedBehavior,
         reloadedState,
       }, null, 2));
       return;
@@ -4173,6 +4243,9 @@ const main = async () => {
     const listBehaviorControls = EDITOR_PATH
       ? null
       : await testListBehaviorControls(client);
+    const dividerBehaviorControls = EDITOR_PATH
+      ? null
+      : await testDividerBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4229,6 +4302,7 @@ const main = async () => {
     let persistedImageBehavior = null;
     let persistedIconBehavior = null;
     let persistedListBehavior = null;
+    let persistedDividerBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4239,7 +4313,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4301,6 +4375,9 @@ const main = async () => {
       persistedListBehavior = listBehaviorControls
         ? await assertPersistedListBehavior(tempPageId)
         : null;
+      persistedDividerBehavior = dividerBehaviorControls
+        ? await assertPersistedDividerBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4332,7 +4409,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4438,6 +4515,7 @@ const main = async () => {
       imageBehaviorControls,
       iconBehaviorControls,
       listBehaviorControls,
+      dividerBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4458,6 +4536,7 @@ const main = async () => {
       persistedImageBehavior,
       persistedIconBehavior,
       persistedListBehavior,
+      persistedDividerBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

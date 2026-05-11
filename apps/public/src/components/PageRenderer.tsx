@@ -1316,8 +1316,8 @@ function DividerElement({ element }: ElementRendererProps) {
       style={{
         width: '100%',
         height: getLength(props.thickness, '1px'),
-        borderTop: `${getLength(props.thickness, '1px')} solid ${getNameClass(props.color) || '#e5e7eb'}`,
         border: 'none',
+        borderTop: `${getLength(props.thickness, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || getNameClass(props.color) || '#e5e7eb'}`,
         margin: `${getLength(props.margin, '16px')} 0`,
         backgroundColor: 'transparent',
         ...styles,
