@@ -1983,11 +1983,11 @@ function QuoteElement({ element }: ElementRendererProps) {
   return (
     <blockquote
       style={{
+        ...getAppearanceStyle(props as Record<string, unknown>),
         margin: 0,
         paddingLeft: getLength(props.quotePaddingLeft, '1rem'),
         borderLeft: `${getLength(props.quoteBorderWidth, '4px')} solid ${getNameClass(props.quoteBorderColor) || 'rgba(0,0,0,0.2)'}`,
         color: getNameClass(props.color) || '#334155',
-        fontStyle: 'italic',
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
       }}

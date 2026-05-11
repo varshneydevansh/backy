@@ -74,6 +74,18 @@ const content: PageContent = {
         citation: 'Renderer Smoke',
         quoteBorderColor: '#7c3aed',
         quoteBorderWidth: 6,
+        quotePaddingLeft: 24,
+        citationColor: '#be123c',
+        citationFontSize: 15,
+        fontSize: 20,
+        fontStyle: 'italic',
+        color: '#1f2937',
+        textAlign: 'right',
+        lineHeight: 1.6,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 18,
+        boxShadow: '0 6px 16px rgba(15, 23, 42, 0.18)',
       },
     },
     {
@@ -545,6 +557,17 @@ assert(html.includes('Slate paragraph for custom frontend output.'), `Paragraph 
 assert(html.includes('Slate quote for public renderer.'), `Quote Slate content was not rendered: ${html}`);
 assert(html.includes('Renderer Smoke'), `Quote citation was not rendered: ${html}`);
 assert(html.includes('border-left:6px solid #7c3aed'), `Quote border styling was not rendered: ${html}`);
+assert(html.includes('padding-left:24px'), `Quote padding-left was not rendered: ${html}`);
+assert(html.includes('font-size:20px'), `Quote font size was not rendered: ${html}`);
+assert(html.includes('font-style:italic'), `Quote font style was not rendered: ${html}`);
+assert(html.includes('color:#1f2937'), `Quote color was not rendered: ${html}`);
+assert(html.includes('text-align:right'), `Quote text align was not rendered: ${html}`);
+assert(html.includes('line-height:1.6'), `Quote line height was not rendered: ${html}`);
+assert(html.includes('background-color:#f8fafc'), `Quote background was not rendered: ${html}`);
+assert(html.includes('border-radius:12px'), `Quote border radius was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 6px 16px rgba(15, 23, 42, 0.18)'), `Quote shadow was not rendered: ${html}`);
+assert(html.includes('color:#be123c'), `Quote citation color was not rendered: ${html}`);
+assert(html.includes('font-size:15px'), `Quote citation font size was not rendered: ${html}`);
 assert(html.includes('Styled box child'), `Styled box child was not rendered: ${html}`);
 assert(html.includes('background-color:#ecfeff'), `Container background color was not rendered: ${html}`);
 assert(html.includes('border-width:3px'), `Container border width was not rendered: ${html}`);

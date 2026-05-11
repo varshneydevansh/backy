@@ -43,7 +43,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown selection styling still partial; mixed selection transforms | ⚠️ |
 | heading | ✅ Similar to text | ✅ | ✅ | Selection edge cases for marks | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same text parity issues as heading | ⚠️ |
-| quote | ✅ | ✅ | ⚠️ | Public and editor quote styles can diverge under custom styles | ⚠️ |
+| quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
 | button | ✅ label/link-like styling | ✅ | ✅ | Link action config still needs action presets in property panel | ⚠️ |
@@ -334,6 +334,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Brought public quote rendering into parity for appearance, typography, border, and citation styles with renderer smoke coverage.
 - Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.
 - Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
