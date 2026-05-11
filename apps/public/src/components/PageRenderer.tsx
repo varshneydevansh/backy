@@ -832,6 +832,28 @@ function parseAttributeString(value: unknown): string | undefined {
   return undefined;
 }
 
+function resolveMediaSource(value: unknown): string | undefined {
+  const direct = parseAttributeString(value);
+  if (direct) {
+    return direct;
+  }
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return parseAttributeString(value.url)
+    || parseAttributeString(value.src)
+    || parseAttributeString(value.publicUrl)
+    || parseAttributeString(value.path);
+}
+
+function resolveElementMediaSource(props: Record<string, unknown>, key: string): string | undefined {
+  return resolveMediaSource(props[key])
+    || resolveMediaSource(props[`${key}Url`])
+    || resolveMediaSource(props.media);
+}
+
 function parseNumericAttribute(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -1286,11 +1308,12 @@ function HeadingElement({ element }: ElementRendererProps) {
  */
 function ImageElement({ element }: ElementRendererProps) {
   const { props, styles, width, height } = element;
+  const src = resolveElementMediaSource(props as Record<string, unknown>, 'src');
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={props.src as string}
+      src={src}
       alt={getNameClass(props.alt) || ''}
       title={getNameClass(props.title) || undefined}
       width={typeof width === 'number' ? width : undefined}
@@ -1315,13 +1338,15 @@ function VideoElement({ element }: ElementRendererProps) {
   const { props, styles, width, height } = element;
   const autoPlay = getBooleanWithFallback(props.autoplay ?? props.autoPlay, false);
   const muted = getBooleanWithFallback(props.muted, autoPlay);
+  const src = resolveElementMediaSource(props as Record<string, unknown>, 'src');
+  const poster = resolveMediaSource(props.poster);
 
   return (
     <video
-      src={props.src as string}
+      src={src}
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
-      poster={getNameClass(props.poster) || undefined}
+      poster={poster}
       autoPlay={autoPlay}
       loop={getBooleanWithFallback(props.loop, false)}
       muted={muted}

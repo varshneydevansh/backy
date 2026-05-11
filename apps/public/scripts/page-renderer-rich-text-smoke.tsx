@@ -142,7 +142,10 @@ const content: PageContent = {
       width: 180,
       height: 90,
       props: {
-        src: 'https://cdn.backy.test/hero.png',
+        src: {
+          url: 'https://cdn.backy.test/hero.png',
+          id: 'media-hero',
+        },
         alt: 'Styled image alt',
         title: 'Styled image title',
         objectFit: 'contain',
@@ -164,8 +167,14 @@ const content: PageContent = {
       width: 200,
       height: 112,
       props: {
-        src: 'https://cdn.backy.test/clip.mp4',
-        poster: 'https://cdn.backy.test/poster.jpg',
+        src: {
+          publicUrl: 'https://cdn.backy.test/clip.mp4',
+          id: 'media-clip',
+        },
+        poster: {
+          src: 'https://cdn.backy.test/poster.jpg',
+          id: 'media-poster',
+        },
         objectFit: 'contain',
         controls: true,
         autoplay: true,
