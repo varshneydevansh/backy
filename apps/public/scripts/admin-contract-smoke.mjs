@@ -2919,6 +2919,19 @@ try {
     assert(publicCapturedTemplateRecordResolve.response.status === 200, `${publicCapturedTemplateRecordResolve.url} expected captured collection record resolve`);
     assert(publicCapturedTemplateRecordResolve.json?.data?.route?.resource?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecordResolve.url} missing resolved collection record frontend design`);
     assert(publicCapturedTemplateRecordResolve.json?.data?.route?.resource?.collectionFrontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecordResolve.url} missing resolved collection record schema frontend design`);
+    const publicCapturedTemplateSeo = await request(`/api/sites/${createdSiteId}/seo`);
+    assert(publicCapturedTemplateSeo.response.status === 200, `${publicCapturedTemplateSeo.url} expected captured collection SEO discovery`);
+    assert(publicCapturedTemplateSeo.json?.data?.routes?.some((route) => (
+      route.type === 'dynamicList' &&
+      route.id === capturedTemplateCollectionId &&
+      route.frontendDesign?.templateId === 'captured-collection-template'
+    )), `${publicCapturedTemplateSeo.url} missing SEO collection frontend design`);
+    assert(publicCapturedTemplateSeo.json?.data?.routes?.some((route) => (
+      route.type === 'dynamicItem' &&
+      route.id === capturedTemplateRecordId &&
+      route.frontendDesign?.templateId === 'captured-collection-template' &&
+      route.collectionFrontendDesign?.templateId === 'captured-collection-template'
+    )), `${publicCapturedTemplateSeo.url} missing SEO collection record frontend design`);
     const capturedTemplateCollectionRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/directory-captured-${unique}`)}`);
     assert(capturedTemplateCollectionRender.response.status === 200, `${capturedTemplateCollectionRender.url} expected captured collection render`);
     validateAiRenderPayload(capturedTemplateCollectionRender.json, 'captured collection render payload');

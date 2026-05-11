@@ -25,6 +25,7 @@ import {
 } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import {
   createPublicCacheRevision,
   publicContractJson,
@@ -81,6 +82,8 @@ const seoCacheRevision = (
     openGraph: route.openGraph,
     keywords: route.keywords,
     jsonLd: route.jsonLd,
+    frontendDesign: route.frontendDesign,
+    collectionFrontendDesign: route.collectionFrontendDesign,
   })),
   sitemap: discovery.sitemap,
   robots: discovery.robots,
@@ -227,6 +230,8 @@ const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectio
     },
     keywords: [collection.slug, record.slug],
     jsonLd: [],
+    frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+    collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
   };
 };
 
@@ -255,6 +260,7 @@ const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
     },
     keywords: [collection.slug],
     jsonLd: [],
+    frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
   };
 };
 

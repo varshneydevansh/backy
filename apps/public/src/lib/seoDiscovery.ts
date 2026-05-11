@@ -7,6 +7,7 @@ import {
   type StoreSite,
 } from '@/lib/backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import type { SiteSettings } from '@backy-cms/core';
 
 export interface SeoRoute {
@@ -32,6 +33,8 @@ export interface SeoRoute {
   };
   keywords: string[];
   jsonLd: Array<Record<string, unknown>>;
+  frontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
+  collectionFrontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
 }
 
 export interface SeoDiscovery {
@@ -403,6 +406,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
       },
       keywords: [collection.slug],
       jsonLd: [],
+      frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
     };
   });
 
@@ -432,6 +436,8 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
         },
         keywords: [collection.slug, record.slug],
         jsonLd: [],
+        frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+        collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
       };
     })
   ));

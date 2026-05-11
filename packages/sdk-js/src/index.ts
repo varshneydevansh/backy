@@ -743,7 +743,7 @@ export type BackyRouteResolveResult =
     });
 
 export interface BackySeoRoute {
-  type: 'page' | 'post' | 'dynamicItem' | string;
+  type: 'page' | 'post' | 'dynamicList' | 'dynamicItem' | string;
   id: string;
   title: string;
   description?: string;
@@ -761,6 +761,8 @@ export interface BackySeoRoute {
   openGraph?: Record<string, unknown>;
   keywords?: string[];
   jsonLd?: Array<Record<string, unknown>>;
+  frontendDesign?: BackyFrontendDesignProvenance;
+  collectionFrontendDesign?: BackyFrontendDesignProvenance;
   [key: string]: unknown;
 }
 
