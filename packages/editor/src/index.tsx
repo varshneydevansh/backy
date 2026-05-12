@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
-import { Element as SlateElement, Editor, Range as SlateRange, Transforms } from 'slate';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Element as SlateElement, Editor, Node, Range as SlateRange, Transforms } from 'slate';
+import { ReactEditor } from 'slate-react';
 import { Plate, PlateContent, ParagraphPlugin, usePlateEditor } from '@udecode/plate/react';
 import type { PlateEditor } from '@udecode/plate/react';
 import { BaseBoldPlugin, BaseItalicPlugin, BaseUnderlinePlugin, BaseCodePlugin, BaseStrikethroughPlugin } from '@udecode/plate-basic-marks';
@@ -116,6 +117,126 @@ export const BackyEditor = ({
         plugins,
         value,
     });
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const draggedListItemPathRef = useRef<number[] | null>(null);
+    const draggedListItemIndentRef = useRef<number | undefined>(undefined);
+
+    const findListItemPathFromDom = (listItem: HTMLElement) => {
+        const listContainer = listItem.closest('ul, ol');
+        const root = rootRef.current;
+        if (!(listContainer instanceof HTMLElement) || !root?.contains(listContainer)) {
+            return null;
+        }
+
+        const renderedLists = Array.from(root.querySelectorAll<HTMLElement>('ul, ol'));
+        const listIndex = renderedLists.indexOf(listContainer);
+        const listItems = Array.from(listContainer.children).filter(
+            (child): child is HTMLElement => child instanceof HTMLElement && child.matches('[data-backy-rich-list-item="true"]')
+        );
+        const itemIndex = listItems.indexOf(listItem);
+        if (listIndex < 0 || itemIndex < 0) {
+            return null;
+        }
+
+        const slateLists = Array.from(
+            Editor.nodes(editor as any, {
+                at: [],
+                match: isListContainer,
+            })
+        );
+        const [, listPath] = slateLists[listIndex] || [];
+        return Array.isArray(listPath) ? [...listPath, itemIndex] : null;
+    };
+
+    const findListItemPathAtPoint = (clientX: number, clientY: number, options: { handlesOnly?: boolean } = {}) => {
+        if (typeof document === 'undefined') {
+            return null;
+        }
+
+        const candidates = Array.from(
+            document.querySelectorAll<HTMLElement>(
+                options.handlesOnly
+                    ? '[data-backy-rich-list-drag-handle="true"]'
+                    : '[data-backy-rich-list-drag-handle="true"], [data-backy-rich-list-item="true"]'
+            )
+        );
+        const target = candidates.find((candidate) => {
+            const rect = candidate.getBoundingClientRect();
+            return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+        });
+        const listItem = target?.closest?.('[data-backy-rich-list-item="true"]') || null;
+
+        try {
+            if (!(listItem instanceof HTMLElement)) {
+                return null;
+            }
+
+            return findListItemPathFromDom(listItem);
+        } catch {
+            return null;
+        }
+    };
+
+    const moveListItemByDrag = (sourcePath: number[], targetPath: number[], sourceIndent?: number) => {
+        const slateEditor = editor as any;
+        if (readOnly || !sourcePath.length || !targetPath.length) {
+            return false;
+        }
+
+        const sourceParentPath = sourcePath.slice(0, -1);
+        const targetParentPath = targetPath.slice(0, -1);
+        if (sourceParentPath.join('.') !== targetParentPath.join('.')) {
+            return false;
+        }
+
+        const sourceIndex = sourcePath[sourcePath.length - 1] ?? -1;
+        const targetIndex = targetPath[targetPath.length - 1] ?? -1;
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+            return false;
+        }
+
+        try {
+            const currentListItemNode = Node.get(slateEditor, sourcePath) as unknown as Record<string, unknown>;
+            const currentIndent = typeof currentListItemNode.indent === 'number'
+                ? currentListItemNode.indent
+                : typeof sourceIndent === 'number'
+                  ? sourceIndent
+                  : undefined;
+            const nextChildren = JSON.parse(JSON.stringify(slateEditor.children || []));
+            let parentChildren: unknown[] | null = Array.isArray(nextChildren) ? nextChildren : null;
+            for (const index of sourceParentPath) {
+                const nextParent = parentChildren?.[index] as { children?: unknown[] } | undefined;
+                parentChildren = Array.isArray(nextParent?.children) ? nextParent.children : null;
+            }
+
+            if (!parentChildren || targetIndex > parentChildren.length - 1) {
+                return false;
+            }
+
+            const [movedNode] = parentChildren.splice(sourceIndex, 1) as [Record<string, unknown> | undefined];
+            if (!movedNode) {
+                return false;
+            }
+            if (typeof currentIndent === 'number' && currentIndent > 0) {
+                movedNode.indent = currentIndent;
+            }
+            const nextPath = [...sourceParentPath, targetIndex];
+            parentChildren.splice(targetIndex, 0, movedNode);
+            slateEditor.children = nextChildren;
+            try {
+                Transforms.select(slateEditor, Editor.start(slateEditor, nextPath));
+            } catch {
+                // Selection is best-effort after list item drag reorder.
+            }
+            slateEditor.onChange?.();
+            if (Array.isArray(slateEditor.children)) {
+                onChange?.(JSON.parse(JSON.stringify(slateEditor.children)));
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     // Expose editor instance when ready
     useEffect(() => {
@@ -530,14 +651,202 @@ export const BackyEditor = ({
 
         if (type === 'li') {
             const indent = Number((element as any)?.indent || 0);
+            const getListItemPath = () => ReactEditor.findPath(editor as any, element);
+            const getListItemPathFromHandle = (event: MouseEvent) => {
+                const target = event.currentTarget instanceof Element
+                    ? event.currentTarget
+                    : event.target instanceof Element
+                      ? event.target
+                      : null;
+                const listItem = target?.closest?.('[data-backy-rich-list-item="true"]');
+                if (listItem instanceof HTMLElement) {
+                    return findListItemPathFromDom(listItem);
+                }
+                return getListItemPath();
+            };
+            const getListItemIndentFromDom = (target: EventTarget | null) => {
+                if (typeof window === 'undefined') {
+                    return indent > 0 ? indent : undefined;
+                }
+
+                const targetElement = target instanceof Element ? target : null;
+                const listItem = targetElement?.closest?.('[data-backy-rich-list-item="true"]');
+                if (listItem instanceof HTMLElement) {
+                    const marginLeft = Number.parseFloat(window.getComputedStyle(listItem).marginLeft || '0');
+                    if (Number.isFinite(marginLeft) && marginLeft > 0) {
+                        return Math.max(1, Math.round(marginLeft / 24));
+                    }
+                }
+
+                return indent > 0 ? indent : undefined;
+            };
+            const handleDragStart = (event: React.DragEvent<HTMLLIElement> | DragEvent) => {
+                if (readOnly) {
+                    return;
+                }
+
+                try {
+                    const path = getListItemPath();
+                    draggedListItemPathRef.current = path;
+                    draggedListItemIndentRef.current = getListItemIndentFromDom(event.currentTarget);
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', path.join('.'));
+                    }
+                } catch {
+                    draggedListItemPathRef.current = null;
+                    draggedListItemIndentRef.current = undefined;
+                }
+            };
+            const handleDragOver = (event: React.DragEvent<HTMLLIElement> | DragEvent) => {
+                if (readOnly || !draggedListItemPathRef.current) {
+                    return;
+                }
+
+                try {
+                    const targetPath = getListItemPath();
+                    const sourceParent = draggedListItemPathRef.current.slice(0, -1).join('.');
+                    const targetParent = targetPath.slice(0, -1).join('.');
+                    if (sourceParent === targetParent && draggedListItemPathRef.current.join('.') !== targetPath.join('.')) {
+                        event.preventDefault();
+                        if (event.dataTransfer) {
+                            event.dataTransfer.dropEffect = 'move';
+                        }
+                    }
+                } catch {
+                }
+            };
+            const handleDrop = (event: React.DragEvent<HTMLLIElement> | DragEvent) => {
+                if (readOnly || !draggedListItemPathRef.current) {
+                    return;
+                }
+
+                event.preventDefault();
+                try {
+                    const targetPath = getListItemPath();
+                    moveListItemByDrag(draggedListItemPathRef.current, targetPath, draggedListItemIndentRef.current);
+                } finally {
+                    draggedListItemPathRef.current = null;
+                    draggedListItemIndentRef.current = undefined;
+                }
+            };
+            const handleDragEnd = () => {
+                draggedListItemPathRef.current = null;
+                draggedListItemIndentRef.current = undefined;
+            };
+            const handlePointerReorderStart = (event: MouseEvent) => {
+                if (readOnly || event.button !== 0) {
+                    return;
+                }
+
+                let sourcePath: number[] | null = null;
+                try {
+                    sourcePath = getListItemPathFromHandle(event);
+                } catch {
+                    sourcePath = null;
+                }
+                if (!sourcePath) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                draggedListItemPathRef.current = sourcePath;
+                const sourceIndent = getListItemIndentFromDom(event.currentTarget);
+                draggedListItemIndentRef.current = sourceIndent;
+                const startX = event.clientX;
+                const startY = event.clientY;
+
+                const handlePointerReorderEnd = (mouseEvent: MouseEvent) => {
+                    try {
+                        const targetPath = findListItemPathAtPoint(mouseEvent.clientX, mouseEvent.clientY);
+                        const movedDistance = Math.hypot(mouseEvent.clientX - startX, mouseEvent.clientY - startY);
+                        if (targetPath && movedDistance >= 4) {
+                            moveListItemByDrag(sourcePath, targetPath, sourceIndent);
+                            mouseEvent.preventDefault();
+                            mouseEvent.stopPropagation();
+                        }
+                    } finally {
+                        draggedListItemPathRef.current = null;
+                        draggedListItemIndentRef.current = undefined;
+                        document.removeEventListener('mouseup', handlePointerReorderEnd, true);
+                    }
+                };
+
+                document.addEventListener('mouseup', handlePointerReorderEnd, true);
+            };
+            const setListItemHandleRef = (node: HTMLSpanElement | null) => {
+                if (!node) {
+                    return;
+                }
+
+                (node as any).__backyRichListHandleCleanup?.();
+                node.addEventListener('mousedown', handlePointerReorderStart);
+                (node as any).__backyRichListHandleCleanup = () => {
+                    node.removeEventListener('mousedown', handlePointerReorderStart);
+                };
+            };
+            const setListItemRef = (node: HTMLLIElement | null) => {
+                const slateRef = (attributes as any).ref;
+                if (typeof slateRef === 'function') {
+                    slateRef(node);
+                } else if (slateRef && typeof slateRef === 'object') {
+                    slateRef.current = node;
+                }
+
+                if (!node) {
+                    return;
+                }
+
+                (node as any).__backyRichListDragCleanup?.();
+                node.addEventListener('dragstart', handleDragStart as EventListener);
+                node.addEventListener('dragover', handleDragOver as EventListener);
+                node.addEventListener('drop', handleDrop as EventListener);
+                node.addEventListener('dragend', handleDragEnd as EventListener);
+                (node as any).__backyRichListDragCleanup = () => {
+                    node.removeEventListener('dragstart', handleDragStart as EventListener);
+                    node.removeEventListener('dragover', handleDragOver as EventListener);
+                    node.removeEventListener('drop', handleDrop as EventListener);
+                    node.removeEventListener('dragend', handleDragEnd as EventListener);
+                };
+            };
             return (
                 <li
                     {...attributes}
+                    ref={setListItemRef}
+                    draggable={!readOnly}
+                    data-backy-rich-list-item="true"
                     style={{
                         ...elementStyle,
                         marginLeft: indent > 0 ? `${indent * 24}px` : undefined,
                     }}
                 >
+                    {!readOnly && (
+                        <span
+                            contentEditable={false}
+                            ref={setListItemHandleRef}
+                            data-backy-rich-list-drag-handle="true"
+                            aria-hidden="true"
+                            style={{
+                                display: 'inline-flex',
+                                width: '0.875em',
+                                height: '0.875em',
+                                marginLeft: 0,
+                                marginRight: '0.2em',
+                                cursor: 'grab',
+                                fontSize: '0.65em',
+                                lineHeight: 1,
+                                position: 'relative',
+                                zIndex: 1,
+                                pointerEvents: 'auto',
+                                userSelect: 'none',
+                                verticalAlign: 'middle',
+                                backgroundImage: 'radial-gradient(circle, #94a3b8 1px, transparent 1.5px)',
+                                backgroundSize: '4px 4px',
+                                backgroundPosition: 'center',
+                            }}
+                        />
+                    )}
                     {children}
                 </li>
             );
@@ -629,7 +938,7 @@ export const BackyEditor = ({
     };
 
     return (
-        <div className={cn("relative h-full flex flex-col", className)}>
+        <div ref={rootRef} className={cn("relative h-full flex flex-col", className)}>
             <Plate
                 editor={editor}
                 onChange={({ value }) => onChange?.(value)}

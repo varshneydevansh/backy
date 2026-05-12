@@ -865,6 +865,19 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       try {
+        const listItemIndents = Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (node) => SlateElement.isElement(node) && (node as any).type === 'li',
+          })
+        )
+          .map(([node, path]) => ({
+            path: path as number[],
+            indent: typeof (node as { indent?: unknown }).indent === 'number'
+              ? (node as { indent?: number }).indent
+              : undefined,
+          }))
+          .filter((entry): entry is { path: number[]; indent: number } => typeof entry.indent === 'number');
         const children = Array.isArray((editor as any).children) ? (editor as any).children : [];
         const lastIndex = children.length - 1;
         const lastNode = lastIndex >= 0 ? children[lastIndex] : null;
@@ -875,6 +888,15 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         } else {
           const end = Editor.end(editor as any, []);
           Transforms.select(editor as any, end);
+        }
+        for (const entry of listItemIndents) {
+          if (!Node.has(editor as any, entry.path)) {
+            continue;
+          }
+
+          Transforms.setNodes(editor as any, { indent: entry.indent } as any, {
+            at: entry.path,
+          });
         }
         setStoredSelection(editor.selection || null);
         return {

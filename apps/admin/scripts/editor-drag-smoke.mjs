@@ -1246,6 +1246,142 @@ const selectElement = async (client, elementId, options = {}) => {
   await sleep(150);
 };
 
+const dragRichTextListItem = async (client, elementId, fromText, toText) => {
+  await scrollElementIntoView(client, elementId);
+  await activateTextEditing(client, elementId);
+  await sleep(250);
+  const dragResult = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editorHost = host?.querySelector('[data-backy-text-editor]');
+    const editableEditor = host?.querySelector('[contenteditable="true"]');
+    const items = Array.from(host?.querySelectorAll('[data-backy-rich-list-item="true"], li') || []);
+    const source = items.find((node) => (node.textContent || '').includes(${JSON.stringify(fromText)}));
+    const target = items.find((node) => (node.textContent || '').includes(${JSON.stringify(toText)}));
+    if (editorHost?.getAttribute('data-backy-text-editor-editable') !== 'true' || !(editableEditor instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'editor-not-editable',
+        hostEditable: editorHost?.getAttribute('data-backy-text-editor-editable') || '',
+        hasEditableEditor: editableEditor instanceof HTMLElement,
+        html: host?.innerHTML || '',
+      };
+    }
+    if (!(source instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-list-drag-targets',
+        itemTexts: items.map((node) => node.textContent || ''),
+      };
+    }
+    if (source.getAttribute('draggable') !== 'true' || target.getAttribute('draggable') !== 'true') {
+      return {
+        ok: false,
+        reason: 'list-items-not-draggable',
+        sourceDraggable: source.getAttribute('draggable'),
+        targetDraggable: target.getAttribute('draggable'),
+        html: host?.innerHTML || '',
+      };
+    }
+
+    const pointForHandle = (root, text) => {
+      const handle = root.querySelector('[data-backy-rich-list-drag-handle="true"]');
+      if (handle instanceof HTMLElement) {
+        const rect = handle.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            x: Math.round(rect.left + rect.width / 2),
+            y: Math.round(rect.top + rect.height / 2),
+            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          };
+        }
+      }
+
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const value = node.textContent || '';
+        const index = value.indexOf(text);
+        if (index >= 0) {
+          const range = document.createRange();
+          range.setStart(node, index);
+          range.setEnd(node, index + text.length);
+          const rect = range.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            return {
+              x: Math.round(rect.left + rect.width / 2),
+              y: Math.round(rect.top + rect.height / 2),
+              rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+            };
+          }
+        }
+        node = walker.nextNode();
+      }
+
+      const rect = root.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left + Math.min(Math.max(rect.width / 2, 12), Math.max(rect.width - 8, 12))),
+        y: Math.round(rect.top + Math.min(Math.max(rect.height / 2, 8), Math.max(rect.height - 4, 8))),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      };
+    };
+    const sourcePoint = pointForHandle(source, ${JSON.stringify(fromText)});
+    const targetPoint = pointForHandle(target, ${JSON.stringify(toText)});
+    const start = { x: sourcePoint.x, y: sourcePoint.y };
+    const end = { x: targetPoint.x, y: targetPoint.y };
+    const handle = source.querySelector('[data-backy-rich-list-drag-handle="true"]');
+    if (!(handle instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-list-drag-handle',
+        html: host?.innerHTML || '',
+      };
+    }
+
+    handle.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: start.x,
+      clientY: start.y,
+    }));
+    document.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: end.x,
+      clientY: end.y,
+    }));
+    document.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 0,
+      clientX: end.x,
+      clientY: end.y,
+    }));
+
+    const hitStart = document.elementFromPoint(start.x, start.y);
+    const hitEnd = document.elementFromPoint(end.x, end.y);
+    return {
+      ok: true,
+      start,
+      end,
+      sourceRect: sourcePoint.rect,
+      targetRect: targetPoint.rect,
+      hitStart: hitStart instanceof Element ? { tag: hitStart.tagName, text: hitStart.textContent?.trim?.().slice(0, 80) || '' } : null,
+      hitEnd: hitEnd instanceof Element ? { tag: hitEnd.tagName, text: hitEnd.textContent?.trim?.().slice(0, 80) || '' } : null,
+    };
+  })()`);
+  assert(dragResult?.ok, `Unable to dispatch rich-text list drag: ${JSON.stringify(dragResult)}`);
+  await sleep(250);
+  return dragResult;
+};
+
 const pressKey = async (client, key, options = {}) => {
   const codeByKey = {
     ArrowLeft: 'ArrowLeft',
@@ -2886,7 +3022,7 @@ const activateTextEditing = async (client, elementId) => {
       window.dispatchEvent(new CustomEvent('backy-open-text-editor', { detail: { elementId: ${JSON.stringify(elementId)} } }));
       const node = document.querySelector('[data-element-id="${elementId}"]');
       const host = node?.querySelector('[data-backy-text-editor]');
-      const editor = node?.querySelector('[contenteditable="true"], [role="textbox"]');
+      const editor = node?.querySelector('[contenteditable="true"]');
       return {
         selected: Boolean(node?.className?.toString?.().includes('ring-sky-500')),
         editable: node?.getAttribute('data-backy-text-editor-editable') === 'true' || host?.getAttribute('data-backy-text-editor-editable') === 'true',
@@ -3395,6 +3531,60 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `List move-up control did not restore list item order and metadata: ${JSON.stringify(listMoveUpState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const listDragDownResult = await dragRichTextListItem(client, elementId, 'Nested item', 'Sibling item');
+  const listDragDownState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      dragResult: ${JSON.stringify(listDragDownResult)},
+      itemTexts: items.map((node) => node.textContent || ''),
+      itemMargins: items.map((node) => getComputedStyle(node).marginLeft),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    listDragDownState.dragResult?.ok &&
+      listDragDownState.itemTexts?.[0]?.includes('Sibling item') &&
+      listDragDownState.itemTexts?.[1]?.includes('Nested item') &&
+      listDragDownState.itemMargins?.[1] === '192px',
+    `List drag reorder did not move the selected item down while preserving indent: ${JSON.stringify(listDragDownState)}`,
+  );
+
+  const listDragRestoreResult = await dragRichTextListItem(client, elementId, 'Nested item', 'Sibling item');
+  const listDragRestoreState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      dragResult: ${JSON.stringify(listDragRestoreResult)},
+      itemTexts: items.map((node) => node.textContent || ''),
+      itemMargins: items.map((node) => getComputedStyle(node).marginLeft),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    listDragRestoreState.dragResult?.ok &&
+      listDragRestoreState.itemTexts?.[0]?.includes('Nested item') &&
+      listDragRestoreState.itemTexts?.[1]?.includes('Sibling item') &&
+      listDragRestoreState.itemMargins?.[0] === '192px',
+    `List drag reorder did not restore the selected item order and indent: ${JSON.stringify(listDragRestoreState)}`,
+  );
+  const dragRestoredNestedItem = listDragRestoreState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  const dragRestoredSiblingItem = listDragRestoreState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Sibling item'));
+  assert(
+    dragRestoredNestedItem?.indent === 8 &&
+      dragRestoredSiblingItem?.indent === undefined,
+    `List drag reorder did not preserve Slate list item metadata: ${JSON.stringify(listDragRestoreState)}`,
+  );
+
   const collapsed = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -3403,6 +3593,13 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     return window.__backyCollapseActiveEditorToEnd();
   })()`);
   assert(collapsed?.ok, `Unable to collapse rich text selection before table insert: ${JSON.stringify(collapsed)}`);
+  const collapsedListState = await evaluate(client, `(() => {
+    return typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : { ok: false, reason: 'missing-active-editor-state-helper' };
+  })()`);
+  const collapsedNestedItem = collapsedListState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  assert(collapsedNestedItem?.indent === 8, `List item indent was lost after collapsing selection: ${JSON.stringify(collapsedListState)}`);
   await sleep(250);
 
   await mouseDownControlByTestId(client, 'rich-text-insert-table');
@@ -3434,6 +3631,13 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   } else {
     assert(directInsert?.ok, `Direct active-editor table insert failed after toolbar click: ${JSON.stringify(directInsert)}`);
   }
+  const insertedTableListState = await evaluate(client, `(() => {
+    return typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : { ok: false, reason: 'missing-active-editor-state-helper' };
+  })()`);
+  const insertedTableNestedItem = insertedTableListState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  assert(insertedTableNestedItem?.indent === 8, `List item indent was lost after table insertion: ${JSON.stringify(insertedTableListState)}`);
   await sleep(500);
 
   const tableState = await evaluate(client, `(() => {
@@ -3975,7 +4179,6 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       restoredHeaderTableState.firstRowHeaderCount === 2,
     `Restored table header-row state is incomplete before save: ${JSON.stringify(restoredHeaderTableState)}`,
   );
-
   return {
     seeded,
     selected,
@@ -3986,8 +4189,12 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     listMoveDownState,
     selectedListItemBeforeMoveUp,
     listMoveUpState,
+    listDragDownState,
+    listDragRestoreState,
     collapsed,
+    collapsedListState,
     directInsert,
+    insertedTableListState,
     tableState,
     editedTableState,
     trimmedTableState,
