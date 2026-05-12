@@ -138,6 +138,7 @@ export function RichTextFormatting({
     toggleTableHeaderCell,
     setTableCellBackgroundColor,
     setTableCellBorderColor,
+    setTableCellVerticalAlign,
     setTableCaption,
     removeTable,
     storeSelection,
@@ -1591,6 +1592,7 @@ export function RichTextFormatting({
   const [selectedHighlightColorValue, setSelectedHighlightColorValue] = useState('');
   const [selectedTableCellFillValue, setSelectedTableCellFillValue] = useState('');
   const [selectedTableCellBorderValue, setSelectedTableCellBorderValue] = useState('');
+  const [selectedTableCellVerticalAlignValue, setSelectedTableCellVerticalAlignValue] = useState<'top' | 'middle' | 'bottom'>('top');
   const [selectedTableCaptionValue, setSelectedTableCaptionValue] = useState('');
   const [insertDialog, setInsertDialog] = useState<{
     mode: InsertDialogMode;
@@ -1935,6 +1937,25 @@ export function RichTextFormatting({
     return typeof cellNode?.borderColor === 'string' ? cellNode.borderColor : '';
   }, [getActiveEditor]);
 
+  const readSelectedTableCellVerticalAlign = useCallback((): 'top' | 'middle' | 'bottom' => {
+    const editor = getActiveEditor();
+    const selection = editor?.selection;
+    if (!editor || !selection || !SlateRange.isRange(selection)) {
+      return 'top';
+    }
+
+    const cellEntry = Editor.above(editor as any, {
+      at: selection,
+      match: (node) => {
+        const type = (node as { type?: unknown }).type;
+        return type === 'td' || type === 'th';
+      },
+    });
+    const cellNode = cellEntry?.[0] as { verticalAlign?: unknown } | undefined;
+    const value = typeof cellNode?.verticalAlign === 'string' ? cellNode.verticalAlign : '';
+    return value === 'middle' || value === 'bottom' ? value : 'top';
+  }, [getActiveEditor]);
+
   const updateTableCellFillAtSelection = useCallback((color: string) => {
     setSelectedTableCellFillValue(color);
     runOrActivateTextEditor('table-cell-fill', () => {
@@ -1948,6 +1969,13 @@ export function RichTextFormatting({
       setTableCellBorderColor(color);
     });
   }, [runOrActivateTextEditor, setTableCellBorderColor]);
+
+  const updateTableCellVerticalAlignAtSelection = useCallback((align: 'top' | 'middle' | 'bottom') => {
+    setSelectedTableCellVerticalAlignValue(align);
+    runOrActivateTextEditor('table-cell-vertical-align', () => {
+      setTableCellVerticalAlign(align);
+    });
+  }, [runOrActivateTextEditor, setTableCellVerticalAlign]);
 
   const updateTableCaptionAtSelection = useCallback((caption: string) => {
     setSelectedTableCaptionValue(caption);
@@ -2081,7 +2109,8 @@ export function RichTextFormatting({
     setSelectedTableCaptionValue(readSelectedTableCaption());
     setSelectedTableCellFillValue(readSelectedTableCellFill());
     setSelectedTableCellBorderValue(readSelectedTableCellBorder());
-  }, [isTargetEditorInEditableMode, readSelectedTableCaption, readSelectedTableCellBorder, readSelectedTableCellFill, selectionRevision]);
+    setSelectedTableCellVerticalAlignValue(readSelectedTableCellVerticalAlign());
+  }, [isTargetEditorInEditableMode, readSelectedTableCaption, readSelectedTableCellBorder, readSelectedTableCellFill, readSelectedTableCellVerticalAlign, selectionRevision]);
 
   useEffect(() => {
     if (fontFamilies.length === 0) {
@@ -2754,6 +2783,41 @@ export function RichTextFormatting({
           />
         </span>
       </label>
+
+      <div className="flex min-w-0 items-center gap-2 text-xs">
+        <Rows2 className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground whitespace-nowrap">Cell Vertical</span>
+        <div className="ml-auto grid grid-cols-3 gap-1">
+          {([
+            { value: 'top', icon: ArrowUp, title: 'Align cell content to top' },
+            { value: 'middle', icon: AlignCenter, title: 'Align cell content to middle' },
+            { value: 'bottom', icon: ArrowDown, title: 'Align cell content to bottom' },
+          ] as const).map((option) => {
+            const Icon = option.icon;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  runContentProperty(`table-cell-vertical-${option.value}`, () => {
+                    updateTableCellVerticalAlignAtSelection(option.value);
+                  }, { requireActiveEditor: false });
+                }}
+                className={cn(
+                  "w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent",
+                  selectedTableCellVerticalAlignValue === option.value && "bg-accent text-accent-foreground"
+                )}
+                data-testid={`rich-text-table-cell-vertical-${option.value}`}
+                title={option.title}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <label className="flex min-w-0 items-center gap-2 text-xs">
         <TableProperties className="w-3 h-3 text-muted-foreground" />

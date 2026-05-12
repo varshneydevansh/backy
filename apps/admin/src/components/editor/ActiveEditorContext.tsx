@@ -84,6 +84,8 @@ interface ActiveEditorContextType {
   setTableCellBackgroundColor: (color: string) => boolean;
   /** Set or clear the current table cell border color */
   setTableCellBorderColor: (color: string) => boolean;
+  /** Set the current table cell vertical alignment */
+  setTableCellVerticalAlign: (align: 'top' | 'middle' | 'bottom') => boolean;
   /** Set or clear the current table caption */
   setTableCaption: (caption: string) => boolean;
   /** Remove the current table */
@@ -148,6 +150,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleTableHeaderCell: () => false,
   setTableCellBackgroundColor: () => false,
   setTableCellBorderColor: () => false,
+  setTableCellVerticalAlign: () => false,
   setTableCaption: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
@@ -863,6 +866,24 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const setSelectedTableCellVerticalAlign = useCallback((editor: PlateEditor, align: 'top' | 'middle' | 'bottom') => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    Transforms.setNodes(editor as any, { verticalAlign: align } as any, {
+      at: context.cellPath,
+    });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after cell style changes.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
   const setSelectedTableCaption = useCallback((editor: PlateEditor, caption: string) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -1149,6 +1170,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           caption: typeof (node as { caption?: unknown }).caption === 'string' ? (node as { caption?: string }).caption : undefined,
           backgroundColor: typeof (node as { backgroundColor?: unknown }).backgroundColor === 'string' ? (node as { backgroundColor?: string }).backgroundColor : undefined,
           borderColor: typeof (node as { borderColor?: unknown }).borderColor === 'string' ? (node as { borderColor?: string }).borderColor : undefined,
+          verticalAlign: typeof (node as { verticalAlign?: unknown }).verticalAlign === 'string' ? (node as { verticalAlign?: string }).verticalAlign : undefined,
           align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
@@ -2294,6 +2316,32 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setSelectedTableCellBorderColor, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const setTableCellVerticalAlign = useCallback((align: 'top' | 'middle' | 'bottom') => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('setTableCellVerticalAlign.start', {
+        align,
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!setSelectedTableCellVerticalAlign(editor, align)) return false;
+
+      debug('setTableCellVerticalAlign.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('setTableCellVerticalAlign failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setSelectedTableCellVerticalAlign, setStoredSelection, syncActiveEditorContentSoon]);
+
   const setTableCaption = useCallback((caption: string) => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2667,6 +2715,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleTableHeaderCell,
       setTableCellBackgroundColor,
       setTableCellBorderColor,
+      setTableCellVerticalAlign,
       setTableCaption,
       removeTable,
       isMarkActive,

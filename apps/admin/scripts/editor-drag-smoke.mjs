@@ -4457,6 +4457,61 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Rich-text table cell border control did not apply only to the selected cell: ${JSON.stringify(tableCellBorderState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedVerticalTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedVerticalTableCell?.ok, `Unable to reselect table cell before vertical alignment control: ${JSON.stringify(selectedVerticalTableCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-cell-vertical-bottom');
+  await sleep(500);
+  await activateTextEditing(client, elementId);
+  const reselectedVerticalTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(reselectedVerticalTableCell?.ok, `Unable to reselect table cell before vertical alignment metadata check: ${JSON.stringify(reselectedVerticalTableCell)}`);
+
+  const tableCellVerticalState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 1'));
+    const otherCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const targetCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 1')
+    ));
+    const otherCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 2')
+    ));
+    return {
+      targetText: targetCell?.textContent || '',
+      targetVerticalAlign: targetCell ? window.getComputedStyle(targetCell).verticalAlign : '',
+      otherVerticalAlign: otherCell ? window.getComputedStyle(otherCell).verticalAlign : '',
+      targetCellVerticalAlign: targetCellNode?.verticalAlign || '',
+      otherCellVerticalAlign: otherCellNode?.verticalAlign || '',
+      html: targetCell?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCellVerticalState.targetVerticalAlign === 'bottom' &&
+      tableCellVerticalState.targetCellVerticalAlign === 'bottom' &&
+      tableCellVerticalState.otherCellVerticalAlign !== 'bottom',
+    `Rich-text table cell vertical alignment control did not apply only to the selected cell: ${JSON.stringify(tableCellVerticalState)}`,
+  );
+
   await mouseDownControlByTestId(client, 'rich-text-align-center');
   await sleep(500);
 
@@ -4563,6 +4618,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     selectedBorderTableCell,
     reselectedBorderTableCell,
     tableCellBorderState,
+    selectedVerticalTableCell,
+    reselectedVerticalTableCell,
+    tableCellVerticalState,
     tableCellAlignmentState,
     reselectedHeaderCell,
     restoredHeaderTableState,
@@ -4667,6 +4725,8 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   assert(unfilledColumnTwoCell?.backgroundColor !== '#c9daf8', `Persisted table cell fill leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
   assert(filledColumnOneCell?.borderColor === '#f4cccc', `Persisted table cell border color missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
   assert(unfilledColumnTwoCell?.borderColor !== '#f4cccc', `Persisted table cell border color leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
+  assert(filledColumnOneCell?.verticalAlign === 'bottom', `Persisted table cell vertical alignment missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
+  assert(unfilledColumnTwoCell?.verticalAlign !== 'bottom', `Persisted table cell vertical alignment leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
   assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);

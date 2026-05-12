@@ -636,6 +636,9 @@ export const BackyEditor = ({
             const borderColor = typeof element?.borderColor === 'string'
                 ? element.borderColor.trim()
                 : '';
+            const verticalAlign = element?.verticalAlign === 'middle' || element?.verticalAlign === 'bottom'
+                ? element.verticalAlign
+                : 'top';
             return (
                 <Tag
                     {...attributes}
@@ -644,7 +647,7 @@ export const BackyEditor = ({
                         ...elementStyle,
                         border: `1px solid ${borderColor || '#e5e7eb'}`,
                         padding: '0.375rem 0.5rem',
-                        verticalAlign: 'top',
+                        verticalAlign,
                         ...(backgroundColor ? { backgroundColor } : {}),
                     }}
                 >
