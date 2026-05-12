@@ -98,6 +98,105 @@ const DEFAULT_IMAGE_PRESENTATION = {
   aspectRatio: 'original' as MediaImageAspectRatio,
 };
 
+type MediaStorageProvider = 'local' | 'supabase' | 's3';
+
+interface MediaStorageEnvField {
+  name: string;
+  env: string[];
+  required: boolean;
+  secret?: boolean;
+  detail: string;
+}
+
+const MEDIA_STORAGE_ENV_CONTRACT: Record<MediaStorageProvider, MediaStorageEnvField[]> = {
+  local: [
+    {
+      name: 'basePath',
+      env: ['BACKY_LOCAL_UPLOADS_DIR', 'BACKY_STORAGE_LOCAL_PATH'],
+      required: false,
+      detail: 'Overrides the local upload directory. Defaults to public/uploads.',
+    },
+    {
+      name: 'publicUrl',
+      env: ['BACKY_LOCAL_PUBLIC_URL', 'BACKY_MEDIA_PUBLIC_URL'],
+      required: false,
+      detail: 'Public base URL for locally served upload files.',
+    },
+  ],
+  supabase: [
+    {
+      name: 'url',
+      env: ['BACKY_SUPABASE_URL', 'SUPABASE_URL'],
+      required: true,
+      detail: 'Supabase project URL used by the storage adapter.',
+    },
+    {
+      name: 'key',
+      env: [
+        'BACKY_SUPABASE_SERVICE_ROLE_KEY',
+        'BACKY_SUPABASE_ANON_KEY',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'SUPABASE_ANON_KEY',
+      ],
+      required: true,
+      secret: true,
+      detail: 'Server-side key used for upload, read, delete, and signing operations.',
+    },
+    {
+      name: 'bucket',
+      env: ['BACKY_SUPABASE_STORAGE_BUCKET', 'BACKY_STORAGE_BUCKET'],
+      required: true,
+      detail: 'Storage bucket for media objects.',
+    },
+  ],
+  s3: [
+    {
+      name: 'bucket',
+      env: ['BACKY_S3_BUCKET', 'BACKY_STORAGE_BUCKET'],
+      required: true,
+      detail: 'S3/R2-compatible bucket for media objects.',
+    },
+    {
+      name: 'region',
+      env: ['BACKY_S3_REGION', 'AWS_REGION'],
+      required: true,
+      detail: 'Provider region. R2-compatible providers may use a stable placeholder.',
+    },
+    {
+      name: 'accessKeyId',
+      env: ['BACKY_S3_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'],
+      required: true,
+      secret: true,
+      detail: 'Access key with media bucket read/write permissions.',
+    },
+    {
+      name: 'secretAccessKey',
+      env: ['BACKY_S3_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY'],
+      required: true,
+      secret: true,
+      detail: 'Secret access key for the configured storage account.',
+    },
+    {
+      name: 'endpoint',
+      env: ['BACKY_S3_ENDPOINT', 'BACKY_STORAGE_ENDPOINT'],
+      required: false,
+      detail: 'Custom endpoint for R2, MinIO, or non-AWS S3-compatible storage.',
+    },
+    {
+      name: 'publicUrl',
+      env: ['BACKY_S3_PUBLIC_URL', 'BACKY_MEDIA_PUBLIC_URL'],
+      required: false,
+      detail: 'Direct public CDN/storage base URL for public assets.',
+    },
+    {
+      name: 'forcePathStyle',
+      env: ['BACKY_S3_FORCE_PATH_STYLE'],
+      required: false,
+      detail: 'Set true for providers that require path-style bucket URLs.',
+    },
+  ],
+};
+
 const MEDIA_UPLOAD_INTAKE_RULES = [
   {
     label: 'Images',
@@ -1052,6 +1151,17 @@ function MediaPage() {
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
   const storageSettings = settingsIntegrations?.storage || {};
   const supabaseSettings = settingsIntegrations?.supabase || {};
+  const selectedStorageProvider: MediaStorageProvider = (
+    storageSettings.provider === 'supabase' ||
+    storageSettings.provider === 's3' ||
+    storageSettings.provider === 'local'
+      ? storageSettings.provider
+      : runtimeStorage?.provider === 'supabase' || runtimeStorage?.provider === 's3' || runtimeStorage?.provider === 'local'
+        ? runtimeStorage.provider
+        : 'local'
+  );
+  const storageEnvContract = useMemo(() => MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider], [selectedStorageProvider]);
+  const missingStorageEnv = new Set(runtimeStorage?.provider === selectedStorageProvider ? runtimeStorage.missing || [] : []);
   const selectedProviderInsight = useMemo(
     () => selectedAsset ? getMediaProviderInsight(selectedAsset, runtimeStorage, storageSettings) : undefined,
     [runtimeStorage, selectedAsset, storageSettings],
@@ -2940,6 +3050,68 @@ function MediaPage() {
                     {storageSettingsNotice}
                   </Notice>
                 )}
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="media-storage-env-contract">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Provider env contract</h4>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Runtime credentials are read from server environment variables, then verified by Run check.
+                    </p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold capitalize text-muted-foreground">
+                    {selectedStorageProvider}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {storageEnvContract.map((field) => {
+                    const status = selectedStorageProvider === 'local'
+                      ? 'optional'
+                      : missingStorageEnv.has(field.name)
+                        ? 'missing'
+                        : field.required
+                          ? 'detected'
+                          : 'optional';
+                    return (
+                      <div key={`${selectedStorageProvider}:${field.name}`} className="rounded-md border border-border bg-background px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-semibold">{field.name}</span>
+                              {field.secret && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                                  secret
+                                </span>
+                              )}
+                              {!field.required && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                                  optional
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">{field.detail}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              'rounded px-2 py-0.5 text-[11px] font-semibold',
+                              status === 'missing'
+                                ? 'bg-warning/10 text-warning'
+                                : status === 'detected'
+                                  ? 'bg-success/10 text-success'
+                                  : 'bg-muted text-muted-foreground',
+                            )}
+                          >
+                            {status}
+                          </span>
+                        </div>
+                        <code className="mt-2 block break-all rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                          {field.env.join(' or ')}
+                        </code>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

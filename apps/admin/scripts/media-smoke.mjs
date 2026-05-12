@@ -370,6 +370,8 @@ const assertMediaLayout = async (client, expectedText) => {
     hasApi: document.body?.innerText?.includes('Frontend media API') || false,
     hasStorage: document.body?.innerText?.includes('Storage runtime') || document.body?.innerText?.includes('Media storage runtime') || false,
     hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
+    hasStorageEnvContract: Boolean(document.querySelector('[data-testid="media-storage-env-contract"]')) &&
+      document.body?.innerText?.includes('Provider env contract'),
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
     hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
@@ -378,7 +380,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -599,6 +601,21 @@ const saveMediaStorageSettingsFromUi = async (client, suffix) => {
   await setMediaStorageCheckbox(client, 'Private file delivery', true);
   await setMediaStorageCheckbox(client, 'Image transforms', true);
   await setMediaStorageCheckbox(client, 'Supabase storage', true);
+
+  const envContract = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="media-storage-env-contract"]');
+    const text = panel?.textContent || '';
+    return {
+      ready: Boolean(panel) &&
+        text.includes('Provider env contract') &&
+        text.includes('BACKY_SUPABASE_URL') &&
+        text.includes('BACKY_SUPABASE_SERVICE_ROLE_KEY') &&
+        text.includes('BACKY_SUPABASE_STORAGE_BUCKET') &&
+        text.includes('secret'),
+      text: text.slice(0, 1200),
+    };
+  })()`);
+  assert(envContract.ready, `Media storage env contract did not render Supabase credential requirements: ${JSON.stringify(envContract)}`);
 
   const clicked = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="media-storage-settings-editor"]');
