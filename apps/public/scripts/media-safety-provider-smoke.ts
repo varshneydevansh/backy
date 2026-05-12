@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import {
   MediaSafetyError,
@@ -17,6 +18,14 @@ const envKeys = [
   'BACKY_MEDIA_SCANNER_TIMEOUT_MS',
   'BACKY_MEDIA_SCAN_FAIL_OPEN',
   'BACKY_MEDIA_SCANNER_FAIL_OPEN',
+  'BACKY_MEDIA_SCAN_HOST',
+  'BACKY_MEDIA_SCANNER_HOST',
+  'BACKY_MEDIA_SCAN_PORT',
+  'BACKY_MEDIA_SCANNER_PORT',
+  'BACKY_CLAMAV_HOST',
+  'BACKY_CLAMAV_PORT',
+  'CLAMD_HOST',
+  'CLAMD_PORT',
 ] as const;
 
 const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
@@ -55,7 +64,7 @@ const assertMediaSafetyError = async (run: () => Promise<unknown>, message: stri
   assert(error instanceof MediaSafetyError, message);
 };
 
-const scannerServer = createServer((request, response) => {
+const scannerServer = createHttpServer((request, response) => {
   const chunks: Buffer[] = [];
   request.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
   request.on('end', () => {
@@ -97,11 +106,28 @@ const scannerServer = createServer((request, response) => {
   });
 });
 
+const clamAvServer = createTcpServer((socket) => {
+  const chunks: Buffer[] = [];
+  socket.on('data', (chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    const hasEndChunk = body.length >= 4 && body.subarray(body.length - 4).equals(Buffer.alloc(4));
+    if (!hasEndChunk) return;
+
+    const verdict = body.includes(Buffer.from('virus'))
+      ? 'stream: Eicar-Test-Signature FOUND\0'
+      : 'stream: OK\0';
+    socket.end(verdict);
+  });
+});
+
 const main = async () => {
   try {
     await new Promise<void>((resolve) => scannerServer.listen(0, '127.0.0.1', resolve));
     const address = scannerServer.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
+    await new Promise<void>((resolve) => clamAvServer.listen(0, '127.0.0.1', resolve));
+    const clamAvAddress = clamAvServer.address() as AddressInfo;
 
     resetScanEnv();
     const defaultScan = await scanMediaUploadWithProviders(cleanPngInput());
@@ -122,20 +148,20 @@ const main = async () => {
     assert.equal(providerScan.providerScans?.[0]?.details?.authorized, true);
 
     resetScanEnv();
-  process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
-  process.env.BACKY_MEDIA_SCAN_ENDPOINT = `${baseUrl}/reject`;
-  await assertMediaSafetyError(
-    () => scanMediaUploadWithProviders(cleanPngInput()),
-    'Rejected provider verdict should block uploads by default',
-  );
-  process.env.BACKY_MEDIA_SCAN_FAIL_OPEN = 'true';
-  await assertMediaSafetyError(
-    () => scanMediaUploadWithProviders(cleanPngInput()),
-    'Rejected provider verdict should block uploads even when fail-open is enabled',
-  );
+    process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
+    process.env.BACKY_MEDIA_SCAN_ENDPOINT = `${baseUrl}/reject`;
+    await assertMediaSafetyError(
+      () => scanMediaUploadWithProviders(cleanPngInput()),
+      'Rejected provider verdict should block uploads by default',
+    );
+    process.env.BACKY_MEDIA_SCAN_FAIL_OPEN = 'true';
+    await assertMediaSafetyError(
+      () => scanMediaUploadWithProviders(cleanPngInput()),
+      'Rejected provider verdict should block uploads even when fail-open is enabled',
+    );
 
-  resetScanEnv();
-  process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
+    resetScanEnv();
+    process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
     await assertMediaSafetyError(
       () => scanMediaUploadWithProviders(cleanPngInput()),
       'Missing HTTP scanner endpoint should fail closed by default',
@@ -151,20 +177,46 @@ const main = async () => {
     assert(unavailableScan.checks.includes('provider-http-scan-failed-open'));
     assert(unavailableScan.warnings.some((warning) => warning.includes('503')));
 
-  resetScanEnv();
-  process.env.BACKY_MEDIA_SCAN_PROVIDER = 'clamav';
+    resetScanEnv();
+    process.env.BACKY_MEDIA_SCAN_PROVIDER = 'clamav';
+    process.env.BACKY_MEDIA_SCAN_HOST = '127.0.0.1';
+    process.env.BACKY_MEDIA_SCAN_PORT = String(clamAvAddress.port);
+    const clamAvScan = await scanMediaUploadWithProviders(cleanPngInput());
+    assert.equal(clamAvScan.providerScans?.[0]?.provider, 'clamav');
+    assert.equal(clamAvScan.providerScans?.[0]?.scanner, 'clamav-clamd');
+    assert(clamAvScan.checks.includes('provider-clamav-scan'));
+
+    await assertMediaSafetyError(
+      () => scanMediaUploadWithProviders({
+        ...cleanPngInput(),
+        buffer: Buffer.from('virus-signature'),
+      }),
+      'ClamAV infected verdict should block uploads',
+    );
+
+    resetScanEnv();
+    process.env.BACKY_MEDIA_SCAN_PROVIDER = 'clamav';
+    process.env.BACKY_MEDIA_SCAN_HOST = '127.0.0.1';
+    process.env.BACKY_MEDIA_SCAN_PORT = String(clamAvAddress.port + 1);
+    process.env.BACKY_MEDIA_SCAN_FAIL_OPEN = 'true';
+    const clamAvFailOpen = await scanMediaUploadWithProviders(cleanPngInput());
+    assert(clamAvFailOpen.checks.includes('provider-clamav-scan-failed-open'));
+
+    resetScanEnv();
+    process.env.BACKY_MEDIA_SCAN_PROVIDER = 'icap';
     await assertMediaSafetyError(
       () => scanMediaUploadWithProviders(cleanPngInput()),
       'Unsupported scanner providers should fail explicitly',
     );
 
-  console.log(JSON.stringify({
-    ok: true,
-    cases: 8,
-  }));
+    console.log(JSON.stringify({
+      ok: true,
+      cases: 11,
+    }));
   } finally {
     restoreEnv();
     await new Promise<void>((resolve) => scannerServer.close(() => resolve()));
+    await new Promise<void>((resolve) => clamAvServer.close(() => resolve()));
   }
 };
 

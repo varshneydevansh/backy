@@ -106,6 +106,8 @@ const DEFAULT_MEDIA_SCANNER_RUNTIME: NonNullable<SiteSettingsInput['runtimeMedia
   enabled: false,
   configured: true,
   endpointConfigured: false,
+  host: undefined,
+  port: undefined,
   apiKeyConfigured: false,
   timeoutMs: 5000,
   failOpen: false,
@@ -224,13 +226,25 @@ const MEDIA_SCANNER_ENV_CONTRACT: MediaScannerEnvField[] = [
     name: 'provider',
     env: ['BACKY_MEDIA_SCAN_PROVIDER', 'BACKY_MEDIA_SCANNER_PROVIDER'],
     required: false,
-    detail: 'Set to http to forward uploads and replacements to a scanner before storage. Defaults to none.',
+    detail: 'Set to http or clamav to scan uploads and replacements before storage. Defaults to none.',
   },
   {
     name: 'endpoint',
     env: ['BACKY_MEDIA_SCAN_ENDPOINT', 'BACKY_MEDIA_SCANNER_ENDPOINT'],
-    required: true,
-    detail: 'HTTP endpoint that receives the raw media bytes and returns a clean verdict JSON payload.',
+    required: false,
+    detail: 'HTTP scanner endpoint that receives raw media bytes and returns a clean verdict JSON payload.',
+  },
+  {
+    name: 'clamdHost',
+    env: ['BACKY_MEDIA_SCAN_HOST', 'BACKY_MEDIA_SCANNER_HOST', 'BACKY_CLAMAV_HOST', 'CLAMD_HOST'],
+    required: false,
+    detail: 'ClamAV clamd host for the built-in INSTREAM adapter. Defaults to 127.0.0.1.',
+  },
+  {
+    name: 'clamdPort',
+    env: ['BACKY_MEDIA_SCAN_PORT', 'BACKY_MEDIA_SCANNER_PORT', 'BACKY_CLAMAV_PORT', 'CLAMD_PORT'],
+    required: false,
+    detail: 'ClamAV clamd TCP port for INSTREAM scans. Defaults to 3310.',
   },
   {
     name: 'apiKey',
@@ -1107,6 +1121,8 @@ function MediaPage() {
       enabled: scannerRuntime.enabled,
       configured: scannerRuntime.configured,
       endpointConfigured: scannerRuntime.endpointConfigured,
+      host: scannerRuntime.host,
+      port: scannerRuntime.port,
       apiKeyConfigured: scannerRuntime.apiKeyConfigured,
       timeoutMs: scannerRuntime.timeoutMs,
       failOpen: scannerRuntime.failOpen,
@@ -3109,6 +3125,14 @@ function MediaPage() {
                   <dt className="text-xs text-muted-foreground">Timeout</dt>
                   <dd className="font-mono text-xs">{scannerRuntime.timeoutMs || 5000} ms</dd>
                 </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">ClamAV host</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.host || '127.0.0.1'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">ClamAV port</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.port || 3310}</dd>
+                </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">API key</dt>
                   <dd className="font-mono text-xs">{scannerRuntime.apiKeyConfigured ? 'configured' : 'optional'}</dd>
@@ -3382,7 +3406,7 @@ function MediaPage() {
                   <div>
                     <h4 className="text-sm font-semibold">Scanner env contract</h4>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Upload scanning is disabled by default. Set provider http to require a clean scanner verdict before storage.
+                      Upload scanning is disabled by default. Set provider http or clamav to require a clean scanner verdict before storage.
                     </p>
                   </div>
                   <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -3396,10 +3420,14 @@ function MediaPage() {
                       ? scannerEnabled ? 'detected' : 'optional'
                       : field.name === 'endpoint'
                         ? scannerEnabled
-                          ? scannerRuntime.endpointConfigured
+                          ? scannerRuntime.provider === 'http' && scannerRuntime.endpointConfigured
                             ? 'detected'
-                            : 'missing'
+                            : scannerRuntime.provider === 'http' ? 'missing' : 'optional'
                           : 'optional'
+                        : field.name === 'clamdHost'
+                          ? scannerRuntime.provider === 'clamav' ? 'detected' : 'optional'
+                        : field.name === 'clamdPort'
+                          ? scannerRuntime.provider === 'clamav' ? 'detected' : 'optional'
                         : field.name === 'apiKey'
                           ? scannerRuntime.apiKeyConfigured ? 'detected' : 'optional'
                         : field.name === 'timeoutMs'

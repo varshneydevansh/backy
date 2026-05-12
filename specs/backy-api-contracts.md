@@ -345,9 +345,9 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
   - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
-  - validates image/video/audio/document/font MIME categories, runs static upload safety checks before storage, rejects active-content SVG payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
+  - validates image/video/audio/document/font MIME categories, runs static upload safety checks before storage, optionally enforces HTTP scanner or ClamAV `clamd` clean verdicts through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
   - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
-  - stores clean scan evidence under `metadata.safetyScan`; this is deterministic type/content validation, not a full antivirus quarantine system
+  - stores clean scan evidence under `metadata.safetyScan`, including provider scan evidence when an HTTP scanner or ClamAV adapter is configured
   - returns `{ success, requestId, data: { media } }`
 
 - `GET /api/admin/sites/:siteId/media`

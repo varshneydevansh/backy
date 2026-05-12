@@ -1414,6 +1414,8 @@ export interface SiteSettingsInput {
     enabled: boolean;
     configured: boolean;
     endpointConfigured?: boolean;
+    host?: string;
+    port?: number;
     apiKeyConfigured?: boolean;
     timeoutMs?: number;
     failOpen?: boolean;

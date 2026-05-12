@@ -1,4 +1,5 @@
 import { extname } from 'node:path';
+import { Socket } from 'node:net';
 import type { MediaItem } from '@backy-cms/core';
 
 export type MediaSafetyScan = {
@@ -9,7 +10,7 @@ export type MediaSafetyScan = {
   warnings: string[];
   deliveryPolicy: 'inline-ok' | 'attachment-only';
   providerScans?: Array<{
-    provider: 'http';
+    provider: 'http' | 'clamav';
     scanner: string;
     scannedAt: string;
     status: 'clean';
@@ -38,9 +39,11 @@ export class MediaSafetyError extends Error {
 }
 
 type MediaScannerConfig = {
-  provider: 'none' | 'http';
+  provider: 'none' | 'http' | 'clamav';
   endpoint?: string;
   apiKey?: string;
+  host?: string;
+  port?: number;
   timeoutMs: number;
   failOpen: boolean;
 };
@@ -76,9 +79,19 @@ export const resolveMediaScannerConfig = (): MediaScannerConfig => {
   }
 
   if (provider !== 'http') {
+    if (provider === 'clamav' || provider === 'clamd') {
+      return {
+        provider: 'clamav',
+        host: envValue(['BACKY_MEDIA_SCAN_HOST', 'BACKY_MEDIA_SCANNER_HOST', 'BACKY_CLAMAV_HOST', 'CLAMD_HOST']) || '127.0.0.1',
+        port: envPositiveInteger(envValue(['BACKY_MEDIA_SCAN_PORT', 'BACKY_MEDIA_SCANNER_PORT', 'BACKY_CLAMAV_PORT', 'CLAMD_PORT']), 3310),
+        timeoutMs,
+        failOpen,
+      };
+    }
+
     throw new MediaSafetyError('Unsupported media scan provider.', {
       provider,
-      supportedProviders: ['none', 'http'],
+      supportedProviders: ['none', 'http', 'clamav'],
     });
   }
 
@@ -253,6 +266,146 @@ const mergeProviderWarnings = (
   return Array.from(new Set([...staticScan.warnings, ...providerWarnings]));
 };
 
+const parseClamAvResponse = (value: string) => {
+  const response = value.replace(/\0/g, '').trim();
+  const foundMatch = response.match(/:\s*(.+?)\s+FOUND$/i);
+  const errorMatch = response.match(/:\s*(.+?)\s+ERROR$/i);
+
+  if (/\bOK$/i.test(response)) {
+    return { status: 'clean' as const, response };
+  }
+
+  if (foundMatch) {
+    return {
+      status: 'infected' as const,
+      signature: foundMatch[1]?.trim() || 'unknown',
+      response,
+    };
+  }
+
+  if (errorMatch) {
+    return {
+      status: 'error' as const,
+      error: errorMatch[1]?.trim() || response,
+      response,
+    };
+  }
+
+  return {
+    status: 'error' as const,
+    error: response || 'Empty clamd response',
+    response,
+  };
+};
+
+const writeClamAvChunk = (socket: Socket, chunk: Buffer) => new Promise<void>((resolve, reject) => {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(chunk.length, 0);
+  socket.write(Buffer.concat([length, chunk]), (error) => {
+    if (error) reject(error);
+    else resolve();
+  });
+});
+
+const scanWithClamAv = (input: {
+  buffer: Buffer;
+  originalName: string;
+  mimeType: string;
+  mediaType: MediaItem['type'];
+  config: MediaScannerConfig;
+}) => new Promise<{ scanner: string; signature?: string; details: Record<string, unknown> }>((resolve, reject) => {
+  const host = input.config.host || '127.0.0.1';
+  const port = input.config.port || 3310;
+  const socket = new Socket();
+  const chunks: Buffer[] = [];
+  let settled = false;
+
+  const finish = (error: Error | null, value?: { scanner: string; signature?: string; details: Record<string, unknown> }) => {
+    if (settled) return;
+    settled = true;
+    socket.destroy();
+    if (error) reject(error);
+    else if (value) resolve(value);
+    else reject(new Error('ClamAV scanner returned no verdict.'));
+  };
+
+  const timeout = setTimeout(() => {
+    finish(new Error(`ClamAV scanner timed out after ${input.config.timeoutMs}ms.`));
+  }, input.config.timeoutMs);
+
+  socket.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+  socket.on('error', (error) => {
+    clearTimeout(timeout);
+    finish(error);
+  });
+  socket.on('end', () => {
+    clearTimeout(timeout);
+    const parsed = parseClamAvResponse(Buffer.concat(chunks).toString('utf8'));
+    if (parsed.status === 'clean') {
+      finish(null, {
+        scanner: 'clamav-clamd',
+        details: {
+          response: parsed.response,
+          host,
+          port,
+          bytes: input.buffer.length,
+          mediaType: input.mediaType,
+          mimeType: input.mimeType,
+        },
+      });
+      return;
+    }
+
+    if (parsed.status === 'infected') {
+      finish(new MediaSafetyError('ClamAV scanner rejected the uploaded file.', {
+        reason: 'clamav-infected',
+        scanner: 'clamav-clamd',
+        signature: parsed.signature,
+        details: {
+          response: parsed.response,
+          host,
+          port,
+          mediaType: input.mediaType,
+          mimeType: input.mimeType,
+          originalName: input.originalName,
+        },
+      }));
+      return;
+    }
+
+    finish(new MediaSafetyError('ClamAV scanner request failed.', {
+      reason: 'clamav-error',
+      scanner: 'clamav-clamd',
+      error: parsed.error,
+      details: {
+        response: parsed.response,
+        host,
+        port,
+      },
+    }));
+  });
+
+  socket.connect(port, host, async () => {
+    try {
+      socket.write('zINSTREAM\0');
+      const chunkSize = 64 * 1024;
+      for (let offset = 0; offset < input.buffer.length; offset += chunkSize) {
+        await writeClamAvChunk(socket, input.buffer.subarray(offset, offset + chunkSize));
+      }
+      await writeClamAvChunk(socket, Buffer.alloc(0));
+    } catch (error) {
+      clearTimeout(timeout);
+      finish(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+});
+
+const failOpenProviderScan = (staticScan: MediaSafetyScan, provider: string, error: unknown): MediaSafetyScan => ({
+  ...staticScan,
+  checks: [...staticScan.checks, `provider-${provider}-scan-failed-open`],
+  warnings: [...staticScan.warnings, `Provider media scanner failed open: ${error instanceof Error ? error.message : String(error)}`],
+});
+
 export const scanMediaUploadWithProviders = async (input: {
   buffer: Buffer;
   originalName: string;
@@ -273,6 +426,46 @@ export const scanMediaUploadWithProviders = async (input: {
 
   if (scannerConfig.provider === 'none') {
     return staticScan;
+  }
+
+  if (scannerConfig.provider === 'clamav') {
+    try {
+      const providerScan = await scanWithClamAv({
+        ...input,
+        config: scannerConfig,
+      });
+
+      return {
+        ...staticScan,
+        scanner: `${staticScan.scanner}+${providerScan.scanner}`,
+        checks: Array.from(new Set([...staticScan.checks, 'provider-clamav-scan'])),
+        providerScans: [
+          ...(staticScan.providerScans || []),
+          {
+            provider: 'clamav',
+            scanner: providerScan.scanner,
+            scannedAt: new Date().toISOString(),
+            status: 'clean',
+            ...(providerScan.signature ? { signature: providerScan.signature } : {}),
+            details: providerScan.details,
+          },
+        ],
+      };
+    } catch (error) {
+      if (error instanceof MediaSafetyError) {
+        if (!scannerConfig.failOpen || error.details.reason === 'clamav-infected') throw error;
+        return failOpenProviderScan(staticScan, 'clamav', error);
+      }
+
+      if (!scannerConfig.failOpen) {
+        throw new MediaSafetyError('ClamAV scanner request failed.', {
+          reason: 'clamav-request-failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      return failOpenProviderScan(staticScan, 'clamav', error);
+    }
   }
 
   if (!scannerConfig.endpoint) {
