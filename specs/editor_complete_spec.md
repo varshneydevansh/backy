@@ -34,15 +34,15 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
 | 22 | Keyboard Shortcuts | ✅ | Core canvas shortcuts for save, selection, clipboard, duplicate, delete, nudge, undo/redo, grouping, and guarded focus are covered by focused smoke |
-| 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `1.` conversions implemented in shared editor |
+| 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `+`, `1.`/`1)` block conversions and inline `**bold**`, `_italic_`, `~~strike~~`, `` `code` `` mark shortcuts implemented in shared editor |
 
 ## Canvas Element Parity Matrix (Current)
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown selection styling still partial; mixed selection transforms | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Selection edge cases for marks | ⚠️ |
-| paragraph | ✅ | ✅ | ✅ | Same text parity issues as heading | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown wrapper shortcuts now render marks; mixed multi-line selection transforms still pending | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown mark shortcuts covered; multi-line selection edge cases remain | ⚠️ |
+| paragraph | ✅ | ✅ | ✅ | Same rich-text selection parity issues as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
@@ -232,6 +232,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ⚠️ Better than previous baseline, not complete parity
 - **Implemented in this pass:**
   - Markdown shortcuts now support `+` and both `1.`/`1)` list triggers.
+  - Inline markdown shortcuts now convert wrapper syntax into Slate marks for bold, italic, strike, and code.
   - Rich-text leaf rendering now merges multiple text-decoration marks (underline + strike) instead of overwrite behavior.
   - Editor context list actions now expose:
     - Toggle same-list off by unwrapping existing list wrappers.
@@ -349,6 +350,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
+- Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added explicit keydown passthrough so editor consumers can layer additional shortcuts.
 - Unified canvas `list` rendering with `RichTextBlock` so list editing follows rich-text behavior.
 - Synced list textarea/list-type controls with rich-text list content so old and new list models stay compatible.

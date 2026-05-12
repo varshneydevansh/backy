@@ -21,6 +21,7 @@ import { BaseAutoformatPlugin } from '@udecode/plate-autoformat';
 import { FloatingToolbar } from './ui/FloatingToolbar';
 import { AdvancedToolbar } from './ui/AdvancedToolbar';
 import { PortalToolbar } from './ui/PortalToolbar';
+import { applyInlineMarkdownShortcut, applyInlineMarkdownShortcutOnInput } from './inlineMarkdown';
 
 import { cn } from './utils';
 
@@ -217,7 +218,7 @@ export const BackyEditor = ({
         return true;
     };
 
-    const handleMarkdownLikeShortcuts = (event: React.KeyboardEvent) => {
+    const handleBlockMarkdownShortcuts = (event: React.KeyboardEvent) => {
         const slateEditor = editor as any;
         if (!slateEditor || event.defaultPrevented || readOnly) {
             return false;
@@ -321,6 +322,42 @@ export const BackyEditor = ({
         return false;
     };
 
+    const handleInlineMarkdownShortcuts = () => {
+        const slateEditor = editor as any;
+        if (!slateEditor || readOnly) {
+            return false;
+        }
+
+        const textBefore = slateEditor.selection && SlateRange.isRange(slateEditor.selection)
+            ? Editor.string(slateEditor, {
+                anchor: Editor.start(slateEditor, []),
+                focus: slateEditor.selection.anchor,
+            })
+            : '';
+        const typedCharacter = textBefore.slice(-1);
+
+        if (!['*', '_', '~', '`'].includes(typedCharacter)) {
+            return false;
+        }
+
+        return applyInlineMarkdownShortcutOnInput(slateEditor, typedCharacter);
+    };
+
+    const handleInlineMarkdownKeyDown = (event: React.KeyboardEvent) => {
+        const slateEditor = editor as any;
+        if (!slateEditor || event.defaultPrevented || readOnly || !['*', '_', '~', '`'].includes(event.key)) {
+            return false;
+        }
+
+        const transformed = applyInlineMarkdownShortcut(slateEditor, event.key);
+        if (!transformed) {
+            return false;
+        }
+
+        event.preventDefault();
+        return true;
+    };
+
     const handleKeyDown = (event: React.KeyboardEvent) => {
         if (event.key === 'Tab' && handleListIndentShortcut(event, event.shiftKey ? -1 : 1)) {
             return;
@@ -330,10 +367,19 @@ export const BackyEditor = ({
             return;
         }
 
-        if (handleMarkdownLikeShortcuts(event)) {
+        if (handleBlockMarkdownShortcuts(event)) {
             return;
         }
+
+        if (handleInlineMarkdownKeyDown(event)) {
+            return;
+        }
+
         onKeyDown?.(event);
+    };
+
+    const handleInput = () => {
+        handleInlineMarkdownShortcuts();
     };
 
     const renderLeaf = (props: any) => {
@@ -531,6 +577,7 @@ export const BackyEditor = ({
                         onBlur={onBlur}
                         onFocus={onFocus}
                         onKeyDown={handleKeyDown}
+                        onInput={handleInput}
                         onMouseUp={onMouseUp}
                         onMouseDown={onMouseDown}
                         onKeyUp={onKeyUp}

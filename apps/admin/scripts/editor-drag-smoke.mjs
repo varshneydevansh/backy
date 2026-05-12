@@ -14,6 +14,7 @@ const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
+const RICH_TEXT_SMOKE = process.env.BACKY_EDITOR_RICH_TEXT_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
@@ -1243,6 +1244,45 @@ const pressKey = async (client, key, options = {}) => {
     nativeVirtualKeyCode: virtualKeyByKey[key] || key.toUpperCase?.().charCodeAt(0) || 0,
     modifiers,
   });
+  await sleep(150);
+};
+
+const getPrintableKeyCode = (character) => {
+  if (character === ' ') return 'Space';
+  if (/^[a-z]$/i.test(character)) return `Key${character.toUpperCase()}`;
+  if (/^[0-9]$/.test(character)) return `Digit${character}`;
+  const codeByCharacter = {
+    '*': 'Digit8',
+    '_': 'Minus',
+    '~': 'Backquote',
+    '`': 'Backquote',
+  };
+  return codeByCharacter[character] || character;
+};
+
+const typeText = async (client, text) => {
+  for (const character of Array.from(text)) {
+    const key = character;
+    const code = getPrintableKeyCode(character);
+    const virtualKey = character === ' ' ? 32 : character.toUpperCase?.().charCodeAt(0) || 0;
+
+    await client.send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key,
+      code,
+      text: character,
+      unmodifiedText: character,
+      windowsVirtualKeyCode: virtualKey,
+      nativeVirtualKeyCode: virtualKey,
+    });
+    await client.send('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key,
+      code,
+      windowsVirtualKeyCode: virtualKey,
+      nativeVirtualKeyCode: virtualKey,
+    });
+  }
   await sleep(150);
 };
 
@@ -2594,47 +2634,104 @@ const testUndoRedoAfterLayerVisibilityToggle = async (client, elementId) => {
 };
 
 const activateTextEditing = async (client, elementId) => {
-  const box = await getElementBox(client, elementId);
-  assert(box, `Missing text-editable element ${elementId}`);
+  await selectLayerById(client, elementId);
 
-  const x = Math.round(box.x + Math.min(box.width / 2, 120));
-  const y = Math.round(box.y + Math.min(box.height / 2, 30));
+  let state = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      window.dispatchEvent(new CustomEvent('backy-open-text-editor', { detail: { elementId: ${JSON.stringify(elementId)} } }));
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      const host = node?.querySelector('[data-backy-text-editor]');
+      const editor = node?.querySelector('[contenteditable="true"], [role="textbox"]');
+      return {
+        selected: Boolean(node?.className?.toString?.().includes('ring-sky-500')),
+        editable: node?.getAttribute('data-backy-text-editor-editable') === 'true' || host?.getAttribute('data-backy-text-editor-editable') === 'true',
+        hasMoveHandle: Boolean(node?.querySelector('[data-role="canvas-move-handle"]')),
+        hasEditor: editor instanceof HTMLElement,
+        hostEditable: host?.getAttribute('data-backy-text-editor-editable') || '',
+      };
+    })()`);
 
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseMoved',
-    x,
-    y,
-    button: 'none',
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x,
-    y,
-    button: 'left',
-    buttons: 1,
-    clickCount: 2,
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x,
-    y,
-    button: 'left',
-    buttons: 0,
-    clickCount: 2,
-  });
-  await sleep(250);
+    if (state?.editable && state.hasEditor) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  assert(state?.editable && state.hasEditor, `Text editing did not activate for ${elementId}: ${JSON.stringify(state)}`);
+  assert(state.hasMoveHandle, `Move handle missing while editing ${elementId}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-heading') => {
+  await activateTextEditing(client, elementId);
+
+  const focused = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
+    if (!(editor instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-editor',
+        hostText: host?.textContent || '',
+        html: host?.innerHTML || '',
+      };
+    }
+    editor.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return { ok: true, text: editor.textContent || '' };
+  })()`);
+  assert(focused?.ok, `Unable to focus rich text editor for ${elementId}: ${JSON.stringify(focused)}`);
+
+  await typeText(client, ' **Inline bold** _Inline italic_ ~~Inline strike~~ `Inline code`');
+  await sleep(750);
 
   const state = await evaluate(client, `(() => {
-    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
+    const leaves = Array.from(host?.querySelectorAll('[data-slate-string="true"]') || []);
+    const marked = leaves.map((node) => {
+      const element = node instanceof HTMLElement
+        ? node.closest('[data-slate-leaf="true"]') || node
+        : node.parentElement?.closest('[data-slate-leaf="true"]') || node.parentElement;
+      const style = element ? window.getComputedStyle(element) : null;
+      return {
+        text: node.textContent || '',
+        fontWeight: style?.fontWeight || '',
+        fontStyle: style?.fontStyle || '',
+        textDecoration: style?.textDecorationLine || '',
+        fontFamily: style?.fontFamily || '',
+      };
+    });
     return {
-      selected: Boolean(node?.className?.toString?.().includes('ring-sky-500')),
-      editable: node?.getAttribute('data-backy-text-editor-editable') === 'true',
-      hasMoveHandle: Boolean(node?.querySelector('[data-role="canvas-move-handle"]')),
+      text: editor?.textContent || host?.textContent || '',
+      html: editor?.innerHTML || host?.innerHTML || '',
+      marked,
     };
   })()`);
 
-  assert(state?.editable, `Text editing did not activate for ${elementId}: ${JSON.stringify(state)}`);
-  assert(state.hasMoveHandle, `Move handle missing while editing ${elementId}: ${JSON.stringify(state)}`);
+  assert(!state.text.includes('**'), `Inline bold markdown wrapper was not removed: ${JSON.stringify(state)}`);
+  assert(!state.text.includes('~~'), `Inline strike markdown wrapper was not removed: ${JSON.stringify(state)}`);
+  assert(!state.text.includes('`Inline code`'), `Inline code markdown wrapper was not removed: ${JSON.stringify(state)}`);
+  assert(state.text.includes('Inline bold'), `Inline bold text missing: ${JSON.stringify(state)}`);
+  assert(state.text.includes('Inline italic'), `Inline italic text missing: ${JSON.stringify(state)}`);
+  assert(state.text.includes('Inline strike'), `Inline strike text missing: ${JSON.stringify(state)}`);
+  assert(state.text.includes('Inline code'), `Inline code text missing: ${JSON.stringify(state)}`);
+
+  const boldLeaf = state.marked.find((leaf) => leaf.text.includes('Inline bold'));
+  const italicLeaf = state.marked.find((leaf) => leaf.text.includes('Inline italic'));
+  const strikeLeaf = state.marked.find((leaf) => leaf.text.includes('Inline strike'));
+  const codeLeaf = state.marked.find((leaf) => leaf.text.includes('Inline code'));
+  assert(boldLeaf && Number.parseInt(boldLeaf.fontWeight, 10) >= 600, `Inline bold leaf was not visually bold: ${JSON.stringify(state)}`);
+  assert(italicLeaf?.fontStyle === 'italic', `Inline italic leaf was not visually italic: ${JSON.stringify(state)}`);
+  assert(strikeLeaf?.textDecoration.includes('line-through'), `Inline strike leaf was not visually struck: ${JSON.stringify(state)}`);
+  assert(codeLeaf?.fontFamily.toLowerCase().includes('mono'), `Inline code leaf was not visually monospace: ${JSON.stringify(state)}`);
+
   return state;
 };
 
@@ -7186,6 +7283,22 @@ const main = async () => {
         mode: 'page-settings',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         pageSettings,
+      }, null, 2));
+      return;
+    }
+
+    if (RICH_TEXT_SMOKE) {
+      assert(!EDITOR_PATH, 'Rich text smoke currently requires an internally created smoke page');
+      const richText = await testRichTextInlineMarkdownControls(client, 'smoke-heading');
+      await clickSave(client);
+      const savedStatus = await waitForEditorMutationReady(client, 'after rich text smoke save');
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'rich-text',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        richText,
+        savedStatus,
       }, null, 2));
       return;
     }
