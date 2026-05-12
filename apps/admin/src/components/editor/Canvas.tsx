@@ -154,6 +154,21 @@ const resolveElementMediaSource = (props: Record<string, unknown>, key: string):
 );
 
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+const DEFAULT_EMBED_ALLOWED_HOSTS = [
+  'youtube.com',
+  'www.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+  'youtu.be',
+  'vimeo.com',
+  'player.vimeo.com',
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'docs.google.com',
+  'figma.com',
+  'www.figma.com',
+];
 const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
 const IMAGE_DECODING_VALUES = ['async', 'sync', 'auto'] as const;
 const IFRAME_REFERRER_POLICIES = [
@@ -194,6 +209,37 @@ const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | u
   return IFRAME_REFERRER_POLICIES.includes(normalized as IframeReferrerPolicy)
     ? normalized as IframeReferrerPolicy
     : undefined;
+};
+
+const normalizeEmbedHost = (value: string): string => {
+  const raw = value.trim().toLowerCase();
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.replace(/^www\./, '');
+  } catch {
+    return raw.replace(/^www\./, '').split('/')[0];
+  }
+};
+
+const parseEmbedAllowedHosts = (value: unknown): string[] => {
+  const customHosts = typeof value === 'string'
+    ? value.split(/[\n,;]/).map(normalizeEmbedHost).filter(Boolean)
+    : [];
+
+  return Array.from(new Set([
+    ...DEFAULT_EMBED_ALLOWED_HOSTS.map(normalizeEmbedHost),
+    ...customHosts,
+  ]));
+};
+
+const isEmbedHostAllowed = (host: string, allowedHosts: string[]): boolean => {
+  const normalizedHost = normalizeEmbedHost(host);
+  return allowedHosts.some((allowedHost) => (
+    normalizedHost === allowedHost || normalizedHost.endsWith(`.${allowedHost}`)
+  ));
 };
 
 const GRID_SIZE = 10;
@@ -640,7 +686,7 @@ const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
 const isTextEditableElement = (type: CanvasElement['type']): boolean => {
   return type === 'text' || type === 'heading' || type === 'paragraph' || type === 'quote' || type === 'list';
 };
-const normalizeEmbedUrl = (raw: unknown): string => {
+const normalizeEmbedUrl = (raw: unknown, allowedHostsInput?: unknown): string => {
   const source = sanitizeText(raw);
   if (!source) {
     return '';
@@ -648,10 +694,11 @@ const normalizeEmbedUrl = (raw: unknown): string => {
 
   const iframeMatch = source.match(/<iframe[^>]*src=(\"|')([^\"']+)\1/i);
   const src = iframeMatch ? iframeMatch[2] : source;
+  const normalizedSrc = src.startsWith('//') ? `https:${src}` : src;
 
   const parsed = (() => {
     try {
-      return new URL(src);
+      return new URL(normalizedSrc);
     } catch {
       return null;
     }
@@ -663,10 +710,14 @@ const normalizeEmbedUrl = (raw: unknown): string => {
       return `https://www.youtube.com/embed/${src}`;
     }
 
-    return src.startsWith('//') ? `https:${src}` : src;
+    return '';
   }
 
   const host = parsed.host.toLowerCase();
+  const allowedHosts = parseEmbedAllowedHosts(allowedHostsInput);
+  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !isEmbedHostAllowed(host, allowedHosts)) {
+    return '';
+  }
 
   if (host.includes('youtube.com') || host.includes('youtu.be')) {
     const videoId = parsed.searchParams.get('v')
@@ -2624,7 +2675,7 @@ function CanvasElementComponent({
       }
 
       case 'embed':
-        const embedSrc = normalizeEmbedUrl(p.src || p.url);
+        const embedSrc = normalizeEmbedUrl(p.src || p.url, p.allowedHosts ?? p.embedAllowedHosts);
         if (!embedSrc) {
           return (
             <div
@@ -2642,7 +2693,7 @@ function CanvasElementComponent({
                 fontSize: 14,
               }}
             >
-              📦 Set embed URL in properties
+              📦 Set an allowed embed URL in properties
             </div>
           );
         }
@@ -2655,6 +2706,7 @@ function CanvasElementComponent({
             loading={normalizeIframeLoading(p.loading)}
             referrerPolicy={normalizeIframeReferrerPolicy(p.referrerPolicy)}
             sandbox={normalizeIframeSandbox(p.sandbox)}
+            data-backy-embed-allowed-hosts={parseEmbedAllowedHosts(p.allowedHosts ?? p.embedAllowedHosts).join(',')}
             style={{
               ...sharedStyle,
               width: '100%',

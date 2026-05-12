@@ -345,6 +345,7 @@ const content: PageContent = {
       height: 120,
       props: {
         src: 'https://example.com/embed',
+        allowedHosts: 'example.com',
         title: 'Styled embed',
         loading: 'eager',
         borderRadius: 9,
@@ -352,6 +353,18 @@ const content: PageContent = {
         borderStyle: 'double',
         borderColor: '#7c3aed',
         boxShadow: '0 7px 16px rgba(124, 58, 237, 0.25)',
+      },
+    },
+    {
+      id: 'blocked-embed',
+      type: 'embed',
+      x: 724,
+      y: 456,
+      width: 220,
+      height: 80,
+      props: {
+        src: 'javascript:alert(1)',
+        title: 'Blocked embed',
       },
     },
     {
@@ -733,6 +746,10 @@ assert(html.includes('border-color:#64748b'), `Nav border color was not rendered
 assert(html.includes('box-shadow:0 6px 14px rgba(100, 116, 139, 0.22)'), `Nav shadow was not rendered: ${html}`);
 assert(html.includes('title="Styled embed"'), `Embed title was not rendered: ${html}`);
 assert(html.includes('src="https://example.com/embed"'), `Embed src was not rendered: ${html}`);
+assert(html.includes('data-backy-embed-allowed-hosts='), `Embed allowlist metadata was not rendered: ${html}`);
+assert(html.includes('example.com'), `Embed custom allowlist host was not rendered: ${html}`);
+assert(html.includes('Missing or blocked embed source'), `Blocked embed fallback was not rendered: ${html}`);
+assert(!html.includes('src="javascript:alert(1)"'), `Blocked embed source was rendered: ${html}`);
 assert(html.includes('border-style:double'), `Embed border style was not rendered: ${html}`);
 assert(html.includes('border-color:#7c3aed'), `Embed border color was not rendered: ${html}`);
 assert(html.includes('title="Styled map"'), `Map title was not rendered: ${html}`);

@@ -27,7 +27,9 @@ const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os
 const SMOKE_IMAGE_SRC = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22340%22%20height%3D%22240%22%3E%3Crect%20width%3D%22340%22%20height%3D%22240%22%20fill%3D%22%23e0f2fe%22%2F%3E%3Ccircle%20cx%3D%22270%22%20cy%3D%2260%22%20r%3D%2236%22%20fill%3D%22%230ea5e9%22%2F%3E%3Cpath%20d%3D%22M24%20208l92-92%2066%2066%2038-38%2096%2064z%22%20fill%3D%22%230f766e%22%2F%3E%3C%2Fsvg%3E';
 const SMOKE_VIDEO_SRC = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%230f172a%22%2F%3E%3C%2Fsvg%3E';
-const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
+const SMOKE_EMBED_SRC = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+const SMOKE_EMBED_PREVIEW_SRC = 'https://www.youtube.com/embed/dQw4w9WgXcQ';
+const SMOKE_EMBED_ALLOWED_HOSTS = 'trusted.backy.test';
 const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
@@ -6557,6 +6559,7 @@ const testEmbedBehaviorControls = async (client) => {
   await setFormControlByTestId(client, 'editor-embed-src', SMOKE_EMBED_SRC);
   await setFormControlByTestId(client, 'editor-embed-title', 'Smoke embed frame');
   await setFormControlByTestId(client, 'editor-embed-allow', SMOKE_EMBED_ALLOW);
+  await setFormControlByTestId(client, 'editor-embed-allowed-hosts', SMOKE_EMBED_ALLOWED_HOSTS);
   await setFormControlByTestId(client, 'editor-embed-sandbox', SMOKE_EMBED_SANDBOX);
   await setFormControlByTestId(client, 'editor-embed-loading', 'eager');
   await setFormControlByTestId(client, 'editor-embed-referrer-policy', 'no-referrer');
@@ -6574,6 +6577,7 @@ const testEmbedBehaviorControls = async (client) => {
       src: value('editor-embed-src'),
       title: value('editor-embed-title'),
       allow: value('editor-embed-allow'),
+      allowedHosts: value('editor-embed-allowed-hosts'),
       sandbox: value('editor-embed-sandbox'),
       loading: value('editor-embed-loading'),
       referrerPolicy: value('editor-embed-referrer-policy'),
@@ -6581,6 +6585,7 @@ const testEmbedBehaviorControls = async (client) => {
       previewSrc: iframe?.getAttribute('src') || '',
       previewTitle: iframe?.getAttribute('title') || '',
       previewAllow: iframe?.getAttribute('allow') || '',
+      previewAllowedHosts: iframe?.getAttribute('data-backy-embed-allowed-hosts') || '',
       previewSandbox: iframe?.getAttribute('sandbox') || '',
       previewLoading: iframe?.getAttribute('loading') || '',
       previewReferrerPolicy: iframe?.getAttribute('referrerpolicy') || '',
@@ -6588,9 +6593,11 @@ const testEmbedBehaviorControls = async (client) => {
     };
   })()`);
 
-  assert(state.src === SMOKE_EMBED_SRC && state.previewSrc === SMOKE_EMBED_SRC, `Embed src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.src === SMOKE_EMBED_SRC && state.previewSrc === SMOKE_EMBED_PREVIEW_SRC, `Embed src control mismatch: ${JSON.stringify(state)}`);
   assert(state.title === 'Smoke embed frame' && state.previewTitle === 'Smoke embed frame', `Embed title control mismatch: ${JSON.stringify(state)}`);
   assert(state.allow === SMOKE_EMBED_ALLOW && state.previewAllow === SMOKE_EMBED_ALLOW, `Embed allow control mismatch: ${JSON.stringify(state)}`);
+  assert(state.allowedHosts === SMOKE_EMBED_ALLOWED_HOSTS && state.previewAllowedHosts.includes('trusted.backy.test'), `Embed allowed hosts mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewAllowedHosts.includes('youtube.com') && state.previewAllowedHosts.includes('vimeo.com'), `Embed default allowlist missing: ${JSON.stringify(state)}`);
   assert(state.sandbox === SMOKE_EMBED_SANDBOX && state.previewSandbox === SMOKE_EMBED_SANDBOX, `Embed sandbox control mismatch: ${JSON.stringify(state)}`);
   assert(state.loading === 'eager' && state.previewLoading === 'eager', `Embed loading control mismatch: ${JSON.stringify(state)}`);
   assert(state.referrerPolicy === 'no-referrer' && state.previewReferrerPolicy === 'no-referrer', `Embed referrer policy mismatch: ${JSON.stringify(state)}`);
@@ -6609,6 +6616,7 @@ const assertPersistedEmbedBehavior = async (pageId) => {
   assert(props.src === SMOKE_EMBED_SRC, `Persisted embed src mismatch: ${JSON.stringify(props)}`);
   assert(props.title === 'Smoke embed frame', `Persisted embed title mismatch: ${JSON.stringify(props)}`);
   assert(props.allow === SMOKE_EMBED_ALLOW, `Persisted embed allow mismatch: ${JSON.stringify(props)}`);
+  assert(props.allowedHosts === SMOKE_EMBED_ALLOWED_HOSTS, `Persisted embed allowed hosts mismatch: ${JSON.stringify(props)}`);
   assert(props.sandbox === SMOKE_EMBED_SANDBOX, `Persisted embed sandbox mismatch: ${JSON.stringify(props)}`);
   assert(props.loading === 'eager', `Persisted embed loading mismatch: ${JSON.stringify(props)}`);
   assert(props.referrerPolicy === 'no-referrer', `Persisted embed referrer policy mismatch: ${JSON.stringify(props)}`);

@@ -1177,6 +1177,21 @@ const sanitizeHtmlMarkup = (value: unknown): string => {
 };
 
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+const DEFAULT_EMBED_ALLOWED_HOSTS = [
+  'youtube.com',
+  'www.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+  'youtu.be',
+  'vimeo.com',
+  'player.vimeo.com',
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'docs.google.com',
+  'figma.com',
+  'www.figma.com',
+];
 const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
 const IMAGE_DECODING_VALUES = ['async', 'sync', 'auto'] as const;
 const IFRAME_REFERRER_POLICIES = [
@@ -1217,6 +1232,37 @@ const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | u
   return IFRAME_REFERRER_POLICIES.includes(normalized as IframeReferrerPolicy)
     ? normalized as IframeReferrerPolicy
     : undefined;
+};
+
+const normalizeEmbedHost = (value: string): string => {
+  const raw = value.trim().toLowerCase();
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.replace(/^www\./, '');
+  } catch {
+    return raw.replace(/^www\./, '').split('/')[0];
+  }
+};
+
+const parseEmbedAllowedHosts = (value: unknown): string[] => {
+  const customHosts = typeof value === 'string'
+    ? value.split(/[\n,;]/).map(normalizeEmbedHost).filter(Boolean)
+    : [];
+
+  return Array.from(new Set([
+    ...DEFAULT_EMBED_ALLOWED_HOSTS.map(normalizeEmbedHost),
+    ...customHosts,
+  ]));
+};
+
+const isEmbedHostAllowed = (host: string, allowedHosts: string[]): boolean => {
+  const normalizedHost = normalizeEmbedHost(host);
+  return allowedHosts.some((allowedHost) => (
+    normalizedHost === allowedHost || normalizedHost.endsWith(`.${allowedHost}`)
+  ));
 };
 
 const buildContactShareOverride = (props: Record<string, unknown>) => {
@@ -1285,7 +1331,7 @@ const DEFAULT_COMMENT_REPORT_REASONS = [
   'other',
 ];
 
-const normalizeEmbedUrl = (raw: unknown): string => {
+const normalizeEmbedUrl = (raw: unknown, allowedHostsInput?: unknown): string => {
   const source = sanitizeText(raw);
   if (!source) {
     return '';
@@ -1293,10 +1339,11 @@ const normalizeEmbedUrl = (raw: unknown): string => {
 
   const iframeMatch = source.match(/<iframe[^>]*src=(\"|')([^\"']+)\1/i);
   const src = iframeMatch ? iframeMatch[2] : source;
+  const normalizedSrc = src.startsWith('//') ? `https:${src}` : src;
 
   const parsed = (() => {
     try {
-      return new URL(src);
+      return new URL(normalizedSrc);
     } catch {
       return null;
     }
@@ -1307,10 +1354,14 @@ const normalizeEmbedUrl = (raw: unknown): string => {
       return `https://www.youtube.com/embed/${src}`;
     }
 
-    return src.startsWith('//') ? `https:${src}` : src;
+    return '';
   }
 
   const host = parsed.host.toLowerCase();
+  const allowedHosts = parseEmbedAllowedHosts(allowedHostsInput);
+  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !isEmbedHostAllowed(host, allowedHosts)) {
+    return '';
+  }
 
   if (host.includes('youtube.com') || host.includes('youtu.be')) {
     const videoId = parsed.searchParams.get('v')
@@ -1846,10 +1897,10 @@ function DividerElement({ element }: ElementRendererProps) {
  */
 function EmbedElement({ element }: ElementRendererProps) {
   const { props, styles, width, height } = element;
-  const src = normalizeEmbedUrl(getNameClass(props.src) || getNameClass(props.url));
+  const src = normalizeEmbedUrl(getNameClass(props.src) || getNameClass(props.url), props.allowedHosts ?? props.embedAllowedHosts);
 
   if (!src) {
-    return <p>Missing embed source</p>;
+    return <p>Missing or blocked embed source</p>;
   }
 
   return (
@@ -1869,6 +1920,7 @@ function EmbedElement({ element }: ElementRendererProps) {
       loading={normalizeIframeLoading(props.loading)}
       referrerPolicy={normalizeIframeReferrerPolicy(props.referrerPolicy)}
       sandbox={normalizeIframeSandbox(props.sandbox)}
+      data-backy-embed-allowed-hosts={parseEmbedAllowedHosts(props.allowedHosts ?? props.embedAllowedHosts).join(',')}
     />
   );
 }

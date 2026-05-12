@@ -54,7 +54,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | box/container | ✅ style/appearance | ✅ | ✅ | Not yet true child nesting | ⚠️ |
 | columns | ✅ column count/gap | ✅ | ✅ | Public renderer now emits real column slots and places children by column index | ✅ |
 | map | ✅ address/url/zoom/marker controls | ✅ (iframe support added) | ✅ (iframe support added) | Marker label/coordinates now persist, render as metadata, and drive coordinate fallback when no custom URL is set | ✅ |
-| embed | ✅ URL/source | ✅ (iframe support added) | ✅ (iframe support added) | Sanitization and allowlist policy not finished | ⚠️ |
+| embed | ✅ URL/source/allowlist/security controls | ✅ (iframe support added) | ✅ (iframe support added) | Embed URLs now require safe protocols plus default/custom host allowlists, with blocked-source fallback coverage | ✅ |
 | list | ✅ list type + items | ✅ | ✅ | Type resolution now prioritizes stored `listType` when present; mixed content/edge empty-item cases still need nested-depth parity | ⚠️ |
 | form | ✅ title/action metadata + field schema JSON | ✅ schema fields + submit UI + nested children | ✅ schema fields submit through public form runtime | live captcha widget and richer field builder UI | ⚠️ |
 | input | ✅ placeholder/type | ✅ (public) | ✅ (public) | action wiring to form submit path | ⚠️ |
@@ -339,6 +339,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Tightened link target/rel semantics so `_blank` links cannot drop `noopener noreferrer`, public links preserve underline-off styling, and focused link/public renderer smoke covers the contract.
 - Aligned divider public rendering with editor preview by using border-only line geometry, matching vertical margin behavior, and adding public renderer smoke coverage.
 - Added map marker label/latitude/longitude controls, coordinate-first embed fallback, persisted marker metadata, editor smoke coverage, and public renderer metadata coverage.
+- Added default/custom embed host allowlist enforcement, blocked unsafe/unlisted embed fallback behavior, allowlist metadata, and focused editor/public renderer smoke coverage.
 - Brought public quote rendering into parity for appearance, typography, border, and citation styles with renderer smoke coverage.
 - Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.

@@ -2632,6 +2632,25 @@ function ContentProperties({
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
+              Extra Allowed Domains
+            </label>
+            <textarea
+              value={element.props.allowedHosts || element.props.embedAllowedHosts || ''}
+              onChange={(e) => onChange({ allowedHosts: e.target.value })}
+              data-testid="editor-embed-allowed-hosts"
+              rows={2}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="example.com, app.example.com"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              YouTube, Vimeo, Google Maps/Docs, and Figma are allowed by default.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
               Sandbox Tokens
             </label>
             <input
