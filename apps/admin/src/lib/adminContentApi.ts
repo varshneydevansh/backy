@@ -841,6 +841,17 @@ interface ApiListCommentsResponse {
   };
 }
 
+interface ApiCommentAnalyticsResponse {
+  success: boolean;
+  data?: {
+    analytics: CommentAnalytics;
+  };
+  analytics?: CommentAnalytics;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiUpdateCommentsResponse {
   success: boolean;
   data?: {
@@ -1859,6 +1870,60 @@ export interface CommentBlocklistResult {
   blocklist: AdminCommentBlocklistEntry[];
   count: number;
   pagination: ApiPagination;
+}
+
+export interface CommentAnalytics {
+  siteId: string;
+  generatedAt: string;
+  windowDays: number;
+  totals: {
+    comments: number;
+    allTimeComments: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    spam: number;
+    blocked: number;
+    reported: number;
+    reviewed: number;
+    unreviewed: number;
+    replies: number;
+  };
+  byStatus: Record<CommentModerationStatus, number>;
+  reports: {
+    comments: number;
+    reasons: Array<{ reason: string; count: number }>;
+  };
+  threads: {
+    total: number;
+    withReplies: number;
+    reported: number;
+    pendingReplies: number;
+    top: Array<{
+      id: string;
+      targetType: CommentTargetType;
+      targetId: string;
+      total: number;
+      replies: number;
+      pending: number;
+      reported: number;
+      latestAt: string;
+    }>;
+  };
+  targets: Array<{
+    targetType: CommentTargetType;
+    targetId: string;
+    total: number;
+    pending: number;
+    reported: number;
+    replies: number;
+  }>;
+  daily: Array<{
+    date: string;
+    submitted: number;
+    reviewed: number;
+    reported: number;
+  }>;
 }
 
 export interface UpdateCommentsInput {
@@ -3957,6 +4022,26 @@ export async function listComments(
     count,
     pagination,
   };
+}
+
+export async function getCommentAnalytics(
+  siteId: string,
+  filters: { days?: number; targetType?: CommentModerationTarget; targetId?: string } = {},
+): Promise<CommentAnalytics> {
+  const query = new URLSearchParams();
+  query.set('days', String(filters.days || 30));
+  if (filters.targetType && filters.targetType !== 'all') query.set('targetType', filters.targetType);
+  if (filters.targetId) query.set('targetId', filters.targetId);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/analytics?${query.toString()}`);
+  const payload = await readJson<ApiCommentAnalyticsResponse>(response);
+  const analytics = payload.data?.analytics || payload.analytics;
+
+  if (!response.ok || !payload.success || !analytics) {
+    throw new Error(payload.error?.message || 'Unable to load comment analytics');
+  }
+
+  return analytics;
 }
 
 export async function updateComments(

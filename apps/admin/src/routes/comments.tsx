@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import {
   getAdminSite,
+  getCommentAnalytics,
   deleteCommentBlocklistEntries,
   listBlogPosts,
   listCommentBlocklist,
@@ -27,6 +28,7 @@ import {
   updateComments,
   type AdminComment,
   type AdminCommentBlocklistEntry,
+  type CommentAnalytics,
   type CommentModerationStatus,
   type CommentModerationTarget,
 } from '@/lib/adminContentApi';
@@ -208,6 +210,7 @@ function CommentsRoute() {
   const routerState = useRouterState();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
+  const [commentAnalytics, setCommentAnalytics] = useState<CommentAnalytics | null>(null);
   const [blocklist, setBlocklist] = useState<AdminCommentBlocklistEntry[]>([]);
   const [blocklistCount, setBlocklistCount] = useState(0);
   const [blocklistTypeFilter, setBlocklistTypeFilter] = useState<'all' | 'email' | 'ip'>('all');
@@ -324,6 +327,7 @@ function CommentsRoute() {
   }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter, threadFilter]);
   const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
   const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
+  const moderationAnalyticsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/analytics?days=30`;
   const blocklistUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/blocklist`;
   const filteredComments = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -464,7 +468,7 @@ function CommentsRoute() {
       },
       {
         label: 'API contract',
-        detail: 'List, bulk update, and single-comment endpoints are visible for custom admin/frontends.',
+        detail: 'List, analytics, bulk update, and single-comment endpoints are visible for custom admin/frontends.',
         ready: true,
       },
     ];
@@ -493,6 +497,7 @@ function CommentsRoute() {
       list: moderationListUrl,
       bulkUpdate: moderationBulkUpdateUrl,
       singleUpdate: moderationSingleUpdateUrl,
+      analytics: moderationAnalyticsUrl,
       blocklist: blocklistUrl,
       publicPageThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages/{pageId}/comments`,
       publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
@@ -510,6 +515,20 @@ function CommentsRoute() {
       checks: moderationReadiness.checks,
     },
     metrics,
+    analytics: commentAnalytics ? {
+      generatedAt: commentAnalytics.generatedAt,
+      windowDays: commentAnalytics.windowDays,
+      totals: commentAnalytics.totals,
+      topReportReasons: commentAnalytics.reports.reasons,
+      threadSummary: {
+        total: commentAnalytics.threads.total,
+        withReplies: commentAnalytics.threads.withReplies,
+        reported: commentAnalytics.threads.reported,
+        pendingReplies: commentAnalytics.threads.pendingReplies,
+      },
+      topTargets: commentAnalytics.targets.slice(0, 10),
+      daily: commentAnalytics.daily,
+    } : null,
     filters: {
       status: statusFilter,
       targetType: targetTypeFilter,
@@ -620,12 +639,14 @@ function CommentsRoute() {
     blocklistSearch,
     blocklistTypeFilter,
     blocklistUrl,
+    commentAnalytics,
     commentPolicyDirty,
     commentPolicyDraft,
     comments,
     filteredComments,
     filteredBlocklist.length,
     metrics,
+    moderationAnalyticsUrl,
     moderationBulkUpdateUrl,
     moderationListUrl,
     moderationReadiness.checks,
@@ -671,9 +692,11 @@ function CommentsRoute() {
         getAdminSite(activeSiteId).catch(() => null),
         refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })),
       ]);
+      const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 }).catch(() => null);
       const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
 
       setComments(commentResult.comments);
+      setCommentAnalytics(analyticsResult);
       setBlocklist(blocklistResult.blocklist || []);
       setBlocklistCount(blocklistResult.count || 0);
       setCommentPolicyDraft(nextPolicy);
@@ -1309,6 +1332,58 @@ function CommentsRoute() {
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
 
+      <Panel id="comments-analytics" className="mb-6 scroll-mt-24" data-testid="comments-analytics-panel">
+        <PanelHeader
+          title="Comment analytics"
+          description={commentAnalytics ? `${commentAnalytics.totals.comments} comments in the last ${commentAnalytics.windowDays} days` : 'Private analytics endpoint for comment moderation signals'}
+          icon={<Flag className="size-4" />}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isCommentsBusy}
+              onClick={() => void copyCommentApiText(moderationAnalyticsUrl, 'Comment analytics URL')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy analytics
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Code2 className="size-4" />
+                Analytics API
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Custom admin dashboards can use this private endpoint for queue totals, report reasons, thread load, and target-level moderation trends.
+              </p>
+              <div className="mt-4">
+                <ApiSnippet label="Comment analytics" value={moderationAnalyticsUrl} />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetaTile label="30-day comments" value={`${commentAnalytics?.totals.comments ?? metrics.total}`} />
+              <MetaTile label="Reported" value={`${commentAnalytics?.totals.reported ?? metrics.reported}`} />
+              <MetaTile label="Threaded" value={`${commentAnalytics?.threads.withReplies ?? threadSummaries.filter((thread) => thread.replies > 0).length}`} />
+              <MetaTile label="Pending replies" value={`${commentAnalytics?.threads.pendingReplies ?? threadSummaries.reduce((total, thread) => total + Math.min(thread.pending, thread.replies), 0)}`} />
+              <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
+                <div className="text-xs font-medium text-muted-foreground">Top report reasons</div>
+                <div className="mt-1 text-sm font-semibold">{formatReportReasons(commentAnalytics)}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
+                <div className="text-xs font-medium text-muted-foreground">Busiest target</div>
+                <div className="mt-1 truncate text-sm font-semibold">
+                  {formatAnalyticsTarget(commentAnalytics, targetByKey)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
       <Panel id="comments-threads" className="mb-6 scroll-mt-24" data-testid="comments-thread-panel">
         <PanelHeader
           title="Thread map"
@@ -1862,6 +1937,31 @@ function formatThreadOption(thread: CommentThreadSummary) {
   ].filter(Boolean).join(', ');
 
   return `${target} - ${rootAuthor} (${flags})`;
+}
+
+function formatReportReasons(analytics: CommentAnalytics | null) {
+  if (!analytics || analytics.reports.reasons.length === 0) {
+    return 'No report reasons in this window';
+  }
+
+  return analytics.reports.reasons
+    .slice(0, 3)
+    .map((reason) => `${reason.reason} (${reason.count})`)
+    .join(', ');
+}
+
+function formatAnalyticsTarget(
+  analytics: CommentAnalytics | null,
+  targetByKey: Map<string, CommentTargetSummary>,
+) {
+  const target = analytics?.targets[0];
+  if (!target) {
+    return 'No target activity in this window';
+  }
+
+  const targetSummary = targetByKey.get(`${target.targetType}:${target.targetId}`);
+  const label = targetSummary?.label || `${target.targetType}:${target.targetId}`;
+  return `${label} - ${target.total} comment${target.total === 1 ? '' : 's'}`;
 }
 
 function ThreadSummaryRow({

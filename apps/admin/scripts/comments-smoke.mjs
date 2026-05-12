@@ -170,6 +170,11 @@ const listBlocklist = async (q = '') => {
   return payload.data?.blocklist || payload.blocklist || [];
 };
 
+const getCommentAnalytics = async () => {
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments/analytics?days=30`);
+  return payload.data?.analytics || payload.analytics;
+};
+
 const deleteBlocklistEntries = async (ids) => {
   if (!ids.length) return { deleted: [] };
   const payload = await requestApi(`/api/sites/${SITE_ID}/comments/blocklist`, {
@@ -405,11 +410,12 @@ const navigateToComments = async (client, expectedAuthors) => {
       ready: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
       queue: document.body?.innerText?.includes('Moderation Queue') || false,
       api: document.body?.innerText?.includes('Comment moderation API') || false,
+      analytics: Boolean(document.querySelector('[data-testid="comments-analytics-panel"]')),
       authors: ${JSON.stringify(expectedAuthors)}.every((author) => document.body?.innerText?.includes(author)),
       body: document.body?.innerText?.slice(0, 900) || '',
     }))()`);
 
-    if (state.ready && state.queue && state.api && state.authors) {
+    if (state.ready && state.queue && state.api && state.analytics && state.authors) {
       return state;
     }
 
@@ -591,6 +597,7 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+    hasAnalytics: Boolean(document.querySelector('[data-testid="comments-analytics-panel"]')),
     hasThreadPanel: Boolean(document.querySelector('[data-testid="comments-thread-panel"]')),
     hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
@@ -598,7 +605,7 @@ const assertLayout = async (client) => {
     hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -751,6 +758,14 @@ const main = async () => {
       requestId: reportRequestId,
     });
     await waitForCommentReports(reportedComment.id, reportRequestId, 1);
+    const analytics = await getCommentAnalytics();
+    assert(analytics?.totals?.pending >= 6, `Comment analytics did not include seeded pending comments: ${JSON.stringify(analytics)}`);
+    assert(analytics?.totals?.reported >= 1, `Comment analytics did not count reported comments: ${JSON.stringify(analytics)}`);
+    assert(analytics?.threads?.withReplies >= 1, `Comment analytics did not count threaded replies: ${JSON.stringify(analytics)}`);
+    assert(
+      analytics?.reports?.reasons?.some((reason) => reason.reason === 'harassment' && reason.count >= 1),
+      `Comment analytics did not expose harassment report reason: ${JSON.stringify(analytics?.reports)}`,
+    );
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
