@@ -678,6 +678,21 @@ interface ApiListFormDeliveryEventsResponse {
   };
 }
 
+interface ApiListCommentDeliveryEventsResponse {
+  success: boolean;
+  data?: {
+    events: CommentDeliveryEvent[];
+    count?: number;
+    pagination?: ApiPagination;
+  };
+  events?: CommentDeliveryEvent[];
+  count?: number;
+  pagination?: ApiPagination;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListContactsResponse {
   success: boolean;
   data?: {
@@ -1617,6 +1632,7 @@ export interface FormDeliveryEvent {
   siteId: string;
   kind: string;
   formId?: string | null;
+  commentId?: string | null;
   submissionId?: string | null;
   target: string;
   status: 'queued' | 'succeeded' | 'failed' | 'received' | string;
@@ -1627,6 +1643,28 @@ export interface FormDeliveryEvent {
   metadata?: Record<string, unknown>;
   error?: string;
   createdAt: string;
+}
+
+export interface CommentDeliveryEvent {
+  id: string;
+  siteId: string;
+  kind: 'comment-submitted' | 'comment-status' | 'comment-reported' | string;
+  commentId?: string | null;
+  target: string;
+  status: 'queued' | 'succeeded' | 'failed' | 'received' | string;
+  statusCode?: number;
+  requestId?: string | null;
+  reason?: string | null;
+  actor?: string | null;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  createdAt: string;
+}
+
+export interface CommentDeliveryEventList {
+  events: CommentDeliveryEvent[];
+  count: number;
+  pagination?: ApiPagination;
 }
 
 export interface FormDeliveryEventList {
@@ -3682,6 +3720,34 @@ export async function listFormDeliveryEvents(
 
   if (!response.ok || !payload.success || !events) {
     throw new Error(payload.error?.message || 'Unable to load form delivery events');
+  }
+
+  return {
+    events,
+    count,
+    pagination,
+  };
+}
+
+export async function listCommentDeliveryEvents(
+  siteId: string,
+  filters: { limit?: number; offset?: number; commentId?: string } = {},
+): Promise<CommentDeliveryEventList> {
+  const query = new URLSearchParams();
+  query.set('kind', 'all');
+  query.set('limit', String(filters.limit || 100));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.commentId) query.set('commentId', filters.commentId);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/events?${query.toString()}`);
+  const payload = await readJson<ApiListCommentDeliveryEventsResponse>(response);
+  const rawEvents = payload.data?.events || payload.events;
+  const events = rawEvents?.filter((event) => event.kind.startsWith('comment-'));
+  const count = events?.length ?? payload.data?.count ?? payload.count ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination;
+
+  if (!response.ok || !payload.success || !events) {
+    throw new Error(payload.error?.message || 'Unable to load comment delivery events');
   }
 
   return {

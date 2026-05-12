@@ -186,6 +186,16 @@ const getCommentAnalytics = async () => {
   return payload.data?.analytics || payload.analytics;
 };
 
+const listCommentEvents = async () => {
+  const query = new URLSearchParams({
+    kind: 'all',
+    limit: '100',
+  });
+  const payload = await requestApi(`/api/sites/${SITE_ID}/events?${query.toString()}`);
+  const events = payload.data?.events || payload.events || [];
+  return events.filter((event) => String(event.kind || '').startsWith('comment-'));
+};
+
 const deleteBlocklistEntries = async (ids) => {
   if (!ids.length) return { deleted: [] };
   const payload = await requestApi(`/api/sites/${SITE_ID}/comments/blocklist`, {
@@ -231,6 +241,25 @@ const waitForCommentReports = async (commentId, requestId, expectedCount) => {
   }
 
   throw new Error(`Comment ${commentId} did not reach report count ${expectedCount}`);
+};
+
+const waitForCommentEvents = async (expectations) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const events = await listCommentEvents();
+    const hasAllExpected = expectations.every((expected) => events.some((event) => (
+      event.kind === expected.kind &&
+      (!expected.requestId || event.requestId === expected.requestId) &&
+      (!expected.commentId || event.commentId === expected.commentId)
+    )));
+
+    if (hasAllExpected) {
+      return events;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Comment delivery events did not include expected records: ${JSON.stringify(expectations)}`);
 };
 
 const waitForCommentParent = async (commentId, requestId, parentId) => {
@@ -622,6 +651,7 @@ const assertLayout = async (client) => {
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
     hasAnalytics: Boolean(document.querySelector('[data-testid="comments-analytics-panel"]')),
+    hasDelivery: Boolean(document.querySelector('[data-testid="comments-delivery-panel"]')),
     hasThreadPanel: Boolean(document.querySelector('[data-testid="comments-thread-panel"]')),
     hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
@@ -629,7 +659,7 @@ const assertLayout = async (client) => {
     hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasDelivery && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -660,6 +690,37 @@ const assertThreadContext = async (client, parentAuthor, replyAuthor) => {
   assert(state.hasPanel && state.hasFilter && state.optionCount > 1, `Comments thread panel did not expose thread controls: ${JSON.stringify(state)}`);
   assert(state.hasParentReplyCount && state.hasReplyParent && state.hasThreadCopy, `Comments thread context missing parent/reply details: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertCommentDeliveryPanel = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="comments-delivery-panel"]');
+      const events = Array.from(document.querySelectorAll('[data-testid="comments-delivery-event"]'));
+      const text = panel?.textContent || '';
+
+      return {
+        hasPanel: Boolean(panel),
+        eventCount: events.length,
+        hasSubmitted: text.includes('comment-submitted'),
+        hasReported: text.includes('comment-reported'),
+        hasApiCopy: text.includes('Events API') && text.includes('Recent comment handoffs'),
+        panelText: text.slice(0, 1200),
+      };
+    })()`);
+
+    if (state.hasPanel && state.eventCount > 0 && state.hasSubmitted && state.hasReported && state.hasApiCopy) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Comments delivery panel did not render seeded comment events: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const createReplyInUi = async (client, parentAuthor, replyContent) => {
@@ -921,6 +982,11 @@ const main = async () => {
       analytics?.reports?.reasons?.some((reason) => reason.reason === 'harassment' && reason.count >= 1),
       `Comment analytics did not expose harassment report reason: ${JSON.stringify(analytics?.reports)}`,
     );
+    await waitForCommentEvents([
+      { kind: 'comment-submitted', requestId: threadParentRequestId, commentId: threadParentComment.id },
+      { kind: 'comment-submitted', requestId: threadReplyRequestId, commentId: threadReplyComment.id },
+      { kind: 'comment-reported', requestId: reportRequestId, commentId: reportedComment.id },
+    ]);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -945,6 +1011,7 @@ const main = async () => {
       'Comments Smoke Thread Reply',
       'Comments Smoke Move Parent',
     ]);
+    await assertCommentDeliveryPanel(client);
     await assertThreadContext(client, 'Comments Smoke Thread Parent', 'Comments Smoke Thread Reply');
     const adminReplyContent = `Official admin reply from comments smoke ${suffix}.`;
     await createReplyInUi(client, 'Comments Smoke Thread Parent', adminReplyContent);

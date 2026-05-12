@@ -22,6 +22,7 @@ import {
   getAdminSite,
   getCommentAnalytics,
   deleteCommentBlocklistEntries,
+  listCommentDeliveryEvents,
   listBlogPosts,
   listCommentBlocklist,
   listComments,
@@ -31,6 +32,7 @@ import {
   updateComments,
   type AdminComment,
   type AdminCommentBlocklistEntry,
+  type CommentDeliveryEvent,
   type CommentAnalytics,
   type CommentModerationStatus,
   type CommentModerationTarget,
@@ -228,6 +230,8 @@ function CommentsRoute() {
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [commentAnalytics, setCommentAnalytics] = useState<CommentAnalytics | null>(null);
+  const [commentDeliveryEvents, setCommentDeliveryEvents] = useState<CommentDeliveryEvent[]>([]);
+  const [commentDeliveryError, setCommentDeliveryError] = useState<string | null>(null);
   const [blocklist, setBlocklist] = useState<AdminCommentBlocklistEntry[]>([]);
   const [blocklistCount, setBlocklistCount] = useState(0);
   const [blocklistTypeFilter, setBlocklistTypeFilter] = useState<'all' | 'email' | 'ip'>('all');
@@ -436,6 +440,13 @@ function CommentsRoute() {
     blocked: comments.filter((comment) => comment.status === 'blocked').length,
     flagged: comments.filter((comment) => (comment.reportCount || 0) > 0 || comment.status === 'spam' || comment.status === 'blocked').length,
   }), [comments]);
+  const deliveryMetrics = useMemo(() => ({
+    total: commentDeliveryEvents.length,
+    submitted: commentDeliveryEvents.filter((event) => event.kind === 'comment-submitted').length,
+    moderated: commentDeliveryEvents.filter((event) => event.kind === 'comment-status').length,
+    reported: commentDeliveryEvents.filter((event) => event.kind === 'comment-reported').length,
+    failed: commentDeliveryEvents.filter((event) => event.status === 'failed').length,
+  }), [commentDeliveryEvents]);
   const hasSelection = selectedIds.length > 0;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedReportedIds = useMemo(() => comments
@@ -503,6 +514,13 @@ function CommentsRoute() {
         detail: 'List, analytics, bulk update, and single-comment endpoints are visible for custom admin/frontends.',
         ready: true,
       },
+      {
+        label: 'Delivery activity',
+        detail: deliveryMetrics.total > 0
+          ? `${deliveryMetrics.total} comment event${deliveryMetrics.total === 1 ? '' : 's'} recorded across submission, report, and moderation handoffs.`
+          : 'Comment delivery events appear after public submissions, reports, or moderation actions.',
+        ready: comments.length === 0 || deliveryMetrics.total > 0,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -516,7 +534,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
+  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, deliveryMetrics.total, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -531,6 +549,7 @@ function CommentsRoute() {
       singleUpdate: moderationSingleUpdateUrl,
       analytics: moderationAnalyticsUrl,
       blocklist: blocklistUrl,
+      events: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=all&limit=100`,
       publicPageThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages/{pageId}/comments`,
       publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
       reportReasons: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/report-reasons`,
@@ -561,6 +580,18 @@ function CommentsRoute() {
       topTargets: commentAnalytics.targets.slice(0, 10),
       daily: commentAnalytics.daily,
     } : null,
+    delivery: {
+      metrics: deliveryMetrics,
+      recent: commentDeliveryEvents.slice(0, 20).map((event) => ({
+        id: event.id,
+        kind: event.kind,
+        commentId: event.commentId,
+        status: event.status,
+        reason: event.reason,
+        requestId: event.requestId,
+        createdAt: event.createdAt,
+      })),
+    },
     filters: {
       status: statusFilter,
       targetType: targetTypeFilter,
@@ -695,6 +726,8 @@ function CommentsRoute() {
     threadFilter,
     threadSummaries,
     triageFilter,
+    deliveryMetrics,
+    commentDeliveryEvents,
   ]);
   const moderationHandoffText = useMemo(() => JSON.stringify(moderationHandoff, null, 2), [moderationHandoff]);
   const moderationReasonText = moderationReason.trim();
@@ -715,6 +748,19 @@ function CommentsRoute() {
     return analyticsResult;
   };
 
+  const refreshCommentDeliveryEvents = async () => {
+    setCommentDeliveryError(null);
+    try {
+      const result = await listCommentDeliveryEvents(activeSiteId, { limit: 100 });
+      setCommentDeliveryEvents(result.events);
+      return result;
+    } catch (deliveryError) {
+      setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
+      setCommentDeliveryEvents([]);
+      return null;
+    }
+  };
+
   const loadComments = async () => {
     if (isCommentsBusy) return;
 
@@ -723,18 +769,24 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const [commentResult, pages, posts, siteDetail, blocklistResult] = await Promise.all([
+      const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult] = await Promise.all([
         listComments(activeSiteId, { status: 'all', limit: 100, sort: 'newest' }),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         getAdminSite(activeSiteId).catch(() => null),
         refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })),
+        listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
+          setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
+          return null;
+        }),
       ]);
       const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 }).catch(() => null);
       const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
 
       setComments(commentResult.comments);
       setCommentAnalytics(analyticsResult);
+      setCommentDeliveryEvents(deliveryResult?.events || []);
+      if (deliveryResult) setCommentDeliveryError(null);
       setBlocklist(blocklistResult.blocklist || []);
       setBlocklistCount(blocklistResult.count || 0);
       setCommentPolicyDraft(nextPolicy);
@@ -827,6 +879,7 @@ function CommentsRoute() {
       if (status === 'blocked') {
         await refreshBlocklist();
       }
+      await refreshCommentDeliveryEvents().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
       setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
     } catch (updateError) {
@@ -914,6 +967,7 @@ function CommentsRoute() {
       setComments((current) => current.map((comment) => (
         result.updated.find((updated) => updated.id === comment.id) || comment
       )));
+      await refreshCommentDeliveryEvents().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
       setNotice(`${result.updatedCount} report flag${result.updatedCount === 1 ? '' : 's'} resolved.`);
     } catch (updateError) {
@@ -974,6 +1028,7 @@ function CommentsRoute() {
       setReplyDraft((current) => ({ ...current, content: '' }));
       setThreadFilter(getCommentThreadKey(parentComment));
       await refreshCommentAnalytics().catch(() => null);
+      await refreshCommentDeliveryEvents().catch(() => null);
       setNotice(`Reply added to ${parentComment.authorName || parentComment.authorEmail || 'the selected comment'}.`);
     } catch (replyError) {
       setError(replyError instanceof Error ? replyError.message : 'Unable to create reply');
@@ -1028,6 +1083,7 @@ function CommentsRoute() {
       setMoveParentDraft('');
       setThreadFilter(getCommentThreadKey(updated));
       await refreshCommentAnalytics().catch(() => null);
+      await refreshCommentDeliveryEvents().catch(() => null);
       setNotice(`Reply moved under ${nextParent.authorName || nextParent.authorEmail || 'the selected parent'}.`);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : 'Unable to move reply');
@@ -1538,6 +1594,79 @@ function CommentsRoute() {
                   {formatAnalyticsTarget(commentAnalytics, targetByKey)}
                 </div>
               </div>
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel id="comments-delivery" className="mb-6 scroll-mt-24" data-testid="comments-delivery-panel">
+        <PanelHeader
+          title="Comment delivery activity"
+          description="Submission, report, moderation, reply, and thread-change events for custom admin handoffs."
+          icon={<RefreshCw className="size-4" />}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isCommentsBusy}
+              onClick={() => void refreshCommentDeliveryEvents()}
+              iconStart={<RefreshCw className="size-4" />}
+              data-testid="comments-delivery-refresh"
+            >
+              Refresh activity
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Code2 className="size-4" />
+                Events API
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Custom admin dashboards can poll comment events to show submission intake, reports, moderation decisions, and thread updates.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MetaTile label="Activity events" value={`${deliveryMetrics.total}`} />
+                <MetaTile label="Submissions" value={`${deliveryMetrics.submitted}`} />
+                <MetaTile label="Moderation" value={`${deliveryMetrics.moderated}`} />
+                <MetaTile label="Reports" value={`${deliveryMetrics.reported}`} />
+              </div>
+              {commentDeliveryError ? (
+                <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {commentDeliveryError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Recent comment handoffs</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Newest events from the site events API filtered to comment activity.
+                  </div>
+                </div>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  deliveryMetrics.failed > 0 ? 'bg-destructive/10 text-destructive' : 'bg-emerald-50 text-emerald-700',
+                )}
+                >
+                  {deliveryMetrics.failed} failed
+                </span>
+              </div>
+              {commentDeliveryEvents.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
+                  No comment delivery activity has been recorded yet.
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3" data-testid="comments-delivery-list">
+                  {commentDeliveryEvents.slice(0, 8).map((event) => (
+                    <CommentDeliveryEventCard key={event.id} event={event} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </PanelContent>
@@ -2147,6 +2276,64 @@ function formatAnalyticsTarget(
   const targetSummary = targetByKey.get(`${target.targetType}:${target.targetId}`);
   const label = targetSummary?.label || `${target.targetType}:${target.targetId}`;
   return `${label} - ${target.total} comment${target.total === 1 ? '' : 's'}`;
+}
+
+function commentDeliveryTitle(event: CommentDeliveryEvent) {
+  if (event.kind === 'comment-submitted') return 'Comment submitted';
+  if (event.kind === 'comment-reported') return 'Comment reported';
+  if (event.kind === 'comment-status' && event.reason === 'thread-updated') return 'Thread updated';
+  if (event.kind === 'comment-status') return 'Moderation status';
+  return event.kind;
+}
+
+function commentDeliveryDetail(event: CommentDeliveryEvent) {
+  const parts = [
+    event.commentId ? `comment:${event.commentId}` : null,
+    event.reason ? `reason:${event.reason}` : null,
+    event.actor ? `actor:${event.actor}` : null,
+  ].filter(Boolean);
+  return parts.join(' | ') || event.target;
+}
+
+function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
+  const statusClass = event.status === 'succeeded'
+    ? 'bg-success/10 text-success'
+    : event.status === 'failed'
+      ? 'bg-destructive/10 text-destructive'
+      : 'bg-warning/10 text-warning';
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3" data-testid="comments-delivery-event">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn('rounded-md px-2 py-1 text-[11px] font-semibold', statusClass)}>
+              {event.status}
+            </span>
+            <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+              {event.kind}
+            </span>
+            <span className="text-xs text-muted-foreground">{formatDate(event.createdAt)}</span>
+          </div>
+          <div className="mt-2 text-sm font-semibold text-foreground">{commentDeliveryTitle(event)}</div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">{commentDeliveryDetail(event)}</div>
+          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+            {event.requestId || 'no-request-id'}
+          </div>
+          {event.error ? (
+            <div className="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
+              {event.error}
+            </div>
+          ) : null}
+        </div>
+        {typeof event.statusCode === 'number' ? (
+          <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+            HTTP {event.statusCode}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function ThreadSummaryRow({
