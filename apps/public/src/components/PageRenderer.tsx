@@ -1565,6 +1565,7 @@ function ButtonElement({ element }: ElementRendererProps) {
         href={(props.href as string) || '#'}
         target={target}
         rel={rel}
+        download={getBooleanWithFallback(props.download, false) ? '' : undefined}
         title={title}
         aria-label={ariaLabel}
         style={buttonStyles}

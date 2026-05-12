@@ -5857,7 +5857,8 @@ const testButtonLinkBehaviorControls = async (client) => {
   await switchToPropertiesPanel(client);
 
   await setFormControlByTestId(client, 'editor-button-label', 'Smoke signup button');
-  await setFormControlByTestId(client, 'editor-button-href', '/signup');
+  await setFormControlByTestId(client, 'editor-button-action-preset', 'email');
+  await setFormControlByTestId(client, 'editor-button-action-value', 'sales@example.com');
   await setFormControlByTestId(client, 'editor-button-target', '_blank');
   await setFormControlByTestId(client, 'editor-button-rel', 'noopener noreferrer nofollow');
   await setFormControlByTestId(client, 'editor-button-aria-label', 'Open signup page');
@@ -5879,6 +5880,8 @@ const testButtonLinkBehaviorControls = async (client) => {
     const style = interactive ? getComputedStyle(interactive) : null;
     return {
       label: value('editor-button-label'),
+      actionPreset: value('editor-button-action-preset'),
+      actionValue: value('editor-button-action-value'),
       href: value('editor-button-href'),
       target: value('editor-button-target'),
       rel: value('editor-button-rel'),
@@ -5904,7 +5907,9 @@ const testButtonLinkBehaviorControls = async (client) => {
   })()`);
 
   assert(state.label === 'Smoke signup button' && state.previewText === 'Smoke signup button', `Button label mismatch: ${JSON.stringify(state)}`);
-  assert(state.href === '/signup', `Button href control mismatch: ${JSON.stringify(state)}`);
+  assert(state.actionPreset === 'email', `Button action preset mismatch: ${JSON.stringify(state)}`);
+  assert(state.actionValue === 'sales@example.com', `Button action value mismatch: ${JSON.stringify(state)}`);
+  assert(state.href === 'mailto:sales@example.com', `Button href control mismatch: ${JSON.stringify(state)}`);
   assert(state.target === '_blank', `Button target control mismatch: ${JSON.stringify(state)}`);
   assert(state.rel === 'noopener noreferrer nofollow', `Button rel control mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Open signup page' && state.title === 'Start signup', `Button accessibility/title controls mismatch: ${JSON.stringify(state)}`);
@@ -5932,7 +5937,10 @@ const assertPersistedButtonLinkBehavior = async (pageId) => {
 
   assert(button, `Persisted smoke-child-button missing: ${JSON.stringify(elements)}`);
   assert(props.label === 'Smoke signup button', `Persisted button label mismatch: ${JSON.stringify(props)}`);
-  assert(props.href === '/signup', `Persisted button href mismatch: ${JSON.stringify(props)}`);
+  assert(props.actionPreset === 'email', `Persisted button action preset mismatch: ${JSON.stringify(props)}`);
+  assert(props.actionValue === 'sales@example.com', `Persisted button action value mismatch: ${JSON.stringify(props)}`);
+  assert(props.href === 'mailto:sales@example.com', `Persisted button href mismatch: ${JSON.stringify(props)}`);
+  assert(props.download === false, `Persisted button download flag mismatch: ${JSON.stringify(props)}`);
   assert(props.target === '_blank', `Persisted button target mismatch: ${JSON.stringify(props)}`);
   assert(props.rel === 'noopener noreferrer nofollow', `Persisted button rel mismatch: ${JSON.stringify(props)}`);
   assert(props.ariaLabel === 'Open signup page', `Persisted button aria label mismatch: ${JSON.stringify(props)}`);

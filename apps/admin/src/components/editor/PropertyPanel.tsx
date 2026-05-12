@@ -214,6 +214,56 @@ const normalizeLinkTarget = (value: unknown): '_self' | '_blank' | '_parent' | '
   return '_self';
 };
 
+const BUTTON_ACTION_PRESETS = new Set(['custom', 'page', 'section', 'email', 'phone', 'download']);
+
+const normalizeButtonActionPreset = (value: unknown): string => (
+  typeof value === 'string' && BUTTON_ACTION_PRESETS.has(value) ? value : 'custom'
+);
+
+const normalizeButtonActionValue = (preset: string, value: unknown): string => {
+  const raw = typeof value === 'string' ? value.trim() : '';
+
+  if (!raw) {
+    return '';
+  }
+
+  if (preset === 'section') {
+    return raw.replace(/^#/, '');
+  }
+
+  if (preset === 'email') {
+    return raw.replace(/^mailto:/i, '');
+  }
+
+  if (preset === 'phone') {
+    return raw.replace(/^tel:/i, '');
+  }
+
+  return raw;
+};
+
+const buildButtonActionHref = (preset: string, value: unknown): string => {
+  const actionValue = normalizeButtonActionValue(preset, value);
+
+  if (!actionValue) {
+    return '';
+  }
+
+  if (preset === 'section') {
+    return `#${actionValue.replace(/^#+/, '')}`;
+  }
+
+  if (preset === 'email') {
+    return `mailto:${actionValue}`;
+  }
+
+  if (preset === 'phone') {
+    return `tel:${actionValue.replace(/[^\d+*#]/g, '')}`;
+  }
+
+  return actionValue;
+};
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -1164,7 +1214,14 @@ function ContentProperties({
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
                 onChange={(e) => {
-                  if (e.target.value) onChange({ href: e.target.value });
+                  if (e.target.value) {
+                    onChange({
+                      actionPreset: 'page',
+                      actionValue: e.target.value,
+                      href: e.target.value,
+                      download: false,
+                    });
+                  }
                 }}
               >
                 <option value="">Select a page...</option>
@@ -1247,7 +1304,12 @@ function ContentProperties({
               <input
                 type="text"
                 value={element.props.href || ''}
-                onChange={(e) => onChange({ href: e.target.value })}
+                onChange={(e) => onChange({
+                  actionPreset: 'custom',
+                  actionValue: e.target.value,
+                  href: e.target.value,
+                  download: false,
+                })}
                 data-testid="editor-button-href"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -2969,9 +3031,82 @@ function LinkBehaviorProperties({
   includeButtonType = false,
 }: LinkBehaviorPropertiesProps) {
   const target = normalizeLinkTarget(props.target);
+  const isButton = prefix === 'button';
+  const actionPreset = isButton ? normalizeButtonActionPreset(props.actionPreset) : 'custom';
+  const actionValue = isButton
+    ? normalizeButtonActionValue(actionPreset, props.actionValue ?? props.href)
+    : '';
 
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+      {isButton && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Action preset
+            </label>
+            <select
+              value={actionPreset}
+              onChange={(e) => {
+                const nextPreset = normalizeButtonActionPreset(e.target.value);
+                const nextValue = normalizeButtonActionValue(nextPreset, actionValue || props.href);
+
+                onChange({
+                  actionPreset: nextPreset,
+                  actionValue: nextValue,
+                  href: buildButtonActionHref(nextPreset, nextValue),
+                  download: nextPreset === 'download',
+                });
+              }}
+              data-testid="editor-button-action-preset"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="custom">Custom URL</option>
+              <option value="page">Site page</option>
+              <option value="section">Page section</option>
+              <option value="email">Email</option>
+              <option value="phone">Phone</option>
+              <option value="download">Download</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Action value
+            </label>
+            <input
+              type="text"
+              value={actionValue}
+              onChange={(e) => {
+                const nextValue = normalizeButtonActionValue(actionPreset, e.target.value);
+
+                onChange({
+                  actionValue: nextValue,
+                  href: buildButtonActionHref(actionPreset, nextValue),
+                  download: actionPreset === 'download',
+                });
+              }}
+              data-testid="editor-button-action-value"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={
+                actionPreset === 'email'
+                  ? 'hello@example.com'
+                  : actionPreset === 'phone'
+                    ? '+15551234567'
+                    : actionPreset === 'section'
+                      ? 'pricing'
+                      : '/path-or-url'
+              }
+            />
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-xs text-muted-foreground mb-1 block">

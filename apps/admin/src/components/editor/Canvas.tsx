@@ -2396,6 +2396,7 @@ function CanvasElementComponent({
               href={p.href}
               target={target}
               rel={rel}
+              download={p.download === true ? '' : undefined}
               style={buttonStyle}
               {...commonInteractiveProps}
             >
