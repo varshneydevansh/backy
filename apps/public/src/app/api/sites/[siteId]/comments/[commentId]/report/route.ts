@@ -9,6 +9,7 @@ import {
   reportRepositoryComment,
   resolveRepositorySite,
 } from '@/lib/commentRepositorySupport';
+import { notifyCommentDelivery } from '@/lib/commentDelivery';
 import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -171,6 +172,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         actor: payload.actor,
         requestId: payload.requestId,
       });
+      await notifyCommentDelivery({
+        repositories,
+        siteId: site.id,
+        comment: updated,
+        kind: 'comment-reported',
+        requestId,
+        reason: payload.reason,
+        actor: payload.actor,
+      });
 
       return privateResponse({
         success: true,
@@ -213,6 +223,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(409, 'COMMENT_REPORT_FAILED', 'Unable to process report', requestId);
     }
+    await notifyCommentDelivery({
+      siteId: site.id,
+      comment: updated,
+      kind: 'comment-reported',
+      requestId,
+      reason: payload.reason,
+      actor: payload.actor,
+    });
 
     return privateResponse({
       success: true,

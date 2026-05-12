@@ -13,6 +13,7 @@ import {
   recordRepositoryInteractionEvent,
   resolveRepositorySite,
 } from '@/lib/commentRepositorySupport';
+import { notifyCommentDelivery } from '@/lib/commentDelivery';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -427,6 +428,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           hasAuthorWebsite: Boolean(comment.authorWebsite),
         },
       });
+      await notifyCommentDelivery({
+        repositories,
+        siteId: site.id,
+        comment,
+        kind: 'comment-submitted',
+        requestId: comment.requestId,
+        reason: comment.status,
+      });
 
       return privateResponse(
         {
@@ -638,6 +647,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
       ipHash,
       status: classification.status,
+    });
+    await notifyCommentDelivery({
+      siteId: site.id,
+      comment,
+      kind: 'comment-submitted',
+      requestId: comment.requestId,
+      reason: comment.status,
     });
 
     return privateResponse(

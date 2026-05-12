@@ -1345,7 +1345,9 @@ export interface SiteSettingsInput {
         newUser?: boolean;
         pagePublished?: boolean;
         formSubmission?: boolean;
+        comments?: boolean;
         systemUpdates?: boolean;
+        recipient?: string;
       };
       inApp?: {
         comments?: boolean;

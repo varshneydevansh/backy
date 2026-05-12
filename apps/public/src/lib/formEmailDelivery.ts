@@ -1,6 +1,6 @@
 import net from 'node:net';
 import tls from 'node:tls';
-import type { FormDefinition, FormSubmission } from '@backy-cms/core';
+import type { Comment, FormDefinition, FormSubmission } from '@backy-cms/core';
 
 export type EmailDeliveryProvider = 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
 
@@ -10,11 +10,13 @@ export interface EmailDeliveryMessage {
   subject: string;
   text: string;
   siteId: string;
-  formId: string;
-  submissionId: string;
+  formId?: string;
+  submissionId?: string;
+  commentId?: string;
+  entityType?: 'form-submission' | 'comment';
   status: string;
   requestId: string;
-  values: Record<string, unknown>;
+  values?: Record<string, unknown>;
 }
 
 export interface EmailDeliveryConfig {
@@ -154,9 +156,65 @@ export const buildFormNotificationEmail = (params: {
     siteId: params.siteId,
     formId: params.form.id,
     submissionId: params.submission.id,
+    entityType: 'form-submission',
     status: params.submission.status,
     requestId: params.requestId,
     values: params.submission.values || params.values,
+  };
+};
+
+export const buildCommentNotificationEmail = (params: {
+  config: EmailDeliveryConfig;
+  siteId: string;
+  comment: Comment;
+  eventType: 'comment-submitted' | 'comment-reported' | 'comment-status';
+  requestId: string;
+  to: string;
+  reason?: string;
+  actor?: string;
+}): EmailDeliveryMessage => {
+  const targetLabel = `${params.comment.targetType}:${params.comment.targetId}`;
+  const eventLabel = params.eventType === 'comment-submitted'
+    ? 'New comment'
+    : params.eventType === 'comment-reported'
+      ? 'Comment reported'
+      : 'Comment moderation update';
+  const subject = `${eventLabel} on ${targetLabel}`;
+  const text = [
+    `Backy recorded a comment event for ${targetLabel}.`,
+    '',
+    `Site: ${params.siteId}`,
+    `Comment: ${params.comment.id}`,
+    `Event: ${params.eventType}`,
+    `Status: ${params.comment.status}`,
+    `Reason: ${params.reason || params.comment.status}`,
+    `Actor: ${params.actor || params.comment.reviewedBy || 'visitor'}`,
+    `Request: ${params.requestId}`,
+    '',
+    `Author: ${params.comment.authorName || params.comment.authorEmail || 'Anonymous'}`,
+    params.comment.authorEmail ? `Email: ${params.comment.authorEmail}` : '',
+    '',
+    params.comment.content,
+  ].filter(Boolean).join('\n');
+
+  return {
+    to: params.to,
+    from: params.config.from,
+    subject,
+    text,
+    siteId: params.siteId,
+    commentId: params.comment.id,
+    entityType: 'comment',
+    status: params.comment.status,
+    requestId: params.requestId,
+    values: {
+      commentId: params.comment.id,
+      eventType: params.eventType,
+      targetType: params.comment.targetType,
+      targetId: params.comment.targetId,
+      status: params.comment.status,
+      reason: params.reason || params.comment.status,
+    },
   };
 };
 
@@ -169,21 +227,25 @@ const escapeSmtpHeader = (value: string): string => value.replace(/[\r\n]+/g, ' 
 
 const escapeSmtpBody = (value: string): string => value.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
 
-const buildSmtpMessage = (message: EmailDeliveryMessage): string => [
-  `From: ${escapeSmtpHeader(message.from)}`,
-  `To: ${escapeSmtpHeader(message.to)}`,
-  `Subject: ${escapeSmtpHeader(message.subject)}`,
-  `Date: ${new Date().toUTCString()}`,
-  `Message-ID: <${message.requestId}.${message.submissionId}@backy.local>`,
-  'MIME-Version: 1.0',
-  'Content-Type: text/plain; charset=utf-8',
-  'Content-Transfer-Encoding: 8bit',
-  `X-Backy-Site-ID: ${escapeSmtpHeader(message.siteId)}`,
-  `X-Backy-Form-ID: ${escapeSmtpHeader(message.formId)}`,
-  `X-Backy-Submission-ID: ${escapeSmtpHeader(message.submissionId)}`,
-  '',
-  escapeSmtpBody(message.text),
-].join('\r\n');
+const buildSmtpMessage = (message: EmailDeliveryMessage): string => {
+  const entityId = message.submissionId || message.commentId || message.requestId;
+  return [
+    `From: ${escapeSmtpHeader(message.from)}`,
+    `To: ${escapeSmtpHeader(message.to)}`,
+    `Subject: ${escapeSmtpHeader(message.subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: <${message.requestId}.${entityId}@backy.local>`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: 8bit',
+    `X-Backy-Site-ID: ${escapeSmtpHeader(message.siteId)}`,
+    ...(message.formId ? [`X-Backy-Form-ID: ${escapeSmtpHeader(message.formId)}`] : []),
+    ...(message.submissionId ? [`X-Backy-Submission-ID: ${escapeSmtpHeader(message.submissionId)}`] : []),
+    ...(message.commentId ? [`X-Backy-Comment-ID: ${escapeSmtpHeader(message.commentId)}`] : []),
+    '',
+    escapeSmtpBody(message.text),
+  ].join('\r\n');
+};
 
 const parseSmtpCode = (response: string): number => {
   const parsed = Number.parseInt(response.slice(0, 3), 10);
@@ -287,15 +349,18 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
     if (!config.endpoint) {
       throw new EmailDeliveryError('HTTP endpoint provider selected but no delivery endpoint is configured.');
     }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-backy-site-id': message.siteId,
+      'x-backy-notification-channel': 'email',
+    };
+    if (message.formId) headers['x-backy-form-id'] = message.formId;
+    if (message.submissionId) headers['x-backy-submission-id'] = message.submissionId;
+    if (message.commentId) headers['x-backy-comment-id'] = message.commentId;
+
     const response = await fetch(config.endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-backy-site-id': message.siteId,
-        'x-backy-form-id': message.formId,
-        'x-backy-submission-id': message.submissionId,
-        'x-backy-notification-channel': 'email',
-      },
+      headers,
       body: JSON.stringify({
         to: message.to,
         from: message.from,
@@ -304,9 +369,11 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
         siteId: message.siteId,
         formId: message.formId,
         submissionId: message.submissionId,
+        commentId: message.commentId,
+        entityType: message.entityType,
         status: message.status,
         requestId: message.requestId,
-        values: message.values,
+        values: message.values || {},
       }),
     });
     if (!response.ok) {
@@ -332,8 +399,9 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
         text: message.text,
         headers: {
           'X-Backy-Site-ID': message.siteId,
-          'X-Backy-Form-ID': message.formId,
-          'X-Backy-Submission-ID': message.submissionId,
+          ...(message.formId ? { 'X-Backy-Form-ID': message.formId } : {}),
+          ...(message.submissionId ? { 'X-Backy-Submission-ID': message.submissionId } : {}),
+          ...(message.commentId ? { 'X-Backy-Comment-ID': message.commentId } : {}),
         },
       }),
     });

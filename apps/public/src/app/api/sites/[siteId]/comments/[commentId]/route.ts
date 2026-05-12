@@ -11,6 +11,7 @@ import {
   updateRepositoryCommentStatus,
   updateRepositoryCommentThread,
 } from '@/lib/commentRepositorySupport';
+import { notifyCommentDelivery } from '@/lib/commentDelivery';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Comment } from '@backy-cms/core';
@@ -271,6 +272,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           defaultReviewer: 'admin',
         });
       }
+      await notifyCommentDelivery({
+        repositories,
+        siteId: site.id,
+        comment: updated,
+        kind: 'comment-status',
+        requestId,
+        reason: payload.status || 'thread-updated',
+        actor: payload.actor || payload.reviewedBy,
+      });
 
       return privateResponse({
         success: true,
@@ -345,6 +355,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);
     }
+    await notifyCommentDelivery({
+      siteId: site.id,
+      comment: updated,
+      kind: 'comment-status',
+      requestId,
+      reason: payload.status || 'thread-updated',
+      actor: payload.actor || payload.reviewedBy,
+    });
 
     return privateResponse({
       success: true,

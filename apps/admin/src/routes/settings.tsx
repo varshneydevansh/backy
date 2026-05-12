@@ -2331,7 +2331,9 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
     newUser: true,
     pagePublished: true,
     formSubmission: true,
+    comments: true,
     systemUpdates: false,
+    recipient: '',
   },
   inApp: {
     comments: true,
@@ -2634,6 +2636,16 @@ function validateSettingsDraft({
       tab: 'notifications',
       label: 'Webhook URL is invalid',
       detail: 'Use an http or https URL for workflow notifications.',
+      severity: 'error',
+    });
+  }
+
+  const notificationRecipient = notificationSettings.email?.recipient?.trim();
+  if (notificationRecipient && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationRecipient)) {
+    addIssue(issues, {
+      tab: 'notifications',
+      label: 'Notification recipient is invalid',
+      detail: 'Use a valid email address for comment and workflow notification emails.',
       severity: 'error',
     });
   }
@@ -3835,6 +3847,13 @@ function NotificationSettings({
       },
     });
   };
+  const updateEmailRecipient = (recipient: string) => {
+    onChange({
+      email: {
+        recipient,
+      },
+    });
+  };
 
   const updateInApp = (key: keyof NonNullable<NotificationSettingsConfig['inApp']>, checked: boolean) => {
     onChange({
@@ -3857,6 +3876,7 @@ function NotificationSettings({
               { key: 'newUser' as const, label: 'New user registration' },
               { key: 'pagePublished' as const, label: 'Page published' },
               { key: 'formSubmission' as const, label: 'New form submission' },
+              { key: 'comments' as const, label: 'Comment moderation events' },
               { key: 'systemUpdates' as const, label: 'System updates' },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
@@ -3869,6 +3889,16 @@ function NotificationSettings({
                 />
               </label>
             ))}
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Notification recipient</span>
+              <input
+                type="email"
+                value={value.email?.recipient || ''}
+                onChange={(event) => updateEmailRecipient(event.target.value)}
+                placeholder="moderation@example.com"
+                className={inputClassName}
+              />
+            </label>
           </div>
         </PanelContent>
       </Panel>
@@ -3933,7 +3963,7 @@ function NotificationSettings({
       </Panel>
 
       <Notice tone="info" title="Runtime behavior">
-        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved.
+        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Comment emails and workflow webhooks are recorded in delivery activity when a recipient or webhook URL is configured.
       </Notice>
     </div>
   );

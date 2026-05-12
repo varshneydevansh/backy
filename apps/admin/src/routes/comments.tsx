@@ -2288,11 +2288,16 @@ function commentDeliveryTitle(event: CommentDeliveryEvent) {
 
 function commentDeliveryDetail(event: CommentDeliveryEvent) {
   const parts = [
+    typeof event.metadata?.channel === 'string' ? `channel:${event.metadata.channel}` : null,
     event.commentId ? `comment:${event.commentId}` : null,
     event.reason ? `reason:${event.reason}` : null,
     event.actor ? `actor:${event.actor}` : null,
   ].filter(Boolean);
   return parts.join(' | ') || event.target;
+}
+
+function commentDeliveryChannel(event: CommentDeliveryEvent) {
+  return typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'activity';
 }
 
 function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
@@ -2312,6 +2317,9 @@ function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
             </span>
             <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
               {event.kind}
+            </span>
+            <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+              {commentDeliveryChannel(event)}
             </span>
             <span className="text-xs text-muted-foreground">{formatDate(event.createdAt)}</span>
           </div>

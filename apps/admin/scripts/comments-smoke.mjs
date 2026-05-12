@@ -2,6 +2,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -11,6 +12,9 @@ const SITE_ID = process.env.BACKY_COMMENTS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_COMMENTS_CDP_PORT || 9381);
 const SCREENSHOT_PATH = process.env.BACKY_COMMENTS_SCREENSHOT || path.join(os.tmpdir(), 'backy-comments-smoke.png');
+const COMMENT_NOTIFICATION_EMAIL = 'comments-smoke-moderation@example.com';
+const EXPECTED_EMAIL_PROVIDER = process.env.BACKY_COMMENTS_SMOKE_EXPECT_EMAIL_PROVIDER || 'local-outbox';
+const EXPECTED_EMAIL_STATUS_CODE = Number(process.env.BACKY_COMMENTS_SMOKE_EXPECT_EMAIL_STATUS_CODE || (EXPECTED_EMAIL_PROVIDER === 'local-outbox' ? 202 : 200));
 let apiAdminSessionToken = '';
 let apiAdminSessionData = null;
 
@@ -39,6 +43,48 @@ const requestApi = async (endpoint, options = {}) => {
 
   return payload;
 };
+
+const startCommentWebhookReceiver = async () => new Promise((resolve, reject) => {
+  const deliveries = [];
+  const server = http.createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      let payload = null;
+      try {
+        payload = body ? JSON.parse(body) : null;
+      } catch {
+        payload = body;
+      }
+      deliveries.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        payload,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ ok: true }));
+    });
+  });
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => {
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      server.close();
+      reject(new Error('Unable to bind comment webhook receiver'));
+      return;
+    }
+
+    resolve({
+      url: `http://127.0.0.1:${address.port}/backy/comments`,
+      deliveries,
+      close: () => new Promise((closeResolve) => server.close(() => closeResolve())),
+    });
+  });
+});
 
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
@@ -136,6 +182,19 @@ const submitCommentExpectFailure = async ({ pageId, authorName, authorEmail, con
 const getAdminSite = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
   return payload.data?.site || payload.site;
+};
+
+const getAdminSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const patchAdminSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
 };
 
 const patchSiteCommentPolicy = async (policy) => {
@@ -260,6 +319,47 @@ const waitForCommentEvents = async (expectations) => {
   }
 
   throw new Error(`Comment delivery events did not include expected records: ${JSON.stringify(expectations)}`);
+};
+
+const waitForCommentNotificationDelivery = async (receiver, { kind, commentId, requestId }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const delivery = receiver.deliveries.find((item) => (
+      item.payload?.kind === kind &&
+      item.payload?.commentId === commentId &&
+      item.payload?.requestId === requestId
+    ));
+    const events = await listCommentEvents();
+    const scoped = events.filter((event) => (
+      event.kind === kind &&
+      event.commentId === commentId &&
+      event.requestId === requestId
+    ));
+    const webhookQueued = scoped.find((event) => event.metadata?.channel === 'webhook' && event.status === 'queued');
+    const webhookCompleted = scoped.find((event) => event.metadata?.channel === 'webhook' && event.status === 'succeeded');
+    const emailQueued = scoped.find((event) => event.metadata?.channel === 'email' && event.status === 'queued');
+    const emailCompleted = scoped.find((event) => event.metadata?.channel === 'email' && event.status === 'succeeded');
+
+    if (delivery && webhookQueued && webhookCompleted && emailQueued && emailCompleted) {
+      assert(
+        delivery.headers['x-backy-site-id'] === SITE_ID &&
+          delivery.headers['x-backy-comment-id'] === commentId &&
+          delivery.headers['x-backy-comment-event'] === kind,
+        `Comment webhook receiver did not get Backy headers: ${JSON.stringify(delivery.headers)}`,
+      );
+      assert(Number(webhookCompleted.statusCode) === 200, `Comment webhook did not record status 200: ${JSON.stringify(webhookCompleted)}`);
+      assert(emailCompleted.target === `mailto:${COMMENT_NOTIFICATION_EMAIL}`, `Comment email target mismatch: ${JSON.stringify(emailCompleted)}`);
+      assert(emailCompleted.metadata?.provider === EXPECTED_EMAIL_PROVIDER, `Comment email provider mismatch: ${JSON.stringify(emailCompleted)}`);
+      assert(Number(emailCompleted.statusCode) === EXPECTED_EMAIL_STATUS_CODE, `Comment email status mismatch: ${JSON.stringify(emailCompleted)}`);
+      return {
+        delivery,
+        events: scoped,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Comment notification delivery did not complete for ${kind}/${commentId}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
 };
 
 const waitForCommentParent = async (commentId, requestId, parentId) => {
@@ -898,12 +998,37 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let page;
+  let webhookReceiver;
+  let originalNotifications = null;
   const requestIds = [];
   const blocklistIdsToCleanup = new Set();
   let restoredPolicy = false;
+  let restoredNotifications = false;
 
   try {
     await loginAdminApi();
+    webhookReceiver = await startCommentWebhookReceiver();
+    const currentSettings = await getAdminSettings();
+    originalNotifications = currentSettings?.integrations?.notifications || {};
+    await patchAdminSettings({
+      integrations: {
+        ...(currentSettings?.integrations || {}),
+        notifications: {
+          ...originalNotifications,
+          email: {
+            ...(originalNotifications.email || {}),
+            comments: true,
+            recipient: COMMENT_NOTIFICATION_EMAIL,
+          },
+          inApp: {
+            ...(originalNotifications.inApp || {}),
+            comments: true,
+          },
+          digestFrequency: 'instant',
+          webhookUrl: webhookReceiver.url,
+        },
+      },
+    });
     await cleanupSmokeBlocklistResidue();
     page = await createPage();
     const suffix = Date.now().toString(36);
@@ -987,6 +1112,16 @@ const main = async () => {
       { kind: 'comment-submitted', requestId: threadReplyRequestId, commentId: threadReplyComment.id },
       { kind: 'comment-reported', requestId: reportRequestId, commentId: reportedComment.id },
     ]);
+    const submittedDelivery = await waitForCommentNotificationDelivery(webhookReceiver, {
+      kind: 'comment-submitted',
+      requestId: threadParentRequestId,
+      commentId: threadParentComment.id,
+    });
+    const reportDelivery = await waitForCommentNotificationDelivery(webhookReceiver, {
+      kind: 'comment-reported',
+      requestId: reportRequestId,
+      commentId: reportedComment.id,
+    });
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1108,6 +1243,14 @@ const main = async () => {
       sort: 'newest',
     });
     restoredPolicy = true;
+    const finalSettings = await getAdminSettings();
+    await patchAdminSettings({
+      integrations: {
+        ...(finalSettings?.integrations || {}),
+        notifications: originalNotifications || {},
+      },
+    });
+    restoredNotifications = true;
 
     console.log(JSON.stringify({
       ok: true,
@@ -1126,6 +1269,11 @@ const main = async () => {
       threadReplyCommentId: threadReplyComment.id,
       moveParentCommentId: moveParentComment.id,
       adminReplyCommentId: adminReplyComment.id,
+      notifications: {
+        webhookDeliveries: webhookReceiver.deliveries.length,
+        submittedEventStatuses: submittedDelivery.events.map((event) => `${event.metadata?.channel || 'activity'}:${event.status}`),
+        reportEventStatuses: reportDelivery.events.map((event) => `${event.metadata?.channel || 'activity'}:${event.status}`),
+      },
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
@@ -1150,7 +1298,25 @@ const main = async () => {
         console.warn('Unable to restore comment policy:', error instanceof Error ? error.message : error);
       });
     }
+    if (!restoredNotifications && originalNotifications) {
+      const settings = await getAdminSettings().catch(() => null);
+      if (settings) {
+        await patchAdminSettings({
+          integrations: {
+            ...(settings.integrations || {}),
+            notifications: originalNotifications,
+          },
+        }).catch((error) => {
+          console.warn('Unable to restore notification settings:', error instanceof Error ? error.message : error);
+        });
+      }
+    }
     await cleanup({ client, childProcess, userDataDir, pageId: page?.id });
+    if (webhookReceiver) {
+      await webhookReceiver.close().catch((error) => {
+        console.warn('Unable to close comments webhook receiver:', error instanceof Error ? error.message : error);
+      });
+    }
   }
 };
 
