@@ -3471,6 +3471,98 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeMove = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeMove?.ok, `Unable to select first table cell before row/column move controls: ${JSON.stringify(selectedTableCellBeforeMove)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-move-row-down');
+  await sleep(300);
+
+  const movedRowDownState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    movedRowDownState.rows[0]?.includes('Value 1') &&
+      movedRowDownState.rows[1]?.includes('Column 1'),
+    `Table row move down did not reorder rows: ${JSON.stringify(movedRowDownState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-move-row-up');
+  await sleep(300);
+
+  const restoredRowMoveState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredRowMoveState.rows[0]?.includes('Column 1') &&
+      restoredRowMoveState.rows[1]?.includes('Value 1'),
+    `Table row move up did not restore row order: ${JSON.stringify(restoredRowMoveState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeColumnMove = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeColumnMove?.ok, `Unable to select first table cell before column move controls: ${JSON.stringify(selectedTableCellBeforeColumnMove)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-move-column-right');
+  await sleep(300);
+
+  const movedColumnRightState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    movedColumnRightState.rows[0]?.[0] === 'Column 2' &&
+      movedColumnRightState.rows[0]?.[1] === 'Column 1' &&
+      movedColumnRightState.rows[1]?.[0] === 'Value 2' &&
+      movedColumnRightState.rows[1]?.[1] === 'Value 1',
+    `Table column move right did not reorder columns: ${JSON.stringify(movedColumnRightState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-move-column-left');
+  await sleep(300);
+
+  const restoredColumnMoveState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredColumnMoveState.rows[0]?.[0] === 'Column 1' &&
+      restoredColumnMoveState.rows[0]?.[1] === 'Column 2' &&
+      restoredColumnMoveState.rows[1]?.[0] === 'Value 1' &&
+      restoredColumnMoveState.rows[1]?.[1] === 'Value 2',
+    `Table column move left did not restore column order: ${JSON.stringify(restoredColumnMoveState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedHeaderCell = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -3574,6 +3666,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   })()`);
   assert(restoredDirectInsert?.ok, `Direct active-editor table restore failed after table removal: ${JSON.stringify(restoredDirectInsert)}`);
 
+  await activateTextEditing(client, elementId);
   const restoredHeaderCell = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -3616,6 +3709,12 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     tableState,
     editedTableState,
     trimmedTableState,
+    selectedTableCellBeforeMove,
+    movedRowDownState,
+    restoredRowMoveState,
+    selectedTableCellBeforeColumnMove,
+    movedColumnRightState,
+    restoredColumnMoveState,
     selectedHeaderCell,
     headerTableState,
     deletedTableState,

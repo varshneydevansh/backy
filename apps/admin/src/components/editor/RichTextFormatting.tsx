@@ -47,6 +47,10 @@ import {
   Columns2,
   TableProperties,
   Trash2,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -119,6 +123,10 @@ export function RichTextFormatting({
     addTableColumn,
     removeTableRow,
     removeTableColumn,
+    moveTableRowUp,
+    moveTableRowDown,
+    moveTableColumnLeft,
+    moveTableColumnRight,
     toggleTableHeaderRow,
     removeTable,
     storeSelection,
@@ -1639,6 +1647,30 @@ export function RichTextFormatting({
     });
   }, [removeTableColumn, runOrActivateTextEditor]);
 
+  const moveTableRowUpAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-move-row-up', () => {
+      moveTableRowUp();
+    });
+  }, [moveTableRowUp, runOrActivateTextEditor]);
+
+  const moveTableRowDownAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-move-row-down', () => {
+      moveTableRowDown();
+    });
+  }, [moveTableRowDown, runOrActivateTextEditor]);
+
+  const moveTableColumnLeftAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-move-column-left', () => {
+      moveTableColumnLeft();
+    });
+  }, [moveTableColumnLeft, runOrActivateTextEditor]);
+
+  const moveTableColumnRightAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-move-column-right', () => {
+      moveTableColumnRight();
+    });
+  }, [moveTableColumnRight, runOrActivateTextEditor]);
+
   const toggleTableHeaderRowAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-toggle-header-row', () => {
       toggleTableHeaderRow();
@@ -2126,7 +2158,7 @@ export function RichTextFormatting({
           <Plus className="w-3 h-3 text-muted-foreground" />
           <span className="text-muted-foreground whitespace-nowrap">Insert</span>
         </div>
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           <div className="relative">
             <button
               type="button"
@@ -2228,6 +2260,58 @@ export function RichTextFormatting({
             title="Remove table column"
           >
             <Columns2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-move-row-up', () => moveTableRowUpAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-move-row-up"
+            title="Move table row up"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-move-row-down', () => moveTableRowDownAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-move-row-down"
+            title="Move table row down"
+          >
+            <ArrowDown className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-move-column-left', () => moveTableColumnLeftAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-move-column-left"
+            title="Move table column left"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-move-column-right', () => moveTableColumnRightAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-move-column-right"
+            title="Move table column right"
+          >
+            <ArrowRight className="w-4 h-4" />
           </button>
           <button
             type="button"

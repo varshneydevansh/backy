@@ -58,6 +58,14 @@ interface ActiveEditorContextType {
   removeTableRow: () => boolean;
   /** Remove the current table column when rows have more than one column */
   removeTableColumn: () => boolean;
+  /** Move the current table row one position up */
+  moveTableRowUp: () => boolean;
+  /** Move the current table row one position down */
+  moveTableRowDown: () => boolean;
+  /** Move the current table column one position left */
+  moveTableColumnLeft: () => boolean;
+  /** Move the current table column one position right */
+  moveTableColumnRight: () => boolean;
   /** Toggle the current table row between body cells and header cells */
   toggleTableHeaderRow: () => boolean;
   /** Remove the current table */
@@ -109,6 +117,10 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   addTableColumn: () => false,
   removeTableRow: () => false,
   removeTableColumn: () => false,
+  moveTableRowUp: () => false,
+  moveTableRowDown: () => false,
+  moveTableColumnLeft: () => false,
+  moveTableColumnRight: () => false,
   toggleTableHeaderRow: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
@@ -440,6 +452,76 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextColumnIndex]));
     } catch {
       // Selection is best-effort after column removal.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const moveSelectedTableRow = useCallback((editor: PlateEditor, direction: -1 | 1) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const targetRowIndex = context.rowIndex + direction;
+    if (targetRowIndex < 0 || targetRowIndex >= rows.length) {
+      return false;
+    }
+
+    const movedRow = JSON.parse(JSON.stringify(context.rowNode));
+    Transforms.removeNodes(editor as any, { at: context.rowPath });
+    Transforms.insertNodes(editor as any, movedRow, {
+      at: [...context.tablePath, targetRowIndex],
+    });
+
+    try {
+      const movedRowNode = Node.get(editor as any, [...context.tablePath, targetRowIndex]) as any;
+      const movedCellCount = Array.isArray(movedRowNode?.children) ? movedRowNode.children.length : 1;
+      const nextCellIndex = Math.max(0, Math.min(context.cellIndex, movedCellCount - 1));
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.tablePath, targetRowIndex, nextCellIndex]));
+    } catch {
+      // Selection is best-effort after row movement.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const moveSelectedTableColumn = useCallback((editor: PlateEditor, direction: -1 | 1) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const targetCellIndex = context.cellIndex + direction;
+    if (targetCellIndex < 0 || targetCellIndex >= context.columnCount) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    let didMoveColumn = false;
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...context.tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      if (context.cellIndex >= rowChildren.length || targetCellIndex >= rowChildren.length) {
+        continue;
+      }
+
+      const movedCell = JSON.parse(JSON.stringify(rowChildren[context.cellIndex]));
+      Transforms.removeNodes(editor as any, { at: [...rowPath, context.cellIndex] });
+      Transforms.insertNodes(editor as any, movedCell, {
+        at: [...rowPath, targetCellIndex],
+      });
+      didMoveColumn = true;
+    }
+
+    if (!didMoveColumn) {
+      return false;
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, targetCellIndex]));
+    } catch {
+      // Selection is best-effort after column movement.
     }
     return true;
   }, [getSelectedTableContext]);
@@ -1468,6 +1550,106 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, removeSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const moveTableRowUp = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('moveTableRowUp.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!moveSelectedTableRow(editor, -1)) return false;
+
+      debug('moveTableRowUp.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('moveTableRowUp failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, moveSelectedTableRow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const moveTableRowDown = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('moveTableRowDown.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!moveSelectedTableRow(editor, 1)) return false;
+
+      debug('moveTableRowDown.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('moveTableRowDown failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, moveSelectedTableRow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const moveTableColumnLeft = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('moveTableColumnLeft.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!moveSelectedTableColumn(editor, -1)) return false;
+
+      debug('moveTableColumnLeft.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('moveTableColumnLeft failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, moveSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const moveTableColumnRight = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('moveTableColumnRight.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!moveSelectedTableColumn(editor, 1)) return false;
+
+      debug('moveTableColumnRight.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('moveTableColumnRight failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, moveSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const toggleTableHeaderRow = useCallback(() => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -1819,6 +2001,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       addTableColumn,
       removeTableRow,
       removeTableColumn,
+      moveTableRowUp,
+      moveTableRowDown,
+      moveTableColumnLeft,
+      moveTableColumnRight,
       toggleTableHeaderRow,
       removeTable,
       isMarkActive,
