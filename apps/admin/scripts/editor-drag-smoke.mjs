@@ -3369,6 +3369,21 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(colorAlphaLeaf?.color === 'rgb(255, 0, 0)', `Selected range text color was not applied: ${JSON.stringify(colorState)}`);
   assert(colorBetaLeaf?.color !== 'rgb(255, 0, 0)', `Unselected range unexpectedly received text color: ${JSON.stringify(colorState)}`);
 
+  await activateTextEditing(client, elementId);
+  await selectEditorTextRange(client, elementId, 'ha line ', 'Be');
+  await selectColorPickerValue(client, 'rich-text-highlight-color', '#ffff00');
+  await sleep(500);
+
+  const crossNodeHighlightState = await readRichTextLeafState(client, elementId);
+  const unhighlightedAlphaPrefix = crossNodeHighlightState.marked.find((leaf) => leaf.text.includes('Alp'));
+  const highlightedAlphaMiddle = crossNodeHighlightState.marked.find((leaf) => leaf.text.includes('ha'));
+  const highlightedBetaPrefix = crossNodeHighlightState.marked.find((leaf) => leaf.text.includes('Be'));
+  const unhighlightedBetaSuffix = crossNodeHighlightState.marked.find((leaf) => leaf.text.includes('ta'));
+  assert(highlightedAlphaMiddle?.backgroundColor === 'rgb(255, 255, 0)', `Cross-node selected Alpha fragment was not highlighted: ${JSON.stringify(crossNodeHighlightState)}`);
+  assert(highlightedBetaPrefix?.backgroundColor === 'rgb(255, 255, 0)', `Cross-node selected Beta fragment was not highlighted: ${JSON.stringify(crossNodeHighlightState)}`);
+  assert(unhighlightedAlphaPrefix && unhighlightedAlphaPrefix.backgroundColor !== 'rgb(255, 255, 0)', `Cross-node mark leaked into Alpha prefix: ${JSON.stringify(crossNodeHighlightState)}`);
+  assert(unhighlightedBetaSuffix && unhighlightedBetaSuffix.backgroundColor !== 'rgb(255, 255, 0)', `Cross-node mark leaked into Beta suffix: ${JSON.stringify(crossNodeHighlightState)}`);
+
   return {
     selected,
     afterItalic: state,
@@ -3378,6 +3393,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     afterUnderline: underlineState,
     afterStrikethrough: strikethroughState,
     afterColor: colorState,
+    afterCrossNodeHighlight: crossNodeHighlightState,
   };
 };
 
@@ -4233,22 +4249,37 @@ const assertPersistedSelectedRichTextMarks = async (pageId, elementId = 'smoke-h
   assert(element, `Persisted rich text element ${elementId} was not found`);
 
   const leaves = collectSlateLeaves(element.props?.content);
-  const alphaLeaf = leaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Alpha'));
-  const betaLeaf = leaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Beta'));
-  assert(alphaLeaf, `Persisted Alpha rich text leaf missing: ${JSON.stringify(leaves)}`);
-  assert(betaLeaf, `Persisted Beta rich text leaf missing: ${JSON.stringify(leaves)}`);
-  assert(alphaLeaf.fontSize === '32px', `Persisted selected font size missing from Alpha leaf: ${JSON.stringify(leaves)}`);
-  assert(alphaLeaf.color === '#ff0000', `Persisted selected color missing from Alpha leaf: ${JSON.stringify(leaves)}`);
-  assert(alphaLeaf.strikethrough === true, `Persisted selected strikethrough missing from Alpha leaf: ${JSON.stringify(leaves)}`);
-  assert(betaLeaf.fontFamily === 'Georgia, serif', `Persisted selected font family missing from Beta leaf: ${JSON.stringify(leaves)}`);
-  assert(betaLeaf.underline === true, `Persisted selected underline missing from Beta leaf: ${JSON.stringify(leaves)}`);
-  assert(!alphaLeaf.fontFamily, `Unselected Alpha leaf unexpectedly received Beta font family: ${JSON.stringify(leaves)}`);
-  assert(betaLeaf.color !== '#ff0000', `Unselected Beta leaf unexpectedly received Alpha color: ${JSON.stringify(leaves)}`);
-  assert(betaLeaf.strikethrough !== true, `Unselected Beta leaf unexpectedly received Alpha strikethrough: ${JSON.stringify(leaves)}`);
+  const alphaLeaves = leaves.filter((leaf) => leaf.smokeSegment === 'alpha');
+  const betaLeaves = leaves.filter((leaf) => leaf.smokeSegment === 'beta');
+  const alphaPrefixLeaf = alphaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Alp'));
+  const alphaHighlightedLeaf = alphaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('ha'));
+  const alphaLineHighlightedLeaf = alphaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes(' line '));
+  const betaHighlightedLeaf = betaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Be'));
+  const betaSuffixLeaf = betaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('ta'));
+  const betaLineSuffixLeaf = betaLeaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes(' line'));
+  assert(alphaLeaves.length > 0, `Persisted Alpha rich text leaves missing: ${JSON.stringify(leaves)}`);
+  assert(betaLeaves.length > 0, `Persisted Beta rich text leaves missing: ${JSON.stringify(leaves)}`);
+  assert(alphaPrefixLeaf?.fontSize === '32px' && alphaHighlightedLeaf?.fontSize === '32px', `Persisted selected font size missing from Alpha fragments: ${JSON.stringify(leaves)}`);
+  assert(alphaPrefixLeaf?.color === '#ff0000' && alphaHighlightedLeaf?.color === '#ff0000', `Persisted selected color missing from Alpha fragments: ${JSON.stringify(leaves)}`);
+  assert(alphaPrefixLeaf?.strikethrough === true && alphaHighlightedLeaf?.strikethrough === true, `Persisted selected strikethrough missing from Alpha fragments: ${JSON.stringify(leaves)}`);
+  assert(betaHighlightedLeaf?.fontFamily === 'Georgia, serif' && betaSuffixLeaf?.fontFamily === 'Georgia, serif', `Persisted selected font family missing from Beta fragments: ${JSON.stringify(leaves)}`);
+  assert(betaHighlightedLeaf?.underline === true && betaSuffixLeaf?.underline === true, `Persisted selected underline missing from Beta fragments: ${JSON.stringify(leaves)}`);
+  assert(!alphaPrefixLeaf?.fontFamily && !alphaHighlightedLeaf?.fontFamily && !alphaLineHighlightedLeaf?.fontFamily, `Unselected Alpha fragments unexpectedly received Beta font family: ${JSON.stringify(leaves)}`);
+  assert(betaHighlightedLeaf?.color !== '#ff0000' && betaSuffixLeaf?.color !== '#ff0000' && betaLineSuffixLeaf?.color !== '#ff0000', `Unselected Beta fragments unexpectedly received Alpha color: ${JSON.stringify(leaves)}`);
+  assert(betaHighlightedLeaf?.strikethrough !== true && betaSuffixLeaf?.strikethrough !== true && betaLineSuffixLeaf?.strikethrough !== true, `Unselected Beta fragments unexpectedly received Alpha strikethrough: ${JSON.stringify(leaves)}`);
+  assert(alphaHighlightedLeaf?.backgroundColor === '#ffff00', `Persisted cross-node Alpha fragment highlight missing: ${JSON.stringify(leaves)}`);
+  assert(alphaLineHighlightedLeaf?.backgroundColor === '#ffff00', `Persisted cross-node Alpha line fragment highlight missing: ${JSON.stringify(leaves)}`);
+  assert(betaHighlightedLeaf?.backgroundColor === '#ffff00', `Persisted cross-node Beta fragment highlight missing: ${JSON.stringify(leaves)}`);
+  assert(alphaPrefixLeaf && alphaPrefixLeaf.backgroundColor !== '#ffff00', `Persisted cross-node highlight leaked into Alpha prefix: ${JSON.stringify(leaves)}`);
+  assert(betaSuffixLeaf && betaSuffixLeaf.backgroundColor !== '#ffff00', `Persisted cross-node highlight leaked into Beta suffix: ${JSON.stringify(leaves)}`);
+  assert(betaLineSuffixLeaf && betaLineSuffixLeaf.backgroundColor !== '#ffff00', `Persisted cross-node highlight leaked into Beta line suffix: ${JSON.stringify(leaves)}`);
 
   return {
-    alphaLeaf,
-    betaLeaf,
+    alphaLeaves,
+    betaLeaves,
+    alphaHighlightedLeaf,
+    alphaLineHighlightedLeaf,
+    betaHighlightedLeaf,
   };
 };
 
