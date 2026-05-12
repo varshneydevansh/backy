@@ -6330,8 +6330,10 @@ const testBoxBehaviorControls = async (client) => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
     const root = document.querySelector('[data-element-id="smoke-box"]');
     const box = root?.firstElementChild;
+    const child = root?.querySelector('[data-element-id="smoke-child-button"]');
     const style = box ? getComputedStyle(box) : null;
     const rootStyle = root ? getComputedStyle(root) : null;
+    const childStyle = child ? getComputedStyle(child) : null;
     return {
       backgroundColor: value('editor-style-background-color'),
       borderRadius: value('editor-appearance-border-radius'),
@@ -6351,6 +6353,12 @@ const testBoxBehaviorControls = async (client) => {
       previewMargin: style?.margin || '',
       previewBoxShadow: style?.boxShadow || '',
       previewOpacity: rootStyle?.opacity || '',
+      nestedChildParentId: child?.parentElement?.getAttribute('data-element-id') || child?.parentElement?.parentElement?.getAttribute('data-element-id') || '',
+      nestedChildPosition: childStyle?.position || '',
+      nestedChildLeft: childStyle?.left || '',
+      nestedChildTop: childStyle?.top || '',
+      nestedChildWidth: childStyle?.width || '',
+      nestedChildHeight: childStyle?.height || '',
     };
   })()`);
 
@@ -6368,6 +6376,10 @@ const testBoxBehaviorControls = async (client) => {
       /0px\s+10px\s+20px/.test(state.previewBoxShadow),
     `Box shadow mismatch: ${JSON.stringify(state)}`,
   );
+  assert(state.nestedChildParentId === 'smoke-box', `Box nested child parent mismatch: ${JSON.stringify(state)}`);
+  assert(state.nestedChildPosition === 'absolute', `Box nested child positioning mismatch: ${JSON.stringify(state)}`);
+  assert(state.nestedChildLeft === '32px' && state.nestedChildTop === '36px', `Box nested child offset mismatch: ${JSON.stringify(state)}`);
+  assert(state.nestedChildWidth === '160px' && state.nestedChildHeight === '48px', `Box nested child size mismatch: ${JSON.stringify(state)}`);
 
   return state;
 };
@@ -6388,6 +6400,7 @@ const assertPersistedBoxBehavior = async (pageId) => {
   assert(props.padding === 18, `Persisted box padding mismatch: ${JSON.stringify(props)}`);
   assert(props.margin === 4, `Persisted box margin mismatch: ${JSON.stringify(props)}`);
   assert(props.boxShadow === '0 10px 20px rgba(8, 145, 178, 0.25)', `Persisted box shadow mismatch: ${JSON.stringify(props)}`);
+  assert(Array.isArray(box.children) && box.children.some((child) => child.id === 'smoke-child-button'), `Persisted box nested child missing: ${JSON.stringify(box)}`);
 
   return props;
 };

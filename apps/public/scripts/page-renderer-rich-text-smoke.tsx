@@ -675,7 +675,12 @@ assert(html.includes('border-radius:12px'), `Quote border radius was not rendere
 assert(html.includes('box-shadow:0 6px 16px rgba(15, 23, 42, 0.18)'), `Quote shadow was not rendered: ${html}`);
 assert(html.includes('color:#be123c'), `Quote citation color was not rendered: ${html}`);
 assert(html.includes('font-size:15px'), `Quote citation font size was not rendered: ${html}`);
-assert(html.includes('Styled box child'), `Styled box child was not rendered: ${html}`);
+const styledBox = html.match(/<div style="position:absolute;left:580px;top:24px;width:260px;height:120px[^>]*data-element-id="styled-box"[\s\S]*?data-element-id="styled-box-text"[\s\S]*?Styled box child[\s\S]*?<\/div><\/div><\/div>/)?.[0] || '';
+assert(styledBox.length > 0, `Styled box child was not rendered as a nested element: ${html}`);
+assert(styledBox.includes('position:relative'), `Styled box did not render a relative child surface: ${styledBox}`);
+assert(styledBox.includes('width:100%'), `Styled box did not render a full-width child surface: ${styledBox}`);
+assert(styledBox.includes('height:100%'), `Styled box did not render a full-height child surface: ${styledBox}`);
+assert(styledBox.includes('left:12px;top:12px;width:180px;height:28px'), `Styled box child did not preserve parent-relative geometry: ${styledBox}`);
 assert(html.includes('background-color:#ecfeff'), `Container background color was not rendered: ${html}`);
 assert(html.includes('border-width:3px'), `Container border width was not rendered: ${html}`);
 assert(html.includes('border-style:dashed'), `Container border style was not rendered: ${html}`);

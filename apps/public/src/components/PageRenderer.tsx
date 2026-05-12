@@ -1696,10 +1696,15 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
   return (
     <div
       style={{
-        display: (props.display as React.CSSProperties['display']) || 'flex',
+        position: 'relative',
+        display: (props.display as React.CSSProperties['display']) || 'block',
         flexDirection: (props.flexDirection as React.CSSProperties['flexDirection']) || 'column',
         alignItems: props.alignItems as React.CSSProperties['alignItems'],
         justifyContent: props.justifyContent as React.CSSProperties['justifyContent'],
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        overflow: props.overflow as React.CSSProperties['overflow'] || 'visible',
         gap: getLength(props.gap),
         padding: getLength(props.padding),
         backgroundColor: getNameClass(props.backgroundColor),
