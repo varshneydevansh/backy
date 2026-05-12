@@ -2694,6 +2694,8 @@ function CanvasElementComponent({
             style={{
               ...sharedStyle,
               width: '100%',
+              height: 0,
+              boxSizing: 'border-box',
               border: 'none',
               borderTop: `${dividerThickness} ${dividerStyle} ${dividerColor}`,
               color: dividerColor,

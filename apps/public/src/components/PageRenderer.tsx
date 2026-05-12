@@ -1804,10 +1804,11 @@ function DividerElement({ element }: ElementRendererProps) {
     <hr
       style={{
         width: '100%',
-        height: getLength(props.thickness, '1px'),
+        height: 0,
+        boxSizing: 'border-box',
         border: 'none',
         borderTop: `${getLength(props.thickness, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || getNameClass(props.color) || '#e5e7eb'}`,
-        margin: `${getLength(props.margin, '16px')} 0`,
+        margin: `${getLength(props.margin, '0px')} 0`,
         backgroundColor: 'transparent',
         ...styles,
       }}

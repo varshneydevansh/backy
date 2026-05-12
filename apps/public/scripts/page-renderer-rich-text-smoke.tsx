@@ -167,6 +167,20 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-divider',
+      type: 'divider',
+      x: 580,
+      y: 284,
+      width: 220,
+      height: 8,
+      props: {
+        borderColor: '#dc2626',
+        thickness: 6,
+        borderStyle: 'dashed',
+        margin: 12,
+      },
+    },
+    {
       id: 'styled-image',
       type: 'image',
       x: 24,
@@ -670,6 +684,11 @@ assert(styledLink.includes('aria-label="Read renderer docs"'), `Link aria label 
 assert(styledLink.includes('title="Renderer docs"'), `Link title was not rendered: ${styledLink}`);
 assert(styledLink.includes('text-decoration:none'), `Link underline off state was not rendered: ${styledLink}`);
 assert(styledLink.includes('font-size:17px'), `Link font size was not rendered: ${styledLink}`);
+const styledDivider = html.match(/<hr[^>]*border-top:6px dashed #dc2626[^>]*>/)?.[0] || '';
+assert(styledDivider.length > 0, `Divider output was not rendered: ${html}`);
+assert(styledDivider.includes('height:0'), `Divider height should be border-only: ${styledDivider}`);
+assert(styledDivider.includes('box-sizing:border-box'), `Divider box sizing was not rendered: ${styledDivider}`);
+assert(styledDivider.includes('margin:12px 0'), `Divider vertical margin was not rendered: ${styledDivider}`);
 assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
 assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);
 assert(html.includes('object-fit:contain'), `Image object fit was not rendered: ${html}`);
@@ -796,6 +815,7 @@ console.log(JSON.stringify({
     styledBox: true,
     styledButton: true,
     styledLink: true,
+    styledDivider: true,
     styledImage: true,
     styledVideo: true,
     styledIcon: true,
