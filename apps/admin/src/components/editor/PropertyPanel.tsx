@@ -1976,7 +1976,7 @@ function ContentProperties({
               type="number"
               min={0}
               value={toNumber(element.props.listIndent, 0)}
-              onChange={(e) => onChange({ listIndent: e.target.value === '' ? 0 : Number(e.target.value) })}
+              onChange={(e) => onChange({ listIndent: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0) })}
               data-testid="editor-list-indent"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',

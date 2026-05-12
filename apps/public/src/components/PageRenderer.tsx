@@ -663,6 +663,16 @@ function getLength(value: unknown, fallback = ''): string {
   return typeof value === 'number' ? `${value}px` : `${value}`;
 }
 
+function getNonNegativeLength(value: unknown, fallback = 0): string {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number.parseFloat(value)
+      : fallback;
+
+  return `${Math.max(0, Number.isFinite(parsed) ? parsed : fallback)}px`;
+}
+
 function getLineHeight(value: unknown, fallback: React.CSSProperties['lineHeight'] = 'normal'): React.CSSProperties['lineHeight'] {
   if (value === undefined || value === null || value === '') {
     return fallback;
@@ -836,6 +846,18 @@ function parseOptionValues(raw: unknown): string[] {
     .map((item) => item.trim());
 
   return Array.from(new Set(parsed.filter((item) => item.length > 0)));
+}
+
+function parseListItems(raw: unknown, content: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => (typeof item === 'string' ? item.trimEnd() : getNameClass(item).trimEnd()));
+  }
+
+  if (typeof raw === 'string') {
+    return raw.split(/\r?\n/).map((item) => item.trimEnd());
+  }
+
+  return extractListItemsFromSlate(content).map((item) => item.trimEnd());
 }
 
 function normalizeFormSchemaFieldType(raw: unknown): FormSchemaFieldType {
@@ -1945,12 +1967,10 @@ function HtmlElement({ element }: ElementRendererProps) {
  */
 function ListElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
-  const options = (parseOptionValues(props.items).length > 0
-    ? parseOptionValues(props.items)
-    : extractListItemsFromSlate(props.content));
+  const options = parseListItems(props.items, props.content);
   const listTypeFromType = getNameClass(props.listType);
   const listType = listTypeFromType === 'number' || listTypeFromType === 'ordered' ? 'ol' : 'ul';
-  const listIndent = getLength(props.listIndent, '0');
+  const listIndent = getNonNegativeLength(props.listIndent, 0);
   const listMarker = getNameClass(props.listMarker) || (listType === 'ol' ? 'decimal' : 'disc');
 
   return React.createElement(

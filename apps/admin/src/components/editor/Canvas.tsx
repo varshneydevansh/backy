@@ -43,6 +43,16 @@ const toCssLength = (value: unknown): string | number | undefined => {
   return undefined;
 };
 
+const toNonNegativeCssLength = (value: unknown, fallback = 0): string => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number.parseFloat(value)
+      : fallback;
+
+  return `${Math.max(0, Number.isFinite(parsed) ? parsed : fallback)}px`;
+};
+
 const toOpacity = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -3119,6 +3129,7 @@ function CanvasElementComponent({
         const listType = listTypeFromProps || listTypeFromSelection;
         const listStyleType = p.listMarker ?? (listType === 'number' ? 'decimal' : 'disc');
         const listItems = extractListItemsFromSlate(listValue);
+        const listIndent = toNonNegativeCssLength(p.listIndent ?? p.padding ?? 0);
         if (!isEditingEnabled) {
           return React.createElement(
             listType === 'number' ? 'ol' : 'ul',
@@ -3134,7 +3145,7 @@ function CanvasElementComponent({
                 listStyleType,
                 listStylePosition: 'inside',
                 margin: 0,
-                marginLeft: toCssLength(p.listIndent ?? p.padding ?? 0),
+                marginLeft: listIndent,
                 paddingLeft: toCssLength(p.padding ?? sharedStyle.padding ?? 0),
                 width: '100%',
                 height: '100%',
@@ -3177,7 +3188,7 @@ function CanvasElementComponent({
                 lineHeight: p.lineHeight ?? sharedStyle.lineHeight,
                 listStyleType,
                 listStylePosition: 'inside',
-                marginLeft: toCssLength(p.listIndent ?? p.padding ?? 0),
+                marginLeft: listIndent,
                 paddingLeft: toCssLength(p.padding ?? sharedStyle.padding ?? 0),
                 width: '100%',
                 height: '100%',

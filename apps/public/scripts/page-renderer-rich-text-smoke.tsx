@@ -181,6 +181,22 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-list',
+      type: 'list',
+      x: 580,
+      y: 304,
+      width: 240,
+      height: 96,
+      props: {
+        listType: 'number',
+        listMarker: 'upper-alpha',
+        listIndent: -12,
+        items: ['Discovery', '', 'Launch'],
+        fontSize: 16,
+        color: '#334155',
+      },
+    },
+    {
       id: 'styled-image',
       type: 'image',
       x: 24,
@@ -710,6 +726,12 @@ assert(styledDivider.length > 0, `Divider output was not rendered: ${html}`);
 assert(styledDivider.includes('height:0'), `Divider height should be border-only: ${styledDivider}`);
 assert(styledDivider.includes('box-sizing:border-box'), `Divider box sizing was not rendered: ${styledDivider}`);
 assert(styledDivider.includes('margin:12px 0'), `Divider vertical margin was not rendered: ${styledDivider}`);
+const styledList = html.match(/<div[^>]*data-element-id="styled-list"[\s\S]*?<\/ol><\/div>/)?.[0] || '';
+assert(styledList.length > 0, `List output was not rendered: ${html}`);
+assert(styledList.includes('list-style-type:upper-alpha'), `List marker was not rendered: ${styledList}`);
+assert(styledList.includes('margin-left:0px'), `List negative indent was not clamped: ${styledList}`);
+assert((styledList.match(/<li>/g) || []).length === 3, `List empty item structure was not preserved: ${styledList}`);
+assert(styledList.includes('<li></li>'), `List blank item was not preserved: ${styledList}`);
 assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
 assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);
 assert(html.includes('object-fit:contain'), `Image object fit was not rendered: ${html}`);
@@ -845,6 +867,7 @@ console.log(JSON.stringify({
     styledButton: true,
     styledLink: true,
     styledDivider: true,
+    styledList: true,
     styledImage: true,
     styledVideo: true,
     styledIcon: true,

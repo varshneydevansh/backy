@@ -5239,8 +5239,16 @@ const testListBehaviorControls = async (client) => {
 
   await setFormControlByTestId(client, 'editor-list-type', 'number');
   await setFormControlByTestId(client, 'editor-list-marker', 'upper-alpha');
-  await setFormControlByTestId(client, 'editor-list-indent', '24');
-  await setFormControlByTestId(client, 'editor-list-items', 'Discovery\nDesign\nLaunch');
+  await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="editor-list-indent"]');
+    if (!(control instanceof HTMLInputElement)) return false;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(control, '-8');
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await setFormControlByTestId(client, 'editor-list-items', 'Discovery\n\nLaunch');
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
@@ -5262,10 +5270,10 @@ const testListBehaviorControls = async (client) => {
 
   assert(state.listType === 'number' && state.previewTag === 'ol', `List type mismatch: ${JSON.stringify(state)}`);
   assert(state.listMarker === 'upper-alpha' && state.previewListStyleType === 'upper-alpha', `List marker mismatch: ${JSON.stringify(state)}`);
-  assert(state.listIndent === '24' && state.previewMarginLeft === '24px', `List indent mismatch: ${JSON.stringify(state)}`);
+  assert(state.listIndent === '0' && state.previewMarginLeft === '0px', `List indent clamp mismatch: ${JSON.stringify(state)}`);
   assert(
-    state.itemsText === 'Discovery\nDesign\nLaunch' &&
-      JSON.stringify(state.previewItems) === JSON.stringify(['Discovery', 'Design', 'Launch']),
+    state.itemsText === 'Discovery\n\nLaunch' &&
+      JSON.stringify(state.previewItems) === JSON.stringify(['Discovery', '', 'Launch']),
     `List items mismatch: ${JSON.stringify(state)}`,
   );
 
@@ -5281,10 +5289,11 @@ const assertPersistedListBehavior = async (pageId) => {
   assert(list?.type === 'list', `Persisted smoke-list missing: ${JSON.stringify(list)}`);
   assert(props.listType === 'number', `Persisted list type mismatch: ${JSON.stringify(props)}`);
   assert(props.listMarker === 'upper-alpha', `Persisted list marker mismatch: ${JSON.stringify(props)}`);
-  assert(props.listIndent === 24, `Persisted list indent mismatch: ${JSON.stringify(props)}`);
-  assert(JSON.stringify(props.items) === JSON.stringify(['Discovery', 'Design', 'Launch']), `Persisted list items mismatch: ${JSON.stringify(props)}`);
+  assert(props.listIndent === 0, `Persisted list indent clamp mismatch: ${JSON.stringify(props)}`);
+  assert(JSON.stringify(props.items) === JSON.stringify(['Discovery', '', 'Launch']), `Persisted list items mismatch: ${JSON.stringify(props)}`);
   assert(Array.isArray(props.content), `Persisted list content missing: ${JSON.stringify(props)}`);
   assert(props.content?.[0]?.type === 'ol', `Persisted list content type mismatch: ${JSON.stringify(props.content)}`);
+  assert(props.content?.[0]?.children?.length === 3, `Persisted list empty item structure mismatch: ${JSON.stringify(props.content)}`);
 
   return props;
 };
