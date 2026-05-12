@@ -326,16 +326,6 @@ const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, ind
     normalized.format = binding.format;
   }
 
-  const query = normalizeBindingQuery(binding.query);
-  if (query) {
-    normalized.query = query;
-  }
-
-  const pagination = normalizeBindingPagination(binding.pagination);
-  if (pagination) {
-    normalized.pagination = pagination;
-  }
-
   const writeBack = normalizeBindingWriteBack(binding.writeBack);
   if (writeBack) {
     normalized.writeBack = writeBack;
@@ -388,16 +378,6 @@ const normalizeCollectionBinding = (binding: JsonObject, element: RenderElement,
   }
   if (isRecord(binding.format)) {
     normalized.format = binding.format;
-  }
-
-  const query = normalizeBindingQuery(binding.query);
-  if (query) {
-    normalized.query = query;
-  }
-
-  const pagination = normalizeBindingPagination(binding.pagination);
-  if (pagination) {
-    normalized.pagination = pagination;
   }
 
   const writeBack = normalizeBindingWriteBack(binding.writeBack);

@@ -83,10 +83,14 @@ const generatedManifestFromMetadata = (
           }
 
           const bytes = Number(variant.bytes);
+          const generatedUrl = typeof variant.url === 'string' && variant.url.trim().length > 0
+            ? variant.url.trim()
+            : '';
+          const resolvedQuality = Number.isFinite(quality) && quality > 0 ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY;
           return {
             width: Math.floor(width),
-            quality: Number.isFinite(quality) && quality > 0 ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY,
-            url: mediaTransformPath(siteId, media.id, Math.floor(width), Number.isFinite(quality) ? Math.floor(quality) : DEFAULT_IMAGE_VARIANT_QUALITY),
+            quality: resolvedQuality,
+            url: generatedUrl || mediaTransformPath(siteId, media.id, Math.floor(width), resolvedQuality),
             ...(typeof variant.storagePath === 'string' ? { storagePath: variant.storagePath } : {}),
             ...(Number.isFinite(bytes) ? { bytes } : {}),
             ...(typeof variant.mimeType === 'string' ? { mimeType: variant.mimeType } : {}),

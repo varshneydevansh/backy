@@ -74,6 +74,18 @@ async function request(pathOrUrl, init) {
   return result;
 }
 
+function withAdminAuth(headers = {}) {
+  const nextHeaders = new Headers(headers);
+  if (!nextHeaders.has('authorization') && !nextHeaders.has('x-backy-admin-key')) {
+    if (adminRequestApiKey) {
+      nextHeaders.set('x-backy-admin-key', adminRequestApiKey);
+    } else if (adminSessionToken) {
+      nextHeaders.set('authorization', `Bearer ${adminSessionToken}`);
+    }
+  }
+  return nextHeaders;
+}
+
 function assertAdminContract(result) {
   assert(result.response.headers.get('x-backy-request-id'), `${result.url} missing request id header`);
   assert(result.response.headers.get('cache-control') === 'no-store', `${result.url} expected admin no-store cache control`);
@@ -1639,9 +1651,9 @@ try {
 
     const pageCommentReview = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments/${pageCommentId}`, {
       method: 'PATCH',
-      headers: {
+      headers: withAdminAuth({
         'content-type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         status: 'approved',
         reviewedBy: 'contract-smoke',
@@ -1670,9 +1682,9 @@ try {
 
     const siteCommentReview = await request(`/api/sites/${createdSiteId}/comments/${pageCommentId}`, {
       method: 'PATCH',
-      headers: {
+      headers: withAdminAuth({
         'content-type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         status: 'approved',
         reviewedBy: 'contract-smoke',
@@ -1731,9 +1743,9 @@ try {
 
     const clearCommentReports = await request(`/api/sites/${createdSiteId}/comments`, {
       method: 'PATCH',
-      headers: {
+      headers: withAdminAuth({
         'content-type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         ids: [pageCommentId],
         action: 'clearReports',
@@ -1777,9 +1789,9 @@ try {
 
     const blockAuthor = await request(`/api/sites/${createdSiteId}/comments`, {
       method: 'PATCH',
-      headers: {
+      headers: withAdminAuth({
         'content-type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         commentIds: [blockableCommentId],
         status: 'blocked',
@@ -1791,7 +1803,9 @@ try {
     assert(blockAuthor.response.status === 200, `${blockAuthor.url} expected block author 200, got ${blockAuthor.response.status}`);
     assert(blockAuthor.json?.data?.updated?.[0]?.status === 'blocked', `${blockAuthor.url} did not block comment`);
 
-    const authorBlocklist = await request(`/api/sites/${createdSiteId}/comments/blocklist?type=all`);
+    const authorBlocklist = await request(`/api/sites/${createdSiteId}/comments/blocklist?type=all`, {
+      headers: withAdminAuth(),
+    });
     assert(authorBlocklist.response.status === 200, `${authorBlocklist.url} expected blocklist 200, got ${authorBlocklist.response.status}`);
     assertBackyContract(authorBlocklist, 'private');
     const blockedAuthorEntries = (authorBlocklist.json?.data?.blocklist || [])
@@ -1821,9 +1835,9 @@ try {
 
     const unblockAuthor = await request(`/api/sites/${createdSiteId}/comments/blocklist`, {
       method: 'DELETE',
-      headers: {
+      headers: withAdminAuth({
         'content-type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         ids: blockedAuthorEntries.map((entry) => entry.id),
       }),
@@ -3348,7 +3362,9 @@ try {
       assert(adminFormWrittenRecord.response.status === 200, `${adminFormWrittenRecord.url} expected 200, got ${adminFormWrittenRecord.response.status}`);
       assert(adminFormWrittenRecord.json?.data?.records?.[0]?.status === 'draft', `${adminFormWrittenRecord.url} missing draft form-written record`);
 
-      const listedFormWriteSubmissions = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions?status=approved&requestId=contract-form-write`);
+      const listedFormWriteSubmissions = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions?status=approved&requestId=contract-form-write`, {
+        headers: withAdminAuth(),
+      });
       assert(listedFormWriteSubmissions.response.status === 200, `${listedFormWriteSubmissions.url} expected 200, got ${listedFormWriteSubmissions.response.status}`);
       assertBackyContract(listedFormWriteSubmissions, 'private');
       assert(listedFormWriteSubmissions.json?.success === true, `${listedFormWriteSubmissions.url} expected success envelope`);
@@ -3359,7 +3375,9 @@ try {
       assert(listedFormWriteSubmission?.collectionRecord?.recordSlug === formWrittenRecordSlug, `${listedFormWriteSubmissions.url} missing linked collection record slug`);
       assert(listedFormWriteSubmission?.collectionRecordErrors?.length === 0, `${listedFormWriteSubmissions.url} expected no linked collection errors`);
 
-      const fetchedFormWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions/${formWriteSubmissionId}`);
+      const fetchedFormWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions/${formWriteSubmissionId}`, {
+        headers: withAdminAuth(),
+      });
       assert(fetchedFormWriteSubmission.response.status === 200, `${fetchedFormWriteSubmission.url} expected 200, got ${fetchedFormWriteSubmission.response.status}`);
       assertBackyContract(fetchedFormWriteSubmission, 'private');
       assert(fetchedFormWriteSubmission.json?.success === true, `${fetchedFormWriteSubmission.url} expected success envelope`);
@@ -3368,9 +3386,9 @@ try {
 
       const reviewedFormWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions/${formWriteSubmissionId}`, {
         method: 'PATCH',
-        headers: {
+        headers: withAdminAuth({
           'content-type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           status: 'approved',
           reviewedBy: 'contract-smoke',
@@ -3381,7 +3399,9 @@ try {
       assert(reviewedFormWriteSubmission.json?.success === true, `${reviewedFormWriteSubmission.url} expected success envelope`);
       assert(reviewedFormWriteSubmission.json?.data?.submission?.status === 'approved', `${reviewedFormWriteSubmission.url} missing updated submission in data envelope`);
 
-      const listedFormWriteContacts = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/contacts?requestId=contract-form-write`);
+      const listedFormWriteContacts = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/contacts?requestId=contract-form-write`, {
+        headers: withAdminAuth(),
+      });
       assert(listedFormWriteContacts.response.status === 200, `${listedFormWriteContacts.url} expected 200, got ${listedFormWriteContacts.response.status}`);
       assertBackyContract(listedFormWriteContacts, 'private');
       assert(listedFormWriteContacts.json?.success === true, `${listedFormWriteContacts.url} expected success envelope`);
@@ -3390,9 +3410,9 @@ try {
 
       const updatedFormWriteContact = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/contacts/${formWriteContactId}`, {
         method: 'PATCH',
-        headers: {
+        headers: withAdminAuth({
           'content-type': 'application/json',
-        },
+        }),
         body: JSON.stringify({ status: 'qualified' }),
       });
       assert(updatedFormWriteContact.response.status === 200, `${updatedFormWriteContact.url} expected 200, got ${updatedFormWriteContact.response.status}`);

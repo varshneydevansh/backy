@@ -158,13 +158,28 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
-  if (access instanceof NextResponse) {
-    return access;
-  }
 
   try {
     const { siteId } = await params;
+    const { searchParams } = new URL(request.url);
+    const status = parseStatus(searchParams.get('status'));
+    const targetType = parseTargetType(searchParams.get('targetType'));
+    const targetId = searchParams.get('targetId') || undefined;
+    const requestId = parseRequestId(searchParams.get('requestId'));
+    const q = parseSearchQuery(searchParams.get('q'));
+    const parentId = searchParams.get('parentId');
+    const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
+    const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
+    const sort = parseSort(searchParams.get('sort'));
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
+
+    if (status !== 'approved') {
+      const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
+      if (access instanceof NextResponse) {
+        return access;
+      }
+    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -172,19 +187,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
       }
-
-      const { searchParams } = new URL(request.url);
-      const status = parseStatus(searchParams.get('status'));
-      const targetType = parseTargetType(searchParams.get('targetType'));
-      const targetId = searchParams.get('targetId') || undefined;
-      const requestId = parseRequestId(searchParams.get('requestId'));
-      const q = parseSearchQuery(searchParams.get('q'));
-      const parentId = searchParams.get('parentId');
-      const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
-      const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
-      const sort = parseSort(searchParams.get('sort'));
-      const limit = parseInt(searchParams.get('limit') || '20', 10);
-      const offset = parseInt(searchParams.get('offset') || '0', 10);
 
       const result = await repositories.comments.list({
         siteId: site.id,
@@ -221,19 +223,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
-
-    const { searchParams } = new URL(request.url);
-    const status = parseStatus(searchParams.get('status'));
-    const targetType = parseTargetType(searchParams.get('targetType'));
-    const targetId = searchParams.get('targetId') || undefined;
-    const requestId = parseRequestId(searchParams.get('requestId'));
-    const q = parseSearchQuery(searchParams.get('q'));
-    const parentId = searchParams.get('parentId');
-    const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
-    const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
-    const sort = parseSort(searchParams.get('sort'));
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     const result = listComments(site.id, {
       targetType,

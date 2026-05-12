@@ -84,10 +84,6 @@ function parseBody(raw: unknown) {
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(_request, requestId, { permission: 'comments.view' });
-  if (access instanceof NextResponse) {
-    return access;
-  }
 
   try {
     const { siteId, pageId, commentId } = await params;
@@ -107,6 +103,13 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       const comment = await repositories.comments.getById(site.id, commentId);
       if (!comment || comment.targetType !== 'page' || comment.targetId !== pageId) {
         return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+      }
+
+      if (comment.status !== 'approved') {
+        const access = requireAdminAccess(_request, requestId, { permission: 'comments.view' });
+        if (access instanceof NextResponse) {
+          return access;
+        }
       }
 
       return privateResponse({
@@ -133,6 +136,13 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const comment = getCommentById(commentId);
     if (!comment || comment.targetType !== 'page' || comment.targetId !== pageId) {
       return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+    }
+
+    if (comment.status !== 'approved') {
+      const access = requireAdminAccess(_request, requestId, { permission: 'comments.view' });
+      if (access instanceof NextResponse) {
+        return access;
+      }
     }
 
     return privateResponse({

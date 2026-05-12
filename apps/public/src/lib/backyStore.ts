@@ -6772,6 +6772,8 @@ export function validateAndClassifyComment(params: {
   spamFlags: string[];
   spamMessage?: string;
 } {
+  refreshPersistedInteractionStore();
+
   const spamCheck = checkCommentSpamSignals({
     siteId: params.siteId,
     targetType: params.targetType,
