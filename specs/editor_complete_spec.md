@@ -131,6 +131,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
+    - Rich-text tables support authored captions that render above the table, remain outside the editable Slate cell flow, sync to table metadata, and persist through save/reload smoke coverage.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
     - Added applied-change feedback in both standalone and embedded inspector layouts.
 

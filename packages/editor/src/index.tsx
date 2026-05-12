@@ -587,6 +587,7 @@ export const BackyEditor = ({
                 : undefined;
 
         if (tableNodeType === 'table') {
+            const caption = typeof element?.caption === 'string' ? element.caption.trim() : '';
             return (
                 <table
                     {...attributes}
@@ -598,6 +599,22 @@ export const BackyEditor = ({
                         tableLayout: 'fixed',
                     }}
                 >
+                    {caption ? (
+                        <caption
+                            contentEditable={false}
+                            data-backy-rich-table-caption="true"
+                            suppressContentEditableWarning
+                            style={{
+                                captionSide: 'top',
+                                padding: '0 0 0.375rem',
+                                textAlign: 'left',
+                                color: '#475569',
+                                fontSize: '0.875em',
+                            }}
+                        >
+                            {caption}
+                        </caption>
+                    ) : null}
                     <tbody>{children}</tbody>
                 </table>
             );

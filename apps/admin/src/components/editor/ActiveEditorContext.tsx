@@ -80,6 +80,8 @@ interface ActiveEditorContextType {
   toggleTableHeaderColumn: () => boolean;
   /** Toggle the current table cell between body and header semantics */
   toggleTableHeaderCell: () => boolean;
+  /** Set or clear the current table caption */
+  setTableCaption: (caption: string) => boolean;
   /** Remove the current table */
   removeTable: () => boolean;
   /** Check if mark is active */
@@ -140,6 +142,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleTableHeaderRow: () => false,
   toggleTableHeaderColumn: () => false,
   toggleTableHeaderCell: () => false,
+  setTableCaption: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
@@ -499,6 +502,113 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const getFallbackTableEntry = useCallback((editor: PlateEditor) => {
+    const tableEntries = Array.from(
+      Editor.nodes(editor as any, {
+        at: [],
+        match: (node) => SlateElement.isElement(node) && (node as any).type === 'table',
+      })
+    ) as [SlateElement, number[]][];
+
+    return tableEntries.at(-1) || null;
+  }, []);
+
+  const getNodePlainText = useCallback((editor: PlateEditor, path: number[]) => {
+    try {
+      return Editor.string(editor as any, path as any).replace(/\uFEFF/g, '').trim();
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const findEmptyTableRowIndex = useCallback((editor: PlateEditor, tablePath: number[], tableNode: SlateElement) => {
+    const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
+    return rows.findIndex((row: any, rowIndex: number) => {
+      const rowChildren = Array.isArray(row?.children) ? row.children : [];
+      return rowChildren.length > 0 && rowChildren.every((_: unknown, columnIndex: number) => (
+        getNodePlainText(editor, [...tablePath, rowIndex, columnIndex]) === ''
+      ));
+    });
+  }, [getNodePlainText]);
+
+  const removeEmptyTableColumn = useCallback((editor: PlateEditor) => {
+    const tableEntry = getFallbackTableEntry(editor);
+    if (!tableEntry) {
+      return false;
+    }
+
+    const [tableNode, tablePath] = tableEntry;
+    const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
+    if (rows.length === 0 || !rows.some((row: any) => Array.isArray(row?.children) && row.children.length > 1)) {
+      return false;
+    }
+
+    const columnCount = Math.max(0, ...rows.map((row: any) => Array.isArray(row?.children) ? row.children.length : 0));
+    const emptyColumnIndex = Array.from({ length: columnCount }, (_, index) => index).find((columnIndex) => (
+      rows.every((row: any, rowIndex: number) => {
+        const rowChildren = Array.isArray(row?.children) ? row.children : [];
+        return columnIndex < rowChildren.length && getNodePlainText(editor, [...tablePath, rowIndex, columnIndex]) === '';
+      })
+    ));
+
+    if (typeof emptyColumnIndex !== 'number') {
+      return false;
+    }
+
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      if (emptyColumnIndex < rowChildren.length && rowChildren.length > 1) {
+        Transforms.removeNodes(editor as any, { at: [...rowPath, emptyColumnIndex] });
+      }
+    }
+
+    try {
+      const nextTableNode = Node.get(editor as any, tablePath) as SlateElement;
+      const emptyRowIndex = findEmptyTableRowIndex(editor, tablePath, nextTableNode);
+      const nextRows = Array.isArray((nextTableNode as any).children) ? (nextTableNode as any).children : [];
+      const nextRowIndex = emptyRowIndex >= 0 ? emptyRowIndex : Math.max(0, Math.min(rows.length - 1, nextRows.length - 1));
+      const nextRow = nextRows[nextRowIndex] as any;
+      const nextCellCount = Array.isArray(nextRow?.children) ? nextRow.children.length : 1;
+      const nextColumnIndex = Math.max(0, Math.min(emptyColumnIndex, nextCellCount - 1));
+      Transforms.select(editor as any, Editor.start(editor as any, [...tablePath, nextRowIndex, nextColumnIndex]));
+    } catch {
+      // Selection is best-effort after fallback column removal.
+    }
+
+    return true;
+  }, [findEmptyTableRowIndex, getFallbackTableEntry, getNodePlainText]);
+
+  const removeEmptyTableRow = useCallback((editor: PlateEditor) => {
+    const tableEntry = getFallbackTableEntry(editor);
+    if (!tableEntry) {
+      return false;
+    }
+
+    const [tableNode, tablePath] = tableEntry;
+    const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
+    if (rows.length <= 1) {
+      return false;
+    }
+
+    const emptyRowIndex = findEmptyTableRowIndex(editor, tablePath, tableNode);
+    if (emptyRowIndex < 0) {
+      return false;
+    }
+
+    const nextRowIndex = Math.min(emptyRowIndex, rows.length - 2);
+    Transforms.removeNodes(editor as any, { at: [...tablePath, emptyRowIndex] });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...tablePath, nextRowIndex, 0]));
+    } catch {
+      // Selection is best-effort after fallback row removal.
+    }
+
+    return true;
+  }, [findEmptyTableRowIndex, getFallbackTableEntry]);
+
   const removeSelectedTableColumn = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -697,6 +807,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const setSelectedTableCaption = useCallback((editor: PlateEditor, caption: string) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const normalizedCaption = caption.trim();
+    if (normalizedCaption) {
+      Transforms.setNodes(editor as any, { caption: normalizedCaption } as any, {
+        at: context.tablePath,
+      });
+    } else {
+      Transforms.unsetNodes(editor as any, 'caption' as any, {
+        at: context.tablePath,
+      } as any);
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after caption changes.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
   const removeSelectedTable = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -855,6 +990,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       __backyCollapseActiveEditorToEnd?: () => unknown;
       __backyInsertActiveEditorTable?: () => unknown;
       __backySelectActiveEditorTableCell?: (needle: string) => unknown;
+      __backySetActiveEditorTableCaption?: (caption: string) => unknown;
       __backyReadActiveEditorTableState?: () => unknown;
     };
 
@@ -954,6 +1090,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           })
         ).map(([node, path]) => ({
           type: (node as { type?: string }).type || '',
+          caption: typeof (node as { caption?: unknown }).caption === 'string' ? (node as { caption?: string }).caption : undefined,
           align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
@@ -1013,6 +1150,30 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         return {
           ok: false,
           reason: 'select-table-cell-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
+    };
+
+    targetWindow.__backySetActiveEditorTableCaption = (caption: string) => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const updated = setSelectedTableCaption(editor, caption);
+        setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
+        return {
+          ok: updated,
+          caption: caption.trim(),
+          selection: describeSelection(editor.selection || null),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'set-table-caption-failed',
           error: (error as Error)?.message || String(error),
         };
       }
@@ -1195,11 +1356,14 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       if (targetWindow.__backySelectActiveEditorTableCell) {
         delete targetWindow.__backySelectActiveEditorTableCell;
       }
+      if (targetWindow.__backySetActiveEditorTableCaption) {
+        delete targetWindow.__backySetActiveEditorTableCaption;
+      }
       if (targetWindow.__backyReadActiveEditorTableState) {
         delete targetWindow.__backyReadActiveEditorTableState;
       }
     };
-  }, [describeSelection, getActiveEditor, insertDefaultTableNode, setStoredSelection, syncActiveEditorContentSoon]);
+  }, [describeSelection, getActiveEditor, insertDefaultTableNode, setSelectedTableCaption, setStoredSelection, syncActiveEditorContentSoon]);
 
   const focusAndRestore = useCallback((options: RestoreSelectionOptions = {}) => {
     const editor = getActiveEditor();
@@ -1798,7 +1962,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       if (!restoreSelection({ requireTextSelection: false })) return false;
-      if (!removeSelectedTableRow(editor)) return false;
+      if (!removeSelectedTableRow(editor) && !removeEmptyTableRow(editor)) return false;
 
       debug('removeTableRow.success', {
         selection: describeSelection(editor.selection || null),
@@ -1810,7 +1974,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       console.warn('removeTableRow failed:', e);
       return false;
     }
-  }, [debug, describeSelection, getActiveEditor, removeSelectedTableRow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+  }, [debug, describeSelection, getActiveEditor, removeEmptyTableRow, removeSelectedTableRow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const removeTableColumn = useCallback(() => {
     const editor = getActiveEditor();
@@ -1823,7 +1987,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       if (!restoreSelection({ requireTextSelection: false })) return false;
-      if (!removeSelectedTableColumn(editor)) return false;
+      if (!removeSelectedTableColumn(editor) && !removeEmptyTableColumn(editor)) return false;
 
       debug('removeTableColumn.success', {
         selection: describeSelection(editor.selection || null),
@@ -1835,7 +1999,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       console.warn('removeTableColumn failed:', e);
       return false;
     }
-  }, [debug, describeSelection, getActiveEditor, removeSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+  }, [debug, describeSelection, getActiveEditor, removeEmptyTableColumn, removeSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const moveTableRowUp = useCallback(() => {
     const editor = getActiveEditor();
@@ -2011,6 +2175,32 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderCell]);
+
+  const setTableCaption = useCallback((caption: string) => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('setTableCaption.start', {
+        caption,
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!setSelectedTableCaption(editor, caption)) return false;
+
+      debug('setTableCaption.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('setTableCaption failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setSelectedTableCaption, setStoredSelection, syncActiveEditorContentSoon]);
 
   const removeTable = useCallback(() => {
     const editor = getActiveEditor();
@@ -2357,6 +2547,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleTableHeaderRow,
       toggleTableHeaderColumn,
       toggleTableHeaderCell,
+      setTableCaption,
       removeTable,
       isMarkActive,
       hasRangeSelection,

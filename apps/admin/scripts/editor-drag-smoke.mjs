@@ -1274,9 +1274,11 @@ const selectElement = async (client, elementId, options = {}) => {
 
 const dragRichTextListItem = async (client, elementId, fromText, toText) => {
   await scrollElementIntoView(client, elementId);
-  await activateTextEditing(client, elementId);
-  await sleep(250);
-  const dragResult = await evaluate(client, `(() => {
+  let dragResult = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await activateTextEditing(client, elementId);
+    await sleep(250);
+    dragResult = await evaluate(client, `(() => {
     const host = document.querySelector('[data-element-id="${elementId}"]');
     const editorHost = host?.querySelector('[data-backy-text-editor]');
     const editableEditor = host?.querySelector('[contenteditable="true"]');
@@ -1403,6 +1405,14 @@ const dragRichTextListItem = async (client, elementId, fromText, toText) => {
       hitEnd: hitEnd instanceof Element ? { tag: hitEnd.tagName, text: hitEnd.textContent?.trim?.().slice(0, 80) || '' } : null,
     };
   })()`);
+    if (
+      dragResult?.ok ||
+      (dragResult?.reason !== 'editor-not-editable' && dragResult?.reason !== 'list-items-not-draggable')
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
   assert(dragResult?.ok, `Unable to dispatch rich-text list drag: ${JSON.stringify(dragResult)}`);
   await sleep(250);
   return dragResult;
@@ -3612,10 +3622,12 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `List indent control did not clamp selected list item to max depth only: ${JSON.stringify(listIndentState)}`,
   );
 
+  await activateTextEditing(client, elementId);
   const selectedListItemBeforeMoveDown = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
   assert(selectedListItemBeforeMoveDown.selectedText === 'Nested item', `List item reselection failed before move-down control: ${JSON.stringify(selectedListItemBeforeMoveDown)}`);
   await mouseDownControlByTestId(client, 'rich-text-list-move-down');
   await sleep(300);
+  await activateTextEditing(client, elementId);
 
   const listMoveDownState = await evaluate(client, `(() => {
     if (typeof window.__backyReadActiveEditorTableState !== 'function') {
@@ -3645,6 +3657,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(selectedListItemBeforeMoveUp.selectedText === 'Nested item', `List item reselection failed before move-up control: ${JSON.stringify(selectedListItemBeforeMoveUp)}`);
   await mouseDownControlByTestId(client, 'rich-text-list-move-up');
   await sleep(300);
+  await activateTextEditing(client, elementId);
 
   const listMoveUpState = await evaluate(client, `(() => {
     if (typeof window.__backyReadActiveEditorTableState !== 'function') {
@@ -3840,9 +3853,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table row/column controls lost existing cell content: ${JSON.stringify(editedTableState)}`,
   );
 
-  await mouseDownControlByTestId(client, 'rich-text-table-remove-row');
-  await sleep(250);
   await mouseDownControlByTestId(client, 'rich-text-table-remove-column');
+  await sleep(250);
+  await mouseDownControlByTestId(client, 'rich-text-table-remove-row');
   await sleep(500);
 
   const trimmedTableState = await evaluate(client, `(() => {
@@ -4298,6 +4311,42 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   })()`);
   assert(restoredHeaderCell?.ok, `Unable to select restored table cell before header-row toggle: ${JSON.stringify(restoredHeaderCell)}`);
 
+  await setFormControlByTestId(client, 'rich-text-table-caption', 'Smoke pricing table');
+  await sleep(500);
+  await activateTextEditing(client, elementId);
+  const selectedCaptionTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedCaptionTableCell?.ok, `Unable to reselect table cell before caption metadata check: ${JSON.stringify(selectedCaptionTableCell)}`);
+
+  const tableCaptionState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const table = host?.querySelector('table');
+    const caption = table?.querySelector('caption');
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const tableNode = slateState?.types?.find((node) => node.type === 'table');
+    return {
+      captionText: caption?.textContent || '',
+      captionEditable: caption?.getAttribute('contenteditable') || '',
+      captionSide: caption ? window.getComputedStyle(caption).captionSide : '',
+      tableCaption: tableNode?.caption || '',
+      html: table?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCaptionState.captionText === 'Smoke pricing table' &&
+      tableCaptionState.captionEditable === 'false' &&
+      tableCaptionState.tableCaption === 'Smoke pricing table',
+    `Rich-text table caption control did not render and sync caption metadata: ${JSON.stringify(tableCaptionState)}`,
+  );
+
   await mouseDownControlByTestId(client, 'rich-text-align-center');
   await sleep(500);
 
@@ -4396,6 +4445,8 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     deletedTableState,
     restoredDirectInsert,
     restoredHeaderCell,
+    selectedCaptionTableCell,
+    tableCaptionState,
     tableCellAlignmentState,
     reselectedHeaderCell,
     restoredHeaderTableState,
@@ -4453,6 +4504,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   const leaves = collectSlateLeaves(content);
   const blockquoteCount = types.filter((type) => type === 'blockquote').length;
   const tableCount = types.filter((type) => type === 'table').length;
+  const tableElement = elements.find((node) => node.type === 'table');
   const rowCount = types.filter((type) => type === 'tr').length;
   const cellCount = types.filter((type) => type === 'td' || type === 'th').length;
   const headerCellCount = types.filter((type) => type === 'th').length;
@@ -4480,6 +4532,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
 
   assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
   assert(tableCount >= 1 && rowCount === 2 && cellCount === 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
+  assert(tableElement?.caption === 'Smoke pricing table', `Persisted table caption missing: ${JSON.stringify({ tableElement, content })}`);
   assert(headerCellCount === 2, `Persisted table header-row cells missing: ${JSON.stringify({ types, content })}`);
   const alignedColumnOneBlock = elements.find((node) => (
     node.type === 'p' &&
@@ -4495,6 +4548,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   return {
     blockquoteCount,
     tableCount,
+    tableCaption: tableElement?.caption,
     rowCount,
     cellCount,
     headerCellCount,

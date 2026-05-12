@@ -136,6 +136,7 @@ export function RichTextFormatting({
     toggleTableHeaderRow,
     toggleTableHeaderColumn,
     toggleTableHeaderCell,
+    setTableCaption,
     removeTable,
     storeSelection,
     syncActiveEditorContent,
@@ -1586,6 +1587,7 @@ export function RichTextFormatting({
   const [selectedFontSizeValue, setSelectedFontSizeValue] = useState('');
   const [selectedFontColorValue, setSelectedFontColorValue] = useState('');
   const [selectedHighlightColorValue, setSelectedHighlightColorValue] = useState('');
+  const [selectedTableCaptionValue, setSelectedTableCaptionValue] = useState('');
   const [insertDialog, setInsertDialog] = useState<{
     mode: InsertDialogMode;
     value: string;
@@ -1876,6 +1878,28 @@ export function RichTextFormatting({
     });
   }, [runOrActivateTextEditor, toggleTableHeaderCell]);
 
+  const readSelectedTableCaption = useCallback(() => {
+    const editor = getActiveEditor();
+    const selection = editor?.selection;
+    if (!editor || !selection || !SlateRange.isRange(selection)) {
+      return '';
+    }
+
+    const tableEntry = Editor.above(editor as any, {
+      at: selection,
+      match: (node) => (node as { type?: unknown }).type === 'table',
+    });
+    const tableNode = tableEntry?.[0] as { caption?: unknown } | undefined;
+    return typeof tableNode?.caption === 'string' ? tableNode.caption : '';
+  }, [getActiveEditor]);
+
+  const updateTableCaptionAtSelection = useCallback((caption: string) => {
+    setSelectedTableCaptionValue(caption);
+    runOrActivateTextEditor('table-caption', () => {
+      setTableCaption(caption);
+    });
+  }, [runOrActivateTextEditor, setTableCaption]);
+
   const removeTableAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-remove', () => {
       removeTable();
@@ -1992,6 +2016,14 @@ export function RichTextFormatting({
       }
     }
   }, [elementId, fontFamilies, getActiveEditor, isTargetEditorInEditableMode, readActiveTextMark, selectionRevision]);
+
+  useEffect(() => {
+    if (!isTargetEditorInEditableMode()) {
+      return;
+    }
+
+    setSelectedTableCaptionValue(readSelectedTableCaption());
+  }, [isTargetEditorInEditableMode, readSelectedTableCaption, selectionRevision]);
 
   useEffect(() => {
     if (fontFamilies.length === 0) {
@@ -2630,6 +2662,44 @@ export function RichTextFormatting({
           </button>
         </div>
       </div>
+
+      <label className="flex min-w-0 items-center gap-2 text-xs">
+        <TableProperties className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground whitespace-nowrap">Table Caption</span>
+        <input
+          type="text"
+          value={selectedTableCaptionValue}
+          placeholder="Add caption"
+          onMouseDown={(e) => {
+            storeSelection();
+            e.stopPropagation();
+          }}
+          onChange={(event) => {
+            const nextCaption = event.target.value;
+            runContentProperty('table-caption', () => {
+              updateTableCaptionAtSelection(nextCaption);
+            }, { requireActiveEditor: false });
+          }}
+          className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm"
+          data-testid="rich-text-table-caption"
+          title="Table caption"
+        />
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            runContentProperty('table-caption-clear', () => {
+              updateTableCaptionAtSelection('');
+            }, { requireActiveEditor: false });
+          }}
+          className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-table-caption-clear"
+          title="Clear table caption"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </label>
 
       {insertDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
