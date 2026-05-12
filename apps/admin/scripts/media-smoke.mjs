@@ -433,15 +433,45 @@ const assertMediaLayout = async (client, expectedText) => {
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
     hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
+    hasProviderRoi: Boolean(document.querySelector('[data-testid="media-provider-roi"]')) &&
+      document.body?.innerText?.includes('Provider ROI'),
     hasAsset: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
     hasSearch: Boolean(document.querySelector('input[aria-label="Search media"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const assertProviderRoiDashboard = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-provider-roi"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel) &&
+          text.includes('Provider ROI') &&
+          text.includes('USD 166.25') &&
+          text.includes('5 conv') &&
+          text.includes('10% CVR') &&
+          text.includes('USD 3.33/req') &&
+          text.includes('50 provider requests'),
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Provider ROI dashboard did not render expected metrics: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
 };
 
 const runMediaStorageCheck = async (client) => {
@@ -1441,6 +1471,10 @@ const main = async () => {
       item.metadata?.providerDelivery?.ingestMode === 'increment' &&
       item.metadata?.providerDelivery?.matchedBy === 'storagePath'
     ));
+    await navigateToMedia(client, marker);
+    await waitForMediaPageAsset(client, replacementName);
+    await assertProviderRoiDashboard(client);
+    await openMediaDetails(client, replacementName);
     await compareAssetVersionThroughDetails(client);
     await restoreAssetVersionThroughDetails(client);
     const restoredImage = await waitForMedia(marker, (item) => (

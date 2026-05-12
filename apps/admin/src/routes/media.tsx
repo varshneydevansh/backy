@@ -1210,6 +1210,24 @@ function MediaPage() {
       directCdnAnalytics: row.provider === 'local' || row.provider === 'unknown' ? 'not-configured' : 'provider-console',
       providerAnalyticsIngest: adminMediaProviderAnalyticsUrl,
     })),
+    providerRoi: {
+      requests: mediaAnalytics.providerRequests,
+      conversions: mediaAnalytics.providerConversions,
+      conversionValue: mediaAnalytics.providerConversionValue,
+      conversionRate: mediaAnalytics.providerConversionRate,
+      valuePerRequest: mediaAnalytics.providerValuePerRequest,
+      currency: mediaAnalytics.providerCurrency || 'USD',
+      rows: mediaAnalytics.providerRoiRows.map((row) => ({
+        provider: row.provider,
+        requests: row.providerRequests,
+        conversions: row.providerConversions,
+        conversionValue: row.providerConversionValue,
+        conversionRate: row.providerConversionRate,
+        valuePerRequest: row.providerValuePerRequest,
+        currency: row.providerCurrency || mediaAnalytics.providerCurrency || 'USD',
+        lastSyncedAt: row.providerLastSyncedAt,
+      })),
+    },
     folders: folderOptions.map((folder) => ({
       id: folder.id,
       name: folder.name,
@@ -1274,6 +1292,13 @@ function MediaPage() {
     mediaAnalytics.quarantinedAssets,
     mediaAnalytics.unusedAssets,
     mediaAnalytics.providerRows,
+    mediaAnalytics.providerRoiRows,
+    mediaAnalytics.providerRequests,
+    mediaAnalytics.providerConversions,
+    mediaAnalytics.providerConversionValue,
+    mediaAnalytics.providerConversionRate,
+    mediaAnalytics.providerValuePerRequest,
+    mediaAnalytics.providerCurrency,
     mediaQuota,
     publicMediaDetailUrl,
     publicMediaFontsUrl,
@@ -3855,6 +3880,81 @@ function MediaPage() {
                       <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatBytes(bytes)}</span>
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2" data-testid="media-provider-roi">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Provider ROI</p>
+                  <p className="text-xs text-muted-foreground">
+                    Attributed provider conversions, value, CVR, and value per request from ingested CDN/storage analytics.
+                  </p>
+                </div>
+                <span className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                  {mediaAnalytics.providerRoiRows.length} source{mediaAnalytics.providerRoiRows.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {mediaAnalytics.providerRoiRows.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  Provider ROI appears after CDN/storage analytics include requests, conversions, or attributed value.
+                </p>
+              ) : (
+                <div className="grid gap-4">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {[
+                      {
+                        label: 'Attributed value',
+                        value: formatProviderAnalyticsValue(mediaAnalytics.providerConversionValue, mediaAnalytics.providerCurrency),
+                      },
+                      {
+                        label: 'Conversions',
+                        value: `${mediaAnalytics.providerConversions} conv`,
+                      },
+                      {
+                        label: 'Conversion rate',
+                        value: `${formatProviderAnalyticsPercent(mediaAnalytics.providerConversionRate)} CVR`,
+                      },
+                      {
+                        label: 'Value/request',
+                        value: `${formatProviderAnalyticsValue(mediaAnalytics.providerValuePerRequest, mediaAnalytics.providerCurrency)}/req`,
+                      },
+                    ].map((metric) => (
+                      <div key={metric.label} className="rounded-lg border border-border bg-muted/20 px-3 py-3">
+                        <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
+                        <div className="mt-2 font-mono text-lg font-semibold">{metric.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-2">
+                    {mediaAnalytics.providerRoiRows.map((row) => (
+                      <div key={row.provider} className="grid gap-2 rounded-lg border border-border bg-muted/20 px-3 py-3 md:grid-cols-[140px_minmax(0,1fr)_130px_120px] md:items-center">
+                        <div>
+                          <div className="text-sm font-medium capitalize">{row.provider}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {row.providerRequests} provider requests
+                          </div>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-background">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${mediaAnalytics.providerConversionValue > 0 ? Math.max(4, Math.round((row.providerConversionValue / mediaAnalytics.providerConversionValue) * 100)) : 0}%` }}
+                          />
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {row.providerConversions} conv · {formatProviderAnalyticsPercent(row.providerConversionRate)} CVR
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {formatProviderAnalyticsValue(row.providerValuePerRequest, row.providerCurrency)}/req
+                        </div>
+                        <div className="text-xs text-muted-foreground md:col-span-4">
+                          {formatProviderAnalyticsValue(row.providerConversionValue, row.providerCurrency)} attributed value
+                          {row.providerLastSyncedAt ? ` · synced ${formatAuditDate(row.providerLastSyncedAt)}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -6460,6 +6560,22 @@ type MediaAnalytics = {
     asset: MediaAsset;
     bytes: number;
   }>;
+  providerRoiRows: Array<{
+    provider: string;
+    providerRequests: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    providerConversionRate: number;
+    providerValuePerRequest: number;
+    providerCurrency?: string;
+    providerLastSyncedAt?: string;
+  }>;
+  providerRequests: number;
+  providerConversions: number;
+  providerConversionValue: number;
+  providerConversionRate: number;
+  providerValuePerRequest: number;
+  providerCurrency?: string;
   providerRows: Array<{
     provider: string;
     count: number;
@@ -6473,6 +6589,7 @@ type MediaAnalytics = {
     providerConversions: number;
     providerConversionValue: number;
     providerConversionRate: number;
+    providerValuePerRequest: number;
     providerCurrency?: string;
     providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
@@ -6866,6 +6983,26 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     }
   });
 
+  const providerRows = Array.from(byProvider.entries())
+    .map(([provider, value]) => ({
+      provider,
+      ...value,
+      providerConversionRate: value.providerRequests > 0 ? Number(((value.providerConversions / value.providerRequests) * 100).toFixed(4)) : 0,
+      providerValuePerRequest: value.providerRequests > 0 ? value.providerConversionValue / value.providerRequests : 0,
+    }))
+    .sort((a, b) => b.requests - a.requests || b.bytes - a.bytes || b.count - a.count);
+  const providerRoiRows = providerRows
+    .filter((row) => row.providerRequests > 0 || row.providerConversions > 0 || row.providerConversionValue > 0)
+    .sort((a, b) => (
+      b.providerConversionValue - a.providerConversionValue ||
+      b.providerConversions - a.providerConversions ||
+      b.providerRequests - a.providerRequests
+    ));
+  const providerRequests = providerRoiRows.reduce((total, row) => total + row.providerRequests, 0);
+  const providerConversions = providerRoiRows.reduce((total, row) => total + row.providerConversions, 0);
+  const providerConversionValue = providerRoiRows.reduce((total, row) => total + row.providerConversionValue, 0);
+  const providerCurrency = providerRoiRows.find((row) => !!row.providerCurrency)?.providerCurrency;
+
   return {
     totalAssets: assets.length,
     publicAssets,
@@ -6890,13 +7027,14 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       .map((asset) => ({ asset, bytes: assetSizeBytes(asset) }))
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 4),
-    providerRows: Array.from(byProvider.entries())
-      .map(([provider, value]) => ({
-        provider,
-        ...value,
-        providerConversionRate: value.providerRequests > 0 ? Number(((value.providerConversions / value.providerRequests) * 100).toFixed(4)) : 0,
-      }))
-      .sort((a, b) => b.requests - a.requests || b.bytes - a.bytes || b.count - a.count),
+    providerRoiRows,
+    providerRequests,
+    providerConversions,
+    providerConversionValue,
+    providerConversionRate: providerRequests > 0 ? Number(((providerConversions / providerRequests) * 100).toFixed(4)) : 0,
+    providerValuePerRequest: providerRequests > 0 ? providerConversionValue / providerRequests : 0,
+    providerCurrency,
+    providerRows,
   };
 };
 
@@ -7191,6 +7329,11 @@ const formatProviderAnalyticsValue = (value: number, currency?: string) => {
   return `${currency || 'USD'} ${amount.toFixed(2)}`;
 };
 
+const formatProviderAnalyticsPercent = (value: number) => {
+  const percent = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(2)}%`;
+};
+
 const formatProviderAnalyticsSummary = (row: MediaAnalytics['providerRows'][number]) => {
   const parts = [
     `Provider/CDN ${row.providerRequests} req`,
@@ -7200,7 +7343,7 @@ const formatProviderAnalyticsSummary = (row: MediaAnalytics['providerRows'][numb
   if (row.providerConversions > 0 || row.providerConversionValue > 0) {
     parts.push(`${row.providerConversions} conv`);
     parts.push(formatProviderAnalyticsValue(row.providerConversionValue, row.providerCurrency));
-    parts.push(`${row.providerConversionRate}% CVR`);
+    parts.push(`${formatProviderAnalyticsPercent(row.providerConversionRate)} CVR`);
   }
 
   parts.push(`synced ${formatAuditDate(row.providerLastSyncedAt || '')}`);
