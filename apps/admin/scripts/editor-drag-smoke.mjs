@@ -3471,6 +3471,98 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeDuplicateRow = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeDuplicateRow?.ok, `Unable to select first table cell before duplicate row control: ${JSON.stringify(selectedTableCellBeforeDuplicateRow)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-duplicate-row');
+  await sleep(300);
+
+  const duplicatedRowState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    duplicatedRowState.rows.length === 3 &&
+      duplicatedRowState.rows[0]?.join('|') === 'Column 1|Column 2' &&
+      duplicatedRowState.rows[1]?.join('|') === 'Column 1|Column 2',
+    `Table duplicate row control did not copy the selected row below: ${JSON.stringify(duplicatedRowState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-remove-row');
+  await sleep(300);
+
+  const restoredDuplicateRowState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredDuplicateRowState.rows.length === 2 &&
+      restoredDuplicateRowState.rows[0]?.join('|') === 'Column 1|Column 2' &&
+      restoredDuplicateRowState.rows[1]?.join('|') === 'Value 1|Value 2',
+    `Table duplicated row did not remove back to the original table: ${JSON.stringify(restoredDuplicateRowState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeDuplicateColumn = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeDuplicateColumn?.ok, `Unable to select first table cell before duplicate column control: ${JSON.stringify(selectedTableCellBeforeDuplicateColumn)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-duplicate-column');
+  await sleep(300);
+
+  const duplicatedColumnState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    duplicatedColumnState.rows.length === 2 &&
+      duplicatedColumnState.rows[0]?.join('|') === 'Column 1|Column 1|Column 2' &&
+      duplicatedColumnState.rows[1]?.join('|') === 'Value 1|Value 1|Value 2',
+    `Table duplicate column control did not copy the selected column right: ${JSON.stringify(duplicatedColumnState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-remove-column');
+  await sleep(300);
+
+  const restoredDuplicateColumnState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => cell.textContent || '')),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredDuplicateColumnState.rows.length === 2 &&
+      restoredDuplicateColumnState.rows[0]?.join('|') === 'Column 1|Column 2' &&
+      restoredDuplicateColumnState.rows[1]?.join('|') === 'Value 1|Value 2',
+    `Table duplicated column did not remove back to the original table: ${JSON.stringify(restoredDuplicateColumnState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedTableCellBeforeMove = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -3552,6 +3644,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       movedColumnRightState.rows[1]?.[1] === 'Value 1',
     `Table column move right did not reorder columns: ${JSON.stringify(movedColumnRightState)}`,
   );
+
+  await activateTextEditing(client, elementId);
+  const selectedMovedColumnCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedMovedColumnCell?.ok, `Unable to reselect moved table column before move-left control: ${JSON.stringify(selectedMovedColumnCell)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-move-column-left');
   await sleep(300);
@@ -3826,12 +3928,19 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     tableState,
     editedTableState,
     trimmedTableState,
+    selectedTableCellBeforeDuplicateRow,
+    duplicatedRowState,
+    restoredDuplicateRowState,
+    selectedTableCellBeforeDuplicateColumn,
+    duplicatedColumnState,
+    restoredDuplicateColumnState,
     selectedTableCellBeforeMove,
     movedRowDownState,
     selectedMovedRowCell,
     restoredRowMoveState,
     selectedTableCellBeforeColumnMove,
     movedColumnRightState,
+    selectedMovedColumnCell,
     restoredColumnMoveState,
     selectedHeaderColumnCell,
     headerColumnState,

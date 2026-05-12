@@ -47,6 +47,7 @@ import {
   Columns2,
   TableProperties,
   Trash2,
+  Copy,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
@@ -122,6 +123,8 @@ export function RichTextFormatting({
     insertTable,
     addTableRow,
     addTableColumn,
+    duplicateTableRow,
+    duplicateTableColumn,
     removeTableRow,
     removeTableColumn,
     moveTableRowUp,
@@ -1650,6 +1653,18 @@ export function RichTextFormatting({
     });
   }, [removeTableColumn, runOrActivateTextEditor]);
 
+  const duplicateTableRowAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-duplicate-row', () => {
+      duplicateTableRow();
+    });
+  }, [duplicateTableRow, runOrActivateTextEditor]);
+
+  const duplicateTableColumnAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-duplicate-column', () => {
+      duplicateTableColumn();
+    });
+  }, [duplicateTableColumn, runOrActivateTextEditor]);
+
   const moveTableRowUpAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-move-row-up', () => {
       moveTableRowUp();
@@ -2249,6 +2264,32 @@ export function RichTextFormatting({
             title="Add table column"
           >
             <Columns3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-duplicate-row', () => duplicateTableRowAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-duplicate-row"
+            title="Duplicate table row"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-duplicate-column', () => duplicateTableColumnAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-duplicate-column"
+            title="Duplicate table column"
+          >
+            <Copy className="w-4 h-4" />
           </button>
           <button
             type="button"

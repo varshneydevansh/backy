@@ -54,6 +54,10 @@ interface ActiveEditorContextType {
   addTableRow: () => boolean;
   /** Insert a table column to the right of the current table cell */
   addTableColumn: () => boolean;
+  /** Duplicate the current table row below itself */
+  duplicateTableRow: () => boolean;
+  /** Duplicate the current table column to the right of itself */
+  duplicateTableColumn: () => boolean;
   /** Remove the current table row when the table has more than one row */
   removeTableRow: () => boolean;
   /** Remove the current table column when rows have more than one column */
@@ -119,6 +123,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   insertTable: () => false,
   addTableRow: () => false,
   addTableColumn: () => false,
+  duplicateTableRow: () => false,
+  duplicateTableColumn: () => false,
   removeTableRow: () => false,
   removeTableColumn: () => false,
   moveTableRowUp: () => false,
@@ -405,6 +411,65 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
     return rowCount > 0;
   }, [createEmptyTableCellNode, getSelectedTableContext]);
+
+  const duplicateSelectedTableRow = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const nextRowPath = [
+      ...context.rowPath.slice(0, -1),
+      context.rowPath[context.rowPath.length - 1] + 1,
+    ];
+    const duplicatedRow = JSON.parse(JSON.stringify(context.rowNode));
+    Transforms.insertNodes(editor as any, duplicatedRow, { at: nextRowPath, select: true });
+    try {
+      const duplicatedRowNode = Node.get(editor as any, nextRowPath) as any;
+      const duplicatedCellCount = Array.isArray(duplicatedRowNode?.children) ? duplicatedRowNode.children.length : 1;
+      const nextCellIndex = Math.max(0, Math.min(context.cellIndex, duplicatedCellCount - 1));
+      Transforms.select(editor as any, Editor.start(editor as any, [...nextRowPath, nextCellIndex]));
+    } catch {
+      // Selection is best-effort after row duplication.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const duplicateSelectedTableColumn = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const insertIndex = context.cellIndex + 1;
+    let didDuplicateColumn = false;
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...context.tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      if (context.cellIndex >= rowChildren.length) {
+        continue;
+      }
+
+      const duplicatedCell = JSON.parse(JSON.stringify(rowChildren[context.cellIndex]));
+      Transforms.insertNodes(editor as any, duplicatedCell, {
+        at: [...rowPath, Math.max(0, Math.min(insertIndex, rowChildren.length))],
+      });
+      didDuplicateColumn = true;
+    }
+
+    if (!didDuplicateColumn) {
+      return false;
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, insertIndex]));
+    } catch {
+      // Selection is best-effort after column duplication.
+    }
+    return true;
+  }, [getSelectedTableContext]);
 
   const removeSelectedTableRow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -1572,6 +1637,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, insertTableColumnRight, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const duplicateTableRow = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('duplicateTableRow.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!duplicateSelectedTableRow(editor)) return false;
+
+      debug('duplicateTableRow.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('duplicateTableRow failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, duplicateSelectedTableRow, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const duplicateTableColumn = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('duplicateTableColumn.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!duplicateSelectedTableColumn(editor)) return false;
+
+      debug('duplicateTableColumn.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('duplicateTableColumn failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, duplicateSelectedTableColumn, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const removeTableRow = useCallback(() => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2121,6 +2236,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       insertTable,
       addTableRow,
       addTableColumn,
+      duplicateTableRow,
+      duplicateTableColumn,
       removeTableRow,
       removeTableColumn,
       moveTableRowUp,
