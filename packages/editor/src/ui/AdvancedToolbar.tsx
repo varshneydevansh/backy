@@ -222,8 +222,8 @@ export const AdvancedToolbar = ({ className }: { className?: string }) => {
                 const table = {
                     type: 'table',
                     children: [
-                        { type: 'tr', children: [{ type: 'td', children: [{ text: '' }] }, { type: 'td', children: [{ text: '' }] }] },
-                        { type: 'tr', children: [{ type: 'td', children: [{ text: '' }] }, { type: 'td', children: [{ text: '' }] }] },
+                        { type: 'tr', children: [{ type: 'td', children: [{ type: 'p', children: [{ text: '' }] }] }, { type: 'td', children: [{ type: 'p', children: [{ text: '' }] }] }] },
+                        { type: 'tr', children: [{ type: 'td', children: [{ type: 'p', children: [{ text: '' }] }] }, { type: 'td', children: [{ type: 'p', children: [{ text: '' }] }] }] },
                     ]
                 };
                 Transforms.insertNodes(editor, table as any);

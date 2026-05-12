@@ -38,6 +38,8 @@ import {
   Image,
   Plus,
   X,
+  Quote,
+  Table,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -100,10 +102,12 @@ export function RichTextFormatting({
     hasRangeSelection,
     hasSelection,
     selectionRevision,
+    toggleBlockquote,
     indentList,
     outdentList,
     insertLink,
     insertImage,
+    insertTable,
     storeSelection,
     syncActiveEditorContent,
   } = useActiveEditor();
@@ -311,6 +315,61 @@ export function RichTextFormatting({
 
     const nextContent = applyListIndentToNodes(normalizedElementContent, step);
     onElementContentChange?.(nextContent);
+    return true;
+  }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
+
+  const toggleBlockquoteInElementContent = useCallback((): boolean => {
+    if (!canWriteElementContent()) {
+      return false;
+    }
+
+    const isConvertibleType = (type: unknown) => {
+      return typeof type !== 'string'
+        || type === 'p'
+        || type === 'paragraph'
+        || type === 'h1'
+        || type === 'h2'
+        || type === 'h3'
+        || type === 'h4'
+        || type === 'h5'
+        || type === 'h6'
+        || type === 'blockquote';
+    };
+
+    const convertibleBlocks = normalizedElementContent.filter((node) => {
+      if (!node || typeof node !== 'object') {
+        return false;
+      }
+
+      const record = node as Record<string, unknown>;
+      return Array.isArray(record.children) && isConvertibleType(record.type);
+    });
+
+    if (convertibleBlocks.length === 0) {
+      return false;
+    }
+
+    const shouldApplyBlockquote = convertibleBlocks.some((node) => {
+      return (node as Record<string, unknown>).type !== 'blockquote';
+    });
+
+    const nextContent = normalizedElementContent.map((node) => {
+      if (!node || typeof node !== 'object') {
+        return node;
+      }
+
+      const record = node as Record<string, unknown>;
+      if (!Array.isArray(record.children) || !isConvertibleType(record.type)) {
+        return node;
+      }
+
+      return {
+        ...record,
+        type: shouldApplyBlockquote ? 'blockquote' : 'p',
+      };
+    });
+
+    onElementContentChange?.(nextContent as unknown[]);
     return true;
   }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
 
@@ -956,6 +1015,21 @@ export function RichTextFormatting({
     }
   }, [applyListIndentToElementContent, isTargetEditorUsable, outdentList, indentList, runForTextSelectionOrCaret]);
 
+  const toggleBlockquoteForElementOrSelection = useCallback(() => {
+    if (!isTargetEditorUsable()) {
+      toggleBlockquoteInElementContent();
+      return;
+    }
+
+    const didApply = runForTextSelectionOrCaret(() => {
+      toggleBlockquote();
+    }, false);
+
+    if (!didApply) {
+      toggleBlockquoteInElementContent();
+    }
+  }, [isTargetEditorUsable, runForTextSelectionOrCaret, toggleBlockquote, toggleBlockquoteInElementContent]);
+
   const runForCaretPosition = useCallback((fn: () => void) => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -1361,6 +1435,12 @@ export function RichTextFormatting({
     runOrActivateTextEditor,
   ]);
 
+  const insertTableAtSelection = useCallback(() => {
+    runOrActivateTextEditor('insert-table', () => {
+      insertTable();
+    });
+  }, [insertTable, runOrActivateTextEditor]);
+
   const onFontSizeBlur = (event: FocusEvent<HTMLInputElement>) => {
     logTextAction('content-property.font-size-blur', {
       actionName: 'font-size-blur',
@@ -1631,6 +1711,19 @@ export function RichTextFormatting({
         >
           <AlignRight className="w-4 h-4" />
         </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleBlockquoteForElementOrSelection();
+          }}
+          className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-blockquote"
+          title="Blockquote"
+        >
+          <Quote className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -1840,6 +1933,19 @@ export function RichTextFormatting({
             title="Insert image"
           >
             <Image className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('insert-table', () => insertTableAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-insert-table"
+            title="Insert table"
+          >
+            <Table className="w-4 h-4" />
           </button>
           <button
             type="button"

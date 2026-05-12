@@ -11,8 +11,6 @@ import { BaseListPlugin } from '@udecode/plate-list';
 import { BaseImagePlugin, BaseMediaEmbedPlugin } from '@udecode/plate-media';
 import { BaseEquationPlugin } from '@udecode/plate-math';
 
-// New Plugins
-import { BaseTablePlugin } from '@udecode/plate-table';
 import { BaseTextAlignPlugin } from '@udecode/plate-alignment';
 import { BaseFontBackgroundColorPlugin, BaseFontColorPlugin, BaseFontSizePlugin } from '@udecode/plate-font';
 import { BaseIndentPlugin } from '@udecode/plate-indent';
@@ -106,7 +104,6 @@ export const BackyEditor = ({
         BaseEquationPlugin,
 
         // Advanced
-        BaseTablePlugin,
         BaseTextAlignPlugin,
         BaseFontColorPlugin,
         BaseFontBackgroundColorPlugin,
@@ -115,7 +112,10 @@ export const BackyEditor = ({
         BaseAutoformatPlugin,
     ], []);
 
-    const editor = usePlateEditor({ plugins, value });
+    const editor = usePlateEditor({
+        plugins,
+        value,
+    });
 
     // Expose editor instance when ready
     useEffect(() => {
@@ -260,10 +260,11 @@ export const BackyEditor = ({
 
         const textBefore = rawBefore.trim();
         const isHeading = textBefore.match(/^(#{1,3})$/);
+        const isBlockquote = textBefore === '>';
         const isUnorderedList = textBefore === '-' || textBefore === '*' || textBefore === '+';
         const orderedMatch = textBefore.match(/^\d+[.)]$/);
 
-        if (!isHeading && !isUnorderedList && !orderedMatch) {
+        if (!isHeading && !isBlockquote && !isUnorderedList && !orderedMatch) {
             return false;
         }
 
@@ -282,6 +283,14 @@ export const BackyEditor = ({
 
         if (isHeading) {
             Transforms.setNodes(slateEditor, { type: `h${isHeading[1].length}` } as any, {
+                at: blockPath,
+                match: (node) => SlateElement.isElement(node),
+            });
+            return true;
+        }
+
+        if (isBlockquote) {
+            Transforms.setNodes(slateEditor, { type: 'blockquote' } as any, {
                 at: blockPath,
                 match: (node) => SlateElement.isElement(node),
             });
@@ -448,6 +457,56 @@ export const BackyEditor = ({
         const { attributes, children, element } = props;
         const type = (element?.type as string | undefined) || 'p';
         const elementStyle = (props.style || {}) as React.CSSProperties;
+        const tableNodeType = type === 'table'
+            ? 'table'
+            : type === 'tr'
+              ? 'tr'
+              : type === 'td' || type === 'th'
+                ? type
+                : undefined;
+
+        if (tableNodeType === 'table') {
+            return (
+                <table
+                    {...attributes}
+                    data-backy-rich-table="true"
+                    style={{
+                        ...elementStyle,
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        tableLayout: 'fixed',
+                    }}
+                >
+                    <tbody>{children}</tbody>
+                </table>
+            );
+        }
+
+        if (tableNodeType === 'tr') {
+            return (
+                <tr {...attributes} data-backy-rich-table-row="true" style={elementStyle}>
+                    {children}
+                </tr>
+            );
+        }
+
+        if (tableNodeType === 'td' || tableNodeType === 'th') {
+            const Tag = tableNodeType as 'td' | 'th';
+            return (
+                <Tag
+                    {...attributes}
+                    data-backy-rich-table-cell="true"
+                    style={{
+                        ...elementStyle,
+                        border: '1px solid #e5e7eb',
+                        padding: '0.375rem 0.5rem',
+                        verticalAlign: 'top',
+                    }}
+                >
+                    {children}
+                </Tag>
+            );
+        }
 
         if (type === 'ul' || type === 'ol') {
             return React.createElement(

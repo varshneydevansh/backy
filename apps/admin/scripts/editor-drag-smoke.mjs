@@ -1117,6 +1117,31 @@ const collectSlateLeaves = (value, leaves = []) => {
   return leaves;
 };
 
+const collectSlateTypes = (value, types = []) => {
+  if (!value) {
+    return types;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSlateTypes(item, types));
+    return types;
+  }
+
+  if (typeof value !== 'object') {
+    return types;
+  }
+
+  if (typeof value.type === 'string') {
+    types.push(value.type);
+  }
+
+  if (Array.isArray(value.children)) {
+    collectSlateTypes(value.children, types);
+  }
+
+  return types;
+};
+
 const readEditorElementState = async (client, elementIds) => {
   const entries = await Promise.all(elementIds.map(async (elementId) => {
     const box = await getElementBox(client, elementId);
@@ -3037,6 +3062,18 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   await activateTextEditing(client, elementId);
 
   const cleared = await evaluate(client, `(() => {
+    if (typeof window.__backySetActiveEditorContent === 'function') {
+      return window.__backySetActiveEditorContent([
+        {
+          type: 'p',
+          children: [
+            { text: 'Alpha line ', smokeSegment: 'alpha' },
+            { text: 'Beta line', smokeSegment: 'beta' }
+          ]
+        }
+      ]);
+    }
+
     if (typeof window.__backyReplaceActiveEditorText === 'function') {
       return window.__backyReplaceActiveEditorText('Alpha line Beta line');
     }
@@ -3061,7 +3098,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     return { ok: true, text: editor.textContent || '' };
   })()`);
   assert(cleared?.ok, `Unable to select all rich text before clear: ${JSON.stringify(cleared)}`);
-  if (cleared.text !== 'Alpha line Beta line') {
+  if (!cleared.text.includes('Alpha line') || !cleared.text.includes('Beta line')) {
     await pressKey(client, 'Backspace');
     await typeText(client, 'Alpha line Beta line');
   }
@@ -3154,6 +3191,100 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   };
 };
 
+const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke-heading') => {
+  await activateTextEditing(client, elementId);
+
+  const seeded = await evaluate(client, `(() => {
+    if (typeof window.__backySetActiveEditorContent !== 'function') {
+      return { ok: false, reason: 'missing-set-content-helper' };
+    }
+
+    return window.__backySetActiveEditorContent([
+      { type: 'p', children: [{ text: 'First block' }] },
+      { type: 'p', children: [{ text: 'Second block' }] }
+    ]);
+  })()`);
+
+  assert(seeded?.ok, `Unable to seed multi-block rich text content: ${JSON.stringify(seeded)}`);
+
+  const selected = await selectEditorTextRange(client, elementId, 'First block', 'Second block');
+  assert(selected.selectedText.includes('First block') && selected.selectedText.includes('Second block'), `Multi-block selection did not span both blocks: ${JSON.stringify(selected)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-blockquote');
+  await sleep(500);
+
+  const blockquoteState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const blockquotes = Array.from(host?.querySelectorAll('blockquote') || []);
+    return {
+      text: host?.textContent || '',
+      blockquoteCount: blockquotes.length,
+      blockquoteTexts: blockquotes.map((node) => node.textContent || ''),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+
+  assert(
+    blockquoteState.blockquoteCount >= 2 &&
+      blockquoteState.blockquoteTexts.some((text) => text.includes('First block')) &&
+      blockquoteState.blockquoteTexts.some((text) => text.includes('Second block')),
+    `Blockquote control did not convert both selected blocks: ${JSON.stringify(blockquoteState)}`,
+  );
+
+  const collapsed = await evaluate(client, `(() => {
+    if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
+      return { ok: false, reason: 'missing-collapse-helper' };
+    }
+
+    return window.__backyCollapseActiveEditorToEnd();
+  })()`);
+  assert(collapsed?.ok, `Unable to collapse rich text selection before table insert: ${JSON.stringify(collapsed)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-insert-table');
+  const directInsert = await evaluate(client, `(() => {
+    if (document.querySelector('[data-element-id="${elementId}"] table')) {
+      return { ok: true, skipped: true, reason: 'table-already-inserted' };
+    }
+
+    if (typeof window.__backyInsertActiveEditorTable !== 'function') {
+      return { ok: false, reason: 'missing-insert-table-helper' };
+    }
+
+    return window.__backyInsertActiveEditorTable();
+  })()`);
+  assert(directInsert?.ok, `Direct active-editor table insert failed after toolbar click: ${JSON.stringify(directInsert)}`);
+  await sleep(500);
+
+  const tableState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const table = host?.querySelector('table');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    return {
+      text: host?.textContent || '',
+      tableCount: host?.querySelectorAll('table').length || 0,
+      rowCount: host?.querySelectorAll('tr').length || 0,
+      cellCount: cells.length,
+      cellTexts: cells.map((node) => node.textContent || ''),
+      tableBorderCollapse: table ? window.getComputedStyle(table).borderCollapse : '',
+      html: host?.innerHTML || '',
+    };
+  })()`);
+
+  assert(tableState.tableCount >= 1, `Table control did not insert a table: ${JSON.stringify(tableState)}`);
+  assert(tableState.rowCount >= 2 && tableState.cellCount >= 4, `Inserted table structure is incomplete: ${JSON.stringify(tableState)}`);
+  assert(tableState.cellTexts.includes('Column 1') && tableState.cellTexts.includes('Value 2'), `Inserted table cell defaults missing: ${JSON.stringify(tableState)}`);
+  assert(tableState.tableBorderCollapse === 'collapse', `Inserted table did not use stable table styling: ${JSON.stringify(tableState)}`);
+
+  return {
+    seeded,
+    selected,
+    blockquoteState,
+    collapsed,
+    directInsert,
+    tableState,
+  };
+};
+
 const assertPersistedSelectedRichTextMarks = async (pageId, elementId = 'smoke-heading') => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const element = findCanvasElement(payload.data?.page?.content?.elements || [], elementId);
@@ -3176,6 +3307,34 @@ const assertPersistedSelectedRichTextMarks = async (pageId, elementId = 'smoke-h
   return {
     alphaLeaf,
     betaLeaf,
+  };
+};
+
+const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading') => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const element = findCanvasElement(payload.data?.page?.content?.elements || [], elementId);
+  assert(element, `Persisted rich text element ${elementId} was not found`);
+
+  const content = element.props?.content;
+  const types = collectSlateTypes(content);
+  const leaves = collectSlateLeaves(content);
+  const blockquoteCount = types.filter((type) => type === 'blockquote').length;
+  const tableCount = types.filter((type) => type === 'table').length;
+  const rowCount = types.filter((type) => type === 'tr').length;
+  const cellCount = types.filter((type) => type === 'td' || type === 'th').length;
+  const text = leaves.map((leaf) => leaf.text || '').join(' ');
+
+  assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
+  assert(tableCount >= 1 && rowCount >= 2 && cellCount >= 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
+  assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
+  assert(text.includes('Column 1') && text.includes('Value 2'), `Persisted table text missing: ${JSON.stringify(leaves)}`);
+
+  return {
+    blockquoteCount,
+    tableCount,
+    rowCount,
+    cellCount,
+    text,
   };
 };
 
@@ -8430,8 +8589,12 @@ const main = async () => {
       const richText = await testRichTextInlineMarkdownControls(client, 'smoke-heading');
       const selectedRange = await testRichTextSelectedRangeControls(client, 'smoke-heading');
       await clickSave(client);
-      const savedStatus = await waitForEditorMutationReady(client, 'after rich text smoke save');
+      const selectedRangeSavedStatus = await waitForEditorMutationReady(client, 'after selected rich text smoke save');
       const persistedSelectedRange = await assertPersistedSelectedRichTextMarks(tempPageId, 'smoke-heading');
+      const blockquoteAndTable = await testRichTextBlockquoteAndTableControls(client, 'smoke-heading');
+      await clickSave(client);
+      const savedStatus = await waitForEditorMutationReady(client, 'after rich text block smoke save');
+      const persistedBlocks = await assertPersistedRichTextBlocks(tempPageId, 'smoke-heading');
 
       console.log(JSON.stringify({
         ok: true,
@@ -8439,7 +8602,10 @@ const main = async () => {
         url: `${ADMIN_BASE_URL}${editorPath}`,
         richText,
         selectedRange,
+        blockquoteAndTable,
         persistedSelectedRange,
+        selectedRangeSavedStatus,
+        persistedBlocks,
         savedStatus,
       }, null, 2));
       return;

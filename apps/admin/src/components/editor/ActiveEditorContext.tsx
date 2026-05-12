@@ -33,6 +33,8 @@ interface ActiveEditorContextType {
   removeMark: (format: string) => void;
   /** Set text alignment */
   setAlign: (align: string) => void;
+  /** Toggle blockquote for selected block(s) */
+  toggleBlockquote: () => void;
   /** Toggle list */
   toggleList: (format: 'ul' | 'ol') => void;
   /** Increase list indent for selected list item(s) */
@@ -45,6 +47,8 @@ interface ActiveEditorContextType {
   insertLink: (url: string) => void;
   /** Insert an image node at current selection */
   insertImage: (url: string) => void;
+  /** Insert a basic table at current selection */
+  insertTable: () => boolean;
   /** Check if mark is active */
   isMarkActive: (format: string) => boolean;
   /** Whether a range selection is currently available for formatting */
@@ -80,12 +84,14 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleMark: () => { },
   removeMark: () => { },
   setAlign: () => { },
+  toggleBlockquote: () => { },
   toggleList: () => { },
   indentList: () => { },
   outdentList: () => { },
   insertText: () => { },
   insertLink: () => { },
   insertImage: () => { },
+  insertTable: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
   hasSelection: () => false,
@@ -208,6 +214,52 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [syncActiveEditorContent]);
 
+  const createDefaultTableNode = useCallback(() => {
+    const cellTexts = [
+      ['Column 1', 'Column 2'],
+      ['Value 1', 'Value 2'],
+    ];
+
+    return {
+      type: 'table',
+      children: cellTexts.map((row) => ({
+        type: 'tr',
+        children: row.map((text) => ({
+          type: 'td',
+          children: [
+            {
+              type: 'p',
+              children: [{ text }],
+            },
+          ],
+        })),
+      })),
+    } as any;
+  }, []);
+
+  const insertDefaultTableNode = useCallback((editor: PlateEditor) => {
+    const tableNode = createDefaultTableNode();
+    Transforms.insertNodes(editor as any, tableNode, { select: true });
+
+    const tableEntry = Array.from(
+      Editor.nodes(editor as any, {
+        at: [],
+        match: (node) => SlateElement.isElement(node) && (node as any).type === 'table',
+      })
+    ).at(-1);
+
+    if (tableEntry) {
+      const [, tablePath] = tableEntry as [unknown, number[]];
+      try {
+        Transforms.select(editor as any, Editor.end(editor as any, tablePath));
+      } catch {
+        // Selection is best-effort after insertion; the table content is already present.
+      }
+    }
+
+    return !!tableEntry;
+  }, [createDefaultTableNode]);
+
   const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
     if (typeof window === 'undefined') {
       return null;
@@ -323,6 +375,97 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     const targetWindow = window as typeof window & {
       __backySelectActiveEditorText?: (startNeedle: string, endNeedle?: string) => unknown;
       __backyReplaceActiveEditorText?: (text: string) => unknown;
+      __backySetActiveEditorContent?: (content: unknown) => unknown;
+      __backyCollapseActiveEditorToEnd?: () => unknown;
+      __backyInsertActiveEditorTable?: () => unknown;
+    };
+
+    targetWindow.__backyCollapseActiveEditorToEnd = () => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const end = Editor.end(editor as any, []);
+        Transforms.select(editor as any, end);
+        setStoredSelection(editor.selection || null);
+        return {
+          ok: true,
+          text: Editor.string(editor as any, []),
+          selection: describeSelection(editor.selection || null),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'collapse-end-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
+    };
+
+    targetWindow.__backyInsertActiveEditorTable = () => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const inserted = insertDefaultTableNode(editor);
+        setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
+
+        return {
+          ok: inserted,
+          text: Editor.string(editor as any, []),
+          selection: describeSelection(editor.selection || null),
+          childTypes: ((editor as any).children || []).map((node: { type?: string }) => node?.type || ''),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'insert-table-failed',
+          error: (error as Error)?.message || String(error),
+          childTypes: ((editor as any).children || []).map((node: { type?: string }) => node?.type || ''),
+        };
+      }
+    };
+
+    targetWindow.__backySetActiveEditorContent = (content: unknown) => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      if (!Array.isArray(content) || content.length === 0) {
+        return { ok: false, reason: 'invalid-content' };
+      }
+
+      try {
+        const nextContent = JSON.parse(JSON.stringify(content));
+        while (Array.isArray((editor as any).children) && (editor as any).children.length > 0) {
+          Transforms.removeNodes(editor as any, { at: [0] });
+        }
+        Transforms.insertNodes(editor as any, nextContent as any, { at: [0] });
+        Transforms.select(editor as any, {
+          anchor: Editor.start(editor as any, []),
+          focus: Editor.end(editor as any, []),
+        });
+        setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
+        return {
+          ok: true,
+          text: Editor.string(editor as any, []),
+          selection: describeSelection(editor.selection || null),
+          childTypes: ((editor as any).children || []).map((node: { type?: string }) => node?.type || ''),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'set-content-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
     };
 
     targetWindow.__backyReplaceActiveEditorText = (text: string) => {
@@ -451,8 +594,17 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       if (targetWindow.__backyReplaceActiveEditorText) {
         delete targetWindow.__backyReplaceActiveEditorText;
       }
+      if (targetWindow.__backySetActiveEditorContent) {
+        delete targetWindow.__backySetActiveEditorContent;
+      }
+      if (targetWindow.__backyCollapseActiveEditorToEnd) {
+        delete targetWindow.__backyCollapseActiveEditorToEnd;
+      }
+      if (targetWindow.__backyInsertActiveEditorTable) {
+        delete targetWindow.__backyInsertActiveEditorTable;
+      }
     };
-  }, [describeSelection, getActiveEditor, setStoredSelection, syncActiveEditorContentSoon]);
+  }, [describeSelection, getActiveEditor, insertDefaultTableNode, setStoredSelection, syncActiveEditorContentSoon]);
 
   const focusAndRestore = useCallback((options: RestoreSelectionOptions = {}) => {
     const editor = getActiveEditor();
@@ -811,6 +963,35 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const insertTable = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('insertTable.start', {
+        hasSelection: !!editor.selection,
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!editor.selection || !Range.isRange(editor.selection)) return false;
+
+      if (!insertDefaultTableNode(editor)) {
+        return false;
+      }
+      debug('insertTable.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('insertTable failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, insertDefaultTableNode, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
     if (!editor || !url) {
@@ -945,6 +1126,70 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const toggleBlockquote = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) return;
+
+    try {
+      debug('toggleBlockquote.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return;
+      if (!editor.selection || !Range.isRange(editor.selection)) return;
+
+      const isConvertibleBlock = (node: unknown) => {
+        if (!SlateElement.isElement(node) || Editor.isEditor(node)) {
+          return false;
+        }
+
+        const type = (node as SlateElement & { type?: string }).type || 'p';
+        return Editor.isBlock(editor as any, node)
+          && !getIsListNode(node)
+          && !getIsListItemNode(node)
+          && !['table', 'tr', 'td', 'th', 'img', 'image'].includes(type);
+      };
+
+      const selectedBlocks = Array.from(
+        Editor.nodes(editor as any, {
+          at: editor.selection,
+          match: isConvertibleBlock,
+          mode: 'lowest',
+        })
+      );
+
+      if (selectedBlocks.length === 0) {
+        return;
+      }
+
+      const shouldApplyBlockquote = selectedBlocks.some(([node]) => {
+        return (node as SlateElement & { type?: string }).type !== 'blockquote';
+      });
+
+      Transforms.setNodes(editor as any, { type: shouldApplyBlockquote ? 'blockquote' : 'p' } as any, {
+        at: editor.selection,
+        match: isConvertibleBlock,
+      });
+
+      debug('toggleBlockquote.success', {
+        action: shouldApplyBlockquote ? 'apply' : 'remove',
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+    } catch (e) {
+      console.warn('toggleBlockquote failed:', e);
+    }
+  }, [
+    debug,
+    describeSelection,
+    getActiveEditor,
+    getIsListItemNode,
+    getIsListNode,
+    restoreSelection,
+    setStoredSelection,
+    syncActiveEditorContentSoon,
+  ]);
+
   const toggleList = useCallback((format: 'ul' | 'ol') => {
     const editor = getActiveEditor();
     if (!editor) return;
@@ -1036,12 +1281,14 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleMark,
       removeMark,
       setAlign,
+      toggleBlockquote,
       toggleList,
       indentList,
       outdentList,
       insertText,
       insertLink,
       insertImage,
+      insertTable,
       isMarkActive,
       hasRangeSelection,
       hasSelection,
