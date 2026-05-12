@@ -3026,12 +3026,14 @@ const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) 
 
     const absoluteStart = startIndex;
     const absoluteEnd = endIndex + ${JSON.stringify(endNeedle)}.length;
-    const resolvePoint = (targetOffset) => {
+    const resolvePoint = (targetOffset, bias) => {
       let offset = 0;
-      for (const node of textNodes) {
+      for (let index = 0; index < textNodes.length; index += 1) {
+        const node = textNodes[index];
         const text = node.textContent || '';
         const nextOffset = offset + text.length;
-        if (targetOffset <= nextOffset) {
+        const useBoundary = targetOffset === nextOffset && (bias === 'end' || index === textNodes.length - 1);
+        if (targetOffset < nextOffset || useBoundary) {
           return {
             node,
             offset: Math.max(0, Math.min(text.length, targetOffset - offset)),
@@ -3044,8 +3046,8 @@ const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) 
       return last ? { node: last, offset: (last.textContent || '').length } : null;
     };
 
-    const start = resolvePoint(absoluteStart);
-    const end = resolvePoint(absoluteEnd);
+    const start = resolvePoint(absoluteStart, 'start');
+    const end = resolvePoint(absoluteEnd, 'end');
     if (!start || !end) {
       return {
         ok: false,
@@ -3253,7 +3255,14 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
 
     return window.__backySetActiveEditorContent([
       { type: 'p', children: [{ text: 'First block' }] },
-      { type: 'p', children: [{ text: 'Second block' }] }
+      { type: 'p', children: [{ text: 'Second block' }] },
+      {
+        type: 'ul',
+        children: [
+          { type: 'li', children: [{ text: 'Nested item' }] },
+          { type: 'li', children: [{ text: 'Sibling item' }] }
+        ]
+      }
     ]);
   })()`);
 
@@ -3283,6 +3292,50 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Blockquote control did not convert both selected blocks: ${JSON.stringify(blockquoteState)}`,
   );
 
+  const selectedListItem = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+  assert(selectedListItem.selectedText === 'Nested item', `List item selection failed before indent clamp check: ${JSON.stringify(selectedListItem)}`);
+
+  for (let index = 0; index < 10; index += 1) {
+    await activateTextEditing(client, elementId);
+    const reselectedListItem = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+    assert(reselectedListItem.selectedText === 'Nested item', `List item reselection failed during indent clamp check: ${JSON.stringify(reselectedListItem)}`);
+    await mouseDownControlByTestId(client, 'rich-text-list-indent');
+    await sleep(100);
+  }
+
+  const listIndentSlateState = await evaluate(client, `(() => {
+    if (typeof window.__backyReadActiveEditorTableState !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-state-helper' };
+    }
+
+    return window.__backyReadActiveEditorTableState();
+  })()`);
+  const listIndentState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    const target = items.find((node) => (node.textContent || '').includes('Nested item'));
+    const sibling = items.find((node) => (node.textContent || '').includes('Sibling item'));
+    return {
+      itemCount: items.length,
+      targetText: target?.textContent || '',
+      targetMarginLeft: target ? getComputedStyle(target).marginLeft : '',
+      siblingMarginLeft: sibling ? getComputedStyle(sibling).marginLeft : '',
+      slateState: ${JSON.stringify(null)},
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  listIndentState.slateState = listIndentSlateState;
+
+  const indentedListItem = listIndentSlateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  const siblingListItem = listIndentSlateState?.types?.find((node) => node.type === 'li' && node.text.includes('Sibling item'));
+  assert(
+    listIndentState.targetMarginLeft === '192px' &&
+      listIndentState.siblingMarginLeft !== '192px' &&
+      indentedListItem?.indent === 8 &&
+      siblingListItem?.indent === undefined,
+    `List indent control did not clamp selected list item to max depth only: ${JSON.stringify(listIndentState)}`,
+  );
+
   const collapsed = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -3291,6 +3344,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     return window.__backyCollapseActiveEditorToEnd();
   })()`);
   assert(collapsed?.ok, `Unable to collapse rich text selection before table insert: ${JSON.stringify(collapsed)}`);
+  await sleep(250);
 
   await mouseDownControlByTestId(client, 'rich-text-insert-table');
   const directInsert = await evaluate(client, `(() => {
@@ -3304,7 +3358,23 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
 
     return window.__backyInsertActiveEditorTable();
   })()`);
-  assert(directInsert?.ok, `Direct active-editor table insert failed after toolbar click: ${JSON.stringify(directInsert)}`);
+  if (!directInsert?.ok && directInsert?.reason === 'missing-editor') {
+    await activateTextEditing(client, elementId);
+    const retriedDirectInsert = await evaluate(client, `(() => {
+      if (document.querySelector('[data-element-id="${elementId}"] table')) {
+        return { ok: true, skipped: true, reason: 'table-already-inserted-after-reactivate' };
+      }
+
+      if (typeof window.__backyInsertActiveEditorTable !== 'function') {
+        return { ok: false, reason: 'missing-insert-table-helper-after-reactivate' };
+      }
+
+      return window.__backyInsertActiveEditorTable();
+    })()`);
+    assert(retriedDirectInsert?.ok, `Direct active-editor table insert retry failed after toolbar click: ${JSON.stringify({ directInsert, retriedDirectInsert })}`);
+  } else {
+    assert(directInsert?.ok, `Direct active-editor table insert failed after toolbar click: ${JSON.stringify(directInsert)}`);
+  }
   await sleep(500);
 
   const tableState = await evaluate(client, `(() => {
@@ -3326,6 +3396,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(tableState.rowCount >= 2 && tableState.cellCount >= 4, `Inserted table structure is incomplete: ${JSON.stringify(tableState)}`);
   assert(tableState.cellTexts.includes('Column 1') && tableState.cellTexts.includes('Value 2'), `Inserted table cell defaults missing: ${JSON.stringify(tableState)}`);
   assert(tableState.tableBorderCollapse === 'collapse', `Inserted table did not use stable table styling: ${JSON.stringify(tableState)}`);
+
+  await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeGrowth = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeGrowth?.ok, `Unable to select inserted table cell before growth controls: ${JSON.stringify(selectedTableCellBeforeGrowth)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-add-row');
   await sleep(250);
@@ -3441,6 +3521,15 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table header-row toggle lost header text: ${JSON.stringify(headerTableState)}`,
   );
 
+  const selectedTableBeforeRemove = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableBeforeRemove?.ok, `Unable to select table before remove control: ${JSON.stringify(selectedTableBeforeRemove)}`);
+
   await mouseDownControlByTestId(client, 'rich-text-table-remove');
   await sleep(500);
 
@@ -3460,6 +3549,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table remove control did not remove only the active table: ${JSON.stringify(deletedTableState)}`,
   );
 
+  await activateTextEditing(client, elementId);
   const restoredCollapse = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -3519,6 +3609,8 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     seeded,
     selected,
     blockquoteState,
+    selectedListItem,
+    listIndentState,
     collapsed,
     directInsert,
     tableState,
@@ -3571,13 +3663,36 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   const rowCount = types.filter((type) => type === 'tr').length;
   const cellCount = types.filter((type) => type === 'td' || type === 'th').length;
   const headerCellCount = types.filter((type) => type === 'th').length;
+  const listItems = [];
+  const collectListItems = (value) => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(collectListItems);
+      return;
+    }
+    if (value.type === 'li') {
+      listItems.push({
+        text: collectSlateLeaves(value).map((leaf) => leaf.text || '').join(''),
+        indent: value.indent,
+      });
+    }
+    if (Array.isArray(value.children)) {
+      value.children.forEach(collectListItems);
+    }
+  };
+  collectListItems(content);
+  const indentedListItem = listItems.find((item) => item.text.includes('Nested item'));
+  const siblingListItem = listItems.find((item) => item.text.includes('Sibling item'));
   const text = leaves.map((leaf) => leaf.text || '').join(' ');
 
   assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
   assert(tableCount >= 1 && rowCount === 2 && cellCount === 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
   assert(headerCellCount === 2, `Persisted table header-row cells missing: ${JSON.stringify({ types, content })}`);
+  assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
+  assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
   assert(text.includes('Column 1') && text.includes('Value 2'), `Persisted table text missing: ${JSON.stringify(leaves)}`);
+  assert(text.includes('Nested item') && text.includes('Sibling item'), `Persisted list text missing: ${JSON.stringify(leaves)}`);
 
   return {
     blockquoteCount,
@@ -3585,6 +3700,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     rowCount,
     cellCount,
     headerCellCount,
+    listItems,
     text,
   };
 };

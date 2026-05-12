@@ -1,4 +1,5 @@
 export type RichTextListType = 'ul' | 'ol';
+export const RICH_TEXT_LIST_MAX_INDENT = 8;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === 'object';
@@ -119,7 +120,7 @@ export const applyListIndentToNodes = (nodes: unknown[], step: number): unknown[
     if (nextNode.type === 'li') {
       const currentIndent = Number(nextNode.indent || 0);
       if (Number.isFinite(currentIndent)) {
-        const nextIndent = Math.max(0, currentIndent + step);
+        const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
         if (nextIndent === 0) {
           delete nextNode.indent;
         } else {

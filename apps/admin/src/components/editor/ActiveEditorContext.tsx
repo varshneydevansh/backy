@@ -9,6 +9,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import type { PlateEditor } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range, BaseSelection, Node, Text } from 'slate';
 import { ReactEditor } from 'slate-react';
+import { RICH_TEXT_LIST_MAX_INDENT } from './richTextListTransforms';
 
 interface ActiveEditorContextType {
   /** The currently active Plate editor */
@@ -38,9 +39,9 @@ interface ActiveEditorContextType {
   /** Toggle list */
   toggleList: (format: 'ul' | 'ol') => void;
   /** Increase list indent for selected list item(s) */
-  indentList: () => void;
+  indentList: () => boolean;
   /** Decrease list indent for selected list item(s) */
-  outdentList: () => void;
+  outdentList: () => boolean;
   /** Insert plain text at current selection */
   insertText: (text: string) => void;
   /** Insert a link node at current selection */
@@ -98,8 +99,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   setAlign: () => { },
   toggleBlockquote: () => { },
   toggleList: () => { },
-  indentList: () => { },
-  outdentList: () => { },
+  indentList: () => false,
+  outdentList: () => false,
   insertText: () => { },
   insertLink: () => { },
   insertImage: () => { },
@@ -639,8 +640,17 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       try {
-        const end = Editor.end(editor as any, []);
-        Transforms.select(editor as any, end);
+        const children = Array.isArray((editor as any).children) ? (editor as any).children : [];
+        const lastIndex = children.length - 1;
+        const lastNode = lastIndex >= 0 ? children[lastIndex] : null;
+        const lastType = (lastNode as { type?: unknown } | null)?.type;
+        if (lastIndex >= 0 && (lastType === 'ul' || lastType === 'ol')) {
+          Transforms.insertNodes(editor as any, { type: 'p', children: [{ text: '' }] } as any, { at: [lastIndex + 1] });
+          Transforms.select(editor as any, Editor.start(editor as any, [lastIndex + 1]));
+        } else {
+          const end = Editor.end(editor as any, []);
+          Transforms.select(editor as any, end);
+        }
         setStoredSelection(editor.selection || null);
         return {
           ok: true,
@@ -697,6 +707,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           })
         ).map(([node, path]) => ({
           type: (node as { type?: string }).type || '',
+          indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
           text: Editor.string(editor as any, path as any),
         }));
@@ -861,7 +872,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       try {
-        const resolvePoint = (targetOffset: number) => {
+        const resolvePoint = (targetOffset: number, bias: 'start' | 'end') => {
           let offset = 0;
           const textEntries = Array.from(
             Editor.nodes(editor as any, {
@@ -871,10 +882,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
             })
           );
 
-          for (const [node, path] of textEntries) {
+          for (let index = 0; index < textEntries.length; index += 1) {
+            const [node, path] = textEntries[index]!;
             const text = Text.isText(node) ? node.text : '';
             const nextOffset = offset + text.length;
-            if (targetOffset <= nextOffset) {
+            const useBoundary = targetOffset === nextOffset && (bias === 'end' || index === textEntries.length - 1);
+            if (targetOffset < nextOffset || useBoundary) {
               return {
                 path,
                 offset: Math.max(0, Math.min(text.length, targetOffset - offset)),
@@ -894,8 +907,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
             offset: Text.isText(lastNode) ? lastNode.text.length : 0,
           };
         };
-        const start = resolvePoint(startIndex);
-        const end = resolvePoint(endIndex + endText.length);
+        const start = resolvePoint(startIndex, 'start');
+        const end = resolvePoint(endIndex + endText.length, 'end');
         const nextSelection = { anchor: start, focus: end };
         Transforms.select(editor as any, nextSelection);
         setStoredSelection(nextSelection);
@@ -1122,16 +1135,17 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return listTypes.length ? (listTypes[0] as 'ul' | 'ol' | null) : null;
   }, [getActiveEditor, getIsListNode]);
 
-  const applyListIndent = useCallback((step: number) => {
+  const applyListIndent = useCallback((step: number): boolean => {
     const editor = getActiveEditor();
-    if (!editor) return;
+    if (!editor) return false;
     try {
       debug('applyListIndent.start', {
         step,
         selection: describeSelection(editor.selection || null),
       });
-      if (!restoreSelection({ requireTextSelection: false })) return;
-      if (!editor.selection || !Range.isRange(editor.selection)) return;
+      const hasValidLiveSelection = isValidRange(editor, editor.selection);
+      if (!hasValidLiveSelection && !restoreSelection({ requireTextSelection: false })) return false;
+      if (!isValidRange(editor, editor.selection)) return false;
 
       const listItems = Array.from(
         Editor.nodes(editor as any, {
@@ -1141,17 +1155,43 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         })
       );
 
-      if (listItems.length === 0) return;
+      if (listItems.length === 0) {
+        for (const point of [Range.start(editor.selection), Range.end(editor.selection)]) {
+          const item = Editor.above(editor as any, {
+            at: point.path,
+            match: (node) => getIsListItemNode(node),
+          });
+          if (!item) continue;
+          const [, path] = item;
+          const key = path.join('.');
+          if (!listItems.some(([, existingPath]) => existingPath.join('.') === key)) {
+            listItems.push(item);
+          }
+        }
+      }
+
+      if (listItems.length === 0) {
+        return false;
+      }
 
       for (const [node, path] of listItems) {
+        const currentIndent = Number((node as any).indent || 0);
         const next = Math.max(
           0,
-          Number((node as any).indent || 0) + step
+          Math.min(RICH_TEXT_LIST_MAX_INDENT, Number.isFinite(currentIndent) ? currentIndent + step : step)
         );
         if (next === 0) {
-          Transforms.unsetNodes(editor as any, 'indent' as any, { at: path });
+          Transforms.unsetNodes(editor as any, 'indent' as any, { at: path, match: getIsListItemNode });
+          const nextNode = Node.get(editor as any, path as any) as { indent?: unknown };
+          if (nextNode && typeof nextNode === 'object') {
+            delete nextNode.indent;
+          }
         } else {
-          Transforms.setNodes(editor as any, { indent: next } as any, { at: path });
+          Transforms.setNodes(editor as any, { indent: next } as any, { at: path, match: getIsListItemNode });
+          const nextNode = Node.get(editor as any, path as any) as { indent?: unknown };
+          if (nextNode && typeof nextNode === 'object') {
+            nextNode.indent = next;
+          }
         }
       }
 
@@ -1161,10 +1201,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       });
       setStoredSelection(editor.selection || null);
       syncActiveEditorContentSoon();
+      return true;
     } catch (e) {
       console.warn('applyListIndent failed:', e);
+      return false;
     }
-  }, [debug, describeSelection, getActiveEditor, getIsListItemNode, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+  }, [debug, describeSelection, getActiveEditor, getIsListItemNode, isValidRange, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const isMarkActive = useCallback((format: string): boolean => {
     const editor = getActiveEditor();
@@ -1745,11 +1787,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
   ]);
 
   const indentList = useCallback(() => {
-    applyListIndent(1);
+    return applyListIndent(1);
   }, [applyListIndent]);
 
   const outdentList = useCallback(() => {
-    applyListIndent(-1);
+    return applyListIndent(-1);
   }, [applyListIndent]);
 
   return (

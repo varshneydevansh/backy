@@ -16,6 +16,7 @@ import { EmojiPickerModal } from './EmojiPickerModal';
 import {
   applyListIndentToNodes,
   applyListTypeToNodes,
+  RICH_TEXT_LIST_MAX_INDENT,
   type RichTextListType,
 } from './richTextListTransforms';
 import { Editor, Node, Range as SlateRange, Text, Transforms } from 'slate';
@@ -126,6 +127,7 @@ export function RichTextFormatting({
 
   const pendingActionRef = useRef<number | null>(null);
   const activePropertyActionRef = useRef<string>('unknown');
+  const suppressNextListIndentClickRef = useRef(false);
   const syncActiveEditorContentAfterCommand = useCallback(() => {
     syncActiveEditorContent();
     if (typeof window !== 'undefined') {
@@ -329,6 +331,156 @@ export function RichTextFormatting({
     onElementContentChange?.(nextContent);
     return true;
   }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
+
+  const readDomTextSelectionOffsets = useCallback((): { start: number; end: number } | null => {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || !elementId) {
+      return null;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return null;
+    }
+
+    const elementRoot = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+      node.getAttribute('data-element-id') === elementId
+    ));
+    const editor = elementRoot?.querySelector('[contenteditable="true"], [role="textbox"]');
+    if (!(editor instanceof HTMLElement)) {
+      return null;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+      return null;
+    }
+
+    const measureOffset = (container: globalThis.Node, offset: number) => {
+      const measureRange = document.createRange();
+      measureRange.selectNodeContents(editor);
+      measureRange.setEnd(container, offset);
+      return measureRange.toString().length;
+    };
+
+    const start = measureOffset(range.startContainer, range.startOffset);
+    const end = measureOffset(range.endContainer, range.endOffset);
+    return end > start ? { start, end } : null;
+  }, [elementId]);
+
+  const applyListIndentToElementSelection = useCallback((step: number): boolean => {
+    if (!canWriteElementContent()) {
+      return false;
+    }
+
+    const selectionOffsets = readDomTextSelectionOffsets();
+    if (!selectionOffsets) {
+      return false;
+    }
+
+    let didTargetListItem = false;
+    let selectedText = '';
+    if (typeof window !== 'undefined') {
+      selectedText = window.getSelection()?.toString() || '';
+    }
+
+    const getNodeTextLength = (node: unknown): number => {
+      if (!node || typeof node !== 'object') {
+        return 0;
+      }
+
+      const record = node as Record<string, unknown>;
+      if (typeof record.text === 'string') {
+        return record.text.length;
+      }
+
+      const children = Array.isArray(record.children) ? record.children : [];
+      return children.reduce((length, child) => length + getNodeTextLength(child), 0);
+    };
+
+    const patchNode = (node: unknown, startOffset: number): { node: unknown; endOffset: number } => {
+      if (!node || typeof node !== 'object') {
+        return { node, endOffset: startOffset };
+      }
+
+      const record = node as Record<string, unknown>;
+      if (typeof record.text === 'string') {
+        return { node, endOffset: startOffset + record.text.length };
+      }
+
+      const nodeTextLength = getNodeTextLength(record);
+      const nodeEndOffset = startOffset + nodeTextLength;
+      const children = Array.isArray(record.children) ? record.children : null;
+      let nextOffset = startOffset;
+      const nextNode: Record<string, unknown> = { ...record };
+
+      if (children) {
+        nextNode.children = children.map((child) => {
+          const patched = patchNode(child, nextOffset);
+          nextOffset = patched.endOffset;
+          return patched.node;
+        });
+      }
+
+      const intersectsSelection = selectionOffsets.start < nodeEndOffset && selectionOffsets.end > startOffset;
+      const listText = children ? children.map((child) => {
+        if (!child || typeof child !== 'object') {
+          return '';
+        }
+        const childRecord = child as Record<string, unknown>;
+        return typeof childRecord.text === 'string' ? childRecord.text : '';
+      }).join('') : '';
+      const matchesSelectedText = !!selectedText && listText.includes(selectedText);
+      if (nextNode.type === 'li' && (intersectsSelection || matchesSelectedText)) {
+        didTargetListItem = true;
+        const currentIndent = Number(nextNode.indent || 0);
+        if (Number.isFinite(currentIndent)) {
+          const nextIndent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, currentIndent + step));
+          if (nextIndent === 0) {
+            delete nextNode.indent;
+          } else {
+            nextNode.indent = nextIndent;
+          }
+        }
+      }
+
+      return { node: nextNode, endOffset: nodeEndOffset };
+    };
+
+    let offset = 0;
+    const nextContent = normalizedElementContent.map((node) => {
+      const patched = patchNode(node, offset);
+      offset = patched.endOffset;
+      return patched.node;
+    });
+
+    if (!didTargetListItem) {
+      return false;
+    }
+
+    const clonedContent = JSON.parse(JSON.stringify(nextContent)) as unknown[];
+    onElementContentChange?.(clonedContent);
+
+    const activeEditor = getActiveEditor();
+    const activeEditorElementId = getCurrentActiveEditorId();
+    if (activeEditor && (!elementId || !activeEditorElementId || activeEditorElementId === elementId)) {
+      try {
+        (activeEditor as any).children = JSON.parse(JSON.stringify(nextContent));
+        (activeEditor as any).onChange?.();
+        syncActiveEditorContentAfterCommand();
+      } catch {
+      }
+    }
+    return true;
+  }, [
+    canWriteElementContent,
+    elementId,
+    getActiveEditor,
+    getCurrentActiveEditorId,
+    normalizedElementContent,
+    onElementContentChange,
+    readDomTextSelectionOffsets,
+    syncActiveEditorContentAfterCommand,
+  ]);
 
   const toggleBlockquoteInElementContent = useCallback((): boolean => {
     if (!canWriteElementContent()) {
@@ -1009,23 +1161,33 @@ export function RichTextFormatting({
   }, [applyListTypeToElementContent, isTargetEditorUsable, runForTextSelectionOrCaret, toggleList]);
 
   const adjustElementListIndent = useCallback((step: number) => {
-    if (!isTargetEditorUsable()) {
-      applyListIndentToElementContent(step);
-      return;
+    const activeEditorElementId = getCurrentActiveEditorId();
+    const canUseActiveEditor = canInteractWithEditor()
+      && (!elementId || !activeEditorElementId || activeEditorElementId === elementId);
+
+    if (canUseActiveEditor) {
+      const didApplyToActiveEditor = step > 0 ? indentList() : outdentList();
+      if (didApplyToActiveEditor) {
+        return;
+      }
     }
 
-    const didApply = step > 0
-      ? runForTextSelectionOrCaret(() => {
-          indentList();
-        }, false)
-      : runForTextSelectionOrCaret(() => {
-          outdentList();
-        }, false);
-
-    if (!didApply) {
+    if (!applyListIndentToElementSelection(step)) {
       applyListIndentToElementContent(step);
     }
-  }, [applyListIndentToElementContent, isTargetEditorUsable, outdentList, indentList, runForTextSelectionOrCaret]);
+  }, [
+    applyListIndentToElementContent,
+    applyListIndentToElementSelection,
+    canInteractWithEditor,
+    elementId,
+    getCurrentActiveEditorId,
+    outdentList,
+    indentList,
+  ]);
+
+  const runListIndentControl = useCallback((step: number) => {
+    adjustElementListIndent(step);
+  }, [adjustElementListIndent]);
 
   const toggleBlockquoteForElementOrSelection = useCallback(() => {
     if (!isTargetEditorUsable()) {
@@ -1806,7 +1968,17 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            adjustElementListIndent(-1);
+            suppressNextListIndentClickRef.current = true;
+            runListIndentControl(-1);
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (suppressNextListIndentClickRef.current) {
+              suppressNextListIndentClickRef.current = false;
+              return;
+            }
+            runListIndentControl(-1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-outdent"
@@ -1819,7 +1991,17 @@ export function RichTextFormatting({
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            adjustElementListIndent(1);
+            suppressNextListIndentClickRef.current = true;
+            runListIndentControl(1);
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (suppressNextListIndentClickRef.current) {
+              suppressNextListIndentClickRef.current = false;
+              return;
+            }
+            runListIndentControl(1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-indent"
