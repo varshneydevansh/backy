@@ -124,6 +124,82 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
+const setAdminPermissionOverrides = async (overrides) => {
+  await requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({ overrides }),
+  });
+};
+
+const assertCommentsPermissionOverridesAreEnforced = async () => {
+  await setAdminPermissionOverrides({
+    'comments.manage': 'deny',
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/comments`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        status: 'approved',
+        commentIds: ['comments-smoke-denied-permission'],
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 403, `Denied comments.manage override should reject moderation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied comments.manage override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+  } finally {
+    await setAdminPermissionOverrides({
+      'comments.manage': null,
+    });
+  }
+
+  await setAdminPermissionOverrides({
+    'comments.configure': 'deny',
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        settings: {
+          commentPolicy: {
+            enabled: true,
+            moderationMode: 'manual',
+            allowGuests: true,
+            requireName: true,
+            requireEmail: false,
+            allowReplies: true,
+            enableReports: true,
+            enableCaptcha: false,
+            captchaProvider: 'mock',
+            captchaSiteKey: '',
+            blockedTerms: [],
+            closedMessage: 'Comments are closed for this site.',
+            sort: 'newest',
+          },
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 403, `Denied comments.configure override should reject policy save, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied comments.configure override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+  } finally {
+    await setAdminPermissionOverrides({
+      'comments.configure': null,
+    });
+  }
+};
+
 const createPage = async () => {
   const suffix = Date.now().toString(36);
   const title = `Comments Smoke Page ${suffix}`;
@@ -1106,6 +1182,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await assertCommentsPermissionOverridesAreEnforced();
     webhookReceiver = await startCommentWebhookReceiver({ failFirstKind: 'comment-reported' });
     const currentSettings = await getAdminSettings();
     originalNotifications = currentSettings?.integrations?.notifications || {};

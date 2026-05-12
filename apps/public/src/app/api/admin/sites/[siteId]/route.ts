@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site, SiteSettings } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   deleteAdminSite,
   getSiteByIdOrSlug,
@@ -123,6 +124,21 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
   };
 };
 
+const isCommentPolicyOnlyPatch = (body: Record<string, unknown>): boolean => {
+  const bodyKeys = Object.keys(body);
+  if (bodyKeys.length !== 1 || !bodyKeys.includes('settings')) {
+    return false;
+  }
+
+  const settings = body.settings;
+  if (!isRecord(settings)) {
+    return false;
+  }
+
+  const settingsKeys = Object.keys(settings);
+  return settingsKeys.length === 1 && settingsKeys[0] === 'commentPolicy';
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'sites.view' });
@@ -170,7 +186,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  const body = await parseJsonBody(request);
+  const commentPolicyOnlyPatch = isCommentPolicyOnlyPatch(body);
+  const access = requireAdminAccess(request, requestId, {
+    permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
+  });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -185,7 +205,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const body = await parseJsonBody(request);
       const settings = mergeSiteSettings(site.settings, body.settings);
       const updated = await repositories.sites.update(site.id, {
         name: typeof body.name === 'string' ? body.name : undefined,
@@ -196,6 +215,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         isPublished: typeof body.isPublished === 'boolean' ? body.isPublished : undefined,
         settings,
       });
+      if (commentPolicyOnlyPatch) {
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          actorId: access.session?.user.id,
+          entity: 'site',
+          entityId: site.id,
+          action: 'commentPolicy.update',
+          before: site.settings?.commentPolicy || {},
+          after: updated.item.settings?.commentPolicy || {},
+          metadata: {
+            permission: 'comments.configure',
+          },
+          requestId,
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -212,11 +247,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const body = await parseJsonBody(request);
     const updated = updateAdminSite(site.id, body);
 
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+    if (commentPolicyOnlyPatch) {
+      await recordAdminAudit({
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'commentPolicy.update',
+        before: site.settings?.commentPolicy || {},
+        after: updated.settings?.commentPolicy || {},
+        metadata: {
+          permission: 'comments.configure',
+        },
+        requestId,
+      });
     }
 
     return NextResponse.json({
