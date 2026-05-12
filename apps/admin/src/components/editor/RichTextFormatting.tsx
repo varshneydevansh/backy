@@ -45,6 +45,7 @@ import {
   Rows2,
   Columns2,
   TableProperties,
+  Trash2,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -118,6 +119,7 @@ export function RichTextFormatting({
     removeTableRow,
     removeTableColumn,
     toggleTableHeaderRow,
+    removeTable,
     storeSelection,
     syncActiveEditorContent,
   } = useActiveEditor();
@@ -1481,6 +1483,12 @@ export function RichTextFormatting({
     });
   }, [runOrActivateTextEditor, toggleTableHeaderRow]);
 
+  const removeTableAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-remove', () => {
+      removeTable();
+    });
+  }, [removeTable, runOrActivateTextEditor]);
+
   const onFontSizeBlur = (event: FocusEvent<HTMLInputElement>) => {
     logTextAction('content-property.font-size-blur', {
       actionName: 'font-size-blur',
@@ -2051,6 +2059,19 @@ export function RichTextFormatting({
             title="Toggle table header row"
           >
             <TableProperties className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-remove', () => removeTableAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-remove"
+            title="Remove table"
+          >
+            <Trash2 className="w-4 h-4" />
           </button>
           <button
             type="button"

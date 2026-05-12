@@ -3395,6 +3395,80 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table header-row toggle lost header text: ${JSON.stringify(headerTableState)}`,
   );
 
+  await mouseDownControlByTestId(client, 'rich-text-table-remove');
+  await sleep(500);
+
+  const deletedTableState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    return {
+      text: host?.textContent || '',
+      tableCount: host?.querySelectorAll('table').length || 0,
+      blockquoteCount: host?.querySelectorAll('blockquote').length || 0,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    deletedTableState.tableCount === 0 &&
+      deletedTableState.blockquoteCount === 2 &&
+      !deletedTableState.text.includes('Column 1'),
+    `Table remove control did not remove only the active table: ${JSON.stringify(deletedTableState)}`,
+  );
+
+  const restoredCollapse = await evaluate(client, `(() => {
+    if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
+      return { ok: false, reason: 'missing-collapse-helper' };
+    }
+
+    return window.__backyCollapseActiveEditorToEnd();
+  })()`);
+  assert(restoredCollapse?.ok, `Unable to collapse rich text selection before table restore: ${JSON.stringify(restoredCollapse)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-insert-table');
+  await sleep(500);
+  const restoredDirectInsert = await evaluate(client, `(() => {
+    if (document.querySelector('[data-element-id="${elementId}"] table')) {
+      return { ok: true, skipped: true, reason: 'table-already-inserted' };
+    }
+
+    if (typeof window.__backyInsertActiveEditorTable !== 'function') {
+      return { ok: false, reason: 'missing-insert-table-helper' };
+    }
+
+    return window.__backyInsertActiveEditorTable();
+  })()`);
+  assert(restoredDirectInsert?.ok, `Direct active-editor table restore failed after table removal: ${JSON.stringify(restoredDirectInsert)}`);
+
+  const restoredHeaderCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(restoredHeaderCell?.ok, `Unable to select restored table cell before header-row toggle: ${JSON.stringify(restoredHeaderCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-row');
+  await sleep(500);
+
+  const restoredHeaderTableState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const firstRowHeaders = Array.from(rows[0]?.querySelectorAll('th') || []);
+    return {
+      tableCount: host?.querySelectorAll('table').length || 0,
+      rowCount: rows.length,
+      firstRowHeaderCount: firstRowHeaders.length,
+      firstRowHeaderTexts: firstRowHeaders.map((node) => node.textContent || ''),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredHeaderTableState.tableCount === 1 &&
+      restoredHeaderTableState.rowCount === 2 &&
+      restoredHeaderTableState.firstRowHeaderCount === 2,
+    `Restored table header-row state is incomplete before save: ${JSON.stringify(restoredHeaderTableState)}`,
+  );
+
   return {
     seeded,
     selected,
@@ -3406,6 +3480,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     trimmedTableState,
     selectedHeaderCell,
     headerTableState,
+    deletedTableState,
+    restoredDirectInsert,
+    restoredHeaderCell,
+    restoredHeaderTableState,
   };
 };
 

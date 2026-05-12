@@ -59,6 +59,8 @@ interface ActiveEditorContextType {
   removeTableColumn: () => boolean;
   /** Toggle the current table row between body cells and header cells */
   toggleTableHeaderRow: () => boolean;
+  /** Remove the current table */
+  removeTable: () => boolean;
   /** Check if mark is active */
   isMarkActive: (format: string) => boolean;
   /** Whether a range selection is currently available for formatting */
@@ -107,6 +109,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   removeTableRow: () => false,
   removeTableColumn: () => false,
   toggleTableHeaderRow: () => false,
+  removeTable: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
   hasSelection: () => false,
@@ -464,6 +467,45 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
     } catch {
       // Selection is best-effort after header-row toggle.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const removeSelectedTable = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const parentPath = context.tablePath.slice(0, -1);
+    const tableIndex = context.tablePath[context.tablePath.length - 1] || 0;
+    const parentNode = parentPath.length > 0 ? Node.get(editor as any, parentPath) : editor;
+    const siblings = Array.isArray((parentNode as any).children) ? (parentNode as any).children : [];
+
+    if (siblings.length <= 1) {
+      Transforms.removeNodes(editor as any, { at: context.tablePath });
+      const fallbackPath = [...parentPath, 0];
+      Transforms.insertNodes(editor as any, {
+        type: 'p',
+        children: [{ text: '' }],
+      } as any, {
+        at: fallbackPath,
+      });
+      try {
+        Transforms.select(editor as any, Editor.start(editor as any, fallbackPath));
+      } catch {
+        // Selection is best-effort after table removal.
+      }
+      return true;
+    }
+
+    const nextSiblingIndex = Math.max(0, Math.min(tableIndex, siblings.length - 2));
+    const nextSiblingPath = [...parentPath, nextSiblingIndex];
+    Transforms.removeNodes(editor as any, { at: context.tablePath });
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, nextSiblingPath));
+    } catch {
+      // Selection is best-effort after table removal.
     }
     return true;
   }, [getSelectedTableContext]);
@@ -1409,6 +1451,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderRow]);
 
+  const removeTable = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('removeTable.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!removeSelectedTable(editor)) return false;
+
+      debug('removeTable.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('removeTable failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, removeSelectedTable, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
     if (!editor || !url) {
@@ -1711,6 +1778,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       removeTableRow,
       removeTableColumn,
       toggleTableHeaderRow,
+      removeTable,
       isMarkActive,
       hasRangeSelection,
       hasSelection,
