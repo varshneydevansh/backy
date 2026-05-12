@@ -12,6 +12,7 @@ import {
   GitBranch,
   MessageSquare,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldAlert,
   Trash2,
@@ -27,6 +28,7 @@ import {
   listCommentBlocklist,
   listComments,
   listPages,
+  retryCommentDelivery,
   updateSite,
   updateCommentThread,
   updateComments,
@@ -256,10 +258,15 @@ function CommentsRoute() {
   const [isReplyingId, setIsReplyingId] = useState<string | null>(null);
   const [isMovingId, setIsMovingId] = useState<string | null>(null);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  const [retryingDeliveryIds, setRetryingDeliveryIds] = useState<string[]>([]);
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0 || Boolean(isReplyingId) || Boolean(isMovingId);
+  const isCommentMutationBusy = updatingIds.length > 0
+    || deletingBlocklistIds.length > 0
+    || retryingDeliveryIds.length > 0
+    || Boolean(isReplyingId)
+    || Boolean(isMovingId);
   const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
 
   const activeSite = useMemo(
@@ -758,6 +765,28 @@ function CommentsRoute() {
       setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
       setCommentDeliveryEvents([]);
       return null;
+    }
+  };
+
+  const handleRetryCommentDelivery = async (event: CommentDeliveryEvent) => {
+    if (isCommentsBusy || !event.commentId) return;
+
+    setRetryingDeliveryIds((current) => [...current, event.id]);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await retryCommentDelivery(activeSiteId, event.commentId, event.id);
+      setComments((current) => current.map((comment) => (
+        comment.id === result.comment.id ? result.comment : comment
+      )));
+      await refreshCommentDeliveryEvents().catch(() => null);
+      const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'delivery';
+      setNotice(`Comment ${channel} retry ${result.delivery.status}.`);
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : 'Unable to retry comment delivery');
+    } finally {
+      setRetryingDeliveryIds((current) => current.filter((id) => id !== event.id));
     }
   };
 
@@ -1663,7 +1692,12 @@ function CommentsRoute() {
               ) : (
                 <div className="mt-4 grid gap-3" data-testid="comments-delivery-list">
                   {commentDeliveryEvents.slice(0, 8).map((event) => (
-                    <CommentDeliveryEventCard key={event.id} event={event} />
+                    <CommentDeliveryEventCard
+                      key={event.id}
+                      event={event}
+                      isRetrying={retryingDeliveryIds.includes(event.id)}
+                      onRetry={handleRetryCommentDelivery}
+                    />
                   ))}
                 </div>
               )}
@@ -2300,12 +2334,29 @@ function commentDeliveryChannel(event: CommentDeliveryEvent) {
   return typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'activity';
 }
 
-function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
+function isRetryableCommentDeliveryEvent(event: CommentDeliveryEvent) {
+  const channel = commentDeliveryChannel(event);
+  return event.status === 'failed'
+    && Boolean(event.commentId)
+    && (channel === 'webhook' || channel === 'email');
+}
+
+function CommentDeliveryEventCard({
+  event,
+  isRetrying,
+  onRetry,
+}: {
+  event: CommentDeliveryEvent;
+  isRetrying: boolean;
+  onRetry: (event: CommentDeliveryEvent) => void;
+}) {
   const statusClass = event.status === 'succeeded'
     ? 'bg-success/10 text-success'
     : event.status === 'failed'
       ? 'bg-destructive/10 text-destructive'
       : 'bg-warning/10 text-warning';
+  const canRetry = isRetryableCommentDeliveryEvent(event);
+  const channel = commentDeliveryChannel(event);
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3" data-testid="comments-delivery-event">
@@ -2319,8 +2370,13 @@ function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
               {event.kind}
             </span>
             <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-              {commentDeliveryChannel(event)}
+              {channel}
             </span>
+            {event.metadata?.retry === true ? (
+              <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                retry
+              </span>
+            ) : null}
             <span className="text-xs text-muted-foreground">{formatDate(event.createdAt)}</span>
           </div>
           <div className="mt-2 text-sm font-semibold text-foreground">{commentDeliveryTitle(event)}</div>
@@ -2338,6 +2394,19 @@ function CommentDeliveryEventCard({ event }: { event: CommentDeliveryEvent }) {
           <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
             HTTP {event.statusCode}
           </span>
+        ) : null}
+        {canRetry ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRetrying}
+            onClick={() => onRetry(event)}
+            iconStart={<RotateCcw className={cn('size-4', isRetrying ? 'animate-spin' : '')} />}
+            aria-label={`Retry ${channel} delivery ${event.id}`}
+            data-testid="comments-delivery-retry"
+          >
+            {isRetrying ? 'Retrying' : 'Retry'}
+          </Button>
         ) : null}
       </div>
     </div>

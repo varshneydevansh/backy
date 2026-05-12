@@ -693,6 +693,22 @@ interface ApiListCommentDeliveryEventsResponse {
   };
 }
 
+interface ApiCommentDeliveryRetryResponse {
+  success: boolean;
+  requestId?: string;
+  data?: {
+    delivery: CommentDeliveryRetryDelivery;
+    retryOf: string;
+    comment: Comment;
+  };
+  delivery?: CommentDeliveryRetryDelivery;
+  retryOf?: string;
+  comment?: Comment;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListContactsResponse {
   success: boolean;
   data?: {
@@ -1667,6 +1683,17 @@ export interface CommentDeliveryEventList {
   events: CommentDeliveryEvent[];
   count: number;
   pagination?: ApiPagination;
+}
+
+export interface CommentDeliveryRetryDelivery {
+  attempted: boolean;
+  channel?: 'webhook' | 'email' | string;
+  target?: string;
+  status: 'queued' | 'succeeded' | 'failed' | string;
+  statusCode?: number;
+  provider?: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FormDeliveryEventList {
@@ -3814,6 +3841,37 @@ export async function retryFormEmailDelivery(
     requestId: payload.requestId || requestId,
     delivery,
     submission,
+  };
+}
+
+export async function retryCommentDelivery(
+  siteId: string,
+  commentId: string,
+  eventId: string,
+): Promise<{ requestId: string; delivery: CommentDeliveryRetryDelivery; retryOf: string; comment: AdminComment }> {
+  const requestId = `comments-ui-delivery-retry-${Date.now().toString(36)}`;
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}/delivery-retry`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': requestId,
+    },
+    body: JSON.stringify({ eventId, requestId }),
+  });
+  const payload = await readJson<ApiCommentDeliveryRetryResponse>(response);
+  const delivery = payload.data?.delivery || payload.delivery;
+  const retryOf = payload.data?.retryOf || payload.retryOf;
+  const comment = payload.data?.comment || payload.comment;
+
+  if (!response.ok || !payload.success || !delivery || !retryOf || !comment) {
+    throw new Error(payload.error?.message || 'Unable to retry comment delivery');
+  }
+
+  return {
+    requestId: payload.requestId || requestId,
+    delivery,
+    retryOf,
+    comment,
   };
 }
 

@@ -10,8 +10,9 @@ import {
 import { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
 
 type CommentRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
-type CommentDeliveryKind = 'comment-submitted' | 'comment-reported' | 'comment-status';
+export type CommentDeliveryKind = 'comment-submitted' | 'comment-reported' | 'comment-status';
 type CommentDeliveryStatus = 'queued' | 'succeeded' | 'failed';
+export type CommentDeliveryChannel = 'webhook' | 'email';
 
 const readRecord = (value: unknown): Record<string, unknown> => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -95,11 +96,14 @@ async function deliverCommentWebhook(params: {
   requestId: string;
   reason?: string | null;
   actor?: string | null;
+  metadata?: Record<string, unknown>;
 }) {
+  const isRetry = params.metadata?.retry === true;
+
   await recordCommentDeliveryEvent({
     ...params,
     status: 'queued',
-    metadata: { channel: 'webhook' },
+    metadata: { channel: 'webhook', ...(params.metadata || {}) },
   });
 
   try {
@@ -110,8 +114,10 @@ async function deliverCommentWebhook(params: {
         'x-backy-site-id': params.siteId,
         'x-backy-comment-id': params.comment.id,
         'x-backy-comment-event': params.kind,
+        ...(isRetry ? { 'x-backy-webhook-retry': 'true' } : {}),
       },
       body: JSON.stringify({
+        ...(isRetry ? { retry: true } : {}),
         kind: params.kind,
         siteId: params.siteId,
         commentId: params.comment.id,
@@ -136,15 +142,33 @@ async function deliverCommentWebhook(params: {
       status: response.ok ? 'succeeded' : 'failed',
       statusCode: response.status,
       error: response.ok ? undefined : `Webhook returned ${response.status}`,
-      metadata: { channel: 'webhook' },
+      metadata: { channel: 'webhook', ...(params.metadata || {}) },
     });
+
+    return {
+      attempted: true as const,
+      channel: 'webhook' as const,
+      target: params.target,
+      status: response.ok ? 'succeeded' as const : 'failed' as const,
+      statusCode: response.status,
+      error: response.ok ? undefined : `Webhook returned ${response.status}`,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown webhook error';
     await recordCommentDeliveryEvent({
       ...params,
       status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown webhook error',
-      metadata: { channel: 'webhook' },
+      error: message,
+      metadata: { channel: 'webhook', ...(params.metadata || {}) },
     });
+
+    return {
+      attempted: true as const,
+      channel: 'webhook' as const,
+      target: params.target,
+      status: 'failed' as const,
+      error: message,
+    };
   }
 }
 
@@ -157,6 +181,7 @@ async function deliverCommentEmail(params: {
   requestId: string;
   reason?: string | null;
   actor?: string | null;
+  metadata?: Record<string, unknown>;
 }) {
   const config = getEmailDeliveryConfig();
   const message = buildCommentNotificationEmail({
@@ -179,6 +204,7 @@ async function deliverCommentEmail(params: {
       provider: config.provider,
       from: config.from,
       subject: message.subject,
+      ...(params.metadata || {}),
     },
   });
 
@@ -195,24 +221,93 @@ async function deliverCommentEmail(params: {
         from: config.from,
         subject: message.subject,
         ...(result.metadata || {}),
+        ...(params.metadata || {}),
       },
     });
+
+    return {
+      attempted: true as const,
+      channel: 'email' as const,
+      target: `mailto:${params.target}`,
+      status: 'succeeded' as const,
+      statusCode: result.statusCode,
+      provider: config.provider,
+      metadata: result.metadata,
+    };
   } catch (error) {
+    const messageText = error instanceof Error ? error.message : 'Unknown email delivery error';
     await recordCommentDeliveryEvent({
       ...params,
       target: `mailto:${params.target}`,
       status: 'failed',
       statusCode: error instanceof EmailDeliveryError ? error.statusCode : undefined,
-      error: error instanceof Error ? error.message : 'Unknown email delivery error',
+      error: messageText,
       metadata: {
         channel: 'email',
         provider: config.provider,
         from: config.from,
         subject: message.subject,
         ...(error instanceof EmailDeliveryError ? error.metadata || {} : {}),
+        ...(params.metadata || {}),
       },
     });
+
+    return {
+      attempted: true as const,
+      channel: 'email' as const,
+      target: `mailto:${params.target}`,
+      status: 'failed' as const,
+      statusCode: error instanceof EmailDeliveryError ? error.statusCode : undefined,
+      provider: config.provider,
+      error: messageText,
+    };
   }
+}
+
+const normalizeRetryEmailTarget = (target: string): string => (
+  target.startsWith('mailto:') ? target.slice('mailto:'.length).trim() : target.trim()
+);
+
+export async function retryCommentDelivery(params: {
+  repositories?: CommentRepositories | null;
+  siteId: string;
+  comment: Comment;
+  kind: CommentDeliveryKind;
+  channel: CommentDeliveryChannel;
+  target: string;
+  requestId: string;
+  retryOf: string;
+  reason?: string | null;
+  actor?: string | null;
+}) {
+  const metadata = {
+    retry: true,
+    retryOf: params.retryOf,
+  };
+
+  if (params.channel === 'webhook') {
+    const target = readString(params.target);
+    if (!target) {
+      return { attempted: false as const, channel: params.channel, status: 'failed' as const, error: 'Webhook target is missing.' };
+    }
+
+    return deliverCommentWebhook({
+      ...params,
+      target,
+      metadata,
+    });
+  }
+
+  const target = normalizeRetryEmailTarget(params.target);
+  if (!target) {
+    return { attempted: false as const, channel: params.channel, status: 'failed' as const, error: 'Email target is missing.' };
+  }
+
+  return deliverCommentEmail({
+    ...params,
+    target,
+    metadata,
+  });
 }
 
 export async function notifyCommentDelivery(params: {

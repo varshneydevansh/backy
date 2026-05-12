@@ -44,8 +44,9 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
-const startCommentWebhookReceiver = async () => new Promise((resolve, reject) => {
+const startCommentWebhookReceiver = async ({ failFirstKind } = {}) => new Promise((resolve, reject) => {
   const deliveries = [];
+  const failedKinds = new Set();
   const server = http.createServer((request, response) => {
     let body = '';
     request.setEncoding('utf8');
@@ -65,6 +66,20 @@ const startCommentWebhookReceiver = async () => new Promise((resolve, reject) =>
         headers: request.headers,
         payload,
       });
+      const shouldFail = (
+        failFirstKind &&
+        payload?.kind === failFirstKind &&
+        payload?.retry !== true &&
+        request.headers['x-backy-webhook-retry'] !== 'true' &&
+        !failedKinds.has(failFirstKind)
+      );
+      if (shouldFail) {
+        failedKinds.add(failFirstKind);
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ ok: false, retryable: true }));
+        return;
+      }
+
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ ok: true }));
     });
@@ -321,12 +336,18 @@ const waitForCommentEvents = async (expectations) => {
   throw new Error(`Comment delivery events did not include expected records: ${JSON.stringify(expectations)}`);
 };
 
-const waitForCommentNotificationDelivery = async (receiver, { kind, commentId, requestId }) => {
+const waitForCommentNotificationDelivery = async (receiver, {
+  kind,
+  commentId,
+  requestId,
+  expectedWebhookStatus = 'succeeded',
+}) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const delivery = receiver.deliveries.find((item) => (
       item.payload?.kind === kind &&
       item.payload?.commentId === commentId &&
-      item.payload?.requestId === requestId
+      item.payload?.requestId === requestId &&
+      item.payload?.retry !== true
     ));
     const events = await listCommentEvents();
     const scoped = events.filter((event) => (
@@ -335,7 +356,7 @@ const waitForCommentNotificationDelivery = async (receiver, { kind, commentId, r
       event.requestId === requestId
     ));
     const webhookQueued = scoped.find((event) => event.metadata?.channel === 'webhook' && event.status === 'queued');
-    const webhookCompleted = scoped.find((event) => event.metadata?.channel === 'webhook' && event.status === 'succeeded');
+    const webhookCompleted = scoped.find((event) => event.metadata?.channel === 'webhook' && event.status === expectedWebhookStatus);
     const emailQueued = scoped.find((event) => event.metadata?.channel === 'email' && event.status === 'queued');
     const emailCompleted = scoped.find((event) => event.metadata?.channel === 'email' && event.status === 'succeeded');
 
@@ -346,7 +367,11 @@ const waitForCommentNotificationDelivery = async (receiver, { kind, commentId, r
           delivery.headers['x-backy-comment-event'] === kind,
         `Comment webhook receiver did not get Backy headers: ${JSON.stringify(delivery.headers)}`,
       );
-      assert(Number(webhookCompleted.statusCode) === 200, `Comment webhook did not record status 200: ${JSON.stringify(webhookCompleted)}`);
+      const expectedStatusCode = expectedWebhookStatus === 'succeeded' ? 200 : 503;
+      assert(
+        Number(webhookCompleted.statusCode) === expectedStatusCode,
+        `Comment webhook did not record status ${expectedStatusCode}: ${JSON.stringify(webhookCompleted)}`,
+      );
       assert(emailCompleted.target === `mailto:${COMMENT_NOTIFICATION_EMAIL}`, `Comment email target mismatch: ${JSON.stringify(emailCompleted)}`);
       assert(emailCompleted.metadata?.provider === EXPECTED_EMAIL_PROVIDER, `Comment email provider mismatch: ${JSON.stringify(emailCompleted)}`);
       assert(Number(emailCompleted.statusCode) === EXPECTED_EMAIL_STATUS_CODE, `Comment email status mismatch: ${JSON.stringify(emailCompleted)}`);
@@ -360,6 +385,77 @@ const waitForCommentNotificationDelivery = async (receiver, { kind, commentId, r
   }
 
   throw new Error(`Comment notification delivery did not complete for ${kind}/${commentId}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
+};
+
+const retryCommentDeliveryInUi = async (client, failedEventId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const eventId = ${JSON.stringify(failedEventId)};
+      const panel = document.querySelector('[data-testid="comments-delivery-panel"]');
+      const button = panel
+        ? Array.from(panel.querySelectorAll('[data-testid="comments-delivery-retry"]')).find((candidate) => (
+          candidate instanceof HTMLButtonElement &&
+          (candidate.getAttribute('aria-label') || '').includes(eventId) &&
+          !candidate.disabled
+        ))
+        : null;
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        hasPanel: Boolean(panel),
+        panelText: panel?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 700) || '',
+        buttons: panel ? Array.from(panel.querySelectorAll('button')).map((candidate) => ({
+          label: candidate.getAttribute('aria-label') || candidate.textContent || '',
+          disabled: candidate.disabled,
+        })) : [],
+      };
+    })()`);
+
+    if (result.ok) return;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to retry comment delivery in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const waitForCommentWebhookRetry = async (receiver, { kind, commentId, retryOf }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const delivery = receiver.deliveries.find((item) => (
+      item.payload?.kind === kind &&
+      item.payload?.commentId === commentId &&
+      item.payload?.retry === true &&
+      item.headers['x-backy-webhook-retry'] === 'true'
+    ));
+    const events = await listCommentEvents();
+    const retryEvent = events.find((event) => (
+      event.kind === kind &&
+      event.commentId === commentId &&
+      event.status === 'succeeded' &&
+      event.metadata?.channel === 'webhook' &&
+      event.metadata?.retry === true &&
+      event.metadata?.retryOf === retryOf
+    ));
+
+    if (delivery && retryEvent) {
+      assert(Number(retryEvent.statusCode) === 200, `Comment webhook retry did not record status 200: ${JSON.stringify(retryEvent)}`);
+      return {
+        delivery,
+        retryEvent,
+        events,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Comment webhook retry did not complete for ${kind}/${commentId}/${retryOf}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
 };
 
 const waitForCommentParent = async (commentId, requestId, parentId) => {
@@ -1007,7 +1103,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
-    webhookReceiver = await startCommentWebhookReceiver();
+    webhookReceiver = await startCommentWebhookReceiver({ failFirstKind: 'comment-reported' });
     const currentSettings = await getAdminSettings();
     originalNotifications = currentSettings?.integrations?.notifications || {};
     await patchAdminSettings({
@@ -1121,7 +1217,12 @@ const main = async () => {
       kind: 'comment-reported',
       requestId: reportRequestId,
       commentId: reportedComment.id,
+      expectedWebhookStatus: 'failed',
     });
+    const failedReportWebhookEvent = reportDelivery.events.find((event) => (
+      event.metadata?.channel === 'webhook' && event.status === 'failed'
+    ));
+    assert(failedReportWebhookEvent?.id, `Report delivery did not expose a failed webhook event: ${JSON.stringify(reportDelivery.events)}`);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1147,6 +1248,12 @@ const main = async () => {
       'Comments Smoke Move Parent',
     ]);
     await assertCommentDeliveryPanel(client);
+    await retryCommentDeliveryInUi(client, failedReportWebhookEvent.id);
+    const retryDelivery = await waitForCommentWebhookRetry(webhookReceiver, {
+      kind: 'comment-reported',
+      commentId: reportedComment.id,
+      retryOf: failedReportWebhookEvent.id,
+    });
     await assertThreadContext(client, 'Comments Smoke Thread Parent', 'Comments Smoke Thread Reply');
     const adminReplyContent = `Official admin reply from comments smoke ${suffix}.`;
     await createReplyInUi(client, 'Comments Smoke Thread Parent', adminReplyContent);
@@ -1273,6 +1380,7 @@ const main = async () => {
         webhookDeliveries: webhookReceiver.deliveries.length,
         submittedEventStatuses: submittedDelivery.events.map((event) => `${event.metadata?.channel || 'activity'}:${event.status}`),
         reportEventStatuses: reportDelivery.events.map((event) => `${event.metadata?.channel || 'activity'}:${event.status}`),
+        reportRetryStatus: retryDelivery.retryEvent.status,
       },
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
