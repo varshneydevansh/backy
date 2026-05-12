@@ -374,13 +374,17 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### ⚠️ Remaining
 - Verify custom font/color/size application in selected-text flows for text blocks (especially legacy list/content transitions).
-- Improve status label resilience when status values are empty/null on media/user/blog tables.
 - Finalize media scope model and API contract (global vs page/blog-scoped assets).
 - Finish blog post editor flow via dedicated template-backed page.
 - Ensure list property parity for box/container section:
   - list items with empty lines preserve structure after transforms
   - mixed selections do not reset list type unexpectedly
   - indentation stays stable and clamps at non-negative levels
+
+### ✅ Admin table status resilience
+- Shared admin status badges now normalize empty, whitespace, literal `null`/`undefined`, and unknown status strings to stable labels/types instead of rendering blank or misleading labels.
+- Media library visibility and safety status labels now use the shared status badge path, matching the user and blog tables.
+- Covered by `npm run test:status-badge --workspace @backy-cms/admin`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:

@@ -26,6 +26,7 @@
     "test:contacts": "node scripts/contacts-smoke.mjs",
     "test:comments": "node scripts/comments-smoke.mjs",
     "test:users": "node scripts/users-smoke.mjs",
+    "test:status-badge": "node scripts/status-badge-smoke.mjs",
     "test:sites": "node scripts/sites-smoke.mjs",
     "test:site-detail": "node scripts/site-detail-smoke.mjs",
     "test:frontend-design": "node scripts/frontend-design-smoke.mjs",

@@ -6,8 +6,7 @@
  */
 
 import { cn } from '@/lib/utils';
-
-type StatusType = 'success' | 'warning' | 'error' | 'neutral' | 'info';
+import { getStatusLabel, getStatusType, type StatusType } from './statusBadgeUtils';
 
 interface StatusBadgeProps {
     status?: string | null;
@@ -15,43 +14,9 @@ interface StatusBadgeProps {
     className?: string;
 }
 
-// Map common status strings to types automatically
-const STATUS_MAP: Record<string, StatusType> = {
-    published: 'success',
-    active: 'success',
-    online: 'success',
-    draft: 'warning',
-    pending: 'warning',
-    scheduled: 'info',
-    invited: 'info',
-    archived: 'neutral',
-    inactive: 'neutral',
-    suspended: 'error',
-    deleted: 'error',
-    error: 'error',
-    info: 'info',
-};
-
-const normalizeStatus = (value?: string | null) => {
-    return (value || '').toString().trim().toLowerCase();
-};
-
-const labelCase = (value: string) => {
-    if (!value) return 'Unknown';
-
-    return value
-      .replace(/[-_]+/g, ' ')
-      .split(' ')
-      .filter(Boolean)
-      .map((word) => word[0].toUpperCase() + word.slice(1))
-      .join(' ');
-};
-
 export function StatusBadge({ status, type, className }: StatusBadgeProps) {
-    // Auto-detect type if not provided
-    const normalizedStatus = normalizeStatus(status);
-    const badgeType = type || STATUS_MAP[normalizedStatus] || 'neutral';
-    const label = labelCase(normalizedStatus);
+    const badgeType = getStatusType(status, type);
+    const label = getStatusLabel(status);
 
     const variants = {
         success: 'border-success/25 bg-success/10 text-success',

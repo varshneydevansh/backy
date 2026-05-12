@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { DEFAULT_MAX_TAGS, normalizeTagValues, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import {
   getSettings,
@@ -3748,9 +3749,12 @@ function MediaPage() {
                   <MediaTypeIcon type={file.type} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
-                    <p className="text-xs capitalize text-muted-foreground">
-                      {mediaTypeLabel(file.type)} · {file.size} · {file.visibility || 'public'}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{mediaTypeLabel(file.type)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{file.size}</span>
+                      <StatusBadge status={file.visibility || 'public'} className="px-1.5 py-0 text-[10px]" />
+                    </div>
                   </div>
                 </div>
                 {file.folderId && (
@@ -4275,20 +4279,13 @@ function MediaPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <span
-                      className={cn(
-                        'rounded px-2 py-1 text-xs font-medium',
+                    <StatusBadge
+                      status={
                         selectedMediaSecurity.status === 'quarantined'
-                          ? 'bg-destructive/10 text-destructive'
-                          : getSafetyScan(selectedAsset.metadata)?.status === 'clean'
-                            ? 'bg-success/10 text-success'
-                            : 'bg-warning/10 text-warning',
-                      )}
-                    >
-                      {selectedMediaSecurity.status === 'quarantined'
-                        ? 'Quarantined'
-                        : getSafetyScan(selectedAsset.metadata)?.status === 'clean' ? 'Clean' : 'Not scanned'}
-                    </span>
+                          ? 'quarantined'
+                          : getSafetyScan(selectedAsset.metadata)?.status === 'clean' ? 'clean' : 'not-scanned'
+                      }
+                    />
                     {selectedMediaSecurity.status === 'quarantined' ? (
                       <Button
                         type="button"
@@ -4913,8 +4910,11 @@ function MediaPage() {
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-              {pendingDeleteAsset.type} · {pendingDeleteAsset.size} · {pendingDeleteAsset.visibility || 'public'}
+            <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              <span>{pendingDeleteAsset.type}</span>
+              <span aria-hidden="true">·</span>
+              <span>{pendingDeleteAsset.size}</span>
+              <StatusBadge status={pendingDeleteAsset.visibility || 'public'} className="px-1.5 py-0 text-[10px]" />
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
