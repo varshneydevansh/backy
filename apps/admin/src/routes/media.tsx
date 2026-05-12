@@ -98,9 +98,28 @@ const DEFAULT_IMAGE_PRESENTATION = {
   aspectRatio: 'original' as MediaImageAspectRatio,
 };
 
+const DEFAULT_MEDIA_SCANNER_RUNTIME: NonNullable<SiteSettingsInput['runtimeMediaScanner']> = {
+  provider: 'none',
+  enabled: false,
+  configured: true,
+  endpointConfigured: false,
+  apiKeyConfigured: false,
+  timeoutMs: 5000,
+  failOpen: false,
+  missing: [],
+};
+
 type MediaStorageProvider = 'local' | 'supabase' | 's3';
 
 interface MediaStorageEnvField {
+  name: string;
+  env: string[];
+  required: boolean;
+  secret?: boolean;
+  detail: string;
+}
+
+interface MediaScannerEnvField {
   name: string;
   env: string[];
   required: boolean;
@@ -196,6 +215,40 @@ const MEDIA_STORAGE_ENV_CONTRACT: Record<MediaStorageProvider, MediaStorageEnvFi
     },
   ],
 };
+
+const MEDIA_SCANNER_ENV_CONTRACT: MediaScannerEnvField[] = [
+  {
+    name: 'provider',
+    env: ['BACKY_MEDIA_SCAN_PROVIDER', 'BACKY_MEDIA_SCANNER_PROVIDER'],
+    required: false,
+    detail: 'Set to http to forward uploads and replacements to a scanner before storage. Defaults to none.',
+  },
+  {
+    name: 'endpoint',
+    env: ['BACKY_MEDIA_SCAN_ENDPOINT', 'BACKY_MEDIA_SCANNER_ENDPOINT'],
+    required: true,
+    detail: 'HTTP endpoint that receives the raw media bytes and returns a clean verdict JSON payload.',
+  },
+  {
+    name: 'apiKey',
+    env: ['BACKY_MEDIA_SCAN_API_KEY', 'BACKY_MEDIA_SCANNER_API_KEY'],
+    required: false,
+    secret: true,
+    detail: 'Optional bearer token sent only from the server to the scanner endpoint.',
+  },
+  {
+    name: 'timeoutMs',
+    env: ['BACKY_MEDIA_SCAN_TIMEOUT_MS', 'BACKY_MEDIA_SCANNER_TIMEOUT_MS'],
+    required: false,
+    detail: 'Positive request timeout in milliseconds. Defaults to 5000.',
+  },
+  {
+    name: 'failOpen',
+    env: ['BACKY_MEDIA_SCAN_FAIL_OPEN', 'BACKY_MEDIA_SCANNER_FAIL_OPEN'],
+    required: false,
+    detail: 'Allows scanner availability failures to pass, but provider-rejected files still block.',
+  },
+];
 
 const MEDIA_UPLOAD_INTAKE_RULES = [
   {
@@ -535,6 +588,7 @@ function MediaPage() {
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
+  const [runtimeMediaScanner, setRuntimeMediaScanner] = useState<SiteSettingsInput['runtimeMediaScanner']>();
   const [settingsDeliveryMode, setSettingsDeliveryMode] = useState<SiteSettingsInput['deliveryMode']>();
   const [settingsIntegrations, setSettingsIntegrations] = useState<MediaIntegrationSettings | undefined>();
   const [settingsInfrastructureInput, setSettingsInfrastructureInput] = useState<Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> | null>(null);
@@ -1002,6 +1056,7 @@ function MediaPage() {
     runtimeStorage,
     uploadVisibility,
   ]);
+  const scannerRuntime = runtimeMediaScanner || DEFAULT_MEDIA_SCANNER_RUNTIME;
   const mediaHandoff = useMemo(() => ({
     siteId,
     generatedAt: new Date().toISOString(),
@@ -1025,6 +1080,16 @@ function MediaPage() {
           missing: runtimeSupabase.missing || [],
         }
       : null,
+    scanner: {
+      provider: scannerRuntime.provider,
+      enabled: scannerRuntime.enabled,
+      configured: scannerRuntime.configured,
+      endpointConfigured: scannerRuntime.endpointConfigured,
+      apiKeyConfigured: scannerRuntime.apiKeyConfigured,
+      timeoutMs: scannerRuntime.timeoutMs,
+      failOpen: scannerRuntime.failOpen,
+      missing: scannerRuntime.missing || [],
+    },
     quota: mediaQuota
       ? {
           usedBytes: mediaQuota.usedBytes,
@@ -1146,6 +1211,7 @@ function MediaPage() {
     quotaUsagePercent,
     runtimeStorage,
     runtimeSupabase,
+    scannerRuntime,
     siteId,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
@@ -1207,6 +1273,7 @@ function MediaPage() {
         if (!cancelled) {
           setRuntimeStorage(settings.runtimeStorage);
           setRuntimeSupabase(settings.runtimeSupabase);
+          setRuntimeMediaScanner(settings.runtimeMediaScanner);
           setSettingsDeliveryMode(settings.deliveryMode);
           setSettingsIntegrations(settings.integrations);
           setSettingsInfrastructureInput({
@@ -1218,6 +1285,7 @@ function MediaPage() {
         if (!cancelled) {
           setRuntimeStorage(undefined);
           setRuntimeSupabase(undefined);
+          setRuntimeMediaScanner(undefined);
           setSettingsDeliveryMode(undefined);
           setSettingsIntegrations(undefined);
           setSettingsInfrastructureInput(null);
@@ -1322,6 +1390,7 @@ function MediaPage() {
       });
       setRuntimeStorage(updated.runtimeStorage);
       setRuntimeSupabase(updated.runtimeSupabase);
+      setRuntimeMediaScanner(updated.runtimeMediaScanner);
       setSettingsDeliveryMode(updated.deliveryMode);
       setSettingsIntegrations(updated.integrations);
       setSettingsInfrastructureInput({
@@ -2860,6 +2929,63 @@ function MediaPage() {
                 </p>
               )}
             </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4" data-testid="media-scanner-runtime">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Upload scanner</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional pre-storage scan provider used by uploads and replacements.
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    'rounded px-2 py-0.5 text-[11px] font-semibold',
+                    !scannerRuntime.enabled
+                      ? 'bg-muted text-muted-foreground'
+                      : scannerRuntime.configured
+                        ? 'bg-success/10 text-success'
+                        : 'bg-warning/10 text-warning',
+                  )}
+                >
+                  {!scannerRuntime.enabled
+                    ? 'Disabled'
+                    : scannerRuntime.configured
+                      ? 'Configured'
+                      : 'Needs env'}
+                </span>
+              </div>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Provider</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.provider}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Fail open</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.failOpen ? 'availability only' : 'off'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Endpoint</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.endpointConfigured ? 'configured' : 'not set'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Timeout</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.timeoutMs || 5000} ms</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">API key</dt>
+                  <dd className="font-mono text-xs">{scannerRuntime.apiKeyConfigured ? 'configured' : 'optional'}</dd>
+                </div>
+              </dl>
+              {scannerRuntime.missing && scannerRuntime.missing.length > 0 && (
+                <p className="mt-3 text-sm text-warning">
+                  Scanner missing: {scannerRuntime.missing.join(', ')}
+                </p>
+              )}
+              {scannerRuntime.error && (
+                <p className="mt-2 text-sm text-warning">{scannerRuntime.error}</p>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-settings-editor">
@@ -3075,6 +3201,76 @@ function MediaPage() {
                           : 'optional';
                     return (
                       <div key={`${selectedStorageProvider}:${field.name}`} className="rounded-md border border-border bg-background px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-semibold">{field.name}</span>
+                              {field.secret && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                                  secret
+                                </span>
+                              )}
+                              {!field.required && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                                  optional
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">{field.detail}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              'rounded px-2 py-0.5 text-[11px] font-semibold',
+                              status === 'missing'
+                                ? 'bg-warning/10 text-warning'
+                                : status === 'detected'
+                                  ? 'bg-success/10 text-success'
+                                  : 'bg-muted text-muted-foreground',
+                            )}
+                          >
+                            {status}
+                          </span>
+                        </div>
+                        <code className="mt-2 block break-all rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                          {field.env.join(' or ')}
+                        </code>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="media-scanner-env-contract">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Scanner env contract</h4>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Upload scanning is disabled by default. Set provider http to require a clean scanner verdict before storage.
+                    </p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    {scannerRuntime.provider}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {MEDIA_SCANNER_ENV_CONTRACT.map((field) => {
+                    const scannerEnabled = scannerRuntime.enabled === true;
+                    const status = field.name === 'provider'
+                      ? scannerEnabled ? 'detected' : 'optional'
+                      : field.name === 'endpoint'
+                        ? scannerEnabled
+                          ? scannerRuntime.endpointConfigured
+                            ? 'detected'
+                            : 'missing'
+                          : 'optional'
+                        : field.name === 'apiKey'
+                          ? scannerRuntime.apiKeyConfigured ? 'detected' : 'optional'
+                        : field.name === 'timeoutMs'
+                            ? scannerRuntime.timeoutMs ? 'detected' : 'optional'
+                            : scannerRuntime.failOpen ? 'detected' : 'optional';
+
+                    return (
+                      <div key={`scanner:${field.name}`} className="rounded-md border border-border bg-background px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">

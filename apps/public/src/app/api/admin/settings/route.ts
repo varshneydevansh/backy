@@ -11,6 +11,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
 import { getMediaStorageConfigSummary } from '@/lib/mediaStorage';
+import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import {
   getRequiredDatabaseRepositories,
   resolvePublicRepositoryRuntimeConfig,
@@ -172,6 +173,40 @@ const getVercelRuntimeSummary = () => {
   };
 };
 
+const getMediaScannerRuntimeSummary = () => {
+  try {
+    const config = resolveMediaScannerConfig();
+    const endpointConfigured = Boolean(config.endpoint);
+    const missing = config.provider === 'http' && !endpointConfigured
+      ? ['BACKY_MEDIA_SCAN_ENDPOINT or BACKY_MEDIA_SCANNER_ENDPOINT']
+      : [];
+
+    return {
+      provider: config.provider,
+      enabled: config.provider !== 'none',
+      configured: config.provider === 'none' || missing.length === 0,
+      endpointConfigured,
+      apiKeyConfigured: Boolean(config.apiKey),
+      timeoutMs: config.timeoutMs,
+      failOpen: config.failOpen,
+      missing,
+    };
+  } catch (error) {
+    const provider = envValue(['BACKY_MEDIA_SCAN_PROVIDER', 'BACKY_MEDIA_SCANNER_PROVIDER']) || 'unknown';
+    return {
+      provider,
+      enabled: provider !== 'none' && provider !== 'off' && provider !== 'disabled',
+      configured: false,
+      endpointConfigured: Boolean(envValue(['BACKY_MEDIA_SCAN_ENDPOINT', 'BACKY_MEDIA_SCANNER_ENDPOINT'])),
+      apiKeyConfigured: Boolean(envValue(['BACKY_MEDIA_SCAN_API_KEY', 'BACKY_MEDIA_SCANNER_API_KEY'])),
+      timeoutMs: numberValue(envValue(['BACKY_MEDIA_SCAN_TIMEOUT_MS', 'BACKY_MEDIA_SCANNER_TIMEOUT_MS']), 5000),
+      failOpen: ['1', 'true', 'yes', 'on'].includes(envValue(['BACKY_MEDIA_SCAN_FAIL_OPEN', 'BACKY_MEDIA_SCANNER_FAIL_OPEN']).toLowerCase()),
+      missing: ['BACKY_MEDIA_SCAN_PROVIDER=http or none'],
+      error: error instanceof Error ? error.message : 'Unable to resolve media scanner runtime.',
+    };
+  }
+};
+
 const toAdminSettings = (settings: BackySettings) => ({
   deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
   apiKeys: {
@@ -184,6 +219,7 @@ const toAdminSettings = (settings: BackySettings) => ({
   integrations: settings.integrations || {},
   runtimeDatabase: getDatabaseRuntimeSummary(),
   runtimeSupabase: getSupabaseRuntimeSummary(),
+  runtimeMediaScanner: getMediaScannerRuntimeSummary(),
   runtimeVercel: getVercelRuntimeSummary(),
   updatedAt: settings.updatedAt,
 });

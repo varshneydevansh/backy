@@ -968,6 +968,7 @@ interface ApiSettings {
   integrations?: SiteSettingsInput['integrations'];
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeMediaScanner?: SiteSettingsInput['runtimeMediaScanner'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   updatedAt?: string;
 }
@@ -1407,6 +1408,17 @@ export interface SiteSettingsInput {
     databaseUrlConfigured?: boolean;
     storageBucket?: string;
     missing: string[];
+  };
+  runtimeMediaScanner?: {
+    provider: string;
+    enabled: boolean;
+    configured: boolean;
+    endpointConfigured?: boolean;
+    apiKeyConfigured?: boolean;
+    timeoutMs?: number;
+    failOpen?: boolean;
+    missing: string[];
+    error?: string;
   };
   runtimeVercel?: {
     configured: boolean;
@@ -3014,6 +3026,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,
     runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
   };
 }
@@ -3040,6 +3053,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,
     runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
   };
 }
@@ -3066,6 +3080,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,
     runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
   };
 }

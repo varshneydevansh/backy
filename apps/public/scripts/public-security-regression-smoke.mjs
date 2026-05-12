@@ -134,6 +134,16 @@ for (const needle of [
   assertIncludes(mediaSafety, needle, 'mediaSafety');
 }
 
+const adminSettingsRoute = read('apps/public/src/app/api/admin/settings/route.ts');
+for (const needle of [
+  'runtimeMediaScanner',
+  'getMediaScannerRuntimeSummary',
+  'BACKY_MEDIA_SCAN_PROVIDER',
+  'BACKY_MEDIA_SCAN_ENDPOINT',
+]) {
+  assertIncludes(adminSettingsRoute, needle, 'admin settings route');
+}
+
 const mediaFileRoute = read('apps/public/src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
 for (const needle of [
   'requiresAttachmentDelivery(media)',

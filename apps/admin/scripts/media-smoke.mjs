@@ -372,6 +372,11 @@ const assertMediaLayout = async (client, expectedText) => {
     hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
     hasStorageEnvContract: Boolean(document.querySelector('[data-testid="media-storage-env-contract"]')) &&
       document.body?.innerText?.includes('Provider env contract'),
+    hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
+      document.body?.innerText?.includes('Upload scanner'),
+    hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
+      document.body?.innerText?.includes('Scanner env contract') &&
+      document.body?.innerText?.includes('BACKY_MEDIA_SCAN_ENDPOINT'),
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
     hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
@@ -380,7 +385,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -616,6 +621,26 @@ const saveMediaStorageSettingsFromUi = async (client, suffix) => {
     };
   })()`);
   assert(envContract.ready, `Media storage env contract did not render Supabase credential requirements: ${JSON.stringify(envContract)}`);
+
+  const scannerEnvContract = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="media-scanner-env-contract"]');
+    const runtime = document.querySelector('[data-testid="media-scanner-runtime"]');
+    const text = panel?.textContent || '';
+    const runtimeText = runtime?.textContent || '';
+    return {
+      ready: Boolean(panel) &&
+        Boolean(runtime) &&
+        text.includes('Scanner env contract') &&
+        text.includes('BACKY_MEDIA_SCAN_PROVIDER') &&
+        text.includes('BACKY_MEDIA_SCAN_ENDPOINT') &&
+        text.includes('BACKY_MEDIA_SCAN_API_KEY') &&
+        text.includes('failOpen') &&
+        runtimeText.includes('Upload scanner') &&
+        runtimeText.includes('Provider'),
+      text: (runtimeText + '\\n' + text).slice(0, 1600),
+    };
+  })()`);
+  assert(scannerEnvContract.ready, `Media scanner env contract did not render scan provider requirements: ${JSON.stringify(scannerEnvContract)}`);
 
   const clicked = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="media-storage-settings-editor"]');
