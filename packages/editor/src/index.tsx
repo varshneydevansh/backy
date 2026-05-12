@@ -156,7 +156,11 @@ export const BackyEditor = ({
         for (const [node, path] of selectedListItems) {
             const currentIndent = Number((node as any).indent || 0);
             const nextIndent = Math.max(0, Math.min(8, currentIndent + step));
-            Transforms.setNodes(slateEditor, { indent: nextIndent } as any, { at: path });
+            if (nextIndent === 0) {
+                Transforms.unsetNodes(slateEditor, 'indent' as any, { at: path });
+            } else {
+                Transforms.setNodes(slateEditor, { indent: nextIndent } as any, { at: path });
+            }
         }
 
         return true;
@@ -194,11 +198,16 @@ export const BackyEditor = ({
         event.preventDefault();
 
         if (currentIndent > 0) {
-            Transforms.setNodes(
-                slateEditor,
-                { indent: Math.max(0, currentIndent - 1) } as any,
-                { at: path, match: isListItem }
-            );
+            const nextIndent = Math.max(0, currentIndent - 1);
+            if (nextIndent === 0) {
+                Transforms.unsetNodes(slateEditor, 'indent' as any, { at: path, match: isListItem });
+            } else {
+                Transforms.setNodes(
+                    slateEditor,
+                    { indent: nextIndent } as any,
+                    { at: path, match: isListItem }
+                );
+            }
             return true;
         }
 

@@ -13,6 +13,11 @@ import { useStore } from '@/stores/mockStore';
 import { cn } from '@/lib/utils';
 import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { EmojiPickerModal } from './EmojiPickerModal';
+import {
+  applyListIndentToNodes,
+  applyListTypeToNodes,
+  type RichTextListType,
+} from './richTextListTransforms';
 import { Editor, Node, Range as SlateRange, Text, Transforms } from 'slate';
 import type { PlateEditor } from '@udecode/plate/react';
 import {
@@ -275,132 +280,28 @@ export function RichTextFormatting({
     return true;
   }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
 
-  const getRootListTypeFromContent = useCallback(() => {
-    if (!normalizedElementContent.length) {
-      return null;
-    }
-
-    const firstNode = normalizedElementContent[0];
-    if (!firstNode || typeof firstNode !== 'object') {
-      return null;
-    }
-
-    const type = (firstNode as { type?: unknown }).type;
-    if (type === 'ul' || type === 'ol') {
-      return type;
-    }
-
-    return null;
-  }, [normalizedElementContent]);
-
-  const toListItemNodes = useCallback((nodes: unknown[]): unknown[] => {
-    const listItems = nodes.flatMap((node) => {
-      if (!node || typeof node !== 'object') {
-        return [{
-          type: 'li',
-          children: [{ text: String(node ?? '') }],
-        }];
-      }
-
-      const typed = node as Record<string, unknown>;
-      if (typed.type === 'li') {
-        return [typed];
-      }
-
-      const children = Array.isArray((typed as { children?: unknown }).children)
-        ? (typed as { children: unknown[] }).children
-        : null;
-
-      if (!children) {
-        return [{
-          type: 'li',
-          children: [{ text: String(typed.text || '') }],
-        }];
-      }
-
-      return [{
-        type: 'li',
-        children,
-      }];
-    });
-
-    return listItems.length
-      ? listItems
-      : [{ type: 'li', children: [{ text: '' }] }];
-  }, []);
-
-  const applyListTypeToElementContent = useCallback((format: 'ul' | 'ol'): boolean => {
+  const applyListTypeToElementContent = useCallback((format: RichTextListType): boolean => {
     if (!canWriteElementContent()) {
       return false;
     }
 
-    const currentType = getRootListTypeFromContent();
-    if (currentType === format) {
+    const nextContent = applyListTypeToNodes(normalizedElementContent, format);
+
+    if (!nextContent.changed) {
       return false;
     }
 
-    let nextContent: unknown[];
-    if (currentType === 'ul' || currentType === 'ol') {
-      nextContent = normalizedElementContent.map((node) => {
-        if (!node || typeof node !== 'object') {
-          return node;
-        }
-
-        const typed = { ...node } as Record<string, unknown>;
-        if (typed.type === 'ul' || typed.type === 'ol') {
-          typed.type = format;
-        }
-
-        return typed;
-      });
-    } else {
-      const listItems = toListItemNodes(normalizedElementContent);
-      nextContent = [{
-        type: format,
-        children: listItems,
-      }];
-    }
-
-    onElementContentChange?.(nextContent as unknown[]);
+    onElementContentChange?.(nextContent.nodes);
     return true;
-  }, [canWriteElementContent, getRootListTypeFromContent, normalizedElementContent, onElementContentChange, toListItemNodes]);
+  }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
 
   const applyListIndentToElementContent = useCallback((step: number): boolean => {
     if (!canWriteElementContent()) {
       return false;
     }
 
-    const patchNode = (node: unknown): unknown => {
-      if (!node || typeof node !== 'object') {
-        return node;
-      }
-
-      const nextNode = { ...node } as Record<string, unknown>;
-      const children = Array.isArray((nextNode as { children?: unknown }).children)
-        ? (nextNode as { children: unknown[] }).children
-        : null;
-
-      if (children) {
-        nextNode.children = children.map((child) => patchNode(child));
-      }
-
-      if (nextNode.type === 'li') {
-        const currentIndent = Number((nextNode.indent as number) || 0);
-        if (Number.isFinite(currentIndent)) {
-          const nextIndent = Math.max(0, currentIndent + step);
-          if (nextIndent === 0) {
-            delete nextNode.indent;
-          } else {
-            nextNode.indent = nextIndent;
-          }
-        }
-      }
-
-      return nextNode;
-    };
-
-    const nextContent = normalizedElementContent.map((node) => patchNode(node));
-    onElementContentChange?.(nextContent as unknown[]);
+    const nextContent = applyListIndentToNodes(normalizedElementContent, step);
+    onElementContentChange?.(nextContent);
     return true;
   }, [canWriteElementContent, normalizedElementContent, onElementContentChange]);
 

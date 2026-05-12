@@ -375,10 +375,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### ⚠️ Remaining
 - Finalize media scope model and API contract (global vs page/blog-scoped assets).
 - Finish blog post editor flow via dedicated template-backed page.
-- Ensure list property parity for box/container section:
-  - list items with empty lines preserve structure after transforms
-  - mixed selections do not reset list type unexpectedly
-  - indentation stays stable and clamps at non-negative levels
 
 ### ✅ Admin table status resilience
 - Shared admin status badges now normalize empty, whitespace, literal `null`/`undefined`, and unknown status strings to stable labels/types instead of rendering blank or misleading labels.
@@ -389,6 +385,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Selected text range controls now preserve Slate selection across inspector focus changes for italic, clear formatting, font size, font family, and text color.
 - Native input/select/color controls avoid stale whole-element content fallback while an active rich-text editor is targeted.
 - Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+
+### ✅ Rich-text list property parity
+- Extracted list content transforms into shared pure helpers so property-panel fallbacks preserve empty list rows and nested list item structure during list type changes.
+- Active editor list indent/outdent and package-level keyboard list shortcuts now remove `indent` at zero instead of persisting `indent: 0`, keeping indentation clamped and structurally stable.
+- Covered by `npm run test:rich-text-lists --workspace @backy-cms/admin`, `npm run typecheck --workspace @backy-cms/admin`, and `npm run test:inline-markdown --workspace @backy-cms/editor`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:

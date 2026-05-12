@@ -546,7 +546,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           0,
           Number((node as any).indent || 0) + step
         );
-        Transforms.setNodes(editor as any, { indent: next } as any, { at: path });
+        if (next === 0) {
+          Transforms.unsetNodes(editor as any, 'indent' as any, { at: path });
+        } else {
+          Transforms.setNodes(editor as any, { indent: next } as any, { at: path });
+        }
       }
 
       debug('applyListIndent.success', {
@@ -856,7 +860,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         match: (n) => getIsListNode(n),
         split: true,
       });
-      Transforms.setNodes(editor as any, { indent: 0 } as any, {
+      Transforms.unsetNodes(editor as any, 'indent' as any, {
         match: (n) => getIsListItemNode(n),
       });
       Transforms.setNodes(editor as any, { type: 'li' } as any, {
