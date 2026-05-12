@@ -421,6 +421,13 @@ export interface BackyCommerceStorefrontContract {
   currency: string;
   paymentProvider: 'none' | 'stripe' | 'manual';
   providerAccountId?: string | null;
+  provider?: {
+    mode: 'test' | 'live';
+    accountId?: string | null;
+    webhookConfigured: boolean;
+    webhookEndpointUrl?: string | null;
+    [key: string]: unknown;
+  };
   capabilities: {
     catalog: boolean;
     orderIntake: boolean;
@@ -448,6 +455,14 @@ export interface BackyCommerceStorefrontContract {
   };
   webhooks?: {
     eventsEnabled: boolean;
+    endpointConfigured?: boolean;
+    eventAllowlist?: string[];
+    [key: string]: unknown;
+  };
+  reconciliation?: {
+    mode: 'manual' | 'webhook' | 'scheduled';
+    windowHours: number;
+    requiresManualReview: boolean;
     [key: string]: unknown;
   };
   [key: string]: unknown;

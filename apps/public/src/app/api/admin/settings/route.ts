@@ -204,6 +204,8 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   const commerce = parseJsonObject(input.commerce) || {};
   const commerceMode = stringValue(commerce.mode);
   const paymentProvider = stringValue(commerce.paymentProvider);
+  const providerMode = stringValue(commerce.providerMode);
+  const reconciliationMode = stringValue(commerce.reconciliationMode);
 
   return {
     ...input,
@@ -237,7 +239,15 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       paymentProvider: ['none', 'stripe', 'manual'].includes(paymentProvider)
         ? paymentProvider
         : 'none',
+      providerMode: providerMode === 'live' ? 'live' : 'test',
       providerAccountId: stringValue(commerce.providerAccountId),
+      providerWebhookUrl: stringValue(commerce.providerWebhookUrl),
+      providerWebhookSecretId: stringValue(commerce.providerWebhookSecretId),
+      providerWebhookEvents: stringValue(commerce.providerWebhookEvents),
+      reconciliationMode: ['manual', 'webhook', 'scheduled'].includes(reconciliationMode)
+        ? reconciliationMode
+        : 'manual',
+      reconciliationWindowHours: Math.max(1, Math.min(720, Math.round(numberValue(commerce.reconciliationWindowHours, 24)))),
       checkoutSuccessPath: stringValue(commerce.checkoutSuccessPath),
       checkoutCancelPath: stringValue(commerce.checkoutCancelPath),
       guestCheckout: boolValue(commerce.guestCheckout, true),

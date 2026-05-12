@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -1040,35 +1040,52 @@ function SettingsPage() {
     setNotice('Settings handoff manifest downloaded.');
   };
 
-  const updateNotificationSettings = (next: NotificationSettingsConfig) => {
-    setIntegrations({
-      ...integrations,
-      notifications: next,
-    });
+  const updateNotificationSettings = (next: Partial<NotificationSettingsConfig>) => {
+    setIntegrations((current) => ({
+      ...current,
+      notifications: {
+        ...(current.notifications || {}),
+        ...next,
+        ...(next.email ? { email: { ...(current.notifications?.email || {}), ...next.email } } : {}),
+        ...(next.inApp ? { inApp: { ...(current.notifications?.inApp || {}), ...next.inApp } } : {}),
+      },
+    }));
   };
-  const updateGeneralSettings = (next: GeneralSettingsConfig) => {
-    setIntegrations({
-      ...integrations,
-      general: next,
-    });
+  const updateGeneralSettings = (next: Partial<GeneralSettingsConfig>) => {
+    setIntegrations((current) => ({
+      ...current,
+      general: {
+        ...(current.general || {}),
+        ...next,
+      },
+    }));
   };
-  const updateAppearanceSettings = (next: AppearanceSettingsConfig) => {
-    setIntegrations({
-      ...integrations,
-      appearance: next,
-    });
+  const updateAppearanceSettings = (next: Partial<AppearanceSettingsConfig>) => {
+    setIntegrations((current) => ({
+      ...current,
+      appearance: {
+        ...(current.appearance || {}),
+        ...next,
+      },
+    }));
   };
-  const updateSeoSettings = (next: SeoSettingsConfig) => {
-    setIntegrations({
-      ...integrations,
-      seo: next,
-    });
+  const updateSeoSettings = (next: Partial<SeoSettingsConfig>) => {
+    setIntegrations((current) => ({
+      ...current,
+      seo: {
+        ...(current.seo || {}),
+        ...next,
+      },
+    }));
   };
-  const updateCommerceSettings = (next: CommerceSettingsConfig) => {
-    setIntegrations({
-      ...integrations,
-      commerce: next,
-    });
+  const updateCommerceSettings = (next: Partial<CommerceSettingsConfig>) => {
+    setIntegrations((current) => ({
+      ...current,
+      commerce: {
+        ...(current.commerce || {}),
+        ...next,
+      },
+    }));
   };
   const openSettingsTab = (tab: SettingsTab) => {
     setActiveTab(tab);
@@ -1517,7 +1534,7 @@ function GeneralSettings({
   onChange,
 }: {
   value: GeneralSettingsConfig;
-  onChange: (next: GeneralSettingsConfig) => void;
+  onChange: (next: Partial<GeneralSettingsConfig>) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -1532,7 +1549,7 @@ function GeneralSettings({
               id="settings-site-name"
               type="text"
               value={value.siteName || ''}
-              onChange={(event) => onChange({ ...value, siteName: event.target.value })}
+              onChange={(event) => onChange({ siteName: event.target.value })}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1547,7 +1564,7 @@ function GeneralSettings({
             <textarea
               id="settings-site-description"
               value={value.siteDescription || ''}
-              onChange={(event) => onChange({ ...value, siteDescription: event.target.value })}
+              onChange={(event) => onChange({ siteDescription: event.target.value })}
               rows={3}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
@@ -1563,7 +1580,7 @@ function GeneralSettings({
             <select
               id="settings-timezone"
               value={value.timezone || DEFAULT_GENERAL_SETTINGS.timezone}
-              onChange={(event) => onChange({ ...value, timezone: event.target.value })}
+              onChange={(event) => onChange({ timezone: event.target.value })}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1591,7 +1608,7 @@ function AppearanceSettings({
   onChange,
 }: {
   value: AppearanceSettingsConfig;
-  onChange: (next: AppearanceSettingsConfig) => void;
+  onChange: (next: Partial<AppearanceSettingsConfig>) => void;
 }) {
   const resolved = resolveAppearanceSettings(value);
   const colorControls = [
@@ -1605,10 +1622,10 @@ function AppearanceSettings({
   const themeContract = buildAppearanceThemeContract(value);
 
   const updateColor = (key: typeof colorControls[number]['key'], nextValue: string) => {
-    onChange({ ...value, [key]: nextValue });
+    onChange({ [key]: nextValue });
   };
   const updateNumber = (key: 'baseFontSize' | 'radius' | 'spacingUnit', nextValue: number) => {
-    onChange({ ...value, [key]: nextValue });
+    onChange({ [key]: nextValue });
   };
 
   return (
@@ -1658,7 +1675,7 @@ function AppearanceSettings({
               <span className="font-medium">{control.label}</span>
               <select
                 value={String(resolved[control.key as keyof typeof resolved] || '')}
-                onChange={(event) => onChange({ ...value, [control.key]: event.target.value })}
+                onChange={(event) => onChange({ [control.key]: event.target.value })}
                 className={cn(
                   'w-full rounded-lg border bg-background px-3 py-2',
                   'focus:outline-none focus:ring-2 focus:ring-ring',
@@ -1724,7 +1741,7 @@ function AppearanceSettings({
             <select
               id="settings-motion-preset"
               value={resolved.motionPreset}
-              onChange={(event) => onChange({ ...value, motionPreset: event.target.value })}
+              onChange={(event) => onChange({ motionPreset: event.target.value })}
               className={cn(
                 'w-full rounded-lg border bg-background px-3 py-2',
                 'focus:outline-none focus:ring-2 focus:ring-ring',
@@ -1801,7 +1818,7 @@ function SEOSettings({
   onChange,
 }: {
   value: SeoSettingsConfig;
-  onChange: (next: SeoSettingsConfig) => void;
+  onChange: (next: Partial<SeoSettingsConfig>) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -1816,7 +1833,7 @@ function SEOSettings({
               id="settings-title-template"
               type="text"
               value={value.titleTemplate || ''}
-              onChange={(event) => onChange({ ...value, titleTemplate: event.target.value })}
+              onChange={(event) => onChange({ titleTemplate: event.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1834,7 +1851,7 @@ function SEOSettings({
             <textarea
               id="settings-meta-description"
               value={value.metaDescription || ''}
-              onChange={(event) => onChange({ ...value, metaDescription: event.target.value })}
+              onChange={(event) => onChange({ metaDescription: event.target.value })}
               rows={3}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
@@ -1851,7 +1868,7 @@ function SEOSettings({
               id="settings-keywords"
               type="text"
               value={value.keywords || ''}
-              onChange={(event) => onChange({ ...value, keywords: event.target.value })}
+              onChange={(event) => onChange({ keywords: event.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1872,7 +1889,7 @@ function SEOSettings({
               id="settings-og-image"
               type="url"
               value={value.ogImageUrl || ''}
-              onChange={(event) => onChange({ ...value, ogImageUrl: event.target.value })}
+              onChange={(event) => onChange({ ogImageUrl: event.target.value })}
               placeholder="https://example.com/og-image.jpg"
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
@@ -1894,7 +1911,7 @@ function SEOSettings({
               id="settings-analytics-id"
               type="text"
               value={value.analyticsId || ''}
-              onChange={(event) => onChange({ ...value, analyticsId: event.target.value })}
+              onChange={(event) => onChange({ analyticsId: event.target.value })}
               placeholder="G-XXXXXXXXXX"
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
@@ -2228,7 +2245,13 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   mode: 'catalog-only',
   currency: 'USD',
   paymentProvider: 'none',
+  providerMode: 'test',
   providerAccountId: '',
+  providerWebhookUrl: '',
+  providerWebhookSecretId: '',
+  providerWebhookEvents: 'checkout.session.completed,payment_intent.succeeded,charge.refunded',
+  reconciliationMode: 'manual',
+  reconciliationWindowHours: 24,
   checkoutSuccessPath: '/checkout/success',
   checkoutCancelPath: '/checkout/cancel',
   guestCheckout: true,
@@ -2522,6 +2545,60 @@ function validateSettingsDraft({
       label: 'Checkout provider is required',
       detail: 'Choose Stripe or manual payment handling before enabling provider checkout mode.',
       severity: 'warning',
+    });
+  }
+
+  if (commerce.mode === 'checkout-provider' && commerce.paymentProvider === 'stripe' && !commerce.providerAccountId?.trim()) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Stripe account ID is missing',
+      detail: 'Add the connected Stripe account or platform account reference before handing checkout to a frontend.',
+      severity: 'warning',
+    });
+  }
+
+  if (commerce.providerWebhookUrl && !isValidHttpUrl(commerce.providerWebhookUrl)) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Provider webhook URL is invalid',
+      detail: 'Use the https endpoint that your payment provider will call after checkout, refund, and dispute events.',
+      severity: 'error',
+    });
+  }
+
+  if (commerce.webhookEventsEnabled && commerce.paymentProvider !== 'none' && !commerce.providerWebhookUrl?.trim()) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Provider webhook URL is required',
+      detail: 'Enable webhook events only after adding the provider callback URL that Backy or your storefront will verify.',
+      severity: 'warning',
+    });
+  }
+
+  if (commerce.webhookEventsEnabled && commerce.paymentProvider !== 'none' && !commerce.providerWebhookSecretId?.trim()) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Webhook signing secret reference is missing',
+      detail: 'Store only the secret identifier in Settings; the real signing secret should stay in provider environment variables.',
+      severity: 'warning',
+    });
+  }
+
+  if (commerce.reconciliationMode === 'webhook' && !commerce.webhookEventsEnabled) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Webhook reconciliation needs events enabled',
+      detail: 'Turn on commerce webhook events before declaring provider settlement as webhook-driven.',
+      severity: 'warning',
+    });
+  }
+
+  if ((commerce.reconciliationWindowHours || 0) < 1 || (commerce.reconciliationWindowHours || 0) > 720) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Reconciliation window is invalid',
+      detail: 'Use a provider reconciliation window from 1 to 720 hours.',
+      severity: 'error',
     });
   }
 
@@ -2956,7 +3033,7 @@ function InfrastructureSettings({
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
-  onChange: (next: IntegrationSettings) => void;
+  onChange: Dispatch<SetStateAction<IntegrationSettings>>;
 }) {
   const storage: StorageSettings = integrations.storage || {};
   const supabase: SupabaseSettings = integrations.supabase || {};
@@ -2969,37 +3046,37 @@ function InfrastructureSettings({
   const updateStorage = (next: Partial<StorageSettings>) => {
     if (disabled) return;
 
-    onChange({
-      ...integrations,
+    onChange((current) => ({
+      ...current,
       storage: {
-        ...storage,
+        ...(current.storage || {}),
         ...next,
       },
-    });
+    }));
   };
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
     if (disabled) return;
 
-    onChange({
-      ...integrations,
+    onChange((current) => ({
+      ...current,
       supabase: {
-        ...supabase,
+        ...(current.supabase || {}),
         ...next,
       },
-    });
+    }));
   };
 
   const updateVercel = (next: Partial<VercelSettings>) => {
     if (disabled) return;
 
-    onChange({
-      ...integrations,
+    onChange((current) => ({
+      ...current,
       vercel: {
-        ...vercel,
+        ...(current.vercel || {}),
         ...next,
       },
-    });
+    }));
   };
 
   const useRuntimeStorage = () => {
@@ -3023,24 +3100,24 @@ function InfrastructureSettings({
     const publicBaseUrl = storage.publicBaseUrl || buildSupabaseStoragePublicBaseUrl(projectUrl, storageBucket);
     const shouldUseSupabaseStorage = Boolean(projectUrl || storageBucket || storage.provider === 'supabase');
 
-    onChange({
-      ...integrations,
+    onChange((current) => ({
+      ...current,
       supabase: {
-        ...supabase,
+        ...(current.supabase || {}),
         projectUrl,
         projectRef,
-        databaseEnabled: Boolean(runtimeSupabase?.databaseUrlConfigured || supabase.databaseEnabled),
-        storageEnabled: Boolean(storageBucket || supabase.storageEnabled),
-        authEnabled: Boolean(runtimeSupabase?.anonKeyConfigured || supabase.authEnabled),
+        databaseEnabled: Boolean(runtimeSupabase?.databaseUrlConfigured || current.supabase?.databaseEnabled),
+        storageEnabled: Boolean(storageBucket || current.supabase?.storageEnabled),
+        authEnabled: Boolean(runtimeSupabase?.anonKeyConfigured || current.supabase?.authEnabled),
       },
       storage: {
-        ...storage,
-        provider: shouldUseSupabaseStorage ? 'supabase' : storage.provider,
+        ...(current.storage || {}),
+        provider: shouldUseSupabaseStorage ? 'supabase' : current.storage?.provider,
         bucket: storageBucket,
         publicBaseUrl,
-        imageTransformsEnabled: storage.imageTransformsEnabled !== false,
+        imageTransformsEnabled: current.storage?.imageTransformsEnabled !== false,
       },
-    });
+    }));
   };
 
   const useRuntimeVercel = () => {
@@ -3506,17 +3583,14 @@ function CommerceSettings({
   onChange,
 }: {
   value: CommerceSettingsConfig;
-  onChange: (next: CommerceSettingsConfig) => void;
+  onChange: (next: Partial<CommerceSettingsConfig>) => void;
 }) {
   const resolved: Required<CommerceSettingsConfig> = {
     ...DEFAULT_COMMERCE_SETTINGS,
     ...value,
   };
   const update = (next: Partial<CommerceSettingsConfig>) => {
-    onChange({
-      ...resolved,
-      ...next,
-    });
+    onChange(next);
   };
   const updateToggle = (key: keyof Pick<
     CommerceSettingsConfig,
@@ -3576,6 +3650,70 @@ function CommerceSettings({
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Provider mode</span>
+              <select
+                value={resolved.providerMode}
+                onChange={(event) => update({ providerMode: event.target.value as CommerceSettingsConfig['providerMode'] })}
+                className={inputClassName}
+              >
+                <option value="test">Test</option>
+                <option value="live">Live</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Provider webhook URL</span>
+              <input
+                value={resolved.providerWebhookUrl}
+                onChange={(event) => update({ providerWebhookUrl: event.target.value })}
+                placeholder="https://api.example.com/webhooks/commerce"
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Webhook secret reference</span>
+              <input
+                value={resolved.providerWebhookSecretId}
+                onChange={(event) => update({ providerWebhookSecretId: event.target.value })}
+                placeholder="stripe_whsec_live"
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Webhook event allowlist</span>
+              <input
+                value={resolved.providerWebhookEvents}
+                onChange={(event) => update({ providerWebhookEvents: event.target.value })}
+                placeholder="checkout.session.completed,charge.refunded"
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Reconciliation mode</span>
+              <select
+                value={resolved.reconciliationMode}
+                onChange={(event) => update({ reconciliationMode: event.target.value as CommerceSettingsConfig['reconciliationMode'] })}
+                className={inputClassName}
+              >
+                <option value="manual">Manual review</option>
+                <option value="webhook">Provider webhooks</option>
+                <option value="scheduled">Scheduled job</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Reconciliation window</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={resolved.reconciliationWindowHours}
+                  onChange={(event) => update({ reconciliationWindowHours: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">hours</span>
+              </div>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Success redirect path</span>
               <input
                 value={resolved.checkoutSuccessPath}
@@ -3598,6 +3736,11 @@ function CommerceSettings({
           {resolved.mode === 'checkout-provider' && resolved.paymentProvider === 'none' && (
             <Notice tone="warning" className="mt-4" title="Checkout provider needed">
               Select Stripe or manual payment handling before a custom frontend relies on provider checkout mode.
+            </Notice>
+          )}
+          {resolved.webhookEventsEnabled && resolved.paymentProvider !== 'none' && !resolved.providerWebhookUrl && (
+            <Notice tone="warning" className="mt-4" title="Webhook callback needed">
+              Add the provider webhook URL before relying on automatic payment settlement or refund reconciliation.
             </Notice>
           )}
         </PanelContent>
@@ -3659,6 +3802,7 @@ function CommerceSettings({
             {[
               ['Catalog', 'Products stay public through the product catalog and collection record APIs.'],
               ['Checkout', 'The selected mode tells a custom frontend whether to show cart-only, manual order, or provider checkout flows.'],
+              ['Settlement', `${resolved.reconciliationMode} reconciliation with a ${resolved.reconciliationWindowHours}-hour review window is part of the handoff contract.`],
               ['Private data', 'Orders, customer details, provider references, refunds, and fulfillment remain admin-only.'],
             ].map(([title, detail]) => (
               <div key={title} className="rounded-lg border border-border bg-card p-3">
@@ -3682,13 +3826,11 @@ function NotificationSettings({
   onChange,
 }: {
   value: NotificationSettingsConfig;
-  onChange: (next: NotificationSettingsConfig) => void;
+  onChange: (next: Partial<NotificationSettingsConfig>) => void;
 }) {
   const updateEmail = (key: keyof NonNullable<NotificationSettingsConfig['email']>, checked: boolean) => {
     onChange({
-      ...value,
       email: {
-        ...value.email,
         [key]: checked,
       },
     });
@@ -3696,9 +3838,7 @@ function NotificationSettings({
 
   const updateInApp = (key: keyof NonNullable<NotificationSettingsConfig['inApp']>, checked: boolean) => {
     onChange({
-      ...value,
       inApp: {
-        ...value.inApp,
         [key]: checked,
       },
     });
@@ -3770,10 +3910,7 @@ function NotificationSettings({
               <span className="font-medium">Digest frequency</span>
               <select
                 value={value.digestFrequency || DEFAULT_NOTIFICATION_SETTINGS.digestFrequency}
-                onChange={(event) => onChange({
-                  ...value,
-                  digestFrequency: event.target.value as NotificationSettingsConfig['digestFrequency'],
-                })}
+                onChange={(event) => onChange({ digestFrequency: event.target.value as NotificationSettingsConfig['digestFrequency'] })}
                 className={inputClassName}
               >
                 <option value="instant">Instant</option>
@@ -3786,7 +3923,7 @@ function NotificationSettings({
               <span className="font-medium">Webhook URL</span>
               <input
                 value={value.webhookUrl || ''}
-                onChange={(event) => onChange({ ...value, webhookUrl: event.target.value })}
+                onChange={(event) => onChange({ webhookUrl: event.target.value })}
                 placeholder="https://example.com/backy-events"
                 className={inputClassName}
               />
@@ -3820,7 +3957,7 @@ function SecuritySettings({
   publicApiKey: string;
   adminApiKey: string;
   authSettings?: SiteSettingsInput['auth'];
-  onAuthSettingsChange: (next: SiteSettingsInput['auth']) => void;
+  onAuthSettingsChange: Dispatch<SetStateAction<SiteSettingsInput['auth']>>;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
   auditLogs: AdminAuditLog[];
   isAuditLoading: boolean;
@@ -3835,10 +3972,11 @@ function SecuritySettings({
   };
 
   const updatePolicy = (next: Partial<AuthSettingsConfig>) => {
-    onAuthSettingsChange({
-      ...policy,
+    onAuthSettingsChange((current) => ({
+      ...DEFAULT_AUTH_SETTINGS,
+      ...(current || {}),
       ...next,
-    });
+    }));
   };
 
   const copyKey = async (scope: 'public' | 'admin', value: string) => {

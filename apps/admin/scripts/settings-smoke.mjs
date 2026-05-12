@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_SETTINGS_CDP_PORT || 9376);
 const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tmpdir(), 'backy-settings-smoke.png');
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -43,6 +44,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -53,6 +55,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const readSettings = async () => {
@@ -137,8 +160,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -168,10 +202,26 @@ const navigateToSettings = async (client) => {
       tabs: Boolean(document.querySelector('#settings-tabs')),
       title: document.body?.innerText?.includes('Settings command center') || false,
       handoff: document.body?.innerText?.includes('Copy handoff') || false,
+      settingsLoaded: performance.getEntriesByType('resource').some((entry) => (
+        String(entry.name).includes('/api/admin/settings') && entry.responseEnd > 0
+      )),
+      fallbackNotice: document.body?.innerText?.includes('Using local fallback settings') || false,
       body: document.body?.innerText?.slice(0, 300) || '',
     }))()`);
 
-    if (state.ready && state.ownershipMap && state.hasBackyOwner && state.hasSupabaseOwner && state.hasVercelOwner && state.tabs && state.title && state.handoff) {
+    if (
+      state.ready &&
+      state.ownershipMap &&
+      state.hasBackyOwner &&
+      state.hasSupabaseOwner &&
+      state.hasVercelOwner &&
+      state.tabs &&
+      state.title &&
+      state.handoff &&
+      state.settingsLoaded &&
+      !state.fallbackNotice
+    ) {
+      await sleep(150);
       return state;
     }
 
@@ -274,20 +324,57 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
       }
       return { ok: true, labelText, type: control.type, value: control.checked };
     }
+    const shouldType = control instanceof HTMLTextAreaElement || (
+      control instanceof HTMLInputElement &&
+      ['text', 'url', 'number', 'search', 'email', 'password', 'color'].includes(control.type || 'text')
+    );
+    if (shouldType) {
+      control.focus();
+      const previousValue = control.value;
+      if (control instanceof HTMLInputElement) {
+        control.select();
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(control, String(value));
+        control._valueTracker?.setValue?.(previousValue);
+        control.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertReplacementText',
+          data: String(value),
+        }));
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (control instanceof HTMLTextAreaElement) {
+        control.select();
+        control.setRangeText(String(value), 0, previousValue.length, 'end');
+        control._valueTracker?.setValue?.(previousValue);
+        control.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertReplacementText',
+          data: String(value),
+        }));
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return { ok: true, labelText, type: control.tagName, value: control.value };
+    }
     const prototype = control instanceof HTMLSelectElement
       ? HTMLSelectElement.prototype
       : control instanceof HTMLTextAreaElement
         ? HTMLTextAreaElement.prototype
         : HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+    const previousValue = control.value;
     descriptor?.set?.call(control, String(value));
-    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control._valueTracker?.setValue?.(previousValue);
+    if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+      control.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: String(value) }));
+    } else {
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     control.dispatchEvent(new Event('change', { bubbles: true }));
     return { ok: true, labelText, type: control.tagName, value: control.value };
   })()`);
 
   assert(result.ok, `Unable to set ${labelText}: ${JSON.stringify(result)}`);
-  await sleep(80);
+  await sleep(180);
   return result;
 };
 
@@ -352,16 +439,40 @@ const saveSettings = async (client) => {
   return null;
 };
 
-const updateSettingsThroughUi = async (client, suffix) => {
+const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   const initial = await navigateToSettings(client);
 
   await openSettingsTab(client, 'Delivery', 'tab=delivery');
   const delivery = await setDeliveryMode(client, 'custom-frontend');
 
   await openSettingsTab(client, 'General', 'tab=general');
+  const originalSiteName = originalSettings?.integrations?.general?.siteName || 'My Website';
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const loaded = await evaluate(client, `(() => ({
+      siteName: document.querySelector('#settings-site-name')?.value || '',
+    }))()`);
+    if (loaded.siteName === originalSiteName) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`General settings did not finish backend hydration: ${JSON.stringify(loaded)}`);
+    }
+    await sleep(100);
+  }
   await setLabeledControl(client, 'Site Name', `Backy Smoke ${suffix}`);
   await setLabeledControl(client, 'Site Description', `Settings smoke coverage ${suffix}`);
   await setLabeledControl(client, 'Timezone', 'America/New_York');
+  const generalState = await evaluate(client, `(() => ({
+    siteName: document.querySelector('#settings-site-name')?.value || '',
+    siteDescription: document.querySelector('#settings-site-description')?.value || '',
+    timezone: document.querySelector('#settings-timezone')?.value || '',
+  }))()`);
+  assert(
+    generalState.siteName === `Backy Smoke ${suffix}` &&
+    generalState.siteDescription === `Settings smoke coverage ${suffix}` &&
+    generalState.timezone === 'America/New_York',
+    `General settings controls did not accept input: ${JSON.stringify(generalState)}`,
+  );
 
   await openSettingsTab(client, 'Appearance', 'tab=appearance');
   await setLabeledControl(client, 'Primary', '#0f766e');
@@ -421,6 +532,12 @@ const updateSettingsThroughUi = async (client, suffix) => {
   await setLabeledControl(client, 'Default currency', 'EUR');
   await setLabeledControl(client, 'Payment provider', 'stripe');
   await setLabeledControl(client, 'Provider account ID', `acct_${suffix}`);
+  await setLabeledControl(client, 'Provider mode', 'live');
+  await setLabeledControl(client, 'Provider webhook URL', `https://hooks.example.com/commerce/${suffix}`);
+  await setLabeledControl(client, 'Webhook secret reference', `stripe_whsec_${suffix}`);
+  await setLabeledControl(client, 'Webhook event allowlist', 'checkout.session.completed,charge.refunded');
+  await setLabeledControl(client, 'Reconciliation mode', 'webhook');
+  await setLabeledControl(client, 'Reconciliation window', '36');
   await setLabeledControl(client, 'Success redirect path', '/checkout/complete');
   await setLabeledControl(client, 'Cancel redirect path', '/checkout/cancelled');
   await setLabeledControl(client, 'Guest checkout', true);
@@ -434,9 +551,10 @@ const updateSettingsThroughUi = async (client, suffix) => {
     search: window.location.search,
     hasStorefrontHandoff: document.body?.innerText?.includes('Storefront API handoff') || false,
     hasCheckoutProvider: document.body?.innerText?.includes('Checkout provider') || false,
+    hasSettlement: document.body?.innerText?.includes('Settlement') || false,
   }))()`);
   assert(commerceState.search.includes('tab=commerce'), `Commerce tab search state was not persisted: ${JSON.stringify(commerceState)}`);
-  assert(commerceState.hasStorefrontHandoff && commerceState.hasCheckoutProvider, `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`);
+  assert(commerceState.hasStorefrontHandoff && commerceState.hasCheckoutProvider && commerceState.hasSettlement, `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`);
 
   await openSettingsTab(client, 'Notifications', 'tab=notifications');
   await setLabeledControl(client, 'New user registration', true);
@@ -453,6 +571,8 @@ const updateSettingsThroughUi = async (client, suffix) => {
   await setLabeledControl(client, 'Session timeout', '120');
   await setLabeledControl(client, 'Allowed email domains', 'example.com, agency.dev');
 
+  await openSettingsTab(client, 'Delivery', 'tab=delivery');
+  const finalDelivery = await setDeliveryMode(client, 'custom-frontend');
   const saved = await saveSettings(client);
 
   const layout = await evaluate(client, `(() => ({
@@ -466,7 +586,8 @@ const updateSettingsThroughUi = async (client, suffix) => {
 
   return {
     initial,
-    delivery,
+    delivery: finalDelivery,
+    initialDelivery: delivery,
     infrastructureState,
     saved,
     layout,
@@ -488,6 +609,12 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.commerce?.currency === 'EUR', 'Commerce currency was not persisted');
   assert(settings.integrations?.commerce?.paymentProvider === 'stripe', 'Commerce payment provider was not persisted');
   assert(settings.integrations?.commerce?.providerAccountId === `acct_${suffix}`, 'Commerce provider account ID was not persisted');
+  assert(settings.integrations?.commerce?.providerMode === 'live', 'Commerce provider mode was not persisted');
+  assert(settings.integrations?.commerce?.providerWebhookUrl === `https://hooks.example.com/commerce/${suffix}`, 'Commerce provider webhook URL was not persisted');
+  assert(settings.integrations?.commerce?.providerWebhookSecretId === `stripe_whsec_${suffix}`, 'Commerce webhook secret reference was not persisted');
+  assert(settings.integrations?.commerce?.providerWebhookEvents === 'checkout.session.completed,charge.refunded', 'Commerce webhook event allowlist was not persisted');
+  assert(settings.integrations?.commerce?.reconciliationMode === 'webhook', 'Commerce reconciliation mode was not persisted');
+  assert(settings.integrations?.commerce?.reconciliationWindowHours === 36, 'Commerce reconciliation window was not persisted');
   assert(settings.integrations?.commerce?.taxEnabled === true, 'Commerce tax toggle was not persisted');
   assert(settings.integrations?.commerce?.shippingEnabled === true, 'Commerce shipping toggle was not persisted');
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
@@ -541,6 +668,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   const suffix = `settings-smoke-${Date.now().toString(36)}`;
+  const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -558,10 +686,10 @@ const main = async () => {
     await client.send('DOM.enable');
     await client.send('Log.enable');
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: AUTH_STORAGE_SCRIPT,
+      source: authStorageScript(adminSession.session.token),
     });
 
-    const ui = await updateSettingsThroughUi(client, suffix);
+    const ui = await updateSettingsThroughUi(client, suffix, originalSettings);
     const persisted = await readSettings();
     assertPersistedSettings(persisted, suffix);
 

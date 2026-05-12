@@ -1271,7 +1271,13 @@ export interface SiteSettingsInput {
       mode?: 'catalog-only' | 'manual-orders' | 'checkout-provider';
       currency?: string;
       paymentProvider?: 'none' | 'stripe' | 'manual';
+      providerMode?: 'test' | 'live';
       providerAccountId?: string;
+      providerWebhookUrl?: string;
+      providerWebhookSecretId?: string;
+      providerWebhookEvents?: string;
+      reconciliationMode?: 'manual' | 'webhook' | 'scheduled';
+      reconciliationWindowHours?: number;
       checkoutSuccessPath?: string;
       checkoutCancelPath?: string;
       guestCheckout?: boolean;

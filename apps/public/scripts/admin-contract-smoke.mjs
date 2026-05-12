@@ -4791,7 +4791,13 @@ try {
         mode: 'checkout-provider',
         currency: 'GBP',
         paymentProvider: 'stripe',
+        providerMode: 'live',
         providerAccountId: `acct_${unique}`,
+        providerWebhookUrl: `https://hooks.example.com/commerce/${unique}`,
+        providerWebhookSecretId: `stripe_whsec_${unique}`,
+        providerWebhookEvents: 'checkout.session.completed,charge.refunded',
+        reconciliationMode: 'webhook',
+        reconciliationWindowHours: 36,
         checkoutSuccessPath: '/checkout/contract-success',
         checkoutCancelPath: '/checkout/contract-cancel',
         guestCheckout: true,
@@ -4818,6 +4824,8 @@ try {
     assert(update.json?.data?.settings?.integrations?.vercel?.previewDeployments === true, `${update.url} did not persist Vercel preview toggle`);
     assert(update.json?.data?.settings?.integrations?.commerce?.currency === infrastructure.commerce.currency, `${update.url} did not persist commerce currency`);
     assert(update.json?.data?.settings?.integrations?.commerce?.paymentProvider === infrastructure.commerce.paymentProvider, `${update.url} did not persist commerce payment provider`);
+    assert(update.json?.data?.settings?.integrations?.commerce?.providerMode === infrastructure.commerce.providerMode, `${update.url} did not persist commerce provider mode`);
+    assert(update.json?.data?.settings?.integrations?.commerce?.reconciliationMode === infrastructure.commerce.reconciliationMode, `${update.url} did not persist commerce reconciliation mode`);
 
     const readBack = await request('/api/admin/settings');
     assert(readBack.response.status === 200, `${readBack.url} expected 200, got ${readBack.response.status}`);
@@ -4847,6 +4855,11 @@ try {
       assert(manifest.response.status === 200, `${manifest.url} expected manifest read after commerce settings update`);
       assert(manifest.json?.data?.modules?.commerce?.currency === infrastructure.commerce.currency, `${manifest.url} did not expose commerce currency`);
       assert(manifest.json?.data?.modules?.commerce?.paymentProvider === infrastructure.commerce.paymentProvider, `${manifest.url} did not expose commerce payment provider`);
+      assert(manifest.json?.data?.modules?.commerce?.provider?.mode === infrastructure.commerce.providerMode, `${manifest.url} did not expose commerce provider mode`);
+      assert(manifest.json?.data?.modules?.commerce?.provider?.webhookConfigured === true, `${manifest.url} did not expose commerce provider webhook readiness`);
+      assert(manifest.json?.data?.modules?.commerce?.webhooks?.eventAllowlist?.includes('charge.refunded'), `${manifest.url} did not expose commerce webhook event allowlist`);
+      assert(manifest.json?.data?.modules?.commerce?.reconciliation?.mode === infrastructure.commerce.reconciliationMode, `${manifest.url} did not expose commerce reconciliation mode`);
+      assert(manifest.json?.data?.modules?.commerce?.reconciliation?.windowHours === infrastructure.commerce.reconciliationWindowHours, `${manifest.url} did not expose commerce reconciliation window`);
       assert(manifest.json?.data?.modules?.commerce?.checkout?.successPath === infrastructure.commerce.checkoutSuccessPath, `${manifest.url} did not expose commerce success path`);
       assert(manifest.json?.data?.modules?.commerce?.pricing?.taxes === true, `${manifest.url} did not expose commerce tax flag`);
       assert(manifest.json?.data?.modules?.commerce?.inventory?.reservationMinutes === 45, `${manifest.url} did not expose commerce reservation window`);

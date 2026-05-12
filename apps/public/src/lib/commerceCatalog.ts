@@ -110,6 +110,12 @@ export interface CommerceStorefrontContract {
   currency: string;
   paymentProvider: 'none' | 'stripe' | 'manual';
   providerAccountId: string | null;
+  provider: {
+    mode: 'test' | 'live';
+    accountId: string | null;
+    webhookConfigured: boolean;
+    webhookEndpointUrl: string | null;
+  };
   capabilities: {
     catalog: boolean;
     orderIntake: boolean;
@@ -133,6 +139,13 @@ export interface CommerceStorefrontContract {
   };
   webhooks: {
     eventsEnabled: boolean;
+    endpointConfigured: boolean;
+    eventAllowlist: string[];
+  };
+  reconciliation: {
+    mode: 'manual' | 'webhook' | 'scheduled';
+    windowHours: number;
+    requiresManualReview: boolean;
   };
 }
 
@@ -174,9 +187,27 @@ const normalizePaymentProvider = (value: unknown): CommerceStorefrontContract['p
   return provider === 'stripe' || provider === 'manual' ? provider : 'none';
 };
 
+const normalizeProviderMode = (value: unknown): CommerceStorefrontContract['provider']['mode'] => (
+  normalizeIdentifier(value) === 'live' ? 'live' : 'test'
+);
+
+const normalizeReconciliationMode = (value: unknown): CommerceStorefrontContract['reconciliation']['mode'] => {
+  const mode = normalizeIdentifier(value);
+  return mode === 'webhook' || mode === 'scheduled' ? mode : 'manual';
+};
+
 const normalizeRelativePath = (value: unknown, fallback: string): string => {
   const path = normalizeText(value);
   return path.startsWith('/') ? path : fallback;
+};
+
+const normalizeEventAllowlist = (value: unknown): string[] => {
+  const raw = Array.isArray(value) ? value : normalizeText(value).split(',');
+  return raw
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+    .filter((event, index, events) => events.indexOf(event) === index)
+    .slice(0, 24);
 };
 
 export const buildCommerceStorefrontContract = ({
@@ -195,6 +226,10 @@ export const buildCommerceStorefrontContract = ({
   const paymentProvider = normalizePaymentProvider(commerce.paymentProvider);
   const providerCheckout = mode === 'checkout-provider' && paymentProvider !== 'none';
   const reservationMinutes = Math.max(1, Math.min(1440, Math.round(normalizeNumber(commerce.reservationMinutes, 15))));
+  const providerWebhookUrl = normalizeText(commerce.providerWebhookUrl);
+  const providerWebhookSecretId = normalizeText(commerce.providerWebhookSecretId);
+  const eventsEnabled = normalizeBoolean(commerce.webhookEventsEnabled);
+  const reconciliationMode = normalizeReconciliationMode(commerce.reconciliationMode);
 
   return {
     schemaVersion: 'backy.commerce-settings.v1',
@@ -202,6 +237,12 @@ export const buildCommerceStorefrontContract = ({
     currency: normalizeCurrency(commerce.currency),
     paymentProvider,
     providerAccountId: normalizeText(commerce.providerAccountId) || null,
+    provider: {
+      mode: normalizeProviderMode(commerce.providerMode),
+      accountId: normalizeText(commerce.providerAccountId) || null,
+      webhookConfigured: Boolean(providerWebhookUrl && providerWebhookSecretId),
+      webhookEndpointUrl: providerWebhookUrl || null,
+    },
     capabilities: {
       catalog: hasCatalog,
       orderIntake: hasOrderIntake,
@@ -224,7 +265,14 @@ export const buildCommerceStorefrontContract = ({
       reservationMinutes,
     },
     webhooks: {
-      eventsEnabled: normalizeBoolean(commerce.webhookEventsEnabled),
+      eventsEnabled,
+      endpointConfigured: Boolean(providerWebhookUrl),
+      eventAllowlist: normalizeEventAllowlist(commerce.providerWebhookEvents),
+    },
+    reconciliation: {
+      mode: reconciliationMode,
+      windowHours: Math.max(1, Math.min(720, Math.round(normalizeNumber(commerce.reconciliationWindowHours, 24)))),
+      requiresManualReview: reconciliationMode === 'manual' || !eventsEnabled,
     },
   };
 };
