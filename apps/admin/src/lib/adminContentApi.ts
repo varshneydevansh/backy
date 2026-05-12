@@ -303,7 +303,9 @@ interface ApiPageResponse {
     page: ApiPage;
   };
   error?: {
+    code?: string;
     message?: string;
+    details?: unknown;
   };
 }
 
@@ -1521,6 +1523,7 @@ export interface PageUpdateInput {
   content?: unknown;
   revisionNote?: string;
   updatedBy?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface BlogPostInput {
@@ -2605,11 +2608,13 @@ const toReusableSection = (section: ApiReusableSection): ReusableSection => ({
 
 export class AdminContentApiError extends Error {
   details?: unknown;
+  code?: string;
 
-  constructor(message: string, details?: unknown) {
+  constructor(message: string, details?: unknown, code?: string) {
     super(message);
     this.name = 'AdminContentApiError';
     this.details = details;
+    this.code = code;
   }
 }
 
@@ -3225,7 +3230,11 @@ export async function updatePage(siteId: string, pageId: string, input: PageUpda
   const payload = await readJson<ApiPageResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to save page');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to save page',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePage(payload.data.page);

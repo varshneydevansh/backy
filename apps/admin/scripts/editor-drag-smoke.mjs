@@ -13,6 +13,7 @@ const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
+const CONFLICT_SMOKE = process.env.BACKY_EDITOR_CONFLICT_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const RICH_TEXT_SMOKE = process.env.BACKY_EDITOR_RICH_TEXT_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
@@ -3148,6 +3149,91 @@ const waitForEditorSaveStatus = async (client, predicate, label = 'editor save s
   }
 
   throw new Error(`${label}: status did not match expectation: ${JSON.stringify(lastStatus)}`);
+};
+
+const expectPageSaveConflict = async (client, pageId) => {
+  const beforePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const beforePage = beforePayload.data?.page;
+  const beforeHeading = findCanvasElement(beforePage?.content?.elements || [], 'smoke-heading');
+  assert(beforePage?.updatedAt, `Conflict smoke page is missing updatedAt: ${JSON.stringify(beforePage).slice(0, 500)}`);
+  assert(beforeHeading, 'Conflict smoke page is missing smoke-heading before stale save');
+
+  const externalTitle = `Externally changed ${Date.now().toString(36)}`;
+  await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: externalTitle,
+      revisionNote: 'External conflict smoke update',
+      updatedBy: 'conflict-smoke',
+    }),
+  });
+
+  await selectElement(client, 'smoke-heading');
+  await pressKey(client, 'ArrowRight');
+  await clickSave(client);
+
+  const conflictStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => status.saveState === 'error' && /changed since/i.test(`${status.lastError} ${status.title}`),
+    'stale editor save conflict status',
+  );
+
+  const conflictBanner = await evaluate(client, `(() => {
+    const banner = document.querySelector('[data-testid="page-editor-save-conflict"]');
+    const reload = document.querySelector('[data-testid="page-editor-conflict-reload"]');
+    return {
+      exists: Boolean(banner),
+      text: banner?.textContent || '',
+      hasReload: reload instanceof HTMLButtonElement && !reload.disabled,
+    };
+  })()`);
+  assert(
+    conflictBanner.exists &&
+      /Save conflict detected/.test(conflictBanner.text) &&
+      /updated after this editor loaded/.test(conflictBanner.text) &&
+      conflictBanner.hasReload,
+    `Conflict banner did not render the reload action: ${JSON.stringify(conflictBanner)}`,
+  );
+
+  const afterPayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const afterPage = afterPayload.data?.page;
+  const afterHeading = findCanvasElement(afterPage?.content?.elements || [], 'smoke-heading');
+  assert(afterPage?.title === externalTitle, `Stale editor save overwrote the external title: ${JSON.stringify(afterPage).slice(0, 500)}`);
+  assert(afterHeading?.x === beforeHeading.x, `Stale editor save persisted local canvas movement despite conflict: before ${beforeHeading.x}, after ${afterHeading?.x}`);
+
+  const reloadClicked = await evaluate(client, `(() => {
+    const reload = document.querySelector('[data-testid="page-editor-conflict-reload"]');
+    if (!(reload instanceof HTMLButtonElement) || reload.disabled) return false;
+    reload.click();
+    return true;
+  })()`);
+  assert(reloadClicked, `Unable to click conflict reload action: ${JSON.stringify(conflictBanner)}`);
+
+  let reloadState = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    reloadState = await evaluate(client, `(() => ({
+      hasConflict: Boolean(document.querySelector('[data-testid="page-editor-save-conflict"]')),
+      hasHeading: Boolean(document.querySelector('[data-element-id="smoke-heading"]')),
+      notice: document.body.textContent || '',
+    }))()`);
+    if (!reloadState.hasConflict && reloadState.hasHeading && /Latest backend page loaded/.test(reloadState.notice)) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    reloadState && !reloadState.hasConflict && reloadState.hasHeading,
+    `Conflict reload did not restore the latest page cleanly: ${JSON.stringify(reloadState)}`,
+  );
+
+  return {
+    expectedUpdatedAt: beforePage.updatedAt,
+    externalTitle,
+    conflictStatus,
+    conflictBanner,
+    persistedHeadingX: afterHeading?.x,
+    reloaded: reloadState,
+  };
 };
 
 const waitForEditorMutationReady = async (client, label = 'editor mutation readiness') => {
@@ -7434,7 +7520,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -7504,6 +7590,19 @@ const main = async () => {
         mode: 'save',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         saveEditing,
+      }, null, 2));
+      return;
+    }
+
+    if (CONFLICT_SMOKE) {
+      assert(!EDITOR_PATH, 'Conflict smoke currently requires an internally created smoke page');
+      const conflict = await expectPageSaveConflict(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'conflict',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        conflict,
       }, null, 2));
       return;
     }

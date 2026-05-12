@@ -452,6 +452,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Reusable-section instance registry/propagation now discovers synced page/blog instances, reports stale source timestamps, and bulk-refreshes synced instances while preserving root placement.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
   - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
+- ✅ Conflict-safe page saves
+  - Page editor saves send `expectedUpdatedAt` through `PATCH /api/admin/sites/:siteId/pages/:pageId`.
+  - Stale editor saves now return `PAGE_VERSION_CONFLICT` instead of overwriting a newer backend copy.
+  - The page editor renders a save-conflict banner with editor/backend timestamps and a reload-latest action.
+  - Focused coverage: `BACKY_EDITOR_CONFLICT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` verifies the stale save is blocked, newer backend data is preserved, and reload clears the conflict state.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

@@ -14,6 +14,7 @@ import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
 import {
+  AdminContentApiError,
   archivePage,
   createPagePreview,
   getAdminApiBase,
@@ -103,6 +104,15 @@ type CanvasTreeStats = {
   maxDepth: number;
 };
 
+type PageSaveConflict = {
+  expectedUpdatedAt?: string;
+  currentUpdatedAt?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  !!value && typeof value === 'object' && !Array.isArray(value)
+);
+
 const getCanvasTreeStats = (elements: CanvasElement[]): CanvasTreeStats => {
   let totalLayerCount = 0;
   let containerLayerCount = 0;
@@ -153,6 +163,7 @@ function PageEditorRoute() {
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [saveConflict, setSaveConflict] = useState<PageSaveConflict | null>(null);
   const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
   const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
   const [isPreviewBusy, setIsPreviewBusy] = useState(false);
@@ -207,6 +218,7 @@ function PageEditorRoute() {
         if (!cancelled) {
           setPage(backendPage);
           updatePage(pageId, backendPage);
+          setSaveConflict(null);
         }
       } catch (error) {
         if (!cancelled) {
@@ -655,17 +667,50 @@ function PageEditorRoute() {
         content: parseSerializedContent(content),
         revisionNote: 'Before page editor save',
         updatedBy: 'admin',
+        expectedUpdatedAt: page.lastUpdated,
       });
       setPage(savedPage);
       updatePage(pageId, savedPage);
+      setSaveConflict(null);
       setSaveWarning(null);
       setWorkflowNotice('Page saved and revision snapshot recorded.');
       void loadPageReadiness();
     } catch (error) {
-      setSaveWarning(error instanceof Error
-        ? `${error.message}. Changes were not persisted.`
-        : 'Backend save failed. Changes were not persisted.');
+      if (error instanceof AdminContentApiError && error.code === 'PAGE_VERSION_CONFLICT') {
+        const details = isRecord(error.details) ? error.details : {};
+        const expectedUpdatedAt = typeof details.expectedUpdatedAt === 'string' ? details.expectedUpdatedAt : page.lastUpdated;
+        const currentUpdatedAt = typeof details.currentUpdatedAt === 'string' ? details.currentUpdatedAt : undefined;
+        setSaveConflict({ expectedUpdatedAt, currentUpdatedAt });
+        setSaveWarning('This page changed after the editor loaded it. Reload the latest backend copy before saving again.');
+      } else {
+        setSaveConflict(null);
+        setSaveWarning(error instanceof Error
+          ? `${error.message}. Changes were not persisted.`
+          : 'Backend save failed. Changes were not persisted.');
+      }
       throw error;
+    }
+  };
+
+  const reloadLatestPage = async () => {
+    if (isPageEditorBusy) return;
+
+    setIsLoadingPage(true);
+    setSaveWarning(null);
+    setWorkflowNotice(null);
+    try {
+      const latestPage = await getPage(siteId, pageId);
+      setPage(latestPage);
+      updatePage(pageId, latestPage);
+      setEditorResetVersion((version) => version + 1);
+      setEditorHasUnsavedChanges(false);
+      setSaveConflict(null);
+      setWorkflowNotice('Latest backend page loaded into the editor.');
+      void loadPageReadiness();
+    } catch (error) {
+      setSaveWarning(error instanceof Error ? error.message : 'Unable to reload the latest page.');
+    } finally {
+      setIsLoadingPage(false);
     }
   };
 
@@ -815,6 +860,41 @@ function PageEditorRoute() {
       {(loadError || saveWarning) && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
           {saveWarning || `${loadError} Using the local page copy.`}
+        </div>
+      )}
+
+      {saveConflict && (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-sm sm:flex-row sm:items-start sm:justify-between"
+          data-testid="page-editor-save-conflict"
+        >
+          <div>
+            <div className="font-semibold">Save conflict detected</div>
+            <div className="mt-1 text-xs leading-5">
+              The backend page was updated after this editor loaded. Your save was blocked so newer content is not overwritten.
+            </div>
+            <dl className="mt-2 grid gap-1 text-[11px] text-red-800 sm:grid-cols-2">
+              <div>
+                <dt className="font-semibold">Editor copy</dt>
+                <dd className="font-mono">{saveConflict.expectedUpdatedAt || 'unknown'}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Backend copy</dt>
+                <dd className="font-mono">{saveConflict.currentUpdatedAt || 'unknown'}</dd>
+              </div>
+            </dl>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void reloadLatestPage()}
+            disabled={isPageEditorBusy}
+            data-testid="page-editor-conflict-reload"
+            iconStart={<RefreshCw className="size-4" />}
+          >
+            Reload latest
+          </Button>
         </div>
       )}
 
