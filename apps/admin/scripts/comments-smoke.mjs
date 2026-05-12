@@ -233,6 +233,19 @@ const waitForCommentReports = async (commentId, requestId, expectedCount) => {
   throw new Error(`Comment ${commentId} did not reach report count ${expectedCount}`);
 };
 
+const waitForCommentParent = async (commentId, requestId, parentId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const comments = await listComments(requestId);
+    const comment = comments.find((item) => item.id === commentId);
+    if (comment?.parentId === parentId && (comment.commentThreadId === parentId || comment.commentThreadId)) {
+      return comment;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Comment ${commentId} did not move under parent ${parentId}`);
+};
+
 const waitForBlocklistEntry = async (value) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const blocklist = await listBlocklist(value);
@@ -692,6 +705,51 @@ const createReplyInUi = async (client, parentAuthor, replyContent) => {
   }
 };
 
+const moveReplyInUi = async (client, replyAuthor, nextParentAuthor) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const replyCard = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => (
+        (candidate.textContent || '').includes(${JSON.stringify(replyAuthor)})
+      ));
+      if (!replyCard) return { ok: false, reason: 'reply-card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      const open = replyCard.querySelector('[data-testid="comments-move-open"]');
+      if (!(open instanceof HTMLButtonElement)) return { ok: false, reason: 'move-open-missing', text: replyCard.textContent || '' };
+      if (open.disabled) return { ok: false, reason: 'move-open-disabled' };
+      open.click();
+      const composer = replyCard.querySelector('[data-testid="comments-move-composer"]');
+      if (!composer) return { ok: false, reason: 'move-composer-missing' };
+      const select = composer.querySelector('select[aria-label="Comment reply parent"]');
+      if (!(select instanceof HTMLSelectElement)) return { ok: false, reason: 'move-parent-select-missing' };
+      const option = Array.from(select.options).find((candidate) => candidate.textContent?.includes(${JSON.stringify(nextParentAuthor)}));
+      if (!option) {
+        return {
+          ok: false,
+          reason: 'move-parent-option-missing',
+          options: Array.from(select.options).map((candidate) => candidate.textContent || ''),
+        };
+      }
+      select.value = option.value;
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const submit = composer.querySelector('[data-testid="comments-move-submit"]');
+      if (!(submit instanceof HTMLButtonElement)) return { ok: false, reason: 'move-submit-missing' };
+      if (submit.disabled) return { ok: false, reason: 'move-submit-disabled', selected: select.value };
+      submit.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to move reply ${replyAuthor} under ${nextParentAuthor}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
 const waitForReplyContent = async (parentId, content) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const replies = await listCommentReplies(parentId);
@@ -794,7 +852,8 @@ const main = async () => {
     const blockRequestId = `comments-smoke-block-${suffix}`;
     const threadParentRequestId = `comments-smoke-thread-parent-${suffix}`;
     const threadReplyRequestId = `comments-smoke-thread-reply-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId);
+    const moveParentRequestId = `comments-smoke-move-parent-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId, moveParentRequestId);
 
     const approveComment = await submitComment({
       pageId: page.id,
@@ -840,6 +899,13 @@ const main = async () => {
       parentId: threadParentComment.id,
       commentThreadId: threadParentComment.commentThreadId,
     });
+    const moveParentComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Move Parent',
+      authorEmail: 'comments-move-parent@example.com',
+      content: 'Temporary parent comment for the comments reply reparent smoke.',
+      requestId: moveParentRequestId,
+    });
     assert(threadReplyComment.parentId === threadParentComment.id, `Reply comment did not preserve parent id: ${JSON.stringify(threadReplyComment)}`);
     await reportComment({
       commentId: reportedComment.id,
@@ -877,6 +943,7 @@ const main = async () => {
       'Comments Smoke Block',
       'Comments Smoke Thread Parent',
       'Comments Smoke Thread Reply',
+      'Comments Smoke Move Parent',
     ]);
     await assertThreadContext(client, 'Comments Smoke Thread Parent', 'Comments Smoke Thread Reply');
     const adminReplyContent = `Official admin reply from comments smoke ${suffix}.`;
@@ -884,6 +951,10 @@ const main = async () => {
     const adminReplyComment = await waitForReplyContent(threadParentComment.id, adminReplyContent);
     assert(adminReplyComment.parentId === threadParentComment.id, `Admin reply did not preserve parent id: ${JSON.stringify(adminReplyComment)}`);
     assert(adminReplyComment.status === 'approved', `Admin reply should publish immediately: ${JSON.stringify(adminReplyComment)}`);
+    await clearThreadFilterInUi(client);
+    await moveReplyInUi(client, 'Comments Smoke Thread Reply', 'Comments Smoke Move Parent');
+    const movedReply = await waitForCommentParent(threadReplyComment.id, threadReplyRequestId, moveParentComment.id);
+    assert(movedReply.commentThreadId === moveParentComment.id, `Moved reply did not adopt the new parent thread: ${JSON.stringify(movedReply)}`);
     await clearThreadFilterInUi(client);
     await savePolicyInUi(client, 'bannedphrase');
     for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -986,6 +1057,7 @@ const main = async () => {
       blockedCommentId: blockedComment.id,
       threadParentCommentId: threadParentComment.id,
       threadReplyCommentId: threadReplyComment.id,
+      moveParentCommentId: moveParentComment.id,
       adminReplyCommentId: adminReplyComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));

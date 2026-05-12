@@ -189,6 +189,51 @@ export async function clearRepositoryCommentReports(
   return nextComment;
 }
 
+export async function updateRepositoryCommentThread(
+  repositories: PublicCommentRepositories,
+  siteId: string,
+  comment: Comment,
+  input: {
+    parentId: string | null;
+    commentThreadId?: string | null;
+    actor?: string | null;
+    requestId?: string | null;
+    defaultReviewer?: string | null;
+  },
+): Promise<Comment> {
+  const reviewedBy = input.actor || input.defaultReviewer || null;
+  const reviewedAt = new Date().toISOString();
+  const resolvedRequestId = input.requestId || comment.requestId || undefined;
+  const nextComment = (await repositories.comments.update(siteId, comment.id, {
+    parentId: input.parentId,
+    commentThreadId: input.commentThreadId || null,
+    reviewedBy,
+    reviewedAt,
+    requestId: resolvedRequestId || null,
+  })).item;
+
+  await recordRepositoryInteractionEvent(repositories, {
+    kind: 'comment-status',
+    siteId,
+    commentId: nextComment.id,
+    target: `comment:${nextComment.id}`,
+    status: 'succeeded',
+    requestId: resolvedRequestId,
+    reason: 'thread-updated',
+    actor: reviewedBy,
+    metadata: {
+      targetType: nextComment.targetType,
+      targetId: nextComment.targetId,
+      previousParentId: comment.parentId,
+      parentId: nextComment.parentId,
+      previousThreadId: comment.commentThreadId || null,
+      commentThreadId: nextComment.commentThreadId || null,
+    },
+  });
+
+  return nextComment;
+}
+
 export async function reportRepositoryComment(
   repositories: PublicCommentRepositories,
   siteId: string,

@@ -882,6 +882,18 @@ interface ApiUpdateCommentsResponse {
   };
 }
 
+interface ApiUpdateCommentResponse {
+  success: boolean;
+  data?: {
+    comment: Comment;
+  };
+  comment?: Comment;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiListCommentBlocklistResponse {
   success: boolean;
   data?: {
@@ -1962,6 +1974,13 @@ export interface UpdateCommentsInput {
   actor?: string | null;
   rejectionReason?: string | null;
   blockReason?: string | null;
+}
+
+export interface UpdateCommentThreadInput {
+  parentId: string | null;
+  commentThreadId?: string | null;
+  actor?: string | null;
+  requestId?: string;
 }
 
 export interface UpdateCommentsResult {
@@ -4128,6 +4147,28 @@ export async function updateComments(
     updatedCount: payload.data?.updatedCount ?? payload.updatedCount ?? updated.length,
     missingIds: payload.data?.missingIds || payload.missingIds || [],
   };
+}
+
+export async function updateCommentThread(
+  siteId: string,
+  commentId: string,
+  input: UpdateCommentThreadInput,
+): Promise<AdminComment> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiUpdateCommentResponse>(response);
+  const comment = payload.data?.comment || payload.comment;
+
+  if (!response.ok || !payload.success || !comment) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to move comment reply', payload.error?.details);
+  }
+
+  return comment;
 }
 
 export async function listCommentBlocklist(

@@ -3,11 +3,13 @@ import {
   getCommentById,
   getSiteByIdOrSlug,
   updateCommentStatus,
+  updateCommentThread,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
+  updateRepositoryCommentThread,
 } from '@/lib/commentRepositorySupport';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -62,7 +64,10 @@ function parseStatus(raw: unknown): CommentStatus | null {
 }
 
 function parseBody(raw: unknown): {
-  status: CommentStatus;
+  status?: CommentStatus;
+  parentId?: string | null;
+  commentThreadId?: string | null;
+  hasThreadUpdate: boolean;
   reviewedBy?: string;
   actor?: string;
   rejectionReason?: string;
@@ -74,9 +79,23 @@ function parseBody(raw: unknown): {
   }
 
   const status = parseStatus((raw as { status?: unknown }).status);
-  if (!status) {
-    return null;
-  }
+  const hasParentId = Object.prototype.hasOwnProperty.call(raw, 'parentId');
+  const hasCommentThreadId = Object.prototype.hasOwnProperty.call(raw, 'commentThreadId') || Object.prototype.hasOwnProperty.call(raw, 'threadId');
+  const parentId = hasParentId
+    ? (typeof (raw as { parentId?: unknown }).parentId === 'string'
+      ? ((raw as { parentId: string }).parentId.trim() || null)
+      : (raw as { parentId?: unknown }).parentId === null
+        ? null
+        : undefined)
+    : undefined;
+  const rawThreadId = (raw as { commentThreadId?: unknown }).commentThreadId ?? (raw as { threadId?: unknown }).threadId;
+  const commentThreadId = hasCommentThreadId
+    ? (typeof rawThreadId === 'string'
+      ? (rawThreadId.trim() || null)
+      : rawThreadId === null
+        ? null
+        : undefined)
+    : undefined;
 
   const reviewedBy = typeof (raw as { reviewedBy?: unknown }).reviewedBy === 'string'
     ? (raw as { reviewedBy: string }).reviewedBy.trim()
@@ -98,8 +117,15 @@ function parseBody(raw: unknown): {
     ? (raw as { requestId: string }).requestId.trim()
     : undefined;
 
+  if (!status && !hasParentId && !hasCommentThreadId) {
+    return null;
+  }
+
   return {
-    status,
+    status: status || undefined,
+    parentId,
+    commentThreadId,
+    hasThreadUpdate: hasParentId || hasCommentThreadId,
     reviewedBy,
     actor,
     rejectionReason,
@@ -198,18 +224,53 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const payload = parseBody(await request.json().catch(() => null));
       if (!payload) {
-        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or parentId is required.', baseRequestId);
+      }
+      if (payload.status && payload.hasThreadUpdate) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Update status and reply parent in separate requests.', baseRequestId);
       }
       const requestId = payload.requestId || baseRequestId;
 
-      const updated = await updateRepositoryCommentStatus(repositories, site.id, comment, {
-        status: payload.status,
-        reviewedBy: payload.reviewedBy || null,
-        actor: payload.actor,
-        rejectionReason: payload.rejectionReason || null,
-        blockReason: payload.blockReason || null,
-        requestId: payload.requestId,
-      });
+      let updated: Comment;
+      if (payload.status) {
+        updated = await updateRepositoryCommentStatus(repositories, site.id, comment, {
+          status: payload.status,
+          reviewedBy: payload.reviewedBy || null,
+          actor: payload.actor,
+          rejectionReason: payload.rejectionReason || null,
+          blockReason: payload.blockReason || null,
+          requestId: payload.requestId,
+        });
+      } else {
+        if (!comment.parentId) {
+          return errorResponse(422, 'TOP_LEVEL_COMMENT', 'Only replies can be moved to another parent.', requestId);
+        }
+        if (payload.parentId === undefined) {
+          return errorResponse(400, 'PARENT_REQUIRED', 'parentId is required when moving a reply.', requestId);
+        }
+
+        let parent: Comment | null = null;
+        if (payload.parentId) {
+          parent = await repositories.comments.getById(site.id, payload.parentId);
+          if (
+            !parent ||
+            parent.id === comment.id ||
+            parent.parentId ||
+            parent.targetType !== comment.targetType ||
+            parent.targetId !== comment.targetId
+          ) {
+            return errorResponse(422, 'INVALID_PARENT', 'The selected parent comment cannot receive this reply.', requestId);
+          }
+        }
+
+        updated = await updateRepositoryCommentThread(repositories, site.id, comment, {
+          parentId: parent?.id || null,
+          commentThreadId: parent ? (payload.commentThreadId || parent.commentThreadId || parent.id) : null,
+          actor: payload.actor,
+          requestId: payload.requestId,
+          defaultReviewer: 'admin',
+        });
+      }
 
       return privateResponse({
         success: true,
@@ -233,18 +294,53 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const payload = parseBody(await request.json().catch(() => null));
     if (!payload) {
-      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or parentId is required.', baseRequestId);
+    }
+    if (payload.status && payload.hasThreadUpdate) {
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Update status and reply parent in separate requests.', baseRequestId);
     }
     const requestId = payload.requestId || baseRequestId;
 
-    const updated = updateCommentStatus(comment.id, {
-      status: payload.status,
-      reviewedBy: payload.reviewedBy || null,
-      actor: payload.actor,
-      rejectionReason: payload.rejectionReason || null,
-      blockReason: payload.blockReason || null,
-      requestId: payload.requestId,
-    });
+    let updated: Comment | undefined;
+    if (payload.status) {
+      updated = updateCommentStatus(comment.id, {
+        status: payload.status,
+        reviewedBy: payload.reviewedBy || null,
+        actor: payload.actor,
+        rejectionReason: payload.rejectionReason || null,
+        blockReason: payload.blockReason || null,
+        requestId: payload.requestId,
+      });
+    } else {
+      if (!comment.parentId) {
+        return errorResponse(422, 'TOP_LEVEL_COMMENT', 'Only replies can be moved to another parent.', requestId);
+      }
+      if (payload.parentId === undefined) {
+        return errorResponse(400, 'PARENT_REQUIRED', 'parentId is required when moving a reply.', requestId);
+      }
+
+      let parent: Comment | undefined;
+      if (payload.parentId) {
+        parent = getCommentById(payload.parentId);
+        if (
+          !parent ||
+          parent.siteId !== site.id ||
+          parent.id === comment.id ||
+          parent.parentId ||
+          parent.targetType !== comment.targetType ||
+          parent.targetId !== comment.targetId
+        ) {
+          return errorResponse(422, 'INVALID_PARENT', 'The selected parent comment cannot receive this reply.', requestId);
+        }
+      }
+
+      updated = updateCommentThread(comment.id, {
+        parentId: parent?.id || null,
+        commentThreadId: parent ? (payload.commentThreadId || parent.commentThreadId || parent.id) : null,
+        actor: payload.actor,
+        requestId: payload.requestId,
+      });
+    }
 
     if (!updated) {
       return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);

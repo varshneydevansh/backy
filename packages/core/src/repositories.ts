@@ -503,6 +503,8 @@ export interface BackyCommentCreateInput {
 export interface BackyCommentUpdateInput {
   content?: string;
   status?: CommentStatus;
+  parentId?: string | null;
+  commentThreadId?: string | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   rejectionReason?: string | null;

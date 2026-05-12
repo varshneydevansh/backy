@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Filter,
   Flag,
+  GitBranch,
   MessageSquare,
   RefreshCw,
   Search,
@@ -26,6 +27,7 @@ import {
   listComments,
   listPages,
   updateSite,
+  updateCommentThread,
   updateComments,
   type AdminComment,
   type AdminCommentBlocklistEntry,
@@ -241,16 +243,19 @@ function CommentsRoute() {
   const [moderationReason, setModerationReason] = useState('');
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState<CommentReplyDraft>(DEFAULT_REPLY_DRAFT);
+  const [movingCommentId, setMovingCommentId] = useState<string | null>(null);
+  const [moveParentDraft, setMoveParentDraft] = useState('');
   const [commentPolicyDraft, setCommentPolicyDraft] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [savedCommentPolicy, setSavedCommentPolicy] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [isLoading, setIsLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [isReplyingId, setIsReplyingId] = useState<string | null>(null);
+  const [isMovingId, setIsMovingId] = useState<string | null>(null);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0 || Boolean(isReplyingId);
+  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0 || Boolean(isReplyingId) || Boolean(isMovingId);
   const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
 
   const activeSite = useMemo(
@@ -268,6 +273,15 @@ function CommentsRoute() {
   const commentById = useMemo(() => {
     const map = new Map<string, AdminComment>();
     comments.forEach((comment) => map.set(comment.id, comment));
+    return map;
+  }, [comments]);
+  const topLevelParentsByTarget = useMemo(() => {
+    const map = new Map<string, AdminComment[]>();
+    comments.forEach((comment) => {
+      if (comment.parentId) return;
+      const key = `${comment.targetType}:${comment.targetId}`;
+      map.set(key, [...(map.get(key) || []), comment]);
+    });
     return map;
   }, [comments]);
   const replyCountByParent = useMemo(() => {
@@ -765,6 +779,8 @@ function CommentsRoute() {
     setModerationReason('');
     setReplyingToId(null);
     setReplyDraft(DEFAULT_REPLY_DRAFT);
+    setMovingCommentId(null);
+    setMoveParentDraft('');
     clearCommentFilters();
   }, [routerState.location.search, selectedSiteId, sites]);
 
@@ -966,6 +982,60 @@ function CommentsRoute() {
     }
   };
 
+  const openMoveComposer = (comment: AdminComment, parentOptions: AdminComment[]) => {
+    if (isCommentsBusy || !comment.parentId) return;
+    setMovingCommentId(comment.id);
+    setMoveParentDraft(parentOptions.some((parent) => parent.id === comment.parentId)
+      ? comment.parentId
+      : parentOptions[0]?.id || '');
+  };
+
+  const handleMoveReply = async (comment: AdminComment) => {
+    if (isCommentsBusy) return;
+    if (!comment.parentId) {
+      setError('Only replies can be moved to another parent.');
+      setNotice(null);
+      return;
+    }
+
+    const parentOptions = topLevelParentsByTarget.get(`${comment.targetType}:${comment.targetId}`) || [];
+    const nextParent = parentOptions.find((parent) => parent.id === moveParentDraft);
+    if (!nextParent) {
+      setError('Select a top-level parent comment before moving this reply.');
+      setNotice(null);
+      return;
+    }
+    if (nextParent.id === comment.parentId) {
+      setMovingCommentId(null);
+      setMoveParentDraft('');
+      setNotice('Reply already belongs to the selected parent.');
+      return;
+    }
+
+    setIsMovingId(comment.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateCommentThread(activeSiteId, comment.id, {
+        parentId: nextParent.id,
+        commentThreadId: getCommentThreadKey(nextParent),
+        actor: 'admin',
+        requestId: `comments-reparent-${Date.now().toString(36)}`,
+      });
+      setComments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setMovingCommentId(null);
+      setMoveParentDraft('');
+      setThreadFilter(getCommentThreadKey(updated));
+      await refreshCommentAnalytics().catch(() => null);
+      setNotice(`Reply moved under ${nextParent.authorName || nextParent.authorEmail || 'the selected parent'}.`);
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : 'Unable to move reply');
+    } finally {
+      setIsMovingId(null);
+    }
+  };
+
   const copyCommentApiText = async (value: string, label: string) => {
     if (isCommentsBusy) return;
 
@@ -1011,6 +1081,8 @@ function CommentsRoute() {
     setModerationReason('');
     setReplyingToId(null);
     setReplyDraft(DEFAULT_REPLY_DRAFT);
+    setMovingCommentId(null);
+    setMoveParentDraft('');
     clearCommentFilters();
     navigate({ to: '/comments', search: { siteId: nextSiteId }, replace: true });
   };
@@ -1948,42 +2020,57 @@ function CommentsRoute() {
                 />
                 Select visible comments
               </label>
-              {filteredComments.map((comment) => (
-                <CommentCard
-                  key={comment.id}
-                  comment={comment}
-                  target={targetByKey.get(`${comment.targetType}:${comment.targetId}`)}
-                  parentComment={comment.parentId ? commentById.get(comment.parentId) : undefined}
-                  replyCount={replyCountByParent.get(comment.id) || 0}
-                  threadKey={getCommentThreadKey(comment)}
-                  canReply={commentPolicyDraft.allowReplies}
-                  isReplying={replyingToId === comment.id}
-                  isSubmittingReply={isReplyingId === comment.id}
-                  replyDraft={replyDraft}
-                  selected={selectedSet.has(comment.id)}
-                  disabled={isCommentsBusy}
-                  onSelect={(checked) => {
-                    if (isCommentsBusy) return;
-                    setSelectedIds((current) => (
-                      checked
-                        ? Array.from(new Set([...current, comment.id]))
-                        : current.filter((id) => id !== comment.id)
-                    ));
-                  }}
-                  onApprove={() => void handleModerate([comment.id], 'approved')}
-                  onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
-                  onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
-                  onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
-                  onClearReports={() => void handleClearReports([comment.id])}
-                  onOpenReply={() => openReplyComposer(comment)}
-                  onCancelReply={() => {
-                    setReplyingToId(null);
-                    setReplyDraft((current) => ({ ...current, content: '' }));
-                  }}
-                  onReplyDraftChange={patchReplyDraft}
-                  onSubmitReply={() => void handleCreateReply(comment)}
-                />
-              ))}
+              {filteredComments.map((comment) => {
+                const parentOptions = (topLevelParentsByTarget.get(`${comment.targetType}:${comment.targetId}`) || [])
+                  .filter((parent) => parent.id !== comment.id);
+                return (
+                  <CommentCard
+                    key={comment.id}
+                    comment={comment}
+                    target={targetByKey.get(`${comment.targetType}:${comment.targetId}`)}
+                    parentComment={comment.parentId ? commentById.get(comment.parentId) : undefined}
+                    replyCount={replyCountByParent.get(comment.id) || 0}
+                    threadKey={getCommentThreadKey(comment)}
+                    canReply={commentPolicyDraft.allowReplies}
+                    isReplying={replyingToId === comment.id}
+                    isSubmittingReply={isReplyingId === comment.id}
+                    replyDraft={replyDraft}
+                    parentOptions={parentOptions}
+                    isMoving={movingCommentId === comment.id}
+                    isSubmittingMove={isMovingId === comment.id}
+                    moveParentId={moveParentDraft}
+                    selected={selectedSet.has(comment.id)}
+                    disabled={isCommentsBusy}
+                    onSelect={(checked) => {
+                      if (isCommentsBusy) return;
+                      setSelectedIds((current) => (
+                        checked
+                          ? Array.from(new Set([...current, comment.id]))
+                          : current.filter((id) => id !== comment.id)
+                      ));
+                    }}
+                    onApprove={() => void handleModerate([comment.id], 'approved')}
+                    onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
+                    onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
+                    onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
+                    onClearReports={() => void handleClearReports([comment.id])}
+                    onOpenReply={() => openReplyComposer(comment)}
+                    onCancelReply={() => {
+                      setReplyingToId(null);
+                      setReplyDraft((current) => ({ ...current, content: '' }));
+                    }}
+                    onReplyDraftChange={patchReplyDraft}
+                    onSubmitReply={() => void handleCreateReply(comment)}
+                    onOpenMove={() => openMoveComposer(comment, parentOptions)}
+                    onCancelMove={() => {
+                      setMovingCommentId(null);
+                      setMoveParentDraft('');
+                    }}
+                    onMoveParentChange={setMoveParentDraft}
+                    onSubmitMove={() => void handleMoveReply(comment)}
+                  />
+                );
+              })}
             </div>
           )}
         </PanelContent>
@@ -2155,6 +2242,10 @@ function CommentCard({
   isReplying,
   isSubmittingReply,
   replyDraft,
+  parentOptions,
+  isMoving,
+  isSubmittingMove,
+  moveParentId,
   selected,
   disabled,
   onSelect,
@@ -2167,6 +2258,10 @@ function CommentCard({
   onCancelReply,
   onReplyDraftChange,
   onSubmitReply,
+  onOpenMove,
+  onCancelMove,
+  onMoveParentChange,
+  onSubmitMove,
 }: {
   comment: AdminComment;
   target?: CommentTargetSummary;
@@ -2177,6 +2272,10 @@ function CommentCard({
   isReplying: boolean;
   isSubmittingReply: boolean;
   replyDraft: CommentReplyDraft;
+  parentOptions: AdminComment[];
+  isMoving: boolean;
+  isSubmittingMove: boolean;
+  moveParentId: string;
   selected: boolean;
   disabled: boolean;
   onSelect: (checked: boolean) => void;
@@ -2189,6 +2288,10 @@ function CommentCard({
   onCancelReply: () => void;
   onReplyDraftChange: (patch: Partial<CommentReplyDraft>) => void;
   onSubmitReply: () => void;
+  onOpenMove: () => void;
+  onCancelMove: () => void;
+  onMoveParentChange: (parentId: string) => void;
+  onSubmitMove: () => void;
 }) {
   const reports = comment.reportReasons?.length ? comment.reportReasons.join(', ') : null;
   const hasReports = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
@@ -2330,6 +2433,19 @@ function CommentCard({
         >
           Reply
         </Button>
+        {isReply ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onOpenMove}
+            disabled={disabled || parentOptions.length === 0}
+            iconStart={<GitBranch className="size-4" />}
+            aria-label={`Move reply from ${comment.authorName || comment.authorEmail || 'Anonymous'} to another parent`}
+            data-testid="comments-move-open"
+          >
+            Move reply
+          </Button>
+        ) : null}
       </div>
       {isReplying ? (
         <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4" data-testid="comments-reply-composer">
@@ -2404,6 +2520,54 @@ function CommentCard({
               variant="ghost"
               onClick={onCancelReply}
               disabled={disabled || isSubmittingReply}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {isMoving ? (
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4" data-testid="comments-move-composer">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Move reply</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Reassign this reply to another top-level parent on the same {comment.targetType}.
+              </div>
+            </div>
+            <StatusBadge status="thread update" type="neutral" />
+          </div>
+          <label className="mt-3 grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            New parent
+            <select
+              value={moveParentId}
+              disabled={disabled || isSubmittingMove}
+              onChange={(event) => onMoveParentChange(event.target.value)}
+              className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Comment reply parent"
+            >
+              {parentOptions.map((parent) => (
+                <option key={parent.id} value={parent.id}>
+                  {(parent.authorName || parent.authorEmail || 'Anonymous')} - {parent.content.slice(0, 70)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={onSubmitMove}
+              disabled={disabled || isSubmittingMove || !moveParentId || moveParentId === comment.parentId}
+              iconStart={<GitBranch className="size-4" />}
+              data-testid="comments-move-submit"
+            >
+              {isSubmittingMove ? 'Moving reply' : 'Move reply'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onCancelMove}
+              disabled={disabled || isSubmittingMove}
             >
               Cancel
             </Button>

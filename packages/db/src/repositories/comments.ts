@@ -232,6 +232,8 @@ export function createCommentRepository(db: DatabaseInstance): BackyCommentRepos
             const updates: Record<string, unknown> = { updatedAt: new Date() };
             if (input.content !== undefined) updates.content = input.content;
             if (input.status !== undefined) updates.status = input.status;
+            if (input.parentId !== undefined) updates.parentId = input.parentId;
+            if (input.commentThreadId !== undefined) updates.commentThreadId = input.commentThreadId;
             if (input.reviewedBy !== undefined) updates.reviewedBy = input.reviewedBy;
             if (input.reviewedAt !== undefined) updates.reviewedAt = input.reviewedAt ? new Date(input.reviewedAt) : null;
             if (input.rejectionReason !== undefined) updates.rejectionReason = input.rejectionReason;

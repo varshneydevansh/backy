@@ -7922,6 +7922,56 @@ export function updateCommentStatus(
   return clone(comment);
 }
 
+export function updateCommentThread(
+  commentId: string,
+  updates: {
+    parentId: string | null;
+    commentThreadId?: string | null;
+    actor?: string | null;
+    requestId?: string;
+  },
+): Comment | undefined {
+  refreshPersistedInteractionStore();
+
+  const comment = commentStore.find((item) => item.id === commentId);
+  if (!comment) return undefined;
+
+  const previousParentId = comment.parentId;
+  const previousThreadId = comment.commentThreadId || null;
+  const reviewedAt = new Date().toISOString();
+  const resolvedRequestId = updates.requestId || comment.requestId || undefined;
+
+  comment.parentId = updates.parentId;
+  comment.commentThreadId = updates.commentThreadId || undefined;
+  comment.reviewedBy = updates.actor || comment.reviewedBy || 'admin';
+  comment.reviewedAt = reviewedAt;
+  comment.updatedAt = reviewedAt;
+
+  setCommentStore(commentStore.map((item) => (item.id === comment.id ? comment : item)));
+  persistInteractionStore();
+
+  trackWebhookEvent({
+    kind: 'comment-status',
+    siteId: comment.siteId,
+    commentId: comment.id,
+    target: `comment:${comment.id}`,
+    status: 'succeeded',
+    requestId: resolvedRequestId,
+    reason: 'thread-updated',
+    actor: comment.reviewedBy || undefined,
+    metadata: {
+      targetType: comment.targetType,
+      targetId: comment.targetId,
+      previousParentId,
+      parentId: comment.parentId,
+      previousThreadId,
+      commentThreadId: comment.commentThreadId || null,
+    },
+  });
+
+  return clone(comment);
+}
+
 export function listCommentReplies(siteId: string, params: {
   targetType: CommentTargetType;
   targetId: string;
