@@ -641,6 +641,7 @@ function MediaPage() {
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
   const [pendingRestoreVersionId, setPendingRestoreVersionId] = useState<string | null>(null);
   const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<string | null>(null);
+  const [comparisonVersionId, setComparisonVersionId] = useState<string | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
@@ -1588,6 +1589,7 @@ function MediaPage() {
     setIsLoadingAssetVersions(false);
     setPendingRestoreVersionId(null);
     setPendingDeleteVersionId(null);
+    setComparisonVersionId(null);
     setSignedUrl(null);
     setBindingTargetId('');
   }, [selectedAsset?.id]);
@@ -2210,6 +2212,7 @@ function MediaPage() {
     if (pendingDeleteVersionId !== version.id) {
       setPendingDeleteVersionId(version.id);
       setPendingRestoreVersionId(null);
+      setComparisonVersionId(null);
       return;
     }
 
@@ -2239,6 +2242,7 @@ function MediaPage() {
     if (pendingRestoreVersionId !== version.id) {
       setPendingRestoreVersionId(version.id);
       setPendingDeleteVersionId(null);
+      setComparisonVersionId(null);
       return;
     }
 
@@ -5031,57 +5035,120 @@ function MediaPage() {
                     </div>
                   ) : (
                     <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
-                      {replacementVersions.map((version, index) => (
-                        <div key={version.id || `${version.originalName}-${index}`} className="rounded-lg border border-border bg-background px-3 py-3">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium">{version.originalName || version.filename || 'Previous file'}</p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {formatReplacementSize(version.sizeBytes)} · replaced {formatAuditDate(version.replacedAt || version.createdAt || '')}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                              {version.url && (
-                                <a
-                                  href={version.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      {replacementVersions.map((version, index) => {
+                        const comparisonKey = version.id || `${version.originalName || version.filename || 'version'}-${index}`;
+                        const isComparing = comparisonVersionId === comparisonKey;
+                        const currentSizeBytes = assetSizeBytes(selectedAsset);
+                        const retainedSizeBytes = Number.isFinite(Number(version.sizeBytes)) ? Math.max(0, Number(version.sizeBytes)) : undefined;
+                        const sizeDelta = formatSizeDelta(currentSizeBytes, retainedSizeBytes);
+                        const typeComparison = version.type && version.type !== selectedAsset.type
+                          ? `${version.type} -> ${selectedAsset.type}`
+                          : selectedAsset.type;
+                        const currentMimeType = assetMimeLabel(selectedAsset);
+                        const mimeComparison = version.mimeType && version.mimeType !== currentMimeType
+                          ? `${version.mimeType} -> ${currentMimeType}`
+                          : currentMimeType;
+
+                        return (
+                          <div key={comparisonKey} className="rounded-lg border border-border bg-background px-3 py-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{version.originalName || version.filename || 'Previous file'}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatReplacementSize(version.sizeBytes)} · replaced {formatAuditDate(version.replacedAt || version.createdAt || '')}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                {version.url && (
+                                  <a
+                                    href={version.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  >
+                                    Open
+                                    <ExternalLink className="size-3" />
+                                  </a>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isComparing ? 'secondary' : 'outline'}
+                                  disabled={isMediaMutationBusy}
+                                  onClick={() => setComparisonVersionId(isComparing ? null : comparisonKey)}
+                                  title="Compare retained version with the current file."
                                 >
-                                  Open
-                                  <ExternalLink className="size-3" />
-                                </a>
-                              )}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={pendingRestoreVersionId === version.id ? 'primary' : 'outline'}
-                                disabled={isMediaMutationBusy || !version.id}
-                                onClick={() => void handleRestoreAssetVersion(version)}
-                                title={version.id ? 'Restore retained version' : 'This retained version cannot be restored because it has no version id.'}
-                              >
-                                <RefreshCw className="size-3.5" />
-                                {pendingRestoreVersionId === version.id
-                                  ? (isRestoringAssetVersion ? 'Restoring...' : 'Confirm restore')
-                                  : 'Restore'}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={pendingDeleteVersionId === version.id ? 'danger' : 'outline'}
-                                disabled={isMediaMutationBusy || !version.id}
-                                onClick={() => void handleDeleteAssetVersion(version)}
-                                title={version.id ? 'Delete retained version' : 'This retained version cannot be deleted because it has no version id.'}
-                              >
-                                <Trash2 className="size-3.5" />
-                                {pendingDeleteVersionId === version.id
-                                  ? (isDeletingAssetVersion ? 'Deleting...' : 'Confirm')
-                                  : 'Delete'}
-                              </Button>
+                                  <Code2 className="size-3.5" />
+                                  {isComparing ? 'Hide compare' : 'Compare'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={pendingRestoreVersionId === version.id ? 'primary' : 'outline'}
+                                  disabled={isMediaMutationBusy || !version.id}
+                                  onClick={() => void handleRestoreAssetVersion(version)}
+                                  title={version.id ? 'Restore retained version' : 'This retained version cannot be restored because it has no version id.'}
+                                >
+                                  <RefreshCw className="size-3.5" />
+                                  {pendingRestoreVersionId === version.id
+                                    ? (isRestoringAssetVersion ? 'Restoring...' : 'Confirm restore')
+                                    : 'Restore'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={pendingDeleteVersionId === version.id ? 'danger' : 'outline'}
+                                  disabled={isMediaMutationBusy || !version.id}
+                                  onClick={() => void handleDeleteAssetVersion(version)}
+                                  title={version.id ? 'Delete retained version' : 'This retained version cannot be deleted because it has no version id.'}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                  {pendingDeleteVersionId === version.id
+                                    ? (isDeletingAssetVersion ? 'Deleting...' : 'Confirm')
+                                    : 'Delete'}
+                                </Button>
+                              </div>
                             </div>
+                            {isComparing && (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-3" data-testid="media-version-comparison">
+                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Version comparison</div>
+                                <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Current</dt>
+                                    <dd className="mt-1 break-all font-mono">{selectedAsset.name} · {formatBytes(currentSizeBytes)}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Retained</dt>
+                                    <dd className="mt-1 break-all font-mono">{version.originalName || version.filename || 'Previous file'} · {formatReplacementSize(version.sizeBytes)}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Size delta</dt>
+                                    <dd className="mt-1 font-mono">{sizeDelta}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Type and MIME</dt>
+                                    <dd className="mt-1 break-all font-mono">{typeComparison} · {mimeComparison}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Provider</dt>
+                                    <dd className="mt-1 font-mono">{versionProviderLabel(version.storageProvider)}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Storage path</dt>
+                                    <dd className="mt-1 break-all font-mono">{versionProviderLabel(version.storagePath)}</dd>
+                                  </div>
+                                  {version.reason && (
+                                    <div className="rounded bg-background px-2 py-1.5 sm:col-span-2">
+                                      <dt className="text-muted-foreground">Reason</dt>
+                                      <dd className="mt-1">{version.reason}</dd>
+                                    </div>
+                                  )}
+                                </dl>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -6468,8 +6535,12 @@ type ReplacementVersion = {
   filename?: string;
   originalName?: string;
   mimeType?: string;
+  type?: MediaAsset['type'];
   sizeBytes?: number;
   url?: string;
+  storagePath?: string | null;
+  storageProvider?: string | null;
+  reason?: string | null;
   createdAt?: string;
   replacedAt?: string;
 };
@@ -6480,8 +6551,12 @@ const getReplacementVersionsFromRecords = (records: MediaVersionRecord[]): Repla
     filename: record.filename,
     originalName: record.originalName,
     mimeType: record.mimeType,
+    type: record.type === 'document' ? 'file' : record.type,
     sizeBytes: Number.isFinite(Number(record.sizeBytes)) ? Number(record.sizeBytes) : undefined,
     url: record.url,
+    storagePath: record.storagePath,
+    storageProvider: record.storageProvider,
+    reason: record.reason,
     createdAt: record.createdAt,
     replacedAt: record.replacedAt,
   }))
@@ -6502,8 +6577,16 @@ const getReplacementVersions = (metadata: Record<string, unknown> | undefined): 
       filename: typeof version.filename === 'string' ? version.filename : undefined,
       originalName: typeof version.originalName === 'string' ? version.originalName : undefined,
       mimeType: typeof version.mimeType === 'string' ? version.mimeType : undefined,
+      type: version.type === 'document'
+        ? 'file'
+        : version.type === 'image' || version.type === 'video' || version.type === 'audio' || version.type === 'file' || version.type === 'font' || version.type === 'other'
+          ? version.type
+        : undefined,
       sizeBytes: Number.isFinite(Number(version.sizeBytes)) ? Number(version.sizeBytes) : undefined,
       url: typeof version.url === 'string' ? version.url : undefined,
+      storagePath: typeof version.storagePath === 'string' ? version.storagePath : null,
+      storageProvider: typeof version.storageProvider === 'string' ? version.storageProvider : null,
+      reason: typeof version.reason === 'string' ? version.reason : null,
       createdAt: typeof version.createdAt === 'string' ? version.createdAt : undefined,
       replacedAt: typeof version.replacedAt === 'string' ? version.replacedAt : undefined,
     }));
@@ -6521,6 +6604,28 @@ const replacementAcceptForAsset = (type: MediaAsset['type']) => {
 const formatReplacementSize = (sizeBytes: number | undefined) => (
   Number.isFinite(sizeBytes) ? formatBytes(sizeBytes || 0) : 'Unknown size'
 );
+
+const formatSizeDelta = (currentSizeBytes: number, versionSizeBytes: number | undefined) => {
+  if (!Number.isFinite(versionSizeBytes)) {
+    return 'Unknown delta';
+  }
+
+  const delta = currentSizeBytes - Math.max(0, versionSizeBytes || 0);
+  if (delta === 0) {
+    return 'Same size';
+  }
+
+  return `${delta > 0 ? '+' : '-'}${formatBytes(Math.abs(delta))} vs retained`;
+};
+
+const versionProviderLabel = (value: string | null | undefined) => (
+  value && value.trim().length > 0 ? value.trim() : 'not recorded'
+);
+
+const assetMimeLabel = (asset: MediaAsset) => {
+  const mimeType = asset.metadata?.mimeType;
+  return typeof mimeType === 'string' && mimeType.trim().length > 0 ? mimeType.trim() : 'current MIME not exposed';
+};
 
 type MediaPermissionKey = 'media.view' | 'media.create' | 'media.configure' | 'media.delete' | 'activity.export';
 type MediaAdminRole = 'owner' | 'admin' | 'editor' | 'viewer';

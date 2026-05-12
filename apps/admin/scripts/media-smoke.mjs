@@ -846,6 +846,27 @@ const restoreAssetVersionThroughDetails = async (client) => {
   return null;
 };
 
+const compareAssetVersionThroughDetails = async (client) => {
+  await clickDetailsButton(client, 'Compare');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasComparison: Boolean(document.querySelector('[data-testid="media-version-comparison"]')),
+      panelText: document.querySelector('[data-testid="media-version-comparison"]')?.textContent || '',
+      body: document.body?.innerText?.slice(0, 1600) || '',
+    }))()`);
+    if (state.hasComparison && state.panelText.includes('Current') && state.panelText.includes('Retained') && state.panelText.includes('Size delta')) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Media retained version comparison did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const prepareVariantsThroughDetails = async (client) => {
   await clickDetailsButton(client, 'Prepare variants');
 
@@ -1252,6 +1273,7 @@ const main = async () => {
       versionsPayload.data?.source === 'database' || versionsPayload.data?.source === 'metadata',
       `Media versions endpoint did not report a valid source: ${JSON.stringify(versionsPayload.data).slice(0, 500)}`,
     );
+    await compareAssetVersionThroughDetails(client);
     await restoreAssetVersionThroughDetails(client);
     const restoredImage = await waitForMedia(marker, (item) => (
       item.id === publicImage.id &&
