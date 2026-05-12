@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
+const LIBRARY_SMOKE = process.env.BACKY_EDITOR_LIBRARY_SMOKE === '1';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
@@ -1625,6 +1626,25 @@ const clickControlByTestId = async (client, testId) => {
   })()`);
 
   assert(clicked?.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+  await sleep(250);
+  return clicked;
+};
+
+const clickControlBySelector = async (client, selector, label = selector) => {
+  const clicked = await evaluate(client, `(() => {
+    const control = document.querySelector(${JSON.stringify(selector)});
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        selector: ${JSON.stringify(selector)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    control.click();
+    return { ok: true, selector: ${JSON.stringify(selector)} };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click ${label}: ${JSON.stringify(clicked)}`);
   await sleep(250);
   return clicked;
 };
@@ -4102,6 +4122,104 @@ const testComponentClickAdd = async (client, componentKey = 'divider') => {
     clicked,
     before,
     after,
+  };
+};
+
+const readComponentLibraryState = async (client, label) => (
+  evaluate(client, `(() => {
+    const itemIds = Array.from(document.querySelectorAll('[data-component-library-item]')).map((node) => (
+      node.getAttribute('data-component-library-item') || ''
+    ));
+    const categories = Array.from(document.querySelectorAll('[data-component-category]')).map((node) => ({
+      id: node.getAttribute('data-component-category') || '',
+      itemIds: Array.from(node.querySelectorAll('[data-component-library-item]')).map((item) => (
+        item.getAttribute('data-component-library-item') || ''
+      )),
+    }));
+    const favoriteButton = document.querySelector('[data-component-favorite="divider"]');
+    return {
+      label: ${JSON.stringify(label)},
+      hasLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+      searchValue: document.querySelector('[data-testid="editor-component-search"]')?.value || '',
+      itemIds,
+      categories,
+      hasEmpty: /No components found/i.test(document.querySelector('[data-testid="editor-component-library"]')?.textContent || ''),
+      dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
+      storedFavorites: (() => {
+        try {
+          return JSON.parse(window.localStorage.getItem('backy.editor.componentLibrary.favorites') || '[]');
+        } catch {
+          return [];
+        }
+      })(),
+    };
+  })()`)
+);
+
+const testComponentLibraryControls = async (client) => {
+  const initial = await readComponentLibraryState(client, 'initial');
+  assert(initial.hasLibrary, `Component library missing: ${JSON.stringify(initial)}`);
+  assert(initial.itemIds.includes('divider'), `Divider component missing from library: ${JSON.stringify(initial)}`);
+  assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
+
+  await setFormControlByTestId(client, 'editor-component-search', 'divider');
+  await sleep(150);
+  const searchFiltered = await readComponentLibraryState(client, 'search divider');
+  assert(searchFiltered.searchValue === 'divider', `Component search value mismatch: ${JSON.stringify(searchFiltered)}`);
+  assert(searchFiltered.itemIds.includes('divider'), `Divider missing after component search: ${JSON.stringify(searchFiltered)}`);
+  assert(!searchFiltered.itemIds.includes('image'), `Component search did not filter image out: ${JSON.stringify(searchFiltered)}`);
+
+  await clickControlByTestId(client, 'editor-component-category-layout');
+  await sleep(150);
+  const layoutFiltered = await readComponentLibraryState(client, 'layout filtered');
+  assert(layoutFiltered.itemIds.includes('divider'), `Layout category did not retain divider search result: ${JSON.stringify(layoutFiltered)}`);
+  assert(layoutFiltered.categories.every((category) => category.id === 'layout'), `Layout category rendered unexpected groups: ${JSON.stringify(layoutFiltered)}`);
+
+  await setFormControlByTestId(client, 'editor-component-search', '');
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await sleep(150);
+
+  let beforeFavorite = await readComponentLibraryState(client, 'before favorite');
+  if (beforeFavorite.dividerFavoritePressed) {
+    await clickControlBySelector(client, '[data-component-favorite="divider"]');
+    await sleep(150);
+    beforeFavorite = await readComponentLibraryState(client, 'favorite cleared');
+    assert(beforeFavorite.dividerFavoritePressed === false, `Unable to clear existing divider favorite: ${JSON.stringify(beforeFavorite)}`);
+  }
+
+  await clickControlBySelector(client, '[data-component-favorite="divider"]');
+  await sleep(150);
+  const favorited = await readComponentLibraryState(client, 'divider favorited');
+  const favoritesGroup = favorited.categories.find((category) => category.id === 'favorites');
+  assert(favorited.dividerFavoritePressed === true, `Divider favorite button did not become pressed: ${JSON.stringify(favorited)}`);
+  assert(favorited.storedFavorites.includes('divider'), `Divider favorite did not persist to localStorage: ${JSON.stringify(favorited)}`);
+  assert(favoritesGroup?.itemIds.includes('divider'), `Favorites group did not include divider: ${JSON.stringify(favorited)}`);
+
+  await clickControlByTestId(client, 'editor-component-category-favorites');
+  await sleep(150);
+  const favoritesFiltered = await readComponentLibraryState(client, 'favorites category');
+  assert(favoritesFiltered.itemIds.includes('divider'), `Favorites category did not show favorited divider: ${JSON.stringify(favoritesFiltered)}`);
+  assert(favoritesFiltered.categories.length === 1 && favoritesFiltered.categories[0].id === 'favorites', `Favorites category rendered unexpected groups: ${JSON.stringify(favoritesFiltered)}`);
+
+  await setFormControlByTestId(client, 'editor-component-search', 'zz-no-component');
+  await sleep(150);
+  const emptySearch = await readComponentLibraryState(client, 'empty search');
+  assert(emptySearch.hasEmpty === true && emptySearch.itemIds.length === 0, `Component library empty search state missing: ${JSON.stringify(emptySearch)}`);
+
+  await setFormControlByTestId(client, 'editor-component-search', '');
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await sleep(150);
+  const restored = await readComponentLibraryState(client, 'restored');
+  assert(restored.itemIds.includes('divider') && restored.itemIds.includes('image'), `Component library did not restore all items: ${JSON.stringify(restored)}`);
+
+  return {
+    initial,
+    searchFiltered,
+    layoutFiltered,
+    favorited,
+    favoritesFiltered,
+    emptySearch,
+    restored,
   };
 };
 
@@ -7767,7 +7885,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -7793,6 +7911,19 @@ const main = async () => {
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+
+    if (LIBRARY_SMOKE) {
+      assert(!EDITOR_PATH, 'Component library smoke currently requires an internally created smoke page');
+      const componentLibrary = await testComponentLibraryControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'component-library',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        componentLibrary,
+      }, null, 2));
+      return;
+    }
 
     if (CLIPBOARD_SMOKE) {
       const targetElementId = EDITOR_PATH ? 'home-heading' : 'smoke-heading';

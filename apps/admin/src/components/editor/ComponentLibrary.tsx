@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import {
   Type,
   Heading,
@@ -35,6 +35,7 @@ import {
   Sparkles,
   LayoutGrid,
   BookmarkPlus,
+  Star,
   RefreshCw,
   Pencil,
   Trash2,
@@ -50,8 +51,11 @@ import type { ReusableSection } from '@/lib/adminContentApi';
 // ============================================
 
 const LIBRARY_ITEMS: ComponentLibraryItem[] = CANVAS_COMPONENT_LIBRARY;
+const FAVORITES_CATEGORY_ID = 'favorites';
+const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
+const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id ?? item.type);
 
 // ============================================
 // COMPONENT
@@ -95,6 +99,18 @@ export function ComponentLibrary({
 }: ComponentLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [favoriteItemKeys, setFavoriteItemKeys] = useState<string[]>(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(FAVORITES_STORAGE_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
 
   const reusableItems = useMemo<ComponentLibraryItem[]>(() => (
     reusableSections
@@ -134,21 +150,55 @@ export function ComponentLibrary({
     [reusableItems],
   );
 
-  // Filter items
-  const filteredItems = libraryItems.filter((item) => {
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemKeys));
+  }, [favoriteItemKeys]);
+
+  const favoriteKeySet = useMemo(() => new Set(favoriteItemKeys), [favoriteItemKeys]);
+  const favoriteItems = useMemo(
+    () => libraryItems.filter((item) => favoriteKeySet.has(getLibraryItemKey(item))),
+    [favoriteKeySet, libraryItems],
+  );
+
+  const toggleFavorite = (item: ComponentLibraryItem) => {
+    const itemKey = getLibraryItemKey(item);
+    setFavoriteItemKeys((current) => (
+      current.includes(itemKey)
+        ? current.filter((key) => key !== itemKey)
+        : [...current, itemKey]
+    ));
+  };
+
+  const matchesActiveSearch = (item: ComponentLibraryItem) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory =
-      !selectedCategory || getLibraryCategory(item) === selectedCategory;
+    return matchesSearch;
+  };
 
-    return matchesSearch && matchesCategory;
+  // Filter items
+  const filteredItems = libraryItems.filter((item) => {
+    if (!matchesActiveSearch(item)) {
+      return false;
+    }
+
+    if (selectedCategory === FAVORITES_CATEGORY_ID) {
+      return favoriteKeySet.has(getLibraryItemKey(item));
+    }
+
+    return !selectedCategory || getLibraryCategory(item) === selectedCategory;
   });
 
   // Group by category
   const groupedItems = filteredItems.reduce((acc, item) => {
-    const category = getLibraryCategory(item);
+    const category = selectedCategory === FAVORITES_CATEGORY_ID
+      ? FAVORITES_CATEGORY_ID
+      : getLibraryCategory(item);
     if (!acc[category]) {
       acc[category] = [];
     }
@@ -157,6 +207,7 @@ export function ComponentLibrary({
   }, {} as Record<string, ComponentLibraryItem[]>);
 
   const categories = [
+    { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
     { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
     { id: 'media', name: 'Media', color: 'bg-purple-500' },
     { id: 'layout', name: 'Layout', color: 'bg-green-500' },
@@ -164,6 +215,17 @@ export function ComponentLibrary({
     { id: 'saved', name: 'Saved', color: 'bg-sky-500' },
     { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
   ];
+
+  const favoriteSearchItems = favoriteItems.filter(matchesActiveSearch);
+  const groupedItemsWithFavorites = selectedCategory === null && favoriteSearchItems.length > 0
+    ? {
+      [FAVORITES_CATEGORY_ID]: favoriteSearchItems,
+      ...Object.entries(groupedItems).reduce<Record<string, ComponentLibraryItem[]>>((acc, [category, items]) => {
+        acc[category] = items.filter((item) => !favoriteKeySet.has(getLibraryItemKey(item)));
+        return acc;
+      }, {}),
+    }
+    : groupedItems;
 
   return (
     <div
@@ -182,6 +244,7 @@ export function ComponentLibrary({
             placeholder="Search components..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="editor-component-search"
             className={cn(
               'w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 bg-slate-50',
               'focus:outline-none focus:ring-2 focus:ring-sky-500'
@@ -195,6 +258,7 @@ export function ComponentLibrary({
         <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setSelectedCategory(null)}
+            data-testid="editor-component-category-all"
             className={cn(
               'px-2 py-1 text-xs rounded-md transition-colors',
               selectedCategory === null
@@ -208,6 +272,7 @@ export function ComponentLibrary({
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
+              data-testid={`editor-component-category-${cat.id}`}
               className={cn(
                 'px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1',
                 selectedCategory === cat.id
@@ -255,25 +320,29 @@ export function ComponentLibrary({
 
       {/* Components List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-4">
-        {Object.entries(groupedItems).map(([category, items]) => (
-          <div key={category}>
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
-              {category}
-            </h3>
-            <div className="space-y-1">
-              {items.map((item) => (
-                <LibraryItem
-                  key={item.id ?? item.type}
-                  item={item}
-                  disabled={disabled}
-                  onDragStart={() => onDragStart?.(item)}
-                  onAddItem={() => onAddItem?.(item)}
-                  onRenameReusableSection={onRenameReusableSection}
-                  onDeleteReusableSection={onDeleteReusableSection}
-                />
-              ))}
+        {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
+          items.length > 0 && (
+            <div key={category} data-component-category={category}>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
+                {category}
+              </h3>
+              <div className="space-y-1">
+                {items.map((item) => (
+                  <LibraryItem
+                    key={item.id ?? item.type}
+                    item={item}
+                    disabled={disabled}
+                    isFavorite={favoriteKeySet.has(getLibraryItemKey(item))}
+                    onDragStart={() => onDragStart?.(item)}
+                    onAddItem={() => onAddItem?.(item)}
+                    onToggleFavorite={() => toggleFavorite(item)}
+                    onRenameReusableSection={onRenameReusableSection}
+                    onDeleteReusableSection={onDeleteReusableSection}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          )
         ))}
 
         {filteredItems.length === 0 && (
@@ -293,8 +362,10 @@ export function ComponentLibrary({
 interface LibraryItemProps {
   item: ComponentLibraryItem;
   disabled?: boolean;
+  isFavorite?: boolean;
   onDragStart: () => void;
   onAddItem?: () => void;
+  onToggleFavorite?: () => void;
   onRenameReusableSection?: (sectionId: string) => void;
   onDeleteReusableSection?: (sectionId: string) => void;
 }
@@ -302,8 +373,10 @@ interface LibraryItemProps {
 function LibraryItem({
   item,
   disabled = false,
+  isFavorite = false,
   onDragStart,
   onAddItem,
+  onToggleFavorite,
   onRenameReusableSection,
   onDeleteReusableSection,
 }: LibraryItemProps) {
@@ -393,6 +466,30 @@ function LibraryItem({
           </p>
         )}
       </div>
+      <button
+        type="button"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (disabled) return;
+          onToggleFavorite?.();
+        }}
+        disabled={disabled}
+        className={cn(
+          'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+          isFavorite
+            ? 'text-yellow-500 hover:bg-yellow-50'
+            : 'text-slate-400 opacity-0 hover:bg-white hover:text-yellow-500 group-hover:opacity-100 focus:opacity-100',
+          disabled && 'cursor-not-allowed opacity-40'
+        )}
+        title={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+        aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+        aria-pressed={isFavorite}
+        data-component-favorite={item.id ?? item.type}
+      >
+        <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
+      </button>
       <button
         type="button"
         onMouseDown={(event) => event.stopPropagation()}
