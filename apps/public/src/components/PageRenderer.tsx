@@ -1007,6 +1007,78 @@ function resolveFormOwnerId(props: Record<string, unknown>): string | undefined 
   return parseAttributeString(props.formOwnerId) || parseAttributeString(props.formId);
 }
 
+function normalizeCaptchaProvider(value: unknown): 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock' {
+  const provider = getNameClass(value).toLowerCase();
+  if (provider === 'hcaptcha' || provider === 'recaptcha' || provider === 'mock') {
+    return provider;
+  }
+
+  return 'turnstile';
+}
+
+function getCaptchaWidgetClass(provider: 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock'): string | undefined {
+  if (provider === 'turnstile') {
+    return 'cf-turnstile';
+  }
+  if (provider === 'hcaptcha') {
+    return 'h-captcha';
+  }
+  if (provider === 'recaptcha') {
+    return 'g-recaptcha';
+  }
+
+  return undefined;
+}
+
+const CAPTCHA_SCRIPT_URLS = {
+  turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+  hcaptcha: 'https://js.hcaptcha.com/1/api.js?render=explicit',
+  recaptcha: 'https://www.google.com/recaptcha/api.js?render=explicit',
+} as const;
+
+const captchaScriptLoads = new Map<string, Promise<void>>();
+
+function loadCaptchaScript(provider: 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock'): Promise<void> {
+  if (provider === 'mock' || typeof window === 'undefined') {
+    return Promise.resolve();
+  }
+
+  const src = CAPTCHA_SCRIPT_URLS[provider];
+  const existing = captchaScriptLoads.get(src);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = new Promise<void>((resolve, reject) => {
+    const currentScript = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
+    if (currentScript?.dataset.loaded === 'true') {
+      resolve();
+      return;
+    }
+
+    const script = currentScript || document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    script.dataset.backyCaptchaScript = provider;
+    script.addEventListener('load', () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    }, { once: true });
+    script.addEventListener('error', () => {
+      captchaScriptLoads.delete(src);
+      reject(new Error(`Unable to load ${provider} captcha script.`));
+    }, { once: true });
+
+    if (!currentScript) {
+      document.head.appendChild(script);
+    }
+  });
+
+  captchaScriptLoads.set(src, promise);
+  return promise;
+}
+
 function resolveMediaSource(value: unknown): string | undefined {
   const direct = parseAttributeString(value);
   if (direct) {
@@ -2366,7 +2438,10 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
     status: string;
     submissionId?: string;
   } | null>(null);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaStatus, setCaptchaStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const startedAtRef = useRef<number>(Date.now());
+  const captchaWidgetRef = useRef<HTMLDivElement | null>(null);
 
   const formId = typeof props.formId === 'string' ? props.formId : undefined;
   const fallbackFormId = getNameClass(formId || element.id).trim();
@@ -2386,6 +2461,9 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const formAudience = rawAudience === 'authenticated' || rawAudience === 'adminOnly' ? rawAudience : 'public';
   const enableHoneypot = parseBooleanSetting(props.enableHoneypot, false);
   const enableCaptcha = parseBooleanSetting(props.enableCaptcha, false);
+  const captchaProvider = normalizeCaptchaProvider(props.captchaProvider);
+  const captchaSiteKey = getNameClass(props.captchaSiteKey);
+  const captchaWidgetClass = getCaptchaWidgetClass(captchaProvider);
   const contactShareEnabled = parseBooleanSetting(props.contactShareEnabled, false);
   const contactShareNameField = getNameClass(props.contactShareNameField);
   const contactShareEmailField = getNameClass(props.contactShareEmailField);
@@ -2407,6 +2485,136 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const submitLabel = getNameClass(props.submitLabel) || 'Submit';
   const contactShareOverride = buildContactShareOverride(props as Record<string, unknown>);
   const requestId = useRef<string>(`f-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
+
+  useEffect(() => {
+    if (!enableCaptcha) {
+      setCaptchaToken('');
+      setCaptchaStatus('idle');
+      return;
+    }
+
+    if (isPreview) {
+      setCaptchaStatus('idle');
+      return;
+    }
+
+    if (captchaProvider === 'mock') {
+      const mockToken = getNameClass(props.captchaMockToken || props.mockCaptchaToken);
+      setCaptchaToken(mockToken);
+      setCaptchaStatus(mockToken ? 'ready' : 'idle');
+      return;
+    }
+
+    if (!captchaSiteKey || !captchaWidgetRef.current) {
+      setCaptchaStatus('idle');
+      return;
+    }
+
+    let isCancelled = false;
+    let widgetId: string | number | undefined;
+    setCaptchaStatus('loading');
+    setCaptchaToken('');
+
+    const resolveToken = (token: string) => {
+      if (!isCancelled) {
+        setCaptchaToken(token);
+        setCaptchaStatus('ready');
+      }
+    };
+    const clearToken = () => {
+      if (!isCancelled) {
+        setCaptchaToken('');
+        setCaptchaStatus('idle');
+      }
+    };
+
+    loadCaptchaScript(captchaProvider)
+      .then(() => {
+        if (isCancelled || !captchaWidgetRef.current) {
+          return;
+        }
+
+        captchaWidgetRef.current.innerHTML = '';
+        const captchaWindow = window as unknown as {
+          turnstile?: {
+            render: (container: HTMLElement, options: Record<string, unknown>) => string;
+            remove?: (id: string) => void;
+          };
+          hcaptcha?: {
+            render: (container: HTMLElement, options: Record<string, unknown>) => string | number;
+            remove?: (id: string | number) => void;
+            reset?: (id: string | number) => void;
+          };
+          grecaptcha?: {
+            render: (container: HTMLElement, options: Record<string, unknown>) => number;
+            reset?: (id: number) => void;
+          };
+        };
+
+        if (captchaProvider === 'turnstile' && captchaWindow.turnstile?.render) {
+          widgetId = captchaWindow.turnstile.render(captchaWidgetRef.current, {
+            sitekey: captchaSiteKey,
+            callback: resolveToken,
+            'expired-callback': clearToken,
+            'error-callback': () => {
+              clearToken();
+              setCaptchaStatus('error');
+            },
+          });
+          return;
+        }
+
+        if (captchaProvider === 'hcaptcha' && captchaWindow.hcaptcha?.render) {
+          widgetId = captchaWindow.hcaptcha.render(captchaWidgetRef.current, {
+            sitekey: captchaSiteKey,
+            callback: resolveToken,
+            'expired-callback': clearToken,
+            'error-callback': () => {
+              clearToken();
+              setCaptchaStatus('error');
+            },
+          });
+          return;
+        }
+
+        if (captchaProvider === 'recaptcha' && captchaWindow.grecaptcha?.render) {
+          widgetId = captchaWindow.grecaptcha.render(captchaWidgetRef.current, {
+            sitekey: captchaSiteKey,
+            callback: resolveToken,
+            'expired-callback': clearToken,
+            'error-callback': () => {
+              clearToken();
+              setCaptchaStatus('error');
+            },
+          });
+          return;
+        }
+
+        setCaptchaStatus('error');
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCaptchaStatus('error');
+          setCaptchaToken('');
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+      const captchaWindow = window as unknown as {
+        turnstile?: { remove?: (id: string) => void };
+        hcaptcha?: { remove?: (id: string | number) => void; reset?: (id: string | number) => void };
+        grecaptcha?: { reset?: (id: number) => void };
+      };
+      if (captchaProvider === 'turnstile' && typeof widgetId === 'string') {
+        captchaWindow.turnstile?.remove?.(widgetId);
+      } else if (captchaProvider === 'hcaptcha' && widgetId !== undefined) {
+        captchaWindow.hcaptcha?.remove?.(widgetId);
+      } else if (captchaProvider === 'recaptcha' && typeof widgetId === 'number') {
+        captchaWindow.grecaptcha?.reset?.(widgetId);
+      }
+    };
+  }, [captchaProvider, captchaSiteKey, enableCaptcha, isPreview, props.captchaMockToken, props.mockCaptchaToken]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     if (isPreview) {
@@ -2590,13 +2798,27 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         ) : null}
 
         {enableCaptcha ? (
-          <input
-            type="hidden"
-            name="captchaToken"
-            data-backy-captcha-token=""
-            value=""
-            readOnly
-          />
+          <>
+            <div
+              ref={captchaWidgetRef}
+              className={captchaWidgetClass}
+              data-backy-captcha-widget=""
+              data-backy-captcha-provider={captchaProvider}
+              data-backy-captcha-status={captchaStatus}
+              data-sitekey={captchaSiteKey || undefined}
+              data-callback="backyFormCaptchaResolved"
+              data-expired-callback="backyFormCaptchaExpired"
+              aria-label="Captcha challenge"
+            />
+            <input
+              type="hidden"
+              name="captchaToken"
+              data-backy-captcha-token=""
+              data-backy-captcha-provider={captchaProvider}
+              value={captchaToken}
+              readOnly
+            />
+          </>
         ) : null}
 
         {schemaFields.map((field, index) => (

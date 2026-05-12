@@ -69,6 +69,14 @@ const FORM_SCHEMA_FIELDS = [
     required: true,
   },
 ];
+const FORM_BUILDER_FIELD = {
+  key: 'company',
+  label: 'Company',
+  type: 'text',
+  placeholder: 'Acme Inc.',
+  required: true,
+};
+const FORM_SCHEMA_FIELDS_WITH_BUILDER = [...FORM_SCHEMA_FIELDS, FORM_BUILDER_FIELD];
 const createSmokeUploadImageFile = () => {
   const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.png`;
   const filePath = path.join(os.tmpdir(), filename);
@@ -6112,6 +6120,12 @@ const testFormBehaviorControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-form-title', 'Smoke lead capture');
   await setFormControlByTestId(client, 'editor-form-id', 'smoke-lead-capture');
   await setFormControlByTestId(client, 'editor-form-fields', JSON.stringify(FORM_SCHEMA_FIELDS, null, 2));
+  await setFormControlByTestId(client, 'editor-form-builder-key', FORM_BUILDER_FIELD.key);
+  await setFormControlByTestId(client, 'editor-form-builder-label', FORM_BUILDER_FIELD.label);
+  await setFormControlByTestId(client, 'editor-form-builder-type', FORM_BUILDER_FIELD.type);
+  await setFormControlByTestId(client, 'editor-form-builder-placeholder', FORM_BUILDER_FIELD.placeholder);
+  await setCheckboxByTestId(client, 'editor-form-builder-required', true);
+  await clickControlByTestId(client, 'editor-form-builder-add-field');
   await setFormControlByTestId(client, 'editor-form-submit-label', 'Send lead');
   await setCheckboxByTestId(client, 'editor-form-active', true);
   await setFormControlByTestId(client, 'editor-form-audience', 'authenticated');
@@ -6123,6 +6137,8 @@ const testFormBehaviorControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-form-notification-webhook', 'https://hooks.example.com/backy-smoke');
   await setCheckboxByTestId(client, 'editor-form-enable-honeypot', true);
   await setCheckboxByTestId(client, 'editor-form-enable-captcha', true);
+  await setFormControlByTestId(client, 'editor-form-captcha-provider', 'turnstile');
+  await setFormControlByTestId(client, 'editor-form-captcha-site-key', 'turnstile-smoke-site-key');
   await setFormControlByTestId(client, 'editor-form-moderation-mode', 'auto-approve');
   await setCheckboxByTestId(client, 'editor-form-contact-share-enabled', true);
   await setFormControlByTestId(client, 'editor-form-contact-share-name-field', 'full_name');
@@ -6158,6 +6174,8 @@ const testFormBehaviorControls = async (client, collectionId) => {
       notificationWebhook: value('editor-form-notification-webhook'),
       enableHoneypot: checked('editor-form-enable-honeypot'),
       enableCaptcha: checked('editor-form-enable-captcha'),
+      captchaProvider: value('editor-form-captcha-provider'),
+      captchaSiteKey: value('editor-form-captcha-site-key'),
       moderationMode: value('editor-form-moderation-mode'),
       contactShareEnabled: checked('editor-form-contact-share-enabled'),
       contactShareNameField: value('editor-form-contact-share-name-field'),
@@ -6170,6 +6188,7 @@ const testFormBehaviorControls = async (client, collectionId) => {
       collectionWriteSlugField: value('editor-form-collection-write-slug-field'),
       collectionWriteFieldMap: value('editor-form-collection-write-field-map'),
       fieldsJson: value('editor-form-fields'),
+      builderKeys: Array.from(document.querySelectorAll('[data-testid="editor-form-builder-field"]')).map((node) => node.getAttribute('data-field-key')),
       submitLabel: value('editor-form-submit-label'),
       previewText: form?.textContent || '',
       schemaCount: Number(document.querySelector('[data-testid="editor-form-schema"]')?.getAttribute('data-form-field-count') || '0'),
@@ -6179,20 +6198,27 @@ const testFormBehaviorControls = async (client, collectionId) => {
       emailType: document.querySelector('[data-testid="editor-form-schema-field-email"]')?.getAttribute('type') || '',
       messageMaxLength: document.querySelector('[data-testid="editor-form-schema-field-message"]')?.getAttribute('maxlength') || '',
       planOptions: Array.from(document.querySelectorAll('[data-testid="editor-form-schema-field-plan"] option')).map((option) => option.value),
+      companyRequired: document.querySelector('[data-testid="editor-form-schema-field-company"]')?.hasAttribute('required') || false,
+      companyPlaceholder: document.querySelector('[data-testid="editor-form-schema-field-company"]')?.getAttribute('placeholder') || '',
       schemaSubmitLabel: document.querySelector('[data-testid="editor-form-schema-submit"]')?.textContent?.trim() || '',
       hasHoneypot: Boolean(document.querySelector('[data-testid="editor-form-schema-honeypot"]')),
+      hasCaptchaWidget: Boolean(document.querySelector('[data-testid="editor-form-captcha-widget"]')),
+      captchaWidgetProvider: document.querySelector('[data-testid="editor-form-captcha-widget"]')?.getAttribute('data-backy-captcha-provider') || '',
+      captchaWidgetSiteKey: document.querySelector('[data-testid="editor-form-captcha-widget"]')?.getAttribute('data-sitekey') || '',
     };
   })()`);
 
   assert(state.title === 'Smoke lead capture' && state.previewText.includes('Smoke lead capture'), `Form title mismatch: ${JSON.stringify(state)}`);
   assert(state.formId === 'smoke-lead-capture', `Form id mismatch: ${JSON.stringify(state)}`);
   assert(state.submitLabel === 'Send lead' && state.schemaSubmitLabel === 'Send lead', `Form submit label mismatch: ${JSON.stringify(state)}`);
-  assert(state.schemaCount === FORM_SCHEMA_FIELDS.length, `Form schema count mismatch: ${JSON.stringify(state)}`);
-  assert(JSON.stringify(state.schemaKeys) === JSON.stringify(FORM_SCHEMA_FIELDS.map((field) => field.key)), `Form schema keys mismatch: ${JSON.stringify(state)}`);
+  assert(state.schemaCount === FORM_SCHEMA_FIELDS_WITH_BUILDER.length, `Form schema count mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.schemaKeys) === JSON.stringify(FORM_SCHEMA_FIELDS_WITH_BUILDER.map((field) => field.key)), `Form schema keys mismatch: ${JSON.stringify(state)}`);
+  assert(state.builderKeys.includes(FORM_BUILDER_FIELD.key), `Form builder field list mismatch: ${JSON.stringify(state)}`);
   assert(state.fullNameRequired === true && state.fullNameMinLength === '2', `Form name validation mismatch: ${JSON.stringify(state)}`);
   assert(state.emailType === 'email', `Form email field mismatch: ${JSON.stringify(state)}`);
   assert(state.messageMaxLength === '240', `Form message validation mismatch: ${JSON.stringify(state)}`);
   assert(JSON.stringify(state.planOptions) === JSON.stringify(['', 'Starter', 'Growth']), `Form select options mismatch: ${JSON.stringify(state)}`);
+  assert(state.companyRequired === true && state.companyPlaceholder === 'Acme Inc.', `Form builder field preview mismatch: ${JSON.stringify(state)}`);
   assert(state.hasHoneypot === true, `Form schema honeypot mismatch: ${JSON.stringify(state)}`);
   assert(state.active === true, `Form active mismatch: ${JSON.stringify(state)}`);
   assert(state.audience === 'authenticated', `Form audience mismatch: ${JSON.stringify(state)}`);
@@ -6203,6 +6229,14 @@ const testFormBehaviorControls = async (client, collectionId) => {
   assert(state.notificationEmail === 'ops@example.com', `Form notification email mismatch: ${JSON.stringify(state)}`);
   assert(state.notificationWebhook === 'https://hooks.example.com/backy-smoke', `Form notification webhook mismatch: ${JSON.stringify(state)}`);
   assert(state.enableHoneypot === true && state.enableCaptcha === true, `Form spam controls mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.captchaProvider === 'turnstile' &&
+      state.captchaSiteKey === 'turnstile-smoke-site-key' &&
+      state.hasCaptchaWidget === true &&
+      state.captchaWidgetProvider === 'turnstile' &&
+      state.captchaWidgetSiteKey === 'turnstile-smoke-site-key',
+    `Form captcha widget mismatch: ${JSON.stringify(state)}`,
+  );
   assert(state.moderationMode === 'auto-approve', `Form moderation mismatch: ${JSON.stringify(state)}`);
   assert(
     state.contactShareEnabled === true &&
@@ -6235,7 +6269,7 @@ const assertPersistedFormBehavior = async (pageId, collectionId) => {
   assert(form?.type === 'form', `Persisted smoke-form missing: ${JSON.stringify(form)}`);
   assert(props.formTitle === 'Smoke lead capture', `Persisted form title mismatch: ${JSON.stringify(props)}`);
   assert(props.formId === 'smoke-lead-capture', `Persisted form id mismatch: ${JSON.stringify(props)}`);
-  assert(JSON.stringify(props.fields) === JSON.stringify(FORM_SCHEMA_FIELDS), `Persisted form fields mismatch: ${JSON.stringify(props)}`);
+  assert(JSON.stringify(props.fields) === JSON.stringify(FORM_SCHEMA_FIELDS_WITH_BUILDER), `Persisted form fields mismatch: ${JSON.stringify(props)}`);
   assert(props.submitLabel === 'Send lead', `Persisted form submit label mismatch: ${JSON.stringify(props)}`);
   assert(props.formActive !== false, `Persisted form active mismatch: ${JSON.stringify(props)}`);
   assert(props.formAudience === 'authenticated', `Persisted form audience mismatch: ${JSON.stringify(props)}`);
@@ -6246,6 +6280,7 @@ const assertPersistedFormBehavior = async (pageId, collectionId) => {
   assert(props.notificationEmail === 'ops@example.com', `Persisted form notification email mismatch: ${JSON.stringify(props)}`);
   assert(props.notificationWebhook === 'https://hooks.example.com/backy-smoke', `Persisted form notification webhook mismatch: ${JSON.stringify(props)}`);
   assert(props.enableHoneypot === true && props.enableCaptcha === true, `Persisted form spam controls mismatch: ${JSON.stringify(props)}`);
+  assert(props.captchaProvider === 'turnstile' && props.captchaSiteKey === 'turnstile-smoke-site-key', `Persisted form captcha widget controls mismatch: ${JSON.stringify(props)}`);
   assert(props.moderationMode === 'auto-approve', `Persisted form moderation mismatch: ${JSON.stringify(props)}`);
   assert(
     props.contactShareEnabled === true &&

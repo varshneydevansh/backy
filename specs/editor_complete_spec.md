@@ -56,7 +56,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | map | ✅ address/url/zoom/marker controls | ✅ (iframe support added) | ✅ (iframe support added) | Marker label/coordinates now persist, render as metadata, and drive coordinate fallback when no custom URL is set | ✅ |
 | embed | ✅ URL/source/allowlist/security controls | ✅ (iframe support added) | ✅ (iframe support added) | Embed URLs now require safe protocols plus default/custom host allowlists, with blocked-source fallback coverage | ✅ |
 | list | ✅ list type + items + indent clamp | ✅ | ✅ | Empty rows are preserved and list indentation clamps to non-negative values in editor/public renderers | ✅ |
-| form | ✅ title/action metadata + field schema JSON | ✅ schema fields + submit UI + nested children | ✅ schema fields submit through public form runtime | live captcha widget and richer field builder UI | ⚠️ |
+| form | ✅ title/action metadata + schema JSON + structured field builder + captcha provider/site-key controls | ✅ schema fields + submit UI + nested children + captcha preview | ✅ schema fields submit through public form runtime with captcha widget/token wiring | Captcha verification remains server-configured by environment; editor exposes provider/site-key for the public widget | ✅ |
 | input | ✅ placeholder/type/validation/form owner wiring | ✅ (public) | ✅ (public) | standalone fields can target public forms through native `form` owner attributes | ✅ |
 
 ## Canvas-to-Backend/Frontend Contract

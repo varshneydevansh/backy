@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Plus,
   Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -133,6 +134,58 @@ const parseFormSchemaFieldsInput = (value: string): unknown[] | Record<string, u
 
   return undefined;
 };
+
+const FORM_BUILDER_FIELD_TYPES = [
+  'text',
+  'email',
+  'number',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+  'date',
+  'tel',
+  'url',
+  'file',
+] as const;
+
+const normalizeFormFieldKey = (value: unknown, fallback = 'field'): string => {
+  const raw = typeof value === 'string' ? value : String(value || '');
+  const key = raw.trim().replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return key || fallback;
+};
+
+const normalizeFormBuilderFields = (value: unknown): Record<string, any>[] => {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.entries(value as Record<string, unknown>).map(([key, field]) => (
+        field && typeof field === 'object' && !Array.isArray(field)
+          ? { key, ...(field as Record<string, unknown>) }
+          : { key, label: key, type: field }
+      ))
+      : [];
+
+  return entries
+    .filter((field): field is Record<string, any> => Boolean(field && typeof field === 'object' && !Array.isArray(field)))
+    .map((field, index) => ({
+      ...field,
+      key: normalizeFormFieldKey(field.key || field.name || field.id, `field_${index + 1}`),
+      label: typeof field.label === 'string' && field.label.trim()
+        ? field.label.trim()
+        : normalizeFormFieldKey(field.key || field.name || field.id, `field_${index + 1}`),
+      type: FORM_BUILDER_FIELD_TYPES.includes(String(field.type || field.inputType || '').toLowerCase() as typeof FORM_BUILDER_FIELD_TYPES[number])
+        ? String(field.type || field.inputType).toLowerCase()
+        : 'text',
+    }));
+};
+
+const parseBuilderOptions = (value: string): string[] => (
+  value
+    .split(/\r?\n|,/)
+    .map((option) => option.trim())
+    .filter(Boolean)
+);
 
 const formatNavigationItems = (value: unknown): string => {
   if (!Array.isArray(value)) {
@@ -826,6 +879,18 @@ function ContentProperties({
   const listItems = getListItemsFromProps(element.props);
   const [formFieldsDraft, setFormFieldsDraft] = useState('');
   const [formFieldsError, setFormFieldsError] = useState('');
+  const [formBuilderDraft, setFormBuilderDraft] = useState({
+    key: '',
+    label: '',
+    type: 'text',
+    placeholder: '',
+    options: '',
+    required: false,
+  });
+  const formBuilderFields = useMemo(
+    () => normalizeFormBuilderFields(element.props.fields),
+    [element.props.fields]
+  );
   const updateTextContent = useCallback((content: unknown) => {
     onChange({
       props: {
@@ -841,6 +906,53 @@ function ContentProperties({
     setFormFieldsDraft(formatFormSchemaFields(element.props.fields));
     setFormFieldsError('');
   }, [element.id, element.props.fields]);
+  useEffect(() => {
+    setFormBuilderDraft({
+      key: '',
+      label: '',
+      type: 'text',
+      placeholder: '',
+      options: '',
+      required: false,
+    });
+  }, [element.id]);
+
+  const updateFormFields = useCallback((fields: Record<string, any>[]) => {
+    setFormFieldsDraft(formatFormSchemaFields(fields));
+    setFormFieldsError('');
+    onChange({ fields });
+  }, [onChange]);
+
+  const addOrUpdateFormBuilderField = useCallback(() => {
+    const fallbackKey = formBuilderDraft.label || 'field';
+    const key = normalizeFormFieldKey(formBuilderDraft.key || fallbackKey);
+    const type = FORM_BUILDER_FIELD_TYPES.includes(formBuilderDraft.type as typeof FORM_BUILDER_FIELD_TYPES[number])
+      ? formBuilderDraft.type
+      : 'text';
+    const options = parseBuilderOptions(formBuilderDraft.options);
+    const nextField: Record<string, any> = {
+      key,
+      label: formBuilderDraft.label.trim() || key,
+      type,
+      ...(formBuilderDraft.placeholder.trim() ? { placeholder: formBuilderDraft.placeholder.trim() } : {}),
+      ...(formBuilderDraft.required ? { required: true } : {}),
+      ...((type === 'select' || type === 'checkbox' || type === 'radio') && options.length > 0 ? { options } : {}),
+    };
+    const existing = formBuilderFields.filter((field) => field.key !== key);
+    updateFormFields([...existing, nextField]);
+    setFormBuilderDraft({
+      key: '',
+      label: '',
+      type: 'text',
+      placeholder: '',
+      options: '',
+      required: false,
+    });
+  }, [formBuilderDraft, formBuilderFields, updateFormFields]);
+
+  const removeFormBuilderField = useCallback((key: string) => {
+    updateFormFields(formBuilderFields.filter((field) => field.key !== key));
+  }, [formBuilderFields, updateFormFields]);
 
   return (
       <div className="space-y-3">
@@ -2125,6 +2237,141 @@ function ContentProperties({
               Supports key, label, type, placeholder, helpText, options, required, defaultValue, and validation.
             </p>
           </div>
+          <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+            <div className="text-xs font-medium text-foreground">Field builder</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Key
+                </label>
+                <input
+                  type="text"
+                  value={formBuilderDraft.key}
+                  onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, key: e.target.value }))}
+                  data-testid="editor-form-builder-key"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="company"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Type
+                </label>
+                <select
+                  value={formBuilderDraft.type}
+                  onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, type: e.target.value }))}
+                  data-testid="editor-form-builder-type"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  {FORM_BUILDER_FIELD_TYPES.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Label
+              </label>
+              <input
+                type="text"
+                value={formBuilderDraft.label}
+                onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, label: e.target.value }))}
+                data-testid="editor-form-builder-label"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Company"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Placeholder
+              </label>
+              <input
+                type="text"
+                value={formBuilderDraft.placeholder}
+                onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, placeholder: e.target.value }))}
+                data-testid="editor-form-builder-placeholder"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Acme Inc."
+              />
+            </div>
+            {(formBuilderDraft.type === 'select' || formBuilderDraft.type === 'checkbox' || formBuilderDraft.type === 'radio') ? (
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Options
+                </label>
+                <textarea
+                  value={formBuilderDraft.options}
+                  onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, options: e.target.value }))}
+                  rows={3}
+                  data-testid="editor-form-builder-options"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-none',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder={'Starter\nGrowth'}
+                />
+              </div>
+            ) : null}
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={formBuilderDraft.required}
+                onChange={(e) => setFormBuilderDraft((draft) => ({ ...draft, required: e.target.checked }))}
+                data-testid="editor-form-builder-required"
+              />
+              Required
+            </label>
+            <button
+              type="button"
+              onClick={addOrUpdateFormBuilderField}
+              data-testid="editor-form-builder-add-field"
+              className={cn(
+                'inline-flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium',
+                'bg-background hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add/update field
+            </button>
+            {formBuilderFields.length > 0 ? (
+              <div className="space-y-1" data-testid="editor-form-builder-fields">
+                {formBuilderFields.map((field) => (
+                  <div
+                    key={field.key}
+                    data-testid="editor-form-builder-field"
+                    data-field-key={field.key}
+                    className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                  >
+                    <span className="min-w-0 truncate">
+                      {field.label} <span className="text-muted-foreground">({field.key}, {field.type})</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${field.key}`}
+                      onClick={() => removeFormBuilderField(field.key)}
+                      data-testid={`editor-form-builder-remove-${field.key}`}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Submit button label
@@ -2289,6 +2536,45 @@ function ContentProperties({
             />
             Require captcha challenge
           </label>
+          {parseBooleanSetting(element.props.enableCaptcha) && (
+            <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-muted/30 p-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Captcha provider
+                </label>
+                <select
+                  value={element.props.captchaProvider || 'turnstile'}
+                  onChange={(e) => onChange({ captchaProvider: e.target.value })}
+                  data-testid="editor-form-captcha-provider"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="turnstile">Turnstile</option>
+                  <option value="hcaptcha">hCaptcha</option>
+                  <option value="recaptcha">reCAPTCHA</option>
+                  <option value="mock">Mock/dev</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Site key
+                </label>
+                <input
+                  type="text"
+                  value={element.props.captchaSiteKey || ''}
+                  onChange={(e) => onChange({ captchaSiteKey: e.target.value })}
+                  data-testid="editor-form-captcha-site-key"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="0x4AAAA..."
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Moderation mode

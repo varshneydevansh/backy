@@ -1041,6 +1041,15 @@ const getFormOwnerId = (props: Record<string, any>): string | undefined => {
   return undefined;
 };
 
+const normalizeCaptchaProvider = (value: unknown): 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock' => {
+  const provider = sanitizeText(value).toLowerCase();
+  if (provider === 'hcaptcha' || provider === 'recaptcha' || provider === 'mock') {
+    return provider;
+  }
+
+  return 'turnstile';
+};
+
 const getFormFieldGap = (props: Record<string, any>, fallback: number): string | number => (
   toCssLength(props.fieldGap) ?? fallback
 );
@@ -3293,6 +3302,8 @@ function CanvasElementComponent({
             : 'Public';
         const enableHoneypot = getBoolean(p.enableHoneypot);
         const enableCaptcha = getBoolean(p.enableCaptcha);
+        const captchaProvider = normalizeCaptchaProvider(p.captchaProvider);
+        const captchaSiteKey = sanitizeText(p.captchaSiteKey);
         const method = (sanitizeText(p.method) || 'POST').toUpperCase();
         const actionUrl = sanitizeText(p.actionUrl) || sanitizeText(p.action);
         const schemaFields = normalizeFormSchemaFields(p.fields ?? p.formFields ?? p.schema);
@@ -3302,7 +3313,7 @@ function CanvasElementComponent({
           formAudience,
           method,
           ...(enableHoneypot ? ['Honeypot'] : []),
-          ...(enableCaptcha ? ['Captcha'] : []),
+          ...(enableCaptcha ? [`Captcha: ${captchaProvider}`] : []),
           ...(actionUrl ? ['Action set'] : []),
         ];
         const fieldLabelStyle = getFormLabelStyle(p, sharedStyle);
@@ -3548,13 +3559,38 @@ function CanvasElementComponent({
                 />
               ) : null}
               {enableCaptcha ? (
-                <input
-                  type="hidden"
-                  name="captchaToken"
-                  data-testid="editor-form-schema-captcha-token"
-                  value=""
-                  readOnly
-                />
+                <>
+                  <div
+                    data-testid="editor-form-captcha-widget"
+                    data-backy-captcha-widget=""
+                    data-backy-captcha-provider={captchaProvider}
+                    data-sitekey={captchaSiteKey || undefined}
+                    style={{
+                      minHeight: 58,
+                      border: `1px dashed ${p.fieldBorderColor ?? '#cbd5e1'}`,
+                      borderRadius: toCssLength(p.fieldBorderRadius ?? 6),
+                      background: '#f8fafc',
+                      color: '#475569',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                      padding: '10px 12px',
+                      fontSize: 12,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <span>Captcha challenge</span>
+                    <span style={{ fontFamily: 'monospace' }}>{captchaProvider}</span>
+                  </div>
+                  <input
+                    type="hidden"
+                    name="captchaToken"
+                    data-testid="editor-form-schema-captcha-token"
+                    value=""
+                    readOnly
+                  />
+                </>
               ) : null}
               {schemaFields.length > 0 ? (
                 <div

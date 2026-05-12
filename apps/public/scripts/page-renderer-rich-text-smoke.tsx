@@ -562,6 +562,8 @@ const content: PageContent = {
         method: 'POST',
         enableHoneypot: true,
         enableCaptcha: true,
+        captchaProvider: 'turnstile',
+        captchaSiteKey: 'turnstile-public-smoke-key',
         contactShareEnabled: true,
         contactShareNameField: 'name',
         contactShareEmailField: 'email',
@@ -842,6 +844,10 @@ assert(html.includes('<form id="contact_form"'), `Form id attribute for native f
 assert(html.includes('data-backy-form-active="true"'), `Form active contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-form-audience="authenticated"'), `Form audience contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-captcha-required="true"'), `Form captcha contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-captcha-widget=""'), `Form captcha widget mount was not rendered: ${html}`);
+assert(html.includes('class="cf-turnstile"'), `Turnstile captcha widget class was not rendered: ${html}`);
+assert(html.includes('data-backy-captcha-provider="turnstile"'), `Captcha provider metadata was not rendered: ${html}`);
+assert(html.includes('data-sitekey="turnstile-public-smoke-key"'), `Captcha site key was not rendered: ${html}`);
 assert(html.includes('data-backy-contact-share="true"'), `Form contact-share contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-contact-name-field="name"'), `Form contact name field contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-contact-email-field="email"'), `Form contact email field contract attribute was not rendered: ${html}`);
