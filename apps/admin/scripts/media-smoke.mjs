@@ -1217,10 +1217,12 @@ const main = async () => {
     const retainedVersions = versionsPayload.data?.versions || [];
     assert(retainedVersions.length >= 1, 'Media versions endpoint did not return retained replacement history.');
     assert(versionsPayload.data?.pagination?.limit > 0, 'Media versions endpoint returned a non-positive page size.');
+    const retainedOriginalVersion = retainedVersions.find((version) => version.originalName === imageName);
     assert(
-      retainedVersions.some((version) => version.originalName === imageName),
+      retainedOriginalVersion,
       `Media versions endpoint did not include the original image: ${JSON.stringify(retainedVersions).slice(0, 500)}`,
     );
+    assert(retainedOriginalVersion.id, 'Media versions endpoint did not return a retained version id.');
     assert(
       versionsPayload.data?.source === 'database' || versionsPayload.data?.source === 'metadata',
       `Media versions endpoint did not report a valid source: ${JSON.stringify(versionsPayload.data).slice(0, 500)}`,
@@ -1275,6 +1277,21 @@ const main = async () => {
     await openMediaDetails(client, privateName);
     await generateSignedUrl(client);
     await closeMediaDetails(client);
+
+    const deleteVersionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions/${retainedOriginalVersion.id}`, {
+      method: 'DELETE',
+    });
+    assert(deleteVersionPayload.data?.deleted === true, 'Media retained version delete API did not report deletion.');
+    assert(
+      deleteVersionPayload.data?.source === 'database' || deleteVersionPayload.data?.source === 'metadata',
+      `Media retained version delete API did not report a valid source: ${JSON.stringify(deleteVersionPayload.data).slice(0, 500)}`,
+    );
+    const versionsAfterDeletePayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions`);
+    const retainedAfterDelete = versionsAfterDeletePayload.data?.versions || [];
+    assert(
+      !retainedAfterDelete.some((version) => version.id === retainedOriginalVersion.id),
+      'Media versions endpoint still returned a deleted retained version.',
+    );
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));

@@ -448,6 +448,12 @@ export interface BackyMediaVersionListInput extends BackyPaginationInput {
   mediaId: string;
 }
 
+export interface BackyMediaVersionDeleteInput {
+  siteId: string;
+  mediaId: string;
+  versionId: string;
+}
+
 export interface BackyMediaFolderCreateInput {
   siteId: string;
   name: string;
@@ -847,6 +853,7 @@ export interface BackyMediaRepository {
   delete(siteId: string, mediaId: string, context?: BackyRepositoryContext): Promise<boolean>;
   listVersions(input: BackyMediaVersionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<MediaVersion>>;
   createVersion(input: BackyMediaVersionCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaVersion>>;
+  deleteVersion(input: BackyMediaVersionDeleteInput, context?: BackyRepositoryContext): Promise<boolean>;
   listFolders(siteId: string, context?: BackyRepositoryContext): Promise<MediaFolder[]>;
   getFolderById(siteId: string, folderId: string, context?: BackyRepositoryContext): Promise<MediaFolder | null>;
   createFolder(input: BackyMediaFolderCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaFolder>>;

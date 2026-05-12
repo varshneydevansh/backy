@@ -877,6 +877,27 @@ const mediaVersion = (await mediaRepository.createVersion({
 assert(mediaVersion.mediaId === mediaItem.id && mediaVersion.originalName === mediaItem.originalName, 'Expected media version create');
 const listedMediaVersions = await mediaRepository.listVersions({ siteId: site.id, mediaId: mediaItem.id });
 assert(listedMediaVersions.items.length === 1 && listedMediaVersions.items[0].id === mediaVersion.id, 'Expected media version list');
+assert(await mediaRepository.deleteVersion({ siteId: site.id, mediaId: mediaItem.id, versionId: mediaVersion.id }), 'Expected media version delete');
+assert((await mediaRepository.listVersions({ siteId: site.id, mediaId: mediaItem.id })).items.length === 0, 'Expected retained version delete');
+await mediaRepository.createVersion({
+  siteId: site.id,
+  mediaId: mediaItem.id,
+  filename: mediaItem.filename,
+  originalName: mediaItem.originalName,
+  mimeType: mediaItem.mimeType,
+  sizeBytes: mediaItem.sizeBytes,
+  type: mediaItem.type,
+  url: mediaItem.url,
+  thumbnailUrl: mediaItem.thumbnailUrl,
+  storagePath: '/uploads/sites/repo-contract/hero-cascade.jpg',
+  storageProvider: 'local',
+  replacedAt: new Date().toISOString(),
+  replacedBy: 'user_admin',
+  reason: 'Repository contract cascade cleanup',
+  metadata: {
+    source: 'repository-contract',
+  },
+});
 assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === mediaFolder.id), 'Expected media folders');
 assert((await mediaRepository.getFolderById(site.id, mediaFolder.id))?.name === 'Brand assets', 'Expected media folder getById');
 assert(await mediaRepository.deleteFolder(site.id, mediaFolder.id), 'Expected media folder delete');

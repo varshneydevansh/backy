@@ -7,6 +7,7 @@ import {
     type BackyMediaRepository,
     type BackyMediaUpdateInput,
     type BackyMediaVersionCreateInput,
+    type BackyMediaVersionDeleteInput,
     type BackyMediaVersionListInput,
     type BackyRepositoryMutationResult,
     type MediaFolder,
@@ -345,6 +346,15 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
                 metadata: input.metadata || {},
             }).returning() as MediaVersionRow[];
             return { item: toMediaVersion(row) };
+        },
+
+        async deleteVersion(input: BackyMediaVersionDeleteInput): Promise<boolean> {
+            await database.delete(mediaVersions).where(and(
+                eq(mediaVersions.siteId, input.siteId),
+                eq(mediaVersions.mediaId, input.mediaId),
+                eq(mediaVersions.id, input.versionId),
+            ));
+            return true;
         },
 
         async listFolders(siteId: string): Promise<MediaFolder[]> {

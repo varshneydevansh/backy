@@ -105,6 +105,21 @@ interface ApiMediaVersionsResponse {
   };
 }
 
+interface ApiMediaVersionDeleteResponse {
+  success: boolean;
+  data?: {
+    deleted: boolean;
+    mediaId: string;
+    versionId: string;
+    source: 'database' | 'metadata';
+    media?: ApiMediaItem;
+    version?: MediaVersionRecord;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiMediaBindResponse {
   success: boolean;
   data?: {
@@ -617,6 +632,27 @@ export async function listMediaVersions(
   return {
     versions: payload.data.versions,
     source: payload.data.source,
+  };
+}
+
+export async function deleteMediaVersion(
+  mediaId: string,
+  versionId: string,
+  siteId = getDefaultMediaSiteId(),
+): Promise<{ media?: MediaAsset; source: 'database' | 'metadata'; version?: MediaVersionRecord }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/versions/${versionId}`, {
+    method: 'DELETE',
+  });
+  const payload = await response.json() as ApiMediaVersionDeleteResponse;
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete media version');
+  }
+
+  return {
+    media: payload.data.media ? toMediaAsset(payload.data.media) : undefined,
+    source: payload.data.source,
+    version: payload.data.version,
   };
 }
 
