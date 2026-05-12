@@ -26,7 +26,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
+| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/reorder tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -40,8 +40,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows, bounded selected-list indentation, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting, multi-block blockquote, selected-list item indentation/reorder, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows, bounded selected-list indentation/reorder, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same deeper rich-text table/list editing gaps as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
@@ -236,6 +236,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Inline markdown shortcuts now convert wrapper syntax into Slate marks for bold, italic, strike, and code.
   - Right-panel selected-text controls now preserve active Slate selections when focus moves into the panel, with focused smoke coverage for applying and clearing a mark on only the selected range.
   - Right-panel list indent/outdent controls clamp active list item indentation between depth 0 and 8 while preserving unselected sibling item depth.
+  - Right-panel list move controls can move the active list item up/down while preserving item metadata such as indentation.
   - Rich-text leaf rendering now merges multiple text-decoration marks (underline + strike) instead of overwrite behavior.
   - Right-panel rich-text controls can toggle blockquote across multiple selected blocks.
   - Right-panel rich-text controls can insert a basic 2x2 table with semantic editor rendering and persisted Slate table nodes.
@@ -252,6 +253,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Toggle same-list off by unwrapping existing list wrappers.
     - Convert selected block content into list items for list toggles.
     - Indent and outdent list entries from the right-panel formatting toolbar.
+    - Move the active list item up/down from the right-panel formatting toolbar.
 - **Remaining:**
   - Full fidelity for deeper table editing controls and edge-case selections
     (multi-node split transforms, drag-based list reorder).
@@ -381,6 +383,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel whole-table removal controls, with browser smoke coverage proving the active table can be removed without deleting surrounding blockquote content.
 - Added Tab and Shift+Tab canvas selection cycling through visible elements, with keyboard shortcut smoke coverage and focused-control guard coverage.
 - Added right-panel rich-text list indent max-depth clamping with browser persistence coverage for selected list items.
+- Added right-panel rich-text list item move up/down controls with browser coverage proving selected items reorder and preserve indentation metadata.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.

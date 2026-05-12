@@ -42,6 +42,10 @@ interface ActiveEditorContextType {
   indentList: () => boolean;
   /** Decrease list indent for selected list item(s) */
   outdentList: () => boolean;
+  /** Move the active list item one position up */
+  moveListItemUp: () => boolean;
+  /** Move the active list item one position down */
+  moveListItemDown: () => boolean;
   /** Insert plain text at current selection */
   insertText: (text: string) => void;
   /** Insert a link node at current selection */
@@ -117,6 +121,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleList: () => { },
   indentList: () => false,
   outdentList: () => false,
+  moveListItemUp: () => false,
+  moveListItemDown: () => false,
   insertText: () => { },
   insertLink: () => { },
   insertImage: () => { },
@@ -1427,6 +1433,77 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, getIsListItemNode, isValidRange, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const moveSelectedListItem = useCallback((direction: -1 | 1): boolean => {
+    const editor = getActiveEditor();
+    if (!editor) return false;
+
+    try {
+      debug('moveSelectedListItem.start', {
+        direction,
+        selection: describeSelection(editor.selection || null),
+      });
+      const hasValidLiveSelection = isValidRange(editor, editor.selection);
+      if (!hasValidLiveSelection && !restoreSelection({ requireTextSelection: false })) return false;
+      if (!isValidRange(editor, editor.selection)) return false;
+
+      const listItemEntry = Editor.above(editor as any, {
+        at: Range.start(editor.selection).path,
+        match: (node) => getIsListItemNode(node),
+      });
+      if (!listItemEntry) {
+        return false;
+      }
+
+      const [, listItemPath] = listItemEntry as [SlateElement, number[]];
+      const parentPath = listItemPath.slice(0, -1);
+      const parentNode = Node.get(editor as any, parentPath) as { children?: unknown[] };
+      const currentListItemNode = Node.get(editor as any, listItemPath) as unknown as Record<string, unknown>;
+      const siblingCount = Array.isArray(parentNode?.children) ? parentNode.children.length : 0;
+      const currentIndex = listItemPath[listItemPath.length - 1] || 0;
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= siblingCount) {
+        return false;
+      }
+
+      const movedListItem = JSON.parse(JSON.stringify(currentListItemNode));
+      const currentIndent = typeof currentListItemNode.indent === 'number' ? currentListItemNode.indent : undefined;
+      if (typeof currentIndent === 'number') {
+        movedListItem.indent = currentIndent;
+      }
+
+      const movedPath = [...parentPath, targetIndex];
+      Transforms.removeNodes(editor as any, { at: listItemPath });
+      Transforms.insertNodes(editor as any, movedListItem, { at: movedPath });
+      if (typeof currentIndent === 'number') {
+        Transforms.setNodes(editor as any, { indent: currentIndent } as any, {
+          at: movedPath,
+          match: (node) => getIsListItemNode(node),
+        });
+        const nextNode = Node.get(editor as any, movedPath as any) as unknown as { indent?: unknown };
+        if (nextNode && typeof nextNode === 'object') {
+          nextNode.indent = currentIndent;
+        }
+      }
+
+      try {
+        Transforms.select(editor as any, Editor.start(editor as any, movedPath));
+      } catch {
+        // Selection is best-effort after list item movement.
+      }
+
+      debug('moveSelectedListItem.success', {
+        direction,
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('moveSelectedListItem failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, getIsListItemNode, isValidRange, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const isMarkActive = useCallback((format: string): boolean => {
     const editor = getActiveEditor();
     if (!editor) return false;
@@ -2213,6 +2290,14 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return applyListIndent(-1);
   }, [applyListIndent]);
 
+  const moveListItemUp = useCallback(() => {
+    return moveSelectedListItem(-1);
+  }, [moveSelectedListItem]);
+
+  const moveListItemDown = useCallback(() => {
+    return moveSelectedListItem(1);
+  }, [moveSelectedListItem]);
+
   return (
     <ActiveEditorContext.Provider value={{
       activeEditor,
@@ -2230,6 +2315,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleList,
       indentList,
       outdentList,
+      moveListItemUp,
+      moveListItemDown,
       insertText,
       insertLink,
       insertImage,

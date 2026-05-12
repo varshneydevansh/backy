@@ -118,6 +118,8 @@ export function RichTextFormatting({
     toggleBlockquote,
     indentList,
     outdentList,
+    moveListItemUp,
+    moveListItemDown,
     insertLink,
     insertImage,
     insertTable,
@@ -468,6 +470,140 @@ export function RichTextFormatting({
     });
 
     if (!didTargetListItem) {
+      return false;
+    }
+
+    const clonedContent = JSON.parse(JSON.stringify(nextContent)) as unknown[];
+    onElementContentChange?.(clonedContent);
+
+    const activeEditor = getActiveEditor();
+    const activeEditorElementId = getCurrentActiveEditorId();
+    if (activeEditor && (!elementId || !activeEditorElementId || activeEditorElementId === elementId)) {
+      try {
+        (activeEditor as any).children = JSON.parse(JSON.stringify(nextContent));
+        (activeEditor as any).onChange?.();
+        syncActiveEditorContentAfterCommand();
+      } catch {
+      }
+    }
+    return true;
+  }, [
+    canWriteElementContent,
+    elementId,
+    getActiveEditor,
+    getCurrentActiveEditorId,
+    normalizedElementContent,
+    onElementContentChange,
+    readDomTextSelectionOffsets,
+    syncActiveEditorContentAfterCommand,
+  ]);
+
+  const moveListItemInElementSelection = useCallback((direction: -1 | 1): boolean => {
+    if (!canWriteElementContent()) {
+      return false;
+    }
+
+    const selectionOffsets = readDomTextSelectionOffsets();
+    let selectedText = '';
+    if (typeof window !== 'undefined') {
+      selectedText = window.getSelection()?.toString() || '';
+    }
+
+    if (!selectionOffsets && !selectedText.trim()) {
+      return false;
+    }
+
+    const getPlainNodeText = (node: unknown): string => {
+      if (!node || typeof node !== 'object') {
+        return '';
+      }
+
+      const record = node as Record<string, unknown>;
+      if (typeof record.text === 'string') {
+        return record.text;
+      }
+
+      const children = Array.isArray(record.children) ? record.children : [];
+      return children.map((child) => getPlainNodeText(child)).join('');
+    };
+
+    const getNodeTextLength = (node: unknown): number => getPlainNodeText(node).length;
+    let didMoveListItem = false;
+
+    const patchNode = (node: unknown, startOffset: number): { node: unknown; endOffset: number } => {
+      if (!node || typeof node !== 'object') {
+        return { node, endOffset: startOffset };
+      }
+
+      const record = node as Record<string, unknown>;
+      if (typeof record.text === 'string') {
+        return { node, endOffset: startOffset + record.text.length };
+      }
+
+      const children = Array.isArray(record.children) ? record.children : [];
+      const endOffset = startOffset + getNodeTextLength(record);
+
+      if (!didMoveListItem && (record.type === 'ul' || record.type === 'ol')) {
+        let childOffset = startOffset;
+        const entries = children.map((child) => {
+          const childStart = childOffset;
+          const childLength = getNodeTextLength(child);
+          childOffset += childLength;
+          return {
+            child,
+            start: childStart,
+            end: childStart + childLength,
+            text: getPlainNodeText(child),
+          };
+        });
+
+        const selectedIndex = entries.findIndex((entry) => {
+          const childRecord = entry.child as Record<string, unknown>;
+          if (!childRecord || typeof childRecord !== 'object' || childRecord.type !== 'li') {
+            return false;
+          }
+
+          const intersectsSelection = selectionOffsets
+            ? entry.end > selectionOffsets.start && entry.start < selectionOffsets.end
+            : false;
+          const selected = selectedText.trim();
+          const matchesSelectedText = selected
+            ? entry.text.includes(selected) || selected.includes(entry.text.trim())
+            : false;
+          return intersectsSelection || matchesSelectedText;
+        });
+
+        const targetIndex = selectedIndex + direction;
+        if (selectedIndex >= 0 && targetIndex >= 0 && targetIndex < entries.length) {
+          const reordered = entries.map((entry) => entry.child);
+          const [moved] = reordered.splice(selectedIndex, 1);
+          reordered.splice(targetIndex, 0, moved);
+          didMoveListItem = true;
+          return { node: { ...record, children: reordered }, endOffset };
+        }
+      }
+
+      let childOffset = startOffset;
+      const nextChildren = children.map((child) => {
+        const patched = patchNode(child, childOffset);
+        childOffset = patched.endOffset;
+        return patched.node;
+      });
+
+      return {
+        node: children.length ? { ...record, children: nextChildren } : record,
+        endOffset,
+      };
+    };
+
+    let offset = 0;
+    const nextContent = normalizedElementContent.map((node) => {
+      const patched = patchNode(node, offset);
+      offset = patched.endOffset;
+      return patched.node;
+    });
+
+    if (!didMoveListItem) {
       return false;
     }
 
@@ -1202,6 +1338,20 @@ export function RichTextFormatting({
   const runListIndentControl = useCallback((step: number) => {
     adjustElementListIndent(step);
   }, [adjustElementListIndent]);
+
+  const moveListItemAtSelection = useCallback((direction: -1 | 1) => {
+    if (moveListItemInElementSelection(direction)) {
+      return;
+    }
+
+    runOrActivateTextEditor(direction < 0 ? 'list-move-item-up' : 'list-move-item-down', () => {
+      if (direction < 0) {
+        moveListItemUp();
+      } else {
+        moveListItemDown();
+      }
+    });
+  }, [moveListItemDown, moveListItemInElementSelection, moveListItemUp, runOrActivateTextEditor]);
 
   const toggleBlockquoteForElementOrSelection = useCallback(() => {
     if (!isTargetEditorUsable()) {
@@ -2070,6 +2220,32 @@ export function RichTextFormatting({
           title="Indent list"
         >
           <span className="text-[10px]">▶</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            moveListItemAtSelection(-1);
+          }}
+          className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-move-up"
+          title="Move list item up"
+        >
+          <ArrowUp className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            moveListItemAtSelection(1);
+          }}
+          className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-move-down"
+          title="Move list item down"
+        >
+          <ArrowDown className="w-4 h-4" />
         </button>
       </div>
 

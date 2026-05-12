@@ -3336,6 +3336,65 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `List indent control did not clamp selected list item to max depth only: ${JSON.stringify(listIndentState)}`,
   );
 
+  const selectedListItemBeforeMoveDown = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+  assert(selectedListItemBeforeMoveDown.selectedText === 'Nested item', `List item reselection failed before move-down control: ${JSON.stringify(selectedListItemBeforeMoveDown)}`);
+  await mouseDownControlByTestId(client, 'rich-text-list-move-down');
+  await sleep(300);
+
+  const listMoveDownState = await evaluate(client, `(() => {
+    if (typeof window.__backyReadActiveEditorTableState !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-state-helper' };
+    }
+
+    const slateState = window.__backyReadActiveEditorTableState();
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    return {
+      itemTexts: items.map((node) => node.textContent || ''),
+      itemMargins: items.map((node) => getComputedStyle(node).marginLeft),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  const movedDownNestedItem = listMoveDownState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  assert(
+    listMoveDownState.itemTexts?.[0]?.includes('Sibling item') &&
+      listMoveDownState.itemTexts?.[1]?.includes('Nested item') &&
+      (movedDownNestedItem?.indent === 8 || listMoveDownState.itemMargins?.[1] === '192px'),
+    `List move-down control did not reorder the selected list item while preserving indent: ${JSON.stringify(listMoveDownState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedListItemBeforeMoveUp = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+  assert(selectedListItemBeforeMoveUp.selectedText === 'Nested item', `List item reselection failed before move-up control: ${JSON.stringify(selectedListItemBeforeMoveUp)}`);
+  await mouseDownControlByTestId(client, 'rich-text-list-move-up');
+  await sleep(300);
+
+  const listMoveUpState = await evaluate(client, `(() => {
+    if (typeof window.__backyReadActiveEditorTableState !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-state-helper' };
+    }
+
+    const slateState = window.__backyReadActiveEditorTableState();
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    return {
+      itemTexts: items.map((node) => node.textContent || ''),
+      itemMargins: items.map((node) => getComputedStyle(node).marginLeft),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  const restoredNestedItem = listMoveUpState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  const restoredSiblingItem = listMoveUpState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Sibling item'));
+  assert(
+    listMoveUpState.itemTexts?.[0]?.includes('Nested item') &&
+      listMoveUpState.itemTexts?.[1]?.includes('Sibling item') &&
+      (restoredNestedItem?.indent === 8 || listMoveUpState.itemMargins?.[0] === '192px') &&
+      (restoredSiblingItem?.indent === undefined || listMoveUpState.itemMargins?.[1] !== '192px'),
+    `List move-up control did not restore list item order and metadata: ${JSON.stringify(listMoveUpState)}`,
+  );
+
   const collapsed = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -3923,6 +3982,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     blockquoteState,
     selectedListItem,
     listIndentState,
+    selectedListItemBeforeMoveDown,
+    listMoveDownState,
+    selectedListItemBeforeMoveUp,
+    listMoveUpState,
     collapsed,
     directInsert,
     tableState,
