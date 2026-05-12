@@ -13,6 +13,10 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getMediaSecurityPolicy, MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
+import {
+  buildMediaScopeMetadataPatch,
+  mediaScopeRequiresTarget,
+} from '@/lib/mediaScope';
 import { getMediaStorageAdapter, getMediaStoragePath, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import {
   deleteGeneratedTransformFiles,
@@ -280,6 +284,23 @@ const nullableStringFromBody = (value: unknown): string | null | undefined => {
   return typeof value === 'string' ? value.trim() || null : undefined;
 };
 
+const mediaScopeValidationError = (
+  scopePatch: ReturnType<typeof buildMediaScopeMetadataPatch>,
+  requestId: string,
+) => {
+  if (!mediaScopeRequiresTarget(scopePatch.scope) || scopePatch.scopeTargetId) {
+    return null;
+  }
+
+  return errorResponse(
+    400,
+    'MEDIA_SCOPE_TARGET_REQUIRED',
+    'Page and post scoped media require a scopeTargetId.',
+    requestId,
+    { scope: scopePatch.scope },
+  );
+};
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
@@ -305,10 +326,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await parseJsonBody(request);
       const folderId = nullableStringFromBody(body.folderId);
       const inputMetadata = metadataFromInput(body.metadata);
+      const scopePatch = buildMediaScopeMetadataPatch({
+        scope: body.scope,
+        scopeTargetId: body.scopeTargetId,
+        pageIds: body.pageIds,
+        postIds: body.postIds,
+      }, beforeMedia);
+      const scopeError = mediaScopeValidationError(scopePatch, requestId);
+      if (scopeError) {
+        return scopeError;
+      }
+      const scopedMetadata = {
+        ...(inputMetadata || {}),
+        ...scopePatch,
+      };
       const requestedVisibility = visibilityFromInput(body.visibility);
-      const nextMetadata = inputMetadata
-        ? { ...(beforeMedia.metadata || {}), ...inputMetadata }
-        : beforeMedia.metadata;
+      const nextMetadata = {
+        ...(beforeMedia.metadata || {}),
+        ...scopedMetadata,
+      };
       const nextSecurity = getMediaSecurityPolicy(nextMetadata);
       const nextVisibility = nextSecurity.status === 'quarantined' ? 'private' : requestedVisibility;
       if (folderId) {
@@ -324,7 +360,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
         caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,
         visibility: nextVisibility,
-        metadata: inputMetadata,
+        metadata: scopedMetadata,
         tags: stringArrayFromInput(body.tags),
       });
       await recordAdminAudit({
@@ -366,10 +402,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await parseJsonBody(request);
     const folderId = nullableStringFromBody(body.folderId);
     const inputMetadata = metadataFromInput(body.metadata);
+    const scopePatch = buildMediaScopeMetadataPatch({
+      scope: body.scope,
+      scopeTargetId: body.scopeTargetId,
+      pageIds: body.pageIds,
+      postIds: body.postIds,
+    }, beforeMedia);
+    const scopeError = mediaScopeValidationError(scopePatch, requestId);
+    if (scopeError) {
+      return scopeError;
+    }
+    const scopedMetadata = {
+      ...(inputMetadata || {}),
+      ...scopePatch,
+    };
     const requestedVisibility = visibilityFromInput(body.visibility);
-    const nextMetadata = inputMetadata
-      ? { ...(beforeMedia.metadata || {}), ...inputMetadata }
-      : beforeMedia.metadata;
+    const nextMetadata = {
+      ...(beforeMedia.metadata || {}),
+      ...scopedMetadata,
+    };
     const nextSecurity = getMediaSecurityPolicy(nextMetadata);
     const nextVisibility = nextSecurity.status === 'quarantined' ? 'private' : requestedVisibility;
     if (folderId) {
@@ -382,7 +433,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const media = updateMediaItem(site.id, mediaId, {
       ...body,
       ...(nextVisibility ? { visibility: nextVisibility } : {}),
-      ...(inputMetadata ? { metadata: inputMetadata } : {}),
+      metadata: scopedMetadata,
     });
 
     if (!media) {

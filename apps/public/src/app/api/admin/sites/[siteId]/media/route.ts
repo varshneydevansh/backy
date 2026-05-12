@@ -12,7 +12,14 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
-import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
+import {
+  booleanQueryFlag,
+  buildMediaScopeMetadataPatch,
+  mediaMatchesScopeFilters,
+  mediaScopeRequiresTarget,
+  normalizeMediaScope,
+  normalizeScopeTargetId,
+} from '@/lib/mediaScope';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
 import { generatedTransformBytes } from '@/lib/mediaTransformGeneration';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -103,14 +110,6 @@ const parseMetadata = (value: FormDataEntryValue | null): Record<string, unknown
   } catch {
     return {};
   }
-};
-
-const parseScope = (value: FormDataEntryValue | null): MediaItem['scope'] => {
-  if (value === 'page' || value === 'post') {
-    return value;
-  }
-
-  return 'global';
 };
 
 const parseVisibility = (value: FormDataEntryValue | null): MediaItem['visibility'] => (
@@ -388,9 +387,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const scope = parseScope(formData.get('scope'));
+    const scope = normalizeMediaScope(formData.get('scope'), 'global');
     const visibility = parseVisibility(formData.get('visibility'));
-    const scopeTargetId = toStringValue(formData.get('scopeTargetId'));
+    const scopeTargetId = normalizeScopeTargetId(formData.get('scopeTargetId'));
+    if (mediaScopeRequiresTarget(scope) && !scopeTargetId) {
+      return errorResponse(
+        400,
+        'MEDIA_SCOPE_TARGET_REQUIRED',
+        'Page and post scoped media uploads require a scopeTargetId.',
+        requestId,
+        { scope },
+      );
+    }
+    const scopeMetadata = buildMediaScopeMetadataPatch({ scope, scopeTargetId });
     const folderId = toStringValue(formData.get('folderId'));
     if (folderId) {
       const folder = repositories
@@ -434,8 +443,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       type: mediaType,
       url: upload.url,
       thumbnailUrl: mediaType === 'image' ? upload.url : null,
-      pageIds: scope === 'page' && scopeTargetId ? [scopeTargetId] : [],
-      postIds: scope === 'post' && scopeTargetId ? [scopeTargetId] : [],
+      pageIds: scopeMetadata.pageIds,
+      postIds: scopeMetadata.postIds,
       tags: toStringList(formData.get('tags')),
       metadata: {
         ...metadata,
@@ -445,10 +454,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         safetyScan,
         thumbnailUrl: mediaType === 'image' ? upload.url : null,
         tags: toStringList(formData.get('tags')),
-        scope,
-        scopeTargetId,
-        pageIds: scope === 'page' && scopeTargetId ? [scopeTargetId] : [],
-        postIds: scope === 'post' && scopeTargetId ? [scopeTargetId] : [],
+        ...scopeMetadata,
         ...(mediaType === 'font'
           ? {
               fontFamily: toStringValue(formData.get('fontFamily')) || cleanFontFamily(originalName),
@@ -463,8 +469,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       caption: toStringValue(formData.get('caption')),
       uploadedBy: toStringValue(formData.get('uploadedBy')) || 'admin',
       folderId,
-      scope,
-      scopeTargetId,
+      scope: scopeMetadata.scope,
+      scopeTargetId: scopeMetadata.scopeTargetId,
       visibility,
     };
     const media = repositories

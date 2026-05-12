@@ -373,7 +373,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - explicit mark clearing helper for font family/size/ color / background / decoration.
 
 ### ⚠️ Remaining
-- Finalize media scope model and API contract (global vs page/blog-scoped assets).
 - Finish blog post editor flow via dedicated template-backed page.
 
 ### ✅ Admin table status resilience
@@ -390,6 +389,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Extracted list content transforms into shared pure helpers so property-panel fallbacks preserve empty list rows and nested list item structure during list type changes.
 - Active editor list indent/outdent and package-level keyboard list shortcuts now remove `indent` at zero instead of persisting `indent: 0`, keeping indentation clamped and structurally stable.
 - Covered by `npm run test:rich-text-lists --workspace @backy-cms/admin`, `npm run typecheck --workspace @backy-cms/admin`, and `npm run test:inline-markdown --workspace @backy-cms/editor`.
+
+### ✅ Media scope model and API contract
+- Finalized the media scope model as `global|page|post`, with `blogId` remaining a public API alias for `postId`.
+- Public/admin media filters return global assets plus assets explicitly scoped or bound to the requested page/post, while `global=true` isolates reusable global assets.
+- Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
+- Covered by `npm run test:media-scope --workspace @backy/public` and `npm run typecheck --workspace @backy/public`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:
