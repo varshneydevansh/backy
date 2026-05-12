@@ -416,6 +416,7 @@ const content: PageContent = {
       props: {
         label: 'Email field',
         name: 'styled_email',
+        formOwnerId: 'contact_form',
         inputType: 'email',
         required: true,
         placeholder: 'hello@example.com',
@@ -444,6 +445,7 @@ const content: PageContent = {
       props: {
         label: 'Message field',
         name: 'styled_message',
+        formOwnerId: 'contact_form',
         required: true,
         placeholder: 'Tell us more',
         rows: 5,
@@ -488,6 +490,7 @@ const content: PageContent = {
       props: {
         label: 'Plan field',
         name: 'styled_plan',
+        formOwnerId: 'contact_form',
         required: true,
         placeholder: 'Choose a plan',
         options: ['Starter', 'Growth', 'Scale'],
@@ -528,6 +531,7 @@ const content: PageContent = {
       props: {
         label: 'Channels field',
         name: 'styled_channels',
+        formOwnerId: 'contact_form',
         required: true,
         disabled: true,
         options: ['Email', 'SMS'],
@@ -787,7 +791,10 @@ assert(html.includes('data-backy-map-marker-label="Renderer office"'), `Map mark
 assert(html.includes('data-backy-map-marker-latitude="19.076"'), `Map marker latitude metadata was not rendered: ${html}`);
 assert(html.includes('data-backy-map-marker-longitude="72.8777"'), `Map marker longitude metadata was not rendered: ${html}`);
 assert(html.includes('border-color:#0e7490'), `Map border color was not rendered: ${html}`);
-assert(html.includes('name="styled_email"'), `Input name was not rendered: ${html}`);
+const styledInput = html.match(/<input[^>]*name="styled_email"[^>]*>/)?.[0] || '';
+assert(styledInput.length > 0, `Input name was not rendered: ${html}`);
+assert(styledInput.includes('form="contact_form"'), `Standalone input form owner was not rendered: ${styledInput}`);
+assert(html.includes('data-backy-form-owner-id="contact_form"'), `Standalone field form owner metadata was not rendered: ${html}`);
 assert(html.includes('type="email"'), `Input type was not rendered: ${html}`);
 assert(html.includes('pattern=".+@example[.]com"'), `Input pattern was not rendered: ${html}`);
 assert(html.includes('minLength="6"'), `Input minLength was not rendered: ${html}`);
@@ -796,14 +803,18 @@ assert(html.includes('value="team@example.com"'), `Input default value was not r
 assert(html.includes('border:3px dashed #db2777'), `Input border was not rendered: ${html}`);
 assert(html.includes('background-color:#fdf2f8'), `Input background was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 5px 12px rgba(219, 39, 119, 0.2)'), `Input shadow was not rendered: ${html}`);
-assert(html.includes('name="styled_message"'), `Textarea name was not rendered: ${html}`);
+const styledTextarea = html.match(/<textarea[^>]*name="styled_message"[^>]*>/)?.[0] || '';
+assert(styledTextarea.length > 0, `Textarea name was not rendered: ${html}`);
+assert(styledTextarea.includes('form="contact_form"'), `Textarea form owner was not rendered: ${styledTextarea}`);
 assert(html.includes('rows="5"'), `Textarea rows were not rendered: ${html}`);
 assert(html.includes('Textarea body'), `Textarea default value was not rendered: ${html}`);
 assert(html.includes('border:2px solid #059669'), `Textarea border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 6px 16px rgba(5, 150, 105, 0.22)'), `Textarea shadow was not rendered: ${html}`);
 assert(html.includes('name="styled_password"'), `Password input name was not rendered: ${html}`);
 assert(html.includes('type="password"'), `Password input type was not preserved: ${html}`);
-assert(html.includes('name="styled_plan"'), `Select name was not rendered: ${html}`);
+const styledSelect = html.match(/<select[^>]*name="styled_plan"[^>]*>/)?.[0] || '';
+assert(styledSelect.length > 0, `Select name was not rendered: ${html}`);
+assert(styledSelect.includes('form="contact_form"'), `Select form owner was not rendered: ${styledSelect}`);
 assert(html.includes('<option value="" disabled="">Choose a plan</option>'), `Select placeholder was not rendered: ${html}`);
 assert(html.includes('<option value="Growth" selected="">Growth</option>'), `Select default value was not rendered: ${html}`);
 assert(html.includes('border:2px double #4f46e5'), `Select border was not rendered: ${html}`);
@@ -812,7 +823,9 @@ const stringFalseInput = html.match(/<input[^>]*name="string_false"[^>]*>/)?.[0]
 assert(stringFalseInput.length > 0, `String false input was not rendered: ${html}`);
 assert(!stringFalseInput.includes('required'), `String false required was treated as true: ${stringFalseInput}`);
 assert(!stringFalseInput.includes('disabled'), `String false disabled was treated as true: ${stringFalseInput}`);
-assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered: ${html}`);
+const styledCheckbox = html.match(/<input[^>]*name="styled_channels"[^>]*value="SMS"[^>]*>/)?.[0] || '';
+assert(styledCheckbox.length > 0, `Checkbox name was not rendered: ${html}`);
+assert(styledCheckbox.includes('form="contact_form"'), `Checkbox form owner was not rendered: ${styledCheckbox}`);
 assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
 const disabledCheckbox = html.match(/<input[^>]*name="styled_channels"[^>]*value="SMS"[^>]*>/)?.[0] || '';
 assert(disabledCheckbox.includes('disabled=""'), `Checkbox disabled state was not rendered: ${disabledCheckbox}`);
@@ -825,6 +838,7 @@ assert(html.includes('name="pageId"'), `Form page hidden input was not rendered:
 assert(html.includes('value="page_renderer_smoke"'), `Form page hidden value was not rendered: ${html}`);
 assert(html.includes('Contact Form'), `Form title was not rendered: ${html}`);
 assert(html.includes('data-backy-form-id="contact_form"'), `Form id contract attribute was not rendered: ${html}`);
+assert(html.includes('<form id="contact_form"'), `Form id attribute for native field ownership was not rendered: ${html}`);
 assert(html.includes('data-backy-form-active="true"'), `Form active contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-form-audience="authenticated"'), `Form audience contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-captcha-required="true"'), `Form captcha contract attribute was not rendered: ${html}`);

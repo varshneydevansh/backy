@@ -1457,6 +1457,22 @@ function ContentProperties({
               placeholder="name, email, message"
             />
           </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Submit to Form ID
+            </label>
+            <input
+              type="text"
+              value={(element.props.formOwnerId as string) || (element.props.formId as string) || ''}
+              onChange={(e) => onChange({ formOwnerId: e.target.value.trim() || undefined })}
+              data-testid="editor-field-form-owner-id"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="contact_form"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input

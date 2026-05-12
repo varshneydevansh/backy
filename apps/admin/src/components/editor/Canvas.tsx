@@ -1027,6 +1027,20 @@ const getFormPreviewValue = (props: Record<string, any>): string => {
   return formatFormPreviewText(props.defaultValue);
 };
 
+const getFormOwnerId = (props: Record<string, any>): string | undefined => {
+  const rawValue = props.formOwnerId ?? props.formId;
+  if (typeof rawValue === 'string') {
+    const trimmed = rawValue.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+    return `${rawValue}`;
+  }
+
+  return undefined;
+};
+
 const getFormFieldGap = (props: Record<string, any>, fallback: number): string | number => (
   toCssLength(props.fieldGap) ?? fallback
 );
@@ -2801,6 +2815,7 @@ function CanvasElementComponent({
           const inputType = normalizeInputType(p.inputType ?? p.type);
           const placeholder = sanitizeText(p.placeholder);
           const inputValue = getFormPreviewValue(p);
+          const formOwnerId = getFormOwnerId(p);
           return (
             <div style={{
               display: 'flex',
@@ -2809,6 +2824,7 @@ function CanvasElementComponent({
               width: '100%',
               height: '100%',
             }}
+            data-backy-form-owner-id={formOwnerId}
             >
               {fieldLabel ? (
                 <label
@@ -2825,6 +2841,7 @@ function CanvasElementComponent({
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
+                form={formOwnerId}
                 pattern={typeof p.pattern === 'string' && p.pattern.trim() ? p.pattern : undefined}
                 min={sanitizeText(p.min) || undefined}
                 max={sanitizeText(p.max) || undefined}
@@ -2864,6 +2881,7 @@ function CanvasElementComponent({
           const maxLength = toNumericAttribute(p.maxLength);
           const placeholder = sanitizeText(p.placeholder);
           const textareaValue = getFormPreviewValue(p);
+          const formOwnerId = getFormOwnerId(p);
           return (
             <div style={{
               display: 'flex',
@@ -2872,6 +2890,7 @@ function CanvasElementComponent({
               width: '100%',
               height: '100%',
             }}
+            data-backy-form-owner-id={formOwnerId}
             >
               {fieldLabel ? (
                 <label
@@ -2888,6 +2907,7 @@ function CanvasElementComponent({
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
+                form={formOwnerId}
                 minLength={minLength}
                 maxLength={maxLength}
                 style={{
@@ -2922,6 +2942,7 @@ function CanvasElementComponent({
           const disabled = getBoolean(p.disabled);
           const placeholder = sanitizeText(p.placeholder);
           const selectedValue = p.value ?? p.defaultValue ?? (placeholder ? '' : selectOptions[0] ?? '');
+          const formOwnerId = getFormOwnerId(p);
           return (
             <div style={{
               display: 'flex',
@@ -2930,6 +2951,7 @@ function CanvasElementComponent({
               width: '100%',
               height: '100%',
             }}
+            data-backy-form-owner-id={formOwnerId}
             >
               {fieldLabel ? (
                 <label
@@ -2944,6 +2966,7 @@ function CanvasElementComponent({
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
+                form={formOwnerId}
                 style={{
                   ...sharedStyle,
                   width: '100%',
@@ -2996,6 +3019,7 @@ function CanvasElementComponent({
             ? selectedValues[0] || sanitizeText(p.value) || 'on'
             : sanitizeText(p.value) || 'on';
           const choiceItems = optionItems.length > 0 ? optionItems : [fallbackOptionValue];
+          const formOwnerId = getFormOwnerId(p);
           return (
             <div
               style={{
@@ -3007,6 +3031,7 @@ function CanvasElementComponent({
                 gap: getFormFieldGap(p, 8),
                 boxSizing: 'border-box',
               }}
+              data-backy-form-owner-id={formOwnerId}
             >
               {fieldLabel ? (
                 <label
@@ -3045,6 +3070,7 @@ function CanvasElementComponent({
                       <input
                         type={choiceType}
                         name={typeof p.name === 'string' ? p.name : choiceType === 'radio' ? `${element.id}-group` : undefined}
+                        form={formOwnerId}
                         value={option}
                         required={choiceType === 'checkbox' ? optionIndex === 0 && required : required}
                         disabled={!isPreview || disabled}
@@ -3494,6 +3520,7 @@ function CanvasElementComponent({
               Drag form elements here (inputs, buttons)
             </div>
             <form
+              id={formId}
               action={actionUrl || undefined}
               method={method}
               data-testid="editor-form-schema"

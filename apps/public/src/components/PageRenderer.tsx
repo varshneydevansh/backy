@@ -1003,6 +1003,10 @@ function parseAttributeString(value: unknown): string | undefined {
   return undefined;
 }
 
+function resolveFormOwnerId(props: Record<string, unknown>): string | undefined {
+  return parseAttributeString(props.formOwnerId) || parseAttributeString(props.formId);
+}
+
 function resolveMediaSource(value: unknown): string | undefined {
   const direct = parseAttributeString(value);
   if (direct) {
@@ -2535,6 +2539,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   return (
     <>
       <form
+        id={resolvedFormId}
         action={configuredAction}
         method={method}
         encType="multipart/form-data"
@@ -3171,6 +3176,7 @@ function InputElement({ element }: ElementRendererProps) {
   const inputType =
     normalizeInputType(getNameClass(props.inputType) || getNameClass(props.type));
   const fieldName = getNameClass(props.name) || `field-${element.id}`;
+  const formOwnerId = resolveFormOwnerId(props as Record<string, unknown>);
   const minLength = parseNumericAttribute(props.minLength);
   const maxLength = parseNumericAttribute(props.maxLength);
   const label = getNameClass(props.label);
@@ -3185,6 +3191,7 @@ function InputElement({ element }: ElementRendererProps) {
         width: '100%',
         height: '100%',
       }}
+      data-backy-form-owner-id={formOwnerId}
     >
       {label ? (
         <label
@@ -3203,6 +3210,7 @@ function InputElement({ element }: ElementRendererProps) {
         id={`field-${element.id}`}
         type={inputType || 'text'}
         name={fieldName}
+        form={formOwnerId}
         placeholder={getNameClass(props.placeholder)}
         required={getBoolean(props.required)}
         min={getNameClass(props.min)}
@@ -3244,6 +3252,7 @@ function TextareaElement({ element }: ElementRendererProps) {
   const rows = typeof props.rows === 'number' && Number.isFinite(props.rows)
     ? props.rows
     : parseNumericAttribute(props.rows) ?? 5;
+  const formOwnerId = resolveFormOwnerId(props as Record<string, unknown>);
   const minLength = parseNumericAttribute(props.minLength);
   const maxLength = parseNumericAttribute(props.maxLength);
   const fieldName = getNameClass(props.name) || `field-${element.id}`;
@@ -3259,6 +3268,7 @@ function TextareaElement({ element }: ElementRendererProps) {
         width: '100%',
         height: '100%',
       }}
+      data-backy-form-owner-id={formOwnerId}
     >
       {label ? (
         <label
@@ -3276,6 +3286,7 @@ function TextareaElement({ element }: ElementRendererProps) {
       <textarea
         id={`field-${element.id}`}
         name={fieldName}
+        form={formOwnerId}
         placeholder={getNameClass(props.placeholder)}
         required={getBoolean(props.required)}
         rows={Number.isFinite(rows) ? rows : 5}
@@ -3313,6 +3324,7 @@ function SelectElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const options = parseOptionValues(props.options);
   const name = getNameClass(props.name) || `field-${element.id}`;
+  const formOwnerId = resolveFormOwnerId(props as Record<string, unknown>);
   const defaultValue = parseAttributeString(props.defaultValue);
   const placeholder = getNameClass(props.placeholder);
   const label = getNameClass(props.label);
@@ -3327,6 +3339,7 @@ function SelectElement({ element }: ElementRendererProps) {
         width: '100%',
         height: '100%',
       }}
+      data-backy-form-owner-id={formOwnerId}
     >
       {label ? (
         <label
@@ -3344,6 +3357,7 @@ function SelectElement({ element }: ElementRendererProps) {
       <select
         id={`field-${element.id}`}
         name={name}
+        form={formOwnerId}
         required={getBoolean(props.required)}
         disabled={getBoolean(props.disabled)}
         defaultValue={defaultValue || ''}
@@ -3387,6 +3401,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
   const { props, styles, children } = element;
   const inputType = normalizeRendererType(element.type) === 'checkbox' ? 'checkbox' : 'radio';
   const name = getNameClass(props.name) || `field-${element.id}`;
+  const formOwnerId = resolveFormOwnerId(props as Record<string, unknown>);
   const options = parseOptionValues(props.options);
   const defaultValues = toFormInputValueList(
     props.defaultValue !== undefined ? props.defaultValue : props.value
@@ -3418,7 +3433,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
   if (inputType === 'radio') {
     const defaultValue = defaultValues[0] || getNameClass(props.value) || '';
     return (
-      <div style={wrapperStyle}>
+      <div style={wrapperStyle} data-backy-form-owner-id={formOwnerId}>
         {label ? (
           <div style={legendStyle}>
             {label}
@@ -3430,6 +3445,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
             <input
               type="radio"
               name={name}
+              form={formOwnerId}
               value={defaultValue || 'on'}
               required={required}
               disabled={disabled}
@@ -3446,6 +3462,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
               <input
                 type="radio"
                 name={name}
+                form={formOwnerId}
                 value={option}
                 required={required}
                 disabled={disabled}
@@ -3471,7 +3488,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
   }
 
   return (
-    <div style={wrapperStyle}>
+    <div style={wrapperStyle} data-backy-form-owner-id={formOwnerId}>
         {label ? (
           <div style={legendStyle}>
             {label}
@@ -3483,6 +3500,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
             <input
               type="checkbox"
               name={name}
+              form={formOwnerId}
               value={getNameClass(props.value) || 'on'}
               required={required}
               disabled={disabled}
@@ -3499,6 +3517,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
               <input
                 type="checkbox"
                 name={name}
+                form={formOwnerId}
                 value={option}
                 defaultChecked={defaultSet.has(option)}
                 required={option === options[0] && required}

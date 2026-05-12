@@ -5568,6 +5568,7 @@ const testInputFieldBehaviorControls = async (client) => {
 
   await setFormControlByTestId(client, 'editor-field-label', 'Smoke input label');
   await setFormControlByTestId(client, 'editor-field-name', 'smoke_email');
+  await setFormControlByTestId(client, 'editor-field-form-owner-id', 'smoke-lead-capture');
   await setCheckboxByTestId(client, 'editor-field-required', true);
   await setFormControlByTestId(client, 'editor-field-placeholder', 'name@example.com');
   await setFormControlByTestId(client, 'editor-field-help-text', 'Use a reachable email address.');
@@ -5590,6 +5591,7 @@ const testInputFieldBehaviorControls = async (client) => {
     return {
       label: value('editor-field-label'),
       name: value('editor-field-name'),
+      formOwnerId: value('editor-field-form-owner-id'),
       required: checked('editor-field-required'),
       placeholder: value('editor-field-placeholder'),
       helpText: value('editor-field-help-text'),
@@ -5600,6 +5602,8 @@ const testInputFieldBehaviorControls = async (client) => {
       defaultValue: value('editor-input-default-value'),
       previewLabel: label?.textContent || '',
       previewName: input?.getAttribute('name') || '',
+      previewFormOwnerId: input?.getAttribute('form') || '',
+      previewOwnerData: node?.querySelector('[data-backy-form-owner-id]')?.getAttribute('data-backy-form-owner-id') || '',
       previewRequired: input instanceof HTMLInputElement ? input.required : null,
       previewPlaceholder: input?.getAttribute('placeholder') || '',
       previewType: input?.getAttribute('type') || '',
@@ -5613,6 +5617,7 @@ const testInputFieldBehaviorControls = async (client) => {
 
   assert(state.label === 'Smoke input label' && state.previewLabel.includes('Smoke input label'), `Input label mismatch: ${JSON.stringify(state)}`);
   assert(state.name === 'smoke_email' && state.previewName === 'smoke_email', `Input name mismatch: ${JSON.stringify(state)}`);
+  assert(state.formOwnerId === 'smoke-lead-capture' && state.previewFormOwnerId === 'smoke-lead-capture' && state.previewOwnerData === 'smoke-lead-capture', `Input form owner mismatch: ${JSON.stringify(state)}`);
   assert(state.required === true && state.previewRequired === true && state.previewLabel.includes('*'), `Input required mismatch: ${JSON.stringify(state)}`);
   assert(state.placeholder === 'name@example.com' && state.previewPlaceholder === 'name@example.com', `Input placeholder mismatch: ${JSON.stringify(state)}`);
   assert(state.helpText === 'Use a reachable email address.' && state.previewHelpText === 'Use a reachable email address.', `Input help text mismatch: ${JSON.stringify(state)}`);
@@ -5634,6 +5639,7 @@ const assertPersistedInputFieldBehavior = async (pageId) => {
   assert(input?.type === 'input', `Persisted smoke-input missing: ${JSON.stringify(input)}`);
   assert(props.label === 'Smoke input label', `Persisted input label mismatch: ${JSON.stringify(props)}`);
   assert(props.name === 'smoke_email', `Persisted input name mismatch: ${JSON.stringify(props)}`);
+  assert(props.formOwnerId === 'smoke-lead-capture', `Persisted input form owner mismatch: ${JSON.stringify(props)}`);
   assert(props.required === true, `Persisted input required mismatch: ${JSON.stringify(props)}`);
   assert(props.placeholder === 'name@example.com', `Persisted input placeholder mismatch: ${JSON.stringify(props)}`);
   assert(props.helpText === 'Use a reachable email address.', `Persisted input help text mismatch: ${JSON.stringify(props)}`);
