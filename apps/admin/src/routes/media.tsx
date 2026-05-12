@@ -2,7 +2,7 @@
  * BACKY CMS - MEDIA PAGE
  */
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, RefreshCw, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
@@ -52,8 +52,9 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
-type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced';
+type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quarantined';
 type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.bind' | 'media.unbind' | 'delete';
+type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
 type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
@@ -72,7 +73,7 @@ interface MediaSearch {
 
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
-const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced'];
+const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced', 'quarantined'];
 const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: string }> = [
   { value: 'all', label: 'All activity' },
   { value: 'create', label: 'Uploads' },
@@ -607,6 +608,7 @@ function MediaPage() {
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [bulkVisibility, setBulkVisibility] = useState<'keep' | 'public' | 'private'>('keep');
   const [bulkFolderId, setBulkFolderId] = useState<'keep' | 'root' | string>('keep');
+  const [bulkSafetyAction, setBulkSafetyAction] = useState<MediaBulkSafetyAction>('keep');
   const [bulkTagMode, setBulkTagMode] = useState<'keep' | 'merge' | 'replace' | 'clear'>('keep');
   const [bulkTags, setBulkTags] = useState('');
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
@@ -631,6 +633,7 @@ function MediaPage() {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
+  const suppressedRouteAssetIdRef = useRef<string | null>(null);
   const [metadataForm, setMetadataForm] = useState({
     name: '',
     altText: '',
@@ -891,6 +894,9 @@ function MediaPage() {
       if (usageFilter === 'replaced') {
         return getReplacementVersions(file.metadata).length > 0;
       }
+      if (usageFilter === 'quarantined') {
+        return getMediaSecurityPolicy(file.metadata).status === 'quarantined';
+      }
       return true;
     });
   }, [files, searchQuery, selectedFolderId, typeFilter, usageFilter, visibilityFilter]);
@@ -908,7 +914,8 @@ function MediaPage() {
   const allVisibleSelected = displayedFiles.length > 0 && displayedFiles.every((file) => selectedMediaSet.has(file.id));
   const hasBulkTagChange = bulkTagMode === 'clear' ||
     ((bulkTagMode === 'merge' || bulkTagMode === 'replace') && bulkTagList.length > 0);
-  const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep' || hasBulkTagChange;
+  const hasBulkSafetyChange = bulkSafetyAction !== 'keep';
+  const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep' || hasBulkTagChange || hasBulkSafetyChange;
   const fontGroups = useMemo(() => {
     const groups = new Map<string, {
       family: string;
@@ -1024,6 +1031,13 @@ function MediaPage() {
         ready: hasReferences || files.length === 0,
       },
       {
+        label: 'Quarantine review',
+        detail: mediaAnalytics.quarantinedAssets > 0
+          ? `${mediaAnalytics.quarantinedAssets} quarantined asset${mediaAnalytics.quarantinedAssets === 1 ? '' : 's'} need release or deletion`
+          : 'No quarantined assets in the current library.',
+        ready: mediaAnalytics.quarantinedAssets === 0,
+      },
+      {
         label: 'Font controls',
         detail: hasFonts
           ? `${fontGroups.length} font famil${fontGroups.length === 1 ? 'y' : 'ies'} registered`
@@ -1050,6 +1064,7 @@ function MediaPage() {
     mediaAnalytics.folderedAssets,
     mediaAnalytics.privateAssets,
     mediaAnalytics.publicAssets,
+    mediaAnalytics.quarantinedAssets,
     mediaAnalytics.referencedAssets,
     mediaAnalytics.unusedAssets,
     mediaQuota,
@@ -1128,6 +1143,7 @@ function MediaPage() {
       fonts: fontGroups.length,
       referenced: mediaAnalytics.referencedAssets,
       unused: mediaAnalytics.unusedAssets,
+      quarantined: mediaAnalytics.quarantinedAssets,
     },
     providerDelivery: mediaAnalytics.providerRows.map((row) => ({
       provider: row.provider,
@@ -1200,6 +1216,7 @@ function MediaPage() {
     mediaAnalytics.privateAssets,
     mediaAnalytics.publicAssets,
     mediaAnalytics.referencedAssets,
+    mediaAnalytics.quarantinedAssets,
     mediaAnalytics.unusedAssets,
     mediaAnalytics.providerRows,
     mediaQuota,
@@ -1474,6 +1491,7 @@ function MediaPage() {
   }, [siteId]);
 
   const openMetadataEditor = (asset: MediaAsset) => {
+    suppressedRouteAssetIdRef.current = null;
     const imagePresentation = getImagePresentationMetadata(asset.metadata);
     setSelectedAsset(asset);
     updateMediaRouteSearch({ assetId: asset.id });
@@ -1511,7 +1529,12 @@ function MediaPage() {
   };
 
   useEffect(() => {
-    if (!routeSearch.assetId || selectedAsset?.id === routeSearch.assetId) {
+    if (!routeSearch.assetId) {
+      suppressedRouteAssetIdRef.current = null;
+      return;
+    }
+
+    if (suppressedRouteAssetIdRef.current === routeSearch.assetId || selectedAsset?.id === routeSearch.assetId) {
       return;
     }
 
@@ -1870,7 +1893,6 @@ function MediaPage() {
     }
 
     const baseInput = {
-      ...(bulkVisibility !== 'keep' ? { visibility: bulkVisibility } : {}),
       ...(bulkFolderId !== 'keep' ? { folderId: bulkFolderId === 'root' ? null : bulkFolderId } : {}),
     };
 
@@ -1887,9 +1909,45 @@ function MediaPage() {
             : bulkTagMode === 'merge'
               ? normalizeTagValues([...(asset.tags || []), ...bulkTagList])
               : undefined;
+        const currentSecurity = getMediaSecurityPolicy(asset.metadata);
+        const nextVisibility = bulkSafetyAction === 'quarantine'
+          ? 'private'
+          : bulkSafetyAction === 'release'
+            ? bulkVisibility !== 'keep'
+              ? bulkVisibility
+              : currentSecurity.previousVisibility === 'private'
+                ? 'private'
+                : 'public'
+            : bulkVisibility !== 'keep'
+              ? bulkVisibility
+              : undefined;
+        const nextMetadata = bulkSafetyAction === 'quarantine'
+          ? {
+              ...asset.metadata,
+              mediaSecurity: {
+                status: 'quarantined',
+                quarantinedAt: new Date().toISOString(),
+                quarantinedBy: 'admin',
+                reason: 'Bulk quarantine from media safety review',
+                previousVisibility: asset.visibility || 'public',
+              },
+            }
+          : bulkSafetyAction === 'release'
+            ? {
+                ...asset.metadata,
+                mediaSecurity: {
+                  status: 'clear',
+                  clearedAt: new Date().toISOString(),
+                  clearedBy: 'admin',
+                  previousStatus: currentSecurity.status,
+                },
+              }
+            : undefined;
 
         return updateMedia(asset.id, {
           ...baseInput,
+          ...(nextVisibility ? { visibility: nextVisibility } : {}),
+          ...(nextMetadata ? { metadata: nextMetadata } : {}),
           ...(nextTags !== undefined ? { tags: nextTags } : {}),
         }, siteId);
       }),
@@ -1910,6 +1968,7 @@ function MediaPage() {
       }
       setBulkVisibility('keep');
       setBulkFolderId('keep');
+      setBulkSafetyAction('keep');
       setBulkTagMode('keep');
       setBulkTags('');
       void loadLibrary();
@@ -3353,7 +3412,7 @@ function MediaPage() {
           }
         />
         <PanelContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {[
               {
                 label: 'Assets',
@@ -3378,6 +3437,14 @@ function MediaPage() {
                 value: mediaAnalytics.replacedAssets,
                 detail: `${mediaAnalytics.replacementVersions} retained versions · ${formatBytes(mediaAnalytics.replacementBytes)}`,
                 filter: 'replaced' as const,
+              },
+              {
+                label: 'Quarantined',
+                value: mediaAnalytics.quarantinedAssets,
+                detail: mediaAnalytics.quarantinedAssets > 0
+                  ? 'Review before public delivery'
+                  : 'No blocked assets',
+                filter: 'quarantined' as const,
               },
             ].map((metric) => (
               <button
@@ -3411,6 +3478,7 @@ function MediaPage() {
                     { value: 'unused', label: 'Unused' },
                     { value: 'referenced', label: 'Referenced' },
                     { value: 'replaced', label: 'Replaced' },
+                    { value: 'quarantined', label: 'Quarantined' },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -3804,7 +3872,7 @@ function MediaPage() {
         <Panel className="mb-6 scroll-mt-24" id="media-bulk">
           <PanelHeader
             title="Bulk management"
-            description="Select visible assets, move them between folders, change delivery visibility, retag them, or remove them from the library."
+            description="Select visible assets, move them between folders, change delivery visibility, quarantine or release them, retag them, or remove them from the library."
             icon={<CheckSquare className="size-4" />}
             action={
               <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
@@ -3814,7 +3882,7 @@ function MediaPage() {
           />
           <PanelContent>
             <div className="grid gap-4">
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_220px_auto_auto]">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_200px_200px_auto_auto]">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -3866,6 +3934,25 @@ function MediaPage() {
                     {folderOptions.map((folder) => (
                       <option key={folder.id} value={folder.id}>{folder.label}</option>
                     ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Safety
+                  <select
+                    value={bulkSafetyAction}
+                    disabled={isMediaLibraryBusy}
+                    onChange={(event) => setBulkSafetyAction(
+                      event.target.value === 'quarantine' || event.target.value === 'release'
+                        ? event.target.value
+                        : 'keep',
+                    )}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk safety action"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="quarantine">Quarantine</option>
+                    <option value="release">Release quarantine</option>
                   </select>
                 </label>
 
@@ -3937,6 +4024,8 @@ function MediaPage() {
                       {bulkTagMode === 'replace' && 'Selected assets will use only the tags listed here.'}
                       {bulkTagMode === 'clear' && 'Selected assets will have every tag removed.'}
                       {bulkTagMode === 'keep' && 'Choose a tag action to update selected assets in the same batch as folder or visibility changes.'}
+                      {bulkSafetyAction === 'quarantine' && ' Selected assets will be forced private and blocked from public delivery, transforms, and signed URLs.'}
+                      {bulkSafetyAction === 'release' && ' Selected assets will clear quarantine metadata and restore previous visibility unless a visibility change is also selected.'}
                     </p>
                   </div>
                 </div>
@@ -4165,6 +4254,7 @@ function MediaPage() {
                 type="button"
                 onClick={() => {
                   if (isMediaMutationBusy) return;
+                  suppressedRouteAssetIdRef.current = selectedAsset.id;
                   setSelectedAsset(null);
                   updateMediaRouteSearch({ assetId: undefined });
                 }}
@@ -5625,6 +5715,7 @@ type MediaAnalytics = {
   referencedAssets: number;
   unusedAssets: number;
   replacedAssets: number;
+  quarantinedAssets: number;
   replacementVersions: number;
   replacementBytes: number;
   folderedAssets: number;
@@ -5930,6 +6021,7 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
   let referencedAssets = 0;
   let folderedAssets = 0;
   let replacedAssets = 0;
+  let quarantinedAssets = 0;
   let replacementVersions = 0;
   let replacementBytes = 0;
 
@@ -5969,6 +6061,7 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
 
     if (hasMediaReferences(asset)) referencedAssets += 1;
     if (asset.folderId) folderedAssets += 1;
+    if (getMediaSecurityPolicy(asset.metadata).status === 'quarantined') quarantinedAssets += 1;
 
     const versions = getReplacementVersions(asset.metadata);
     if (versions.length > 0) {
@@ -5985,6 +6078,7 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     referencedAssets,
     unusedAssets: Math.max(0, assets.length - referencedAssets),
     replacedAssets,
+    quarantinedAssets,
     replacementVersions,
     replacementBytes,
     folderedAssets,

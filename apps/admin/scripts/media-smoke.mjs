@@ -848,6 +848,109 @@ const releaseQuarantineThroughDetails = async (client) => {
   return null;
 };
 
+const setBulkSafetyAction = async (client, value) => {
+  const result = await evaluate(client, `(() => {
+    const select = document.querySelector('select[aria-label="Bulk safety action"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return {
+        ok: false,
+        reason: 'select-not-found',
+        selects: Array.from(document.querySelectorAll('select')).map((item) => item.getAttribute('aria-label') || item.textContent || '').slice(0, 80),
+      };
+    }
+    if (select.disabled) return { ok: false, reason: 'select-disabled' };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    descriptor?.set?.call(select, ${JSON.stringify(value)});
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: select.value };
+  })()`);
+  assert(result.ok, `Unable to set bulk safety action: ${JSON.stringify(result)}`);
+  await sleep(100);
+  return result;
+};
+
+const selectVisibleMedia = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').includes('Select visible')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'button-not-found' };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to select visible media: ${JSON.stringify(result)}`);
+  await sleep(100);
+};
+
+const applyBulkChanges = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').includes('Apply changes') || (candidate.textContent || '').includes('Applying...')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'button-not-found' };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to apply bulk changes: ${JSON.stringify(result)}`);
+};
+
+const releaseQuarantineThroughBulk = async (client) => {
+  const focusResult = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === 'Quarantined'
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'quarantine-filter-not-found' };
+    }
+    if (button.disabled) return { ok: false, reason: 'quarantine-filter-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(focusResult.ok, `Unable to focus quarantined media: ${JSON.stringify(focusResult)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      focused: document.body?.innerText?.includes('Quarantined') || false,
+      hasReleaseOption: document.body?.innerText?.includes('Release quarantine') || false,
+      body: document.body?.innerText?.slice(0, 1600) || '',
+    }))()`);
+    if (state.focused && state.hasReleaseOption) break;
+    if (attempt === 79) {
+      throw new Error(`Quarantined focus did not render bulk safety controls: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  await selectVisibleMedia(client);
+  await setBulkSafetyAction(client, 'release');
+  await applyBulkChanges(client);
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      released: document.body?.innerText?.includes('Updated 1 asset') ||
+        document.body?.innerText?.includes('No assets match this view'),
+      applying: document.body?.innerText?.includes('Applying...'),
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (state.released && !state.applying) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Bulk quarantine release did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const closeMediaDetails = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('button[aria-label="Close media details"]');
@@ -857,6 +960,22 @@ const closeMediaDetails = async (client) => {
     return { ok: true };
   })()`);
   assert(result.ok, `Unable to close media details: ${JSON.stringify(result)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      closed: !(document.body?.innerText || '').includes('Safety scan') &&
+        !(document.body?.innerText || '').includes('Read audit feed') &&
+        !(document.body?.innerText || '').includes('Provider and CDN boundary'),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.closed) return state;
+    if (attempt === 79) {
+      throw new Error(`Media details did not close: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  return null;
 };
 
 const deleteAssetThroughUi = async (client, assetName) => {
@@ -1103,14 +1222,16 @@ const main = async () => {
       method: 'POST',
       body: JSON.stringify({ expiresInSeconds: 900 }),
     }, 423, 'MEDIA_QUARANTINED');
-    await releaseQuarantineThroughDetails(client);
+    await closeMediaDetails(client);
+    await releaseQuarantineThroughBulk(client);
     const releasedImage = await waitForMedia(marker, (item) => (
       item.id === publicImage.id &&
       item.visibility === 'private' &&
       item.metadata?.mediaSecurity?.status === 'clear'
     ));
     assert(releasedImage.metadata.mediaSecurity.previousStatus === 'quarantined', 'Media quarantine release did not preserve previous security status.');
-    await closeMediaDetails(client);
+    await navigateToMedia(client, marker);
+    await waitForMediaPageAsset(client, privateName);
 
     await openMediaDetails(client, privateName);
     await generateSignedUrl(client);
