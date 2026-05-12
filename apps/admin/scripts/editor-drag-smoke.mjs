@@ -1649,6 +1649,53 @@ const clickControlBySelector = async (client, selector, label = selector) => {
   return clicked;
 };
 
+const hoverControlBySelector = async (client, selector, label = selector) => {
+  const target = await evaluate(client, `(() => {
+    const control = document.querySelector(${JSON.stringify(selector)});
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        selector: ${JSON.stringify(selector)},
+        libraryText: document.querySelector('[data-testid="editor-component-library"]')?.textContent || '',
+      };
+    }
+    control.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const rect = control.getBoundingClientRect();
+    control.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+    control.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, cancelable: true, view: window }));
+    return {
+      ok: true,
+      selector: ${JSON.stringify(selector)},
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  })()`);
+
+  assert(target?.ok, `Unable to hover ${label}: ${JSON.stringify(target)}`);
+  await sleep(250);
+  return target;
+};
+
+const leaveControlBySelector = async (client, selector, label = selector) => {
+  const left = await evaluate(client, `(() => {
+    const control = document.querySelector(${JSON.stringify(selector)});
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        selector: ${JSON.stringify(selector)},
+        libraryText: document.querySelector('[data-testid="editor-component-library"]')?.textContent || '',
+      };
+    }
+    control.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, view: window }));
+    control.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, cancelable: true, view: window }));
+    return { ok: true, selector: ${JSON.stringify(selector)} };
+  })()`);
+
+  assert(left?.ok, `Unable to leave ${label}: ${JSON.stringify(left)}`);
+  await sleep(250);
+  return left;
+};
+
 const setFileInputByTestId = async (client, testId, filePaths) => {
   const documentNode = await client.send('DOM.getDocument', { depth: -1, pierce: true });
   const { nodeId } = await client.send('DOM.querySelector', {
@@ -4137,6 +4184,7 @@ const readComponentLibraryState = async (client, label) => (
       )),
     }));
     const favoriteButton = document.querySelector('[data-component-favorite="divider"]');
+    const preview = document.querySelector('[data-testid="editor-component-preview"]');
     return {
       label: ${JSON.stringify(label)},
       hasLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
@@ -4145,6 +4193,8 @@ const readComponentLibraryState = async (client, label) => (
       categories,
       hasEmpty: /No components found/i.test(document.querySelector('[data-testid="editor-component-library"]')?.textContent || ''),
       dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
+      previewKey: preview?.getAttribute('data-component-preview') || null,
+      previewText: preview?.textContent || '',
       storedFavorites: (() => {
         try {
           return JSON.parse(window.localStorage.getItem('backy.editor.componentLibrary.favorites') || '[]');
@@ -4178,6 +4228,20 @@ const testComponentLibraryControls = async (client) => {
   await setFormControlByTestId(client, 'editor-component-search', '');
   await clickControlByTestId(client, 'editor-component-category-all');
   await sleep(150);
+
+  await hoverControlBySelector(client, '[data-component-library-item="divider"]');
+  const dividerPreview = await readComponentLibraryState(client, 'divider preview');
+  assert(dividerPreview.previewKey === 'divider', `Hovering divider did not show divider preview: ${JSON.stringify(dividerPreview)}`);
+  assert(/Divider/.test(dividerPreview.previewText) && /300 x 2/.test(dividerPreview.previewText), `Divider preview content missing expected metadata: ${JSON.stringify(dividerPreview)}`);
+
+  await hoverControlBySelector(client, '[data-component-library-item="image"]');
+  const imagePreview = await readComponentLibraryState(client, 'image preview');
+  assert(imagePreview.previewKey === 'image', `Hovering image did not update component preview: ${JSON.stringify(imagePreview)}`);
+  assert(/Image/.test(imagePreview.previewText) && /300 x 200/.test(imagePreview.previewText), `Image preview content missing expected metadata: ${JSON.stringify(imagePreview)}`);
+
+  await leaveControlBySelector(client, '[data-component-library-item="image"]');
+  const clearedPreview = await readComponentLibraryState(client, 'preview cleared');
+  assert(clearedPreview.previewKey === null, `Component preview did not clear after leaving item: ${JSON.stringify(clearedPreview)}`);
 
   let beforeFavorite = await readComponentLibraryState(client, 'before favorite');
   if (beforeFavorite.dividerFavoritePressed) {
@@ -4216,6 +4280,9 @@ const testComponentLibraryControls = async (client) => {
     initial,
     searchFiltered,
     layoutFiltered,
+    dividerPreview,
+    imagePreview,
+    clearedPreview,
     favorited,
     favoritesFiltered,
     emptySearch,

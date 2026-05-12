@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from 'react';
 import {
   Type,
   Heading,
@@ -99,6 +99,7 @@ export function ComponentLibrary({
 }: ComponentLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [previewItemKey, setPreviewItemKey] = useState<string | null>(null);
   const [favoriteItemKeys, setFavoriteItemKeys] = useState<string[]>(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -162,6 +163,10 @@ export function ComponentLibrary({
   const favoriteItems = useMemo(
     () => libraryItems.filter((item) => favoriteKeySet.has(getLibraryItemKey(item))),
     [favoriteKeySet, libraryItems],
+  );
+  const previewItem = useMemo(
+    () => libraryItems.find((item) => getLibraryItemKey(item) === previewItemKey) || null,
+    [libraryItems, previewItemKey],
   );
 
   const toggleFavorite = (item: ComponentLibraryItem) => {
@@ -336,6 +341,7 @@ export function ComponentLibrary({
                     onDragStart={() => onDragStart?.(item)}
                     onAddItem={() => onAddItem?.(item)}
                     onToggleFavorite={() => toggleFavorite(item)}
+                    onPreviewChange={(nextItem) => setPreviewItemKey(nextItem ? getLibraryItemKey(nextItem) : null)}
                     onRenameReusableSection={onRenameReusableSection}
                     onDeleteReusableSection={onDeleteReusableSection}
                   />
@@ -351,8 +357,238 @@ export function ComponentLibrary({
           </div>
         )}
       </div>
+
+      {previewItem && (
+        <ComponentPreviewPane item={previewItem} />
+      )}
     </div>
   );
+}
+
+// ============================================
+// COMPONENT PREVIEW
+// ============================================
+
+function getPreviewColor(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function getPreviewContent(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function getPreviewNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function getPreviewRadius(value: unknown, fallback = 6): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
+}
+
+function getPreviewBaseStyle(item: ComponentLibraryItem): CSSProperties {
+  const props = item.defaultProps || {};
+  const styles = item.defaultStyles || {};
+
+  return {
+    backgroundColor: getPreviewColor(props.backgroundColor ?? styles.backgroundColor, '#f8fafc'),
+    color: getPreviewColor(props.color ?? styles.color, '#0f172a'),
+    borderColor: getPreviewColor(props.borderColor ?? styles.borderColor, '#dbe2ea'),
+    borderWidth: getPreviewNumber(props.borderWidth ?? styles.borderWidth, 1),
+    borderStyle: getPreviewContent(props.borderStyle ?? styles.borderStyle, 'solid'),
+    borderRadius: getPreviewRadius(props.borderRadius ?? styles.borderRadius),
+  };
+}
+
+function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
+  const itemKey = getLibraryItemKey(item);
+  const size = item.defaultSize || { width: 240, height: 120 };
+  const category = getLibraryCategory(item);
+  const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+
+  return (
+    <div
+      className="border-t border-slate-200 bg-slate-50 p-3"
+      data-testid="editor-component-preview"
+      data-component-preview={itemKey}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+          {item.description && (
+            <p className="line-clamp-2 text-xs text-slate-500">{item.description}</p>
+          )}
+        </div>
+        <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500">
+          {category}
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white p-2">
+        <div className="flex h-24 items-center justify-center rounded bg-[linear-gradient(45deg,#f8fafc_25%,transparent_25%),linear-gradient(-45deg,#f8fafc_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f8fafc_75%),linear-gradient(-45deg,transparent_75%,#f8fafc_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0]">
+          <ComponentPreviewArtwork item={item} />
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <span>{size.width} x {size.height}</span>
+        {childCount > 0 && <span>{childCount} nested</span>}
+      </div>
+    </div>
+  );
+}
+
+function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
+  const props = item.defaultProps || {};
+  const baseStyle = getPreviewBaseStyle(item);
+  const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+  const resolvedType = item.type;
+
+  if (item.defaultChildren?.length) {
+    return (
+      <div
+        className="relative h-20 w-44 overflow-hidden rounded"
+        style={{
+          backgroundColor: baseStyle.backgroundColor,
+          border: `${baseStyle.borderWidth}px ${baseStyle.borderStyle} ${baseStyle.borderColor}`,
+          borderRadius: baseStyle.borderRadius,
+        }}
+      >
+        {item.defaultChildren.slice(0, 6).map((child, index) => (
+          <div
+            key={`${item.id ?? item.type}-preview-child-${index}`}
+            className="absolute rounded-sm border border-white/60 bg-slate-200/90"
+            style={{
+              left: `${Math.max(3, Math.min(82, (child.x / Math.max(item.defaultSize?.width || 1, 1)) * 100))}%`,
+              top: `${Math.max(4, Math.min(78, (child.y / Math.max(item.defaultSize?.height || 1, 1)) * 100))}%`,
+              width: `${Math.max(10, Math.min(42, (child.width / Math.max(item.defaultSize?.width || 1, 1)) * 100))}%`,
+              height: `${Math.max(8, Math.min(34, (child.height / Math.max(item.defaultSize?.height || 1, 1)) * 100))}%`,
+              backgroundColor: getPreviewColor(child.props?.backgroundColor, index % 2 === 0 ? '#dbeafe' : '#dcfce7'),
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  switch (resolvedType) {
+    case 'heading':
+      return (
+        <div className="w-44 rounded bg-white p-3 shadow-sm">
+          <div
+            className="h-4 w-36 rounded"
+            style={{ backgroundColor: getPreviewColor(props.color, '#0f172a') }}
+          />
+          <div className="mt-2 h-2 w-24 rounded bg-slate-200" />
+        </div>
+      );
+
+    case 'text':
+    case 'paragraph':
+      return (
+        <div className="w-44 rounded bg-white p-3 shadow-sm">
+          {[0, 1, 2].map((line) => (
+            <div
+              key={`${item.type}-preview-line-${line}`}
+              className="mb-1.5 h-2 rounded bg-slate-300 last:mb-0"
+              style={{ width: `${line === 2 ? 62 : 92 - line * 10}%` }}
+            />
+          ))}
+        </div>
+      );
+
+    case 'button':
+      return (
+        <div
+          className="max-w-40 truncate rounded px-5 py-2 text-center text-xs font-semibold shadow-sm"
+          style={{
+            backgroundColor: getPreviewColor(props.backgroundColor, '#3b82f6'),
+            color: getPreviewColor(props.color, '#ffffff'),
+            borderRadius: getPreviewRadius(props.borderRadius, 8),
+          }}
+        >
+          {getPreviewContent(props.label, 'Button')}
+        </div>
+      );
+
+    case 'image':
+    case 'video':
+    case 'embed':
+    case 'map':
+      return (
+        <div className="flex h-20 w-36 items-center justify-center rounded border border-slate-300 bg-slate-100 text-xs font-medium text-slate-500">
+          {item.name}
+        </div>
+      );
+
+    case 'divider':
+      return (
+        <div className="w-40 border-t" style={{ borderColor: getPreviewColor(props.borderColor, '#94a3b8'), borderTopWidth: getPreviewContent(props.thickness, '2px') }} />
+      );
+
+    case 'spacer':
+      return <div className="h-12 w-20 rounded border border-dashed border-slate-300 bg-slate-50" />;
+
+    case 'list':
+      return (
+        <div className="w-40 rounded bg-white p-3 shadow-sm">
+          {[0, 1, 2].map((line) => (
+            <div key={`list-preview-${line}`} className="mb-1.5 flex items-center gap-2 last:mb-0">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="h-2 flex-1 rounded bg-slate-300" />
+            </div>
+          ))}
+        </div>
+      );
+
+    case 'quote':
+      return (
+        <div className="w-40 border-l-4 border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-1.5 h-2 w-28 rounded bg-slate-300" />
+          <div className="h-2 w-20 rounded bg-slate-200" />
+        </div>
+      );
+
+    case 'input':
+    case 'textarea':
+    case 'select':
+      return (
+        <div className="w-40 rounded bg-white p-2 shadow-sm">
+          <div className="mb-1 h-2 w-16 rounded bg-slate-300" />
+          <div className="h-8 rounded border border-slate-300 bg-slate-50" />
+        </div>
+      );
+
+    case 'checkbox':
+    case 'radio':
+      return (
+        <div className="flex items-center gap-2 rounded bg-white p-3 shadow-sm">
+          <span className={cn('h-4 w-4 border border-slate-300 bg-slate-50', resolvedType === 'radio' ? 'rounded-full' : 'rounded')} />
+          <span className="h-2 w-20 rounded bg-slate-300" />
+        </div>
+      );
+
+    default:
+      return (
+        <div
+          className="flex h-20 w-36 items-center justify-center rounded text-xs font-medium shadow-sm"
+          style={{
+            backgroundColor: baseStyle.backgroundColor,
+            color: baseStyle.color,
+            border: `${baseStyle.borderWidth}px ${baseStyle.borderStyle} ${baseStyle.borderColor}`,
+            borderRadius: baseStyle.borderRadius,
+          }}
+        >
+          {childCount > 0 ? `${childCount} items` : item.name}
+        </div>
+      );
+  }
 }
 
 // ============================================
@@ -366,6 +602,7 @@ interface LibraryItemProps {
   onDragStart: () => void;
   onAddItem?: () => void;
   onToggleFavorite?: () => void;
+  onPreviewChange?: (item: ComponentLibraryItem | null) => void;
   onRenameReusableSection?: (sectionId: string) => void;
   onDeleteReusableSection?: (sectionId: string) => void;
 }
@@ -377,6 +614,7 @@ function LibraryItem({
   onDragStart,
   onAddItem,
   onToggleFavorite,
+  onPreviewChange,
   onRenameReusableSection,
   onDeleteReusableSection,
 }: LibraryItemProps) {
@@ -445,7 +683,21 @@ function LibraryItem({
     <div
       draggable={!disabled}
       onDragStart={handleDragStart}
+      onMouseEnter={() => {
+        if (!disabled) onPreviewChange?.(item);
+      }}
+      onMouseLeave={() => onPreviewChange?.(null)}
+      onFocus={() => {
+        if (!disabled) onPreviewChange?.(item);
+      }}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+          onPreviewChange?.(null);
+        }
+      }}
       aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
       data-component-library-item={item.id ?? item.type}
       className={cn(
         'group flex items-center gap-3 p-2 rounded-md cursor-grab',
