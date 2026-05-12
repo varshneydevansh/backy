@@ -42,6 +42,8 @@ import {
   Table,
   Rows3,
   Columns3,
+  Rows2,
+  Columns2,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -112,6 +114,8 @@ export function RichTextFormatting({
     insertTable,
     addTableRow,
     addTableColumn,
+    removeTableRow,
+    removeTableColumn,
     storeSelection,
     syncActiveEditorContent,
   } = useActiveEditor();
@@ -1457,6 +1461,18 @@ export function RichTextFormatting({
     });
   }, [addTableColumn, runOrActivateTextEditor]);
 
+  const removeTableRowAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-remove-row', () => {
+      removeTableRow();
+    });
+  }, [removeTableRow, runOrActivateTextEditor]);
+
+  const removeTableColumnAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-remove-column', () => {
+      removeTableColumn();
+    });
+  }, [removeTableColumn, runOrActivateTextEditor]);
+
   const onFontSizeBlur = (event: FocusEvent<HTMLInputElement>) => {
     logTextAction('content-property.font-size-blur', {
       actionName: 'font-size-blur',
@@ -1988,6 +2004,32 @@ export function RichTextFormatting({
             title="Add table column"
           >
             <Columns3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-remove-row', () => removeTableRowAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-remove-row"
+            title="Remove table row"
+          >
+            <Rows2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-remove-column', () => removeTableColumnAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-remove-column"
+            title="Remove table column"
+          >
+            <Columns2 className="w-4 h-4" />
           </button>
           <button
             type="button"

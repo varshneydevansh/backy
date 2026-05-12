@@ -53,6 +53,10 @@ interface ActiveEditorContextType {
   addTableRow: () => boolean;
   /** Insert a table column to the right of the current table cell */
   addTableColumn: () => boolean;
+  /** Remove the current table row when the table has more than one row */
+  removeTableRow: () => boolean;
+  /** Remove the current table column when rows have more than one column */
+  removeTableColumn: () => boolean;
   /** Check if mark is active */
   isMarkActive: (format: string) => boolean;
   /** Whether a range selection is currently available for formatting */
@@ -98,6 +102,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   insertTable: () => false,
   addTableRow: () => false,
   addTableColumn: () => false,
+  removeTableRow: () => false,
+  removeTableColumn: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
   hasSelection: () => false,
@@ -374,6 +380,62 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
     return rowCount > 0;
   }, [createEmptyTableCellNode, getSelectedTableContext]);
+
+  const removeSelectedTableRow = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    if (rows.length <= 1) {
+      return false;
+    }
+
+    const nextRowIndex = Math.min(context.rowIndex, rows.length - 2);
+    const nextColumnIndex = Math.min(context.cellIndex, Math.max(0, context.columnCount - 1));
+    Transforms.removeNodes(editor as any, { at: context.rowPath });
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.tablePath, nextRowIndex, nextColumnIndex]));
+    } catch {
+      // Selection is best-effort after row removal.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const removeSelectedTableColumn = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const canRemoveColumn = rows.some((row: any) => Array.isArray(row?.children) && row.children.length > 1);
+    if (!canRemoveColumn || context.columnCount <= 1) {
+      return false;
+    }
+
+    const removeIndex = context.cellIndex;
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...context.tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      if (rowChildren.length <= 1) {
+        continue;
+      }
+
+      const boundedRemoveIndex = Math.max(0, Math.min(removeIndex, rowChildren.length - 1));
+      Transforms.removeNodes(editor as any, { at: [...rowPath, boundedRemoveIndex] });
+    }
+
+    try {
+      const nextColumnIndex = Math.max(0, Math.min(removeIndex, context.columnCount - 2));
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, nextColumnIndex]));
+    } catch {
+      // Selection is best-effort after column removal.
+    }
+    return true;
+  }, [getSelectedTableContext]);
 
   const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
     if (typeof window === 'undefined') {
@@ -1157,6 +1219,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, insertTableColumnRight, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const removeTableRow = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('removeTableRow.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!removeSelectedTableRow(editor)) return false;
+
+      debug('removeTableRow.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('removeTableRow failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, removeSelectedTableRow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const removeTableColumn = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('removeTableColumn.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!removeSelectedTableColumn(editor)) return false;
+
+      debug('removeTableColumn.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('removeTableColumn failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, removeSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
     if (!editor || !url) {
@@ -1456,6 +1568,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       insertTable,
       addTableRow,
       addTableColumn,
+      removeTableRow,
+      removeTableColumn,
       isMarkActive,
       hasRangeSelection,
       hasSelection,

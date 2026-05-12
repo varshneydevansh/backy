@@ -26,7 +26,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, persisted selected-range leaf marks, blockquote/table panel controls, row/column table growth, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
+| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, persisted selected-range leaf marks, blockquote/table panel controls, row/column table growth/removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -40,8 +40,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting, multi-block blockquote, basic table insertion, and table row/column growth are covered; deeper table/list editing remains | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows, multi-block blockquote, basic table insertion, and table row/column growth are covered; deeper table/list editing remains | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting, multi-block blockquote, basic table insertion, and table row/column growth/removal are covered; deeper table/list editing remains | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows, multi-block blockquote, basic table insertion, and table row/column growth/removal are covered; deeper table/list editing remains | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same deeper rich-text table/list editing gaps as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
@@ -126,7 +126,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
-    - Advanced rich text table editing still needs Canva-level controls beyond insertion and row/column growth
+    - Advanced rich text table editing still needs Canva-level controls beyond insertion and row/column add/remove
     - Full nested list edge-case parity is not complete
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
@@ -239,6 +239,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can toggle blockquote across multiple selected blocks.
   - Right-panel rich-text controls can insert a basic 2x2 table with semantic editor rendering and persisted Slate table nodes.
   - Right-panel rich-text controls can add a row and column to the active table selection, with persisted Slate table structure.
+  - Right-panel rich-text controls can remove the active table row and column while preserving remaining cell content.
   - Shared editor block markdown shortcuts now support `>` for blockquote.
   - Editor context list actions now expose:
     - Toggle same-list off by unwrapping existing list wrappers.
@@ -363,6 +364,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel applied-change feedback with focused coverage in the heading component smoke via `BACKY_EDITOR_COMPONENT_SMOKE=heading npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel rich-text blockquote and table controls with semantic editor table rendering, persisted table nodes, and focused browser coverage via `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel table row/column growth controls for active rich-text table selections, with browser smoke coverage proving 2x2 tables expand to persisted 3x3 Slate structures.
+- Added Property Panel table row/column removal controls, with browser smoke coverage proving 3x3 tables shrink back to persisted 2x2 structures without losing original cell content.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.
