@@ -26,9 +26,22 @@ type ProviderAnalyticsEntry = {
   url?: string;
   totalRequests: number;
   bytesServed: number;
+  conversions: number;
+  conversionValue: number;
   source?: string;
   reportingWindow?: string;
+  currency?: string;
+  attributionWindow?: string;
   lastDeliveredAt?: string;
+};
+
+type ProviderAnalyticsMatch = {
+  mediaId: string;
+  matchedBy: string;
+  totalRequests: number;
+  bytesServed: number;
+  conversions: number;
+  conversionValue: number;
 };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -69,6 +82,16 @@ const metricValue = (value: unknown): number => {
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
 };
 
+const decimalMetricValue = (value: unknown): number => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
+};
+
+const currencyValue = (value: unknown): string | undefined => {
+  const text = textValue(value);
+  return text ? text.toUpperCase().slice(0, 8) : undefined;
+};
+
 const isoValue = (value: unknown): string | undefined => {
   const text = textValue(value);
   if (!text) return undefined;
@@ -95,8 +118,12 @@ const normalizeEntry = (value: unknown): ProviderAnalyticsEntry | null => {
     url,
     totalRequests: metricValue(record.totalRequests ?? record.requests),
     bytesServed: metricValue(record.bytesServed ?? record.bytes),
+    conversions: metricValue(record.conversions ?? record.conversionCount),
+    conversionValue: decimalMetricValue(record.conversionValue ?? record.revenue ?? record.value),
     source: textValue(record.source),
     reportingWindow: textValue(record.reportingWindow),
+    currency: currencyValue(record.currency),
+    attributionWindow: textValue(record.attributionWindow),
     lastDeliveredAt: isoValue(record.lastDeliveredAt),
   };
 };
@@ -123,6 +150,10 @@ const matchMediaForEntry = (mediaItems: MediaItem[], entry: ProviderAnalyticsEnt
 
 const normalizeMergeMode = (value: unknown): 'replace' | 'increment' => (
   value === 'increment' ? 'increment' : 'replace'
+);
+
+const conversionRate = (conversions: number, totalRequests: number): number => (
+  totalRequests > 0 ? Number(((conversions / totalRequests) * 100).toFixed(4)) : 0
 );
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -162,7 +193,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         limit: 10000,
         offset: 0,
       })).items;
-      const matched: Array<{ mediaId: string; matchedBy: string; totalRequests: number; bytesServed: number }> = [];
+      const matched: ProviderAnalyticsMatch[] = [];
       const unmatched: ProviderAnalyticsEntry[] = [];
       const updatedIds = new Set<string>();
 
@@ -180,11 +211,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const bytesServed = mergeMode === 'increment'
           ? metricValue(existingDelivery.bytesServed) + entry.bytesServed
           : entry.bytesServed;
+        const conversions = mergeMode === 'increment'
+          ? metricValue(existingDelivery.conversions) + entry.conversions
+          : entry.conversions;
+        const conversionValue = mergeMode === 'increment'
+          ? decimalMetricValue(existingDelivery.conversionValue) + entry.conversionValue
+          : entry.conversionValue;
         const lastSyncedAt = new Date().toISOString();
         const nextProviderDelivery = {
           ...existingDelivery,
           totalRequests,
           bytesServed,
+          conversions,
+          conversionValue,
+          conversionRate: conversionRate(conversions, totalRequests),
+          currency: entry.currency || textValue(existingDelivery.currency) || currencyValue(body.currency) || 'USD',
+          attributionWindow: entry.attributionWindow || textValue(existingDelivery.attributionWindow) || textValue(body.attributionWindow) || 'not specified',
           source: entry.source || source,
           reportingWindow: entry.reportingWindow || reportingWindow,
           lastSyncedAt,
@@ -203,6 +245,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           matchedBy: nextProviderDelivery.matchedBy,
           totalRequests,
           bytesServed,
+          conversions,
+          conversionValue,
         });
 
         await recordAdminAudit({
@@ -219,6 +263,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             mergeMode,
             totalRequests,
             bytesServed,
+            conversions,
+            conversionValue,
+            currency: nextProviderDelivery.currency,
+            attributionWindow: nextProviderDelivery.attributionWindow,
+            conversionRate: nextProviderDelivery.conversionRate,
             matchedBy: nextProviderDelivery.matchedBy,
           },
           requestId,
@@ -260,7 +309,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       limit: 10000,
       offset: 0,
     }).media;
-    const matched: Array<{ mediaId: string; matchedBy: string; totalRequests: number; bytesServed: number }> = [];
+    const matched: ProviderAnalyticsMatch[] = [];
     const unmatched: ProviderAnalyticsEntry[] = [];
 
     for (const entry of entries) {
@@ -277,6 +326,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const bytesServed = mergeMode === 'increment'
         ? metricValue(existingDelivery.bytesServed) + entry.bytesServed
         : entry.bytesServed;
+      const conversions = mergeMode === 'increment'
+        ? metricValue(existingDelivery.conversions) + entry.conversions
+        : entry.conversions;
+      const conversionValue = mergeMode === 'increment'
+        ? decimalMetricValue(existingDelivery.conversionValue) + entry.conversionValue
+        : entry.conversionValue;
       const matchedBy = entry.mediaId ? 'mediaId' : entry.storagePath ? 'storagePath' : 'url';
       const updated = updateMediaItem(site.id, media.id, {
         metadata: {
@@ -285,6 +340,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ...existingDelivery,
             totalRequests,
             bytesServed,
+            conversions,
+            conversionValue,
+            conversionRate: conversionRate(conversions, totalRequests),
+            currency: entry.currency || textValue(existingDelivery.currency) || currencyValue(body.currency) || 'USD',
+            attributionWindow: entry.attributionWindow || textValue(existingDelivery.attributionWindow) || textValue(body.attributionWindow) || 'not specified',
             source: entry.source || source,
             reportingWindow: entry.reportingWindow || reportingWindow,
             lastSyncedAt: new Date().toISOString(),
@@ -304,6 +364,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         matchedBy,
         totalRequests,
         bytesServed,
+        conversions,
+        conversionValue,
       });
 
       await recordAdminAudit({
@@ -319,6 +381,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           mergeMode,
           totalRequests,
           bytesServed,
+          conversions,
+          conversionValue,
+          currency: entry.currency || textValue(existingDelivery.currency) || currencyValue(body.currency) || 'USD',
+          attributionWindow: entry.attributionWindow || textValue(existingDelivery.attributionWindow) || textValue(body.attributionWindow) || 'not specified',
+          conversionRate: conversionRate(conversions, totalRequests),
           matchedBy,
         },
         requestId,

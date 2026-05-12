@@ -634,6 +634,10 @@ function MediaPage() {
   const [transformQuality, setTransformQuality] = useState(75);
   const [providerAnalyticsRequests, setProviderAnalyticsRequests] = useState('');
   const [providerAnalyticsBytes, setProviderAnalyticsBytes] = useState('');
+  const [providerAnalyticsConversions, setProviderAnalyticsConversions] = useState('');
+  const [providerAnalyticsValue, setProviderAnalyticsValue] = useState('');
+  const [providerAnalyticsCurrency, setProviderAnalyticsCurrency] = useState('USD');
+  const [providerAnalyticsAttributionWindow, setProviderAnalyticsAttributionWindow] = useState('last-click');
   const [providerAnalyticsSource, setProviderAnalyticsSource] = useState('provider-console');
   const [providerAnalyticsWindow, setProviderAnalyticsWindow] = useState('last-30-days');
   const [bindingTargetType, setBindingTargetType] = useState<'page' | 'post'>('page');
@@ -1615,6 +1619,10 @@ function MediaPage() {
     const providerAnalytics = getMediaProviderDeliveryAnalytics(selectedAsset?.metadata);
     setProviderAnalyticsRequests(providerAnalytics ? String(providerAnalytics.totalRequests) : '');
     setProviderAnalyticsBytes(providerAnalytics ? String(providerAnalytics.bytesServed) : '');
+    setProviderAnalyticsConversions(providerAnalytics ? String(providerAnalytics.conversions) : '');
+    setProviderAnalyticsValue(providerAnalytics ? String(providerAnalytics.conversionValue) : '');
+    setProviderAnalyticsCurrency(providerAnalytics?.currency || 'USD');
+    setProviderAnalyticsAttributionWindow(providerAnalytics?.attributionWindow || 'last-click');
     setProviderAnalyticsSource(providerAnalytics?.source || 'provider-console');
     setProviderAnalyticsWindow(providerAnalytics?.reportingWindow || 'last-30-days');
   }, [selectedAsset?.id, selectedAsset?.metadata]);
@@ -1766,6 +1774,10 @@ function MediaPage() {
 
     const totalRequests = Math.max(0, Math.floor(Number(providerAnalyticsRequests) || 0));
     const bytesServed = Math.max(0, Math.floor(Number(providerAnalyticsBytes) || 0));
+    const conversions = Math.max(0, Math.floor(Number(providerAnalyticsConversions) || 0));
+    const conversionValue = Math.max(0, Number(providerAnalyticsValue) || 0);
+    const currency = providerAnalyticsCurrency.trim().toUpperCase() || 'USD';
+    const attributionWindow = providerAnalyticsAttributionWindow.trim() || 'last-click';
     const source = providerAnalyticsSource.trim() || 'provider-console';
     const reportingWindow = providerAnalyticsWindow.trim() || 'last-30-days';
 
@@ -1780,6 +1792,11 @@ function MediaPage() {
           providerDelivery: {
             totalRequests,
             bytesServed,
+            conversions,
+            conversionValue,
+            conversionRate: totalRequests > 0 ? Number(((conversions / totalRequests) * 100).toFixed(4)) : 0,
+            currency,
+            attributionWindow,
             source,
             reportingWindow,
             lastSyncedAt: new Date().toISOString(),
@@ -3858,7 +3875,7 @@ function MediaPage() {
                       </div>
                       <div className="text-xs text-muted-foreground md:col-span-4">
                         {row.providerRequests > 0
-                          ? `Provider/CDN ${row.providerRequests} req · ${formatBytes(row.providerBytesServed)} served · synced ${formatAuditDate(row.providerLastSyncedAt || '')}.`
+                          ? formatProviderAnalyticsSummary(row)
                           : row.requests > 0
                             ? `Last Backy delivery ${formatAuditDate(row.lastDeliveredAt || '')}.`
                           : row.provider === 'local' || row.provider === 'unknown'
@@ -5105,6 +5122,51 @@ function MediaPage() {
                             disabled={isMediaMutationBusy}
                           />
                         </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Conversions</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={providerAnalyticsConversions}
+                            onChange={(event) => setProviderAnalyticsConversions(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            placeholder="0"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Conversion value</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={providerAnalyticsValue}
+                            onChange={(event) => setProviderAnalyticsValue(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            placeholder="0"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Currency</span>
+                          <input
+                            value={providerAnalyticsCurrency}
+                            onChange={(event) => setProviderAnalyticsCurrency(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            placeholder="USD"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Attribution window</span>
+                          <input
+                            value={providerAnalyticsAttributionWindow}
+                            onChange={(event) => setProviderAnalyticsAttributionWindow(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            placeholder="last-click"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
                       </div>
                       {selectedProviderAnalytics && (
                         <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
@@ -5119,6 +5181,18 @@ function MediaPage() {
                           <div className="rounded bg-background px-2 py-1.5">
                             <dt className="text-muted-foreground">Source window</dt>
                             <dd className="mt-1 font-mono">{selectedProviderAnalytics.source} · {selectedProviderAnalytics.reportingWindow}</dd>
+                          </div>
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Conversions</dt>
+                            <dd className="mt-1 font-mono">{selectedProviderAnalytics.conversions} · {selectedProviderAnalytics.conversionRate}%</dd>
+                          </div>
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Attributed value</dt>
+                            <dd className="mt-1 font-mono">{selectedProviderAnalytics.currency} {selectedProviderAnalytics.conversionValue.toFixed(2)}</dd>
+                          </div>
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Attribution</dt>
+                            <dd className="mt-1 font-mono">{selectedProviderAnalytics.attributionWindow}</dd>
                           </div>
                         </dl>
                       )}
@@ -6352,6 +6426,10 @@ type MediaAnalytics = {
     bytesServed: number;
     providerRequests: number;
     providerBytesServed: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    providerConversionRate: number;
+    providerCurrency?: string;
     providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
   }>;
@@ -6429,6 +6507,11 @@ type MediaDeliveryAnalytics = {
 type MediaProviderDeliveryAnalytics = {
   totalRequests: number;
   bytesServed: number;
+  conversions: number;
+  conversionValue: number;
+  conversionRate: number;
+  currency: string;
+  attributionWindow: string;
   source: string;
   reportingWindow: string;
   lastSyncedAt: string;
@@ -6495,6 +6578,11 @@ const getMediaProviderDeliveryAnalytics = (metadata: Record<string, unknown> | u
   return {
     totalRequests: numberValue(record.totalRequests),
     bytesServed: numberValue(record.bytesServed),
+    conversions: numberValue(record.conversions),
+    conversionValue: numberValue(record.conversionValue),
+    conversionRate: numberValue(record.conversionRate),
+    currency: typeof record.currency === 'string' && record.currency.trim().length > 0 ? record.currency.trim().toUpperCase() : 'USD',
+    attributionWindow: typeof record.attributionWindow === 'string' && record.attributionWindow.trim().length > 0 ? record.attributionWindow.trim() : 'not specified',
     source: typeof record.source === 'string' && record.source.trim().length > 0 ? record.source.trim() : 'provider-console',
     reportingWindow: typeof record.reportingWindow === 'string' && record.reportingWindow.trim().length > 0 ? record.reportingWindow.trim() : 'not specified',
     lastSyncedAt,
@@ -6657,6 +6745,9 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     bytesServed: number;
     providerRequests: number;
     providerBytesServed: number;
+    providerConversions: number;
+    providerConversionValue: number;
+    providerCurrency?: string;
     providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
   }>();
@@ -6687,6 +6778,9 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       bytesServed: 0,
       providerRequests: 0,
       providerBytesServed: 0,
+      providerConversions: 0,
+      providerConversionValue: 0,
+      providerCurrency: undefined,
       providerLastSyncedAt: undefined,
       lastDeliveredAt: undefined,
     };
@@ -6700,6 +6794,9 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       bytesServed: currentProvider.bytesServed + (delivery?.bytesServed || 0),
       providerRequests: currentProvider.providerRequests + (providerDelivery?.totalRequests || 0),
       providerBytesServed: currentProvider.providerBytesServed + (providerDelivery?.bytesServed || 0),
+      providerConversions: currentProvider.providerConversions + (providerDelivery?.conversions || 0),
+      providerConversionValue: currentProvider.providerConversionValue + (providerDelivery?.conversionValue || 0),
+      providerCurrency: providerDelivery?.currency || currentProvider.providerCurrency,
       providerLastSyncedAt: [currentProvider.providerLastSyncedAt, providerDelivery?.lastSyncedAt]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .sort()
@@ -6753,6 +6850,7 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       .map(([provider, value]) => ({
         provider,
         ...value,
+        providerConversionRate: value.providerRequests > 0 ? Number(((value.providerConversions / value.providerRequests) * 100).toFixed(4)) : 0,
       }))
       .sort((a, b) => b.requests - a.requests || b.bytes - a.bytes || b.count - a.count),
   };
@@ -6967,6 +7065,27 @@ const formatAuditDate = (value: string) => {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+};
+
+const formatProviderAnalyticsValue = (value: number, currency?: string) => {
+  const amount = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return `${currency || 'USD'} ${amount.toFixed(2)}`;
+};
+
+const formatProviderAnalyticsSummary = (row: MediaAnalytics['providerRows'][number]) => {
+  const parts = [
+    `Provider/CDN ${row.providerRequests} req`,
+    `${formatBytes(row.providerBytesServed)} served`,
+  ];
+
+  if (row.providerConversions > 0 || row.providerConversionValue > 0) {
+    parts.push(`${row.providerConversions} conv`);
+    parts.push(formatProviderAnalyticsValue(row.providerConversionValue, row.providerCurrency));
+    parts.push(`${row.providerConversionRate}% CVR`);
+  }
+
+  parts.push(`synced ${formatAuditDate(row.providerLastSyncedAt || '')}`);
+  return `${parts.join(' · ')}.`;
 };
 
 const mediaAuditTitle = (log: AdminAuditLog) => {

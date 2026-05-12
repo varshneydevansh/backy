@@ -776,6 +776,10 @@ const generateSignedUrl = async (client) => {
 const recordProviderMetricsThroughDetails = async (client) => {
   await setDetailsField(client, 'Provider requests', 42);
   await setDetailsField(client, 'Provider bytes served', 2048);
+  await setDetailsField(client, 'Conversions', 3);
+  await setDetailsField(client, 'Conversion value', 120.5);
+  await setDetailsField(client, 'Currency', 'USD');
+  await setDetailsField(client, 'Attribution window', 'last-click');
   await setDetailsField(client, 'Analytics source', 'media-smoke-cdn');
   await setDetailsField(client, 'Reporting window', 'smoke-window');
   await clickDetailsButton(client, 'Record provider metrics');
@@ -788,6 +792,10 @@ const recordProviderMetricsThroughDetails = async (client) => {
         ready: text.includes('Provider metrics recorded') &&
           text.includes('42') &&
           text.includes('2 KB') &&
+          text.includes('3') &&
+          text.includes('120.50') &&
+          text.includes('USD') &&
+          text.includes('last-click') &&
           text.includes('media-smoke-cdn') &&
           text.includes('smoke-window'),
         text: text.slice(0, 1600),
@@ -820,6 +828,10 @@ const ingestProviderMetricsThroughApi = async (media) => {
           storagePath,
           requests: 8,
           bytes: 1024,
+          conversions: 2,
+          conversionValue: 45.75,
+          currency: 'USD',
+          attributionWindow: 'view-through-7d',
           lastDeliveredAt: new Date().toISOString(),
         },
         {
@@ -1352,6 +1364,10 @@ const main = async () => {
       item.id === publicImage.id &&
       item.metadata?.providerDelivery?.totalRequests === 42 &&
       item.metadata?.providerDelivery?.bytesServed === 2048 &&
+      item.metadata?.providerDelivery?.conversions === 3 &&
+      item.metadata?.providerDelivery?.conversionValue === 120.5 &&
+      item.metadata?.providerDelivery?.currency === 'USD' &&
+      item.metadata?.providerDelivery?.attributionWindow === 'last-click' &&
       item.metadata?.providerDelivery?.source === 'media-smoke-cdn'
     ));
     assert(providerMetricImage.metadata.providerDelivery.reportingWindow === 'smoke-window', 'Provider metrics did not persist the reporting window.');
@@ -1360,6 +1376,10 @@ const main = async () => {
       item.id === publicImage.id &&
       item.metadata?.providerDelivery?.totalRequests === 50 &&
       item.metadata?.providerDelivery?.bytesServed === 3072 &&
+      item.metadata?.providerDelivery?.conversions === 5 &&
+      item.metadata?.providerDelivery?.conversionValue === 166.25 &&
+      item.metadata?.providerDelivery?.currency === 'USD' &&
+      item.metadata?.providerDelivery?.attributionWindow === 'view-through-7d' &&
       item.metadata?.providerDelivery?.source === 'media-smoke-provider-ingest' &&
       item.metadata?.providerDelivery?.reportingWindow === 'automated-smoke-window' &&
       item.metadata?.providerDelivery?.ingestMode === 'increment' &&
