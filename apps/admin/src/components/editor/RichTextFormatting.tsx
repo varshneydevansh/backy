@@ -1072,17 +1072,21 @@ export function RichTextFormatting({
   }, []);
 
   const runMark = useCallback((format: string, value?: any) => {
-    if (!canUseActiveTextFormatting()) {
-      if (canTargetEditorControlContent()) {
-        const didApply = runForTextSelectionOrCaret(() => {
-          applyTextMarkToActiveEditor(format, value);
+    if (canTargetEditorControlContent()) {
+      const didApply = runForTextSelectionOrCaretNoFallback(() => {
+        applyTextMarkToActiveEditor(format, value);
+      });
+
+      if (!didApply) {
+        logTextAction('runMark.active-editor-apply-failed', {
+          format,
+          actionName: activePropertyActionRef.current,
         });
-
-        if (didApply) {
-          return;
-        }
       }
+      return;
+    }
 
+    if (!canUseActiveTextFormatting()) {
       applyTextMarkToElementContent(format, value);
       return;
     }
@@ -1099,8 +1103,8 @@ export function RichTextFormatting({
     applyTextMarkToElementContent,
     canUseActiveTextFormatting,
     canTargetEditorControlContent,
-    runForTextSelectionOrCaret,
     runForTextSelectionOrCaretNoFallback,
+    logTextAction,
   ]);
 
   const toggleTextMark = useCallback((format: string) => {
@@ -1305,7 +1309,7 @@ export function RichTextFormatting({
     setSelectedFontValue(value);
     runContentProperty('fontFamily', () => {
       runMark('fontFamily', value === 'inherit' ? '' : value);
-    }, { requireActiveEditor: false });
+    });
   }, [runMark, runContentProperty]);
 
   const onFontSizeChange = useCallback((value: string) => {
@@ -1324,7 +1328,7 @@ export function RichTextFormatting({
         setSelectedFontSizeValue(`${clamped}`);
         runMark('fontSize', `${clamped}px`);
       }
-    }, { requireActiveEditor: false });
+    });
   }, [runMark, runContentProperty]);
 
   const onFontSizeCommit = useCallback((value: string) => {
@@ -1777,7 +1781,10 @@ export function RichTextFormatting({
           <select
             onChange={(event) => onFontFamilyChange(event.target.value)}
             value={selectedFontValue}
-            onMouseDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => {
+              storeSelection();
+              event.stopPropagation();
+            }}
               className={cn("w-full min-w-0 px-2 py-1.5 text-sm rounded-md border bg-background", "hover:bg-accent")}
               data-testid="rich-text-font-family"
               title="Selected font family"
@@ -1804,6 +1811,7 @@ export function RichTextFormatting({
             value={selectedFontSizeValue}
             placeholder="px"
             onMouseDown={(e) => {
+              storeSelection();
               e.stopPropagation();
             }}
             onChange={(event) => onFontSizeChange(event.target.value)}
@@ -1845,12 +1853,13 @@ export function RichTextFormatting({
           <span className="ml-auto inline-flex" ref={textColorTriggerRef}>
             <ColorPicker
               value={selectedFontColorValue}
+              testId="rich-text-text-color"
               triggerRef={textColorTriggerRef}
               onChange={(c) => {
                 setSelectedFontColorValue(c);
                 runContentProperty('textColor', () => {
                   runMark('color', c);
-                }, { requireActiveEditor: false });
+                });
               }}
             />
           </span>
@@ -1861,12 +1870,13 @@ export function RichTextFormatting({
           <span className="ml-auto inline-flex" ref={highlightColorTriggerRef}>
             <ColorPicker
               value={selectedHighlightColorValue}
+              testId="rich-text-highlight-color"
               triggerRef={highlightColorTriggerRef}
               onChange={(c) => {
                 setSelectedHighlightColorValue(c);
                 runContentProperty('highlight', () => {
                   runMark('backgroundColor', c);
-                }, { requireActiveEditor: false });
+                });
               }}
               className="ml-auto"
             />

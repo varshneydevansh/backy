@@ -373,7 +373,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - explicit mark clearing helper for font family/size/ color / background / decoration.
 
 ### ⚠️ Remaining
-- Verify custom font/color/size application in selected-text flows for text blocks (especially legacy list/content transitions).
 - Finalize media scope model and API contract (global vs page/blog-scoped assets).
 - Finish blog post editor flow via dedicated template-backed page.
 - Ensure list property parity for box/container section:
@@ -385,6 +384,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shared admin status badges now normalize empty, whitespace, literal `null`/`undefined`, and unknown status strings to stable labels/types instead of rendering blank or misleading labels.
 - Media library visibility and safety status labels now use the shared status badge path, matching the user and blog tables.
 - Covered by `npm run test:status-badge --workspace @backy-cms/admin`.
+
+### ✅ Selected rich-text style controls
+- Selected text range controls now preserve Slate selection across inspector focus changes for italic, clear formatting, font size, font family, and text color.
+- Native input/select/color controls avoid stale whole-element content fallback while an active rich-text editor is targeted.
+- Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:

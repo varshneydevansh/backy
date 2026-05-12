@@ -92,9 +92,9 @@ export function RichTextBlock({
             return;
         }
 
-        storeSelectionAsync();
+        storeSelection();
         onBlur?.();
-    }, [isEditable, onBlur, storeSelectionAsync]);
+    }, [isEditable, onBlur, storeSelection]);
 
     // Ensure content is valid Slate JSON
     const initialValue = useMemo(() => {

@@ -1444,6 +1444,11 @@ export function Canvas({
     return editorHost.getAttribute('data-backy-text-editor-editable') === 'true';
   }, [getTargetElement]);
 
+  const isInspectorInteraction = useCallback((target: EventTarget | null) => {
+    const element = getTargetElement(target);
+    return !!element?.closest?.('[data-testid="editor-inspector"]');
+  }, [getTargetElement]);
+
   const exitTextEditingForTransform = useCallback(() => {
     setEditingId(null);
     clearActiveEditor();
@@ -2086,7 +2091,7 @@ export function Canvas({
       return;
     }
 
-    if (isTextEditorInteraction(eventTarget)) {
+    if (isTextEditorInteraction(eventTarget) || isInspectorInteraction(eventTarget)) {
       debugTextInteraction('handleCanvasClick skipped in text editor', {
         targetTag: (eventTarget as Element | null)?.tagName,
       });
@@ -2098,7 +2103,7 @@ export function Canvas({
       setEditingId(null);
       clearActiveEditor();
     }
-  }, [clearActiveEditor, isPreview, isTextEditorInteraction, onSelect]);
+  }, [clearActiveEditor, isInspectorInteraction, isPreview, isTextEditorInteraction, onSelect]);
 
   const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
     if (disabled) {

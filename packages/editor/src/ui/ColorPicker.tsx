@@ -19,6 +19,7 @@ export interface ColorPickerProps {
   className?: string;
   icon?: React.ReactNode;
   tooltip?: string;
+  testId?: string;
   triggerRef?: React.RefObject<HTMLElement | null> | null;
 }
 
@@ -33,6 +34,7 @@ export const ColorPicker = ({
   className,
   icon,
   tooltip,
+  testId,
   triggerRef,
 }: ColorPickerProps) => {
   const [open, setOpen] = useState(false);
@@ -206,6 +208,7 @@ export const ColorPicker = ({
           setOpen(!open);
         }}
         className="p-1.5 rounded-md hover:bg-muted/80 transition-all flex items-center justify-center h-7 w-7 relative"
+        data-testid={testId}
         title={tooltip}
       >
         {icon || <Palette className="w-4 h-4" />}

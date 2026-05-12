@@ -167,6 +167,20 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
   const setActiveEditor = useCallback((editor: PlateEditor | null, elementId: string | null = null) => {
     const normalizedElementId = editor ? elementId || null : null;
+    const previousEditor = activeEditorRef.current;
+    const previousElementId = activeEditorElementIdRef.current;
+    const incomingSelection = editor?.selection || null;
+    const storedRange = storedSelection.current;
+    const shouldPreserveStoredRange = !!editor
+      && previousEditor === editor
+      && previousElementId === normalizedElementId
+      && storedRange
+      && Range.isRange(storedRange)
+      && !Range.isCollapsed(storedRange)
+      && Node.has(editor as any, storedRange.anchor.path)
+      && Node.has(editor as any, storedRange.focus.path)
+      && (!incomingSelection || !Range.isRange(incomingSelection) || Range.isCollapsed(incomingSelection));
+
     debug('setActiveEditor', {
       hasEditor: !!editor,
       editorElementId: normalizedElementId,
@@ -178,7 +192,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     setActiveEditorState(editor);
     activeEditorElementIdRef.current = normalizedElementId;
     setActiveEditorElementId(normalizedElementId);
-    setStoredSelection(editor?.selection || null);
+    if (!shouldPreserveStoredRange) {
+      setStoredSelection(incomingSelection);
+    }
   }, [setStoredSelection, debug, describeSelection]);
 
   const clearActiveEditor = useCallback((editor?: PlateEditor | null) => {

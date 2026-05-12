@@ -1332,6 +1332,38 @@ const mouseDownControlByTestId = async (client, testId) => {
   return state;
 };
 
+const dispatchMouseDownByTestId = async (client, testId) => {
+  const state = await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="${testId}"]');
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-control',
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+
+    control.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      view: window,
+    }));
+    return {
+      ok: true,
+      testId: ${JSON.stringify(testId)},
+      tagName: control.tagName,
+      value: control.value || '',
+    };
+  })()`);
+
+  assert(state?.ok, `Unable to mouse down ${testId}: ${JSON.stringify(state)}`);
+  await sleep(150);
+  return state;
+};
+
 const clickButtonByAriaLabel = async (client, ariaLabel) => {
   const clicked = await evaluate(client, `(() => {
     const button = document.querySelector('button[aria-label="${ariaLabel}"]');
@@ -2752,6 +2784,9 @@ const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-hea
         fontStyle: style?.fontStyle || '',
         textDecoration: style?.textDecorationLine || '',
         fontFamily: style?.fontFamily || '',
+        fontSize: style?.fontSize || '',
+        color: style?.color || '',
+        backgroundColor: style?.backgroundColor || '',
       };
     });
     return {
@@ -2890,6 +2925,9 @@ const readRichTextLeafState = async (client, elementId) => {
         fontStyle: style?.fontStyle || '',
         textDecoration: style?.textDecorationLine || '',
         fontFamily: style?.fontFamily || '',
+        fontSize: style?.fontSize || '',
+        color: style?.color || '',
+        backgroundColor: style?.backgroundColor || '',
       };
     });
     return {
@@ -2941,6 +2979,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(betaLeaf?.fontStyle === 'italic', `Selected range was not italic: ${JSON.stringify(state)}`);
   assert(unselectedLeaf?.fontStyle !== 'italic', `Unselected leading range was unexpectedly italic: ${JSON.stringify(state)}`);
 
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   await mouseDownControlByTestId(client, 'rich-text-clear-formatting');
   await sleep(500);
@@ -2949,11 +2988,76 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   const clearedBetaLeaf = clearedState.marked.find((leaf) => leaf.text.includes('Beta'));
   assert(clearedBetaLeaf?.fontStyle !== 'italic', `Clear formatting did not clear selected range: ${JSON.stringify(clearedState)}`);
 
+  await activateTextEditing(client, elementId);
+  await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
+  await setFormControlByTestId(client, 'rich-text-font-size', '32');
+  await sleep(500);
+
+  const sizedState = await readRichTextLeafState(client, elementId);
+  const sizedAlphaLeaf = sizedState.marked.find((leaf) => leaf.text.includes('Alpha'));
+  const unsizedBetaLeaf = sizedState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(sizedAlphaLeaf?.fontSize === '32px', `Selected range font size was not applied: ${JSON.stringify(sizedState)}`);
+  assert(unsizedBetaLeaf?.fontSize !== '32px', `Unselected range unexpectedly received font size: ${JSON.stringify(sizedState)}`);
+
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await dispatchMouseDownByTestId(client, 'rich-text-font-family');
+  await setFormControlByTestId(client, 'rich-text-font-family', 'Georgia, serif');
+  await sleep(500);
+
+  const fontFamilyState = await readRichTextLeafState(client, elementId);
+  const familyBetaLeaf = fontFamilyState.marked.find((leaf) => leaf.text.includes('Beta'));
+  const familyAlphaLeaf = fontFamilyState.marked.find((leaf) => leaf.text.includes('Alpha'));
+  assert(familyBetaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Selected range font family was not applied: ${JSON.stringify(fontFamilyState)}`);
+  assert(!familyAlphaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Unselected range unexpectedly received font family: ${JSON.stringify(fontFamilyState)}`);
+
+  await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
+  await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
+  await sleep(500);
+
+  const colorState = await readRichTextLeafState(client, elementId);
+  const colorAlphaLeaf = colorState.marked.find((leaf) => leaf.text.includes('Alpha'));
+  const colorBetaLeaf = colorState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(colorAlphaLeaf?.color === 'rgb(255, 0, 0)', `Selected range text color was not applied: ${JSON.stringify(colorState)}`);
+  assert(colorBetaLeaf?.color !== 'rgb(255, 0, 0)', `Unselected range unexpectedly received text color: ${JSON.stringify(colorState)}`);
+
   return {
     selected,
     afterItalic: state,
     afterClear: clearedState,
+    afterFontSize: sizedState,
+    afterFontFamily: fontFamilyState,
+    afterColor: colorState,
   };
+};
+
+const selectColorPickerValue = async (client, testId, color) => {
+  await mouseDownControlByTestId(client, testId);
+  await sleep(150);
+
+  const selected = await evaluate(client, `(() => {
+    const swatch = Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('title') === ${JSON.stringify(color)});
+    if (!(swatch instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-swatch',
+        color: ${JSON.stringify(color)},
+        openPopoverText: document.body.textContent?.slice(-1000) || '',
+      };
+    }
+
+    swatch.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      view: window,
+    }));
+    return { ok: true, color: ${JSON.stringify(color)} };
+  })()`);
+
+  assert(selected?.ok, `Unable to select ${color} from ${testId}: ${JSON.stringify(selected)}`);
+  await sleep(350);
+  return selected;
 };
 
 const clickSave = async (client) => {
