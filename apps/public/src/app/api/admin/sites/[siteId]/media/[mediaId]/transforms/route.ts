@@ -114,7 +114,7 @@ const mediaUsageBytes = (items: Array<{ sizeBytes?: number; metadata?: unknown }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  const access = requireAdminAccess(request, requestId, { permission: 'media.edit' });
   if (access instanceof NextResponse) {
     return access;
   }

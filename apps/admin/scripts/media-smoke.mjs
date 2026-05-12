@@ -114,6 +114,100 @@ const setAdminPermissionOverrides = async (overrides) => {
   });
 };
 
+const expectForbiddenPermission = async (endpoint, options = {}, label = endpoint) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !(options.body instanceof FormData) && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `${label} should reject denied permission with 403, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `${label} should return FORBIDDEN_PERMISSION, got: ${JSON.stringify(payload).slice(0, 500)}`);
+};
+
+const assertMediaMutationPermissionOverridesAreEnforced = async () => {
+  const fakeMediaId = 'media-denied-permission-smoke';
+  const fakeFolderId = 'folder-denied-permission-smoke';
+  const fakeVersionId = 'version-denied-permission-smoke';
+
+  try {
+    await setAdminPermissionOverrides({
+      'media.create': 'deny',
+    });
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }, 'Denied media.create upload');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/folders`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Denied media folder' }),
+    }, 'Denied media.create folder');
+
+    await setAdminPermissionOverrides({
+      'media.create': null,
+      'media.edit': 'deny',
+    });
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ altText: 'Denied edit' }),
+    }, 'Denied media.edit metadata update');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }, 'Denied media.edit replacement');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}/bind`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'bind', targetType: 'page', targetId: 'page-home' }),
+    }, 'Denied media.edit binding');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}/transforms`, {
+      method: 'POST',
+      body: JSON.stringify({ widths: [320] }),
+    }, 'Denied media.edit transforms');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}/versions/${fakeVersionId}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Denied restore' }),
+    }, 'Denied media.edit retained-version restore');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/folders/${fakeFolderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Denied folder edit' }),
+    }, 'Denied media.edit folder update');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/provider-analytics`, {
+      method: 'POST',
+      body: JSON.stringify({
+        entries: [{ mediaId: fakeMediaId, totalRequests: 1 }],
+      }),
+    }, 'Denied media.edit provider analytics');
+
+    await setAdminPermissionOverrides({
+      'media.edit': null,
+      'media.delete': 'deny',
+    });
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}`, {
+      method: 'DELETE',
+    }, 'Denied media.delete asset delete');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}/versions/${fakeVersionId}`, {
+      method: 'DELETE',
+    }, 'Denied media.delete retained-version delete');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/folders/${fakeFolderId}`, {
+      method: 'DELETE',
+    }, 'Denied media.delete folder delete');
+  } finally {
+    await setAdminPermissionOverrides({
+      'media.create': null,
+      'media.edit': null,
+      'media.delete': null,
+    });
+  }
+};
+
 const assertMediaConfigurePermissionIsEnforced = async () => {
   await setAdminPermissionOverrides({
     'media.configure': 'deny',
@@ -571,7 +665,7 @@ const assertMediaActivityDetails = async (client, expectedText) => {
       }
       return {
         hasFilter: filter instanceof HTMLSelectElement,
-        hasPermission: document.body?.innerText?.includes('media.create') || false,
+        hasPermission: document.body?.innerText?.includes('media.edit') || false,
         hasBefore: document.body?.innerText?.includes('Before') || false,
         hasAfter: document.body?.innerText?.includes('After') || false,
         hasExpected: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
@@ -1354,6 +1448,7 @@ const main = async () => {
   try {
     await loginAdminApi();
     await assertMediaConfigurePermissionIsEnforced();
+    await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     const existing = await listMedia(marker);

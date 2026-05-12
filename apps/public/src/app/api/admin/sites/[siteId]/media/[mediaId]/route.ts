@@ -315,7 +315,7 @@ const mediaScopeValidationError = (
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  const access = requireAdminAccess(request, requestId, { permission: 'media.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -474,7 +474,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  const access = requireAdminAccess(request, requestId, { permission: 'media.edit' });
   if (access instanceof NextResponse) {
     return access;
   }

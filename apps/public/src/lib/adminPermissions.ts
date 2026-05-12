@@ -119,7 +119,8 @@ const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
     description: 'Images, videos, files, fonts, folders, signed URLs, and transforms.',
     permissions: [
       { key: 'media.view', label: 'View media library', capability: 'view', roles: allRoles },
-      { key: 'media.create', label: 'Upload and organize media', capability: 'create', roles: contentRoles },
+      { key: 'media.create', label: 'Upload media and create folders', capability: 'create', roles: contentRoles },
+      { key: 'media.edit', label: 'Edit media metadata and delivery assets', capability: 'edit', roles: contentRoles },
       { key: 'media.configure', label: 'Configure storage metadata', capability: 'configure', roles: adminRoles },
       { key: 'media.delete', label: 'Delete media assets', capability: 'delete', roles: adminRoles },
     ],

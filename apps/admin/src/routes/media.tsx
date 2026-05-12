@@ -7280,7 +7280,7 @@ const MediaVersionPreview = ({
   );
 };
 
-type MediaPermissionKey = 'media.view' | 'media.create' | 'media.configure' | 'media.delete' | 'activity.export';
+type MediaPermissionKey = 'media.view' | 'media.create' | 'media.edit' | 'media.configure' | 'media.delete' | 'activity.export';
 type MediaAdminRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 const MEDIA_ACCESS_RULES: Array<{
@@ -7289,7 +7289,8 @@ const MEDIA_ACCESS_RULES: Array<{
   roles: MediaAdminRole[];
 }> = [
   { permission: 'media.view', label: 'View library', roles: ['owner', 'admin', 'editor', 'viewer'] },
-  { permission: 'media.create', label: 'Upload and organize', roles: ['owner', 'admin', 'editor'] },
+  { permission: 'media.create', label: 'Upload and create folders', roles: ['owner', 'admin', 'editor'] },
+  { permission: 'media.edit', label: 'Edit metadata and delivery', roles: ['owner', 'admin', 'editor'] },
   { permission: 'media.configure', label: 'Configure storage', roles: ['owner', 'admin'] },
   { permission: 'media.delete', label: 'Delete assets', roles: ['owner', 'admin'] },
   { permission: 'activity.export', label: 'Read audit feed', roles: ['owner', 'admin'] },
@@ -7367,8 +7368,11 @@ const mediaAuditPermission = (action: string): MediaPermissionKey => {
   if (action === 'delete') return 'media.delete';
   if (action === 'media.signed-url' || action === 'media.delivery') return 'media.view';
   if (action === 'media.configure') return 'media.configure';
-  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace' || action === 'media.version.restore' || action === 'media.provider-analytics.ingest') {
+  if (action === 'create') {
     return 'media.create';
+  }
+  if (action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace' || action === 'media.version.restore' || action === 'media.provider-analytics.ingest' || action === 'media.transforms.prepare') {
+    return 'media.edit';
   }
   if (action === 'media.version.delete') return 'media.delete';
   return 'activity.export';
