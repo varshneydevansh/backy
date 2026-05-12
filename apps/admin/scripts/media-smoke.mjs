@@ -805,6 +805,39 @@ const recordProviderMetricsThroughDetails = async (client) => {
   return null;
 };
 
+const ingestProviderMetricsThroughApi = async (media) => {
+  const storagePath = media.metadata?.storagePath;
+  assert(storagePath, 'Provider analytics ingest smoke needs the media storage path.');
+
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/provider-analytics`, {
+    method: 'POST',
+    body: JSON.stringify({
+      source: 'media-smoke-provider-ingest',
+      reportingWindow: 'automated-smoke-window',
+      mergeMode: 'increment',
+      entries: [
+        {
+          storagePath,
+          requests: 8,
+          bytes: 1024,
+          lastDeliveredAt: new Date().toISOString(),
+        },
+        {
+          storagePath: `missing/${Date.now()}/asset.png`,
+          requests: 99,
+          bytes: 99,
+        },
+      ],
+    }),
+  });
+
+  assert(payload.data?.matchedCount === 1, `Provider analytics ingest did not match one asset: ${JSON.stringify(payload.data).slice(0, 500)}`);
+  assert(payload.data?.unmatchedCount === 1, `Provider analytics ingest did not report one unmatched entry: ${JSON.stringify(payload.data).slice(0, 500)}`);
+  assert(payload.data?.matched?.[0]?.matchedBy === 'storagePath', 'Provider analytics ingest did not match by storage path.');
+
+  return payload.data;
+};
+
 const replaceAssetThroughDetails = async (client, replacementPath, replacementName) => {
   const markResult = await evaluate(client, `(() => {
     const label = Array.from(document.querySelectorAll('label')).find((candidate) => (
@@ -1322,6 +1355,16 @@ const main = async () => {
       item.metadata?.providerDelivery?.source === 'media-smoke-cdn'
     ));
     assert(providerMetricImage.metadata.providerDelivery.reportingWindow === 'smoke-window', 'Provider metrics did not persist the reporting window.');
+    await ingestProviderMetricsThroughApi(providerMetricImage);
+    await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.metadata?.providerDelivery?.totalRequests === 50 &&
+      item.metadata?.providerDelivery?.bytesServed === 3072 &&
+      item.metadata?.providerDelivery?.source === 'media-smoke-provider-ingest' &&
+      item.metadata?.providerDelivery?.reportingWindow === 'automated-smoke-window' &&
+      item.metadata?.providerDelivery?.ingestMode === 'increment' &&
+      item.metadata?.providerDelivery?.matchedBy === 'storagePath'
+    ));
     await compareAssetVersionThroughDetails(client);
     await restoreAssetVersionThroughDetails(client);
     const restoredImage = await waitForMedia(marker, (item) => (

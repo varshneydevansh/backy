@@ -55,7 +55,7 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quarantined';
-type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.bind' | 'media.unbind' | 'delete';
+type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.provider-analytics.ingest' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
@@ -84,6 +84,7 @@ const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: 
   { value: 'media.version.restore', label: 'Version restores' },
   { value: 'media.version.delete', label: 'Version deletes' },
   { value: 'media.transforms.prepare', label: 'Transforms' },
+  { value: 'media.provider-analytics.ingest', label: 'Provider analytics' },
   { value: 'media.bind', label: 'Bindings' },
   { value: 'media.unbind', label: 'Unbindings' },
   { value: 'delete', label: 'Deletes' },
@@ -728,6 +729,7 @@ function MediaPage() {
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
   const adminMediaFoldersUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders`;
   const adminMediaFolderUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders/{folderId}`;
+  const adminMediaProviderAnalyticsUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/provider-analytics`;
   const mediaRouteSearch = useMemo<MediaSearch>(() => ({
     siteId,
     ...(selectedAsset ? { assetId: selectedAsset.id } : {}),
@@ -1167,6 +1169,7 @@ function MediaPage() {
       adminUpload: adminMediaUploadUrl,
       adminFolders: adminMediaFoldersUrl,
       adminFolder: adminMediaFolderUrl,
+      adminProviderAnalytics: adminMediaProviderAnalyticsUrl,
     },
     controlRoutes: Object.fromEntries(MEDIA_USAGE_SURFACES.map((surface) => [
       surface.title,
@@ -1200,6 +1203,7 @@ function MediaPage() {
       backyBytesServed: row.bytesServed,
       lastBackyDelivery: row.lastDeliveredAt,
       directCdnAnalytics: row.provider === 'local' || row.provider === 'unknown' ? 'not-configured' : 'provider-console',
+      providerAnalyticsIngest: adminMediaProviderAnalyticsUrl,
     })),
     folders: folderOptions.map((folder) => ({
       id: folder.id,
@@ -1252,6 +1256,7 @@ function MediaPage() {
     adminMediaUploadUrl,
     adminMediaFolderUrl,
     adminMediaFoldersUrl,
+    adminMediaProviderAnalyticsUrl,
     displayedFiles.length,
     files,
     folderAssetCounts,
@@ -3050,6 +3055,7 @@ function MediaPage() {
             <MediaApiSnippet label="Admin upload" value={adminMediaUploadUrl} />
             <MediaApiSnippet label="Admin folders" value={adminMediaFoldersUrl} />
             <MediaApiSnippet label="Admin folder detail" value={adminMediaFolderUrl} />
+            <MediaApiSnippet label="Provider analytics ingest" value={adminMediaProviderAnalyticsUrl} />
           </div>
         </PanelContent>
       </Panel>
@@ -6972,6 +6978,7 @@ const mediaAuditTitle = (log: AdminAuditLog) => {
   if (log.action === 'media.replace') return 'Asset file replaced';
   if (log.action === 'media.version.restore') return 'Retained version restored';
   if (log.action === 'media.version.delete') return 'Retained version deleted';
+  if (log.action === 'media.provider-analytics.ingest') return 'Provider analytics ingested';
   return log.action;
 };
 
@@ -6979,7 +6986,7 @@ const mediaAuditPermission = (action: string): MediaPermissionKey => {
   if (action === 'delete') return 'media.delete';
   if (action === 'media.signed-url' || action === 'media.delivery') return 'media.view';
   if (action === 'media.configure') return 'media.configure';
-  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace' || action === 'media.version.restore') {
+  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace' || action === 'media.version.restore' || action === 'media.provider-analytics.ingest') {
     return 'media.create';
   }
   if (action === 'media.version.delete') return 'media.delete';
@@ -7046,6 +7053,25 @@ const mediaAuditDetails = (log: AdminAuditLog): Array<{ label: string; value: st
     }
     if (retainedFilename) {
       details.push({ label: 'Retained current file', value: retainedFilename });
+    }
+  }
+
+  if (log.action === 'media.provider-analytics.ingest') {
+    const source = auditText(metadata?.source);
+    const reportingWindow = auditText(metadata?.reportingWindow);
+    const totalRequests = auditValue(metadata, 'totalRequests');
+    const bytesServed = Number(metadata?.bytesServed);
+    if (source) {
+      details.push({ label: 'Source', value: source });
+    }
+    if (reportingWindow) {
+      details.push({ label: 'Window', value: reportingWindow });
+    }
+    if (totalRequests) {
+      details.push({ label: 'Requests', value: totalRequests });
+    }
+    if (Number.isFinite(bytesServed)) {
+      details.push({ label: 'Bytes served', value: formatBytes(bytesServed) });
     }
   }
 
@@ -7126,6 +7152,12 @@ const mediaAuditDescription = (log: AdminAuditLog) => {
     const restoredFilename = auditText(metadata?.restoredFilename);
     const retainedFilename = auditText(metadata?.retainedFilename);
     return `${restoredFilename || 'A retained version'} was restored${retainedFilename ? ` and ${retainedFilename} was retained` : ''}.`;
+  }
+
+  if (log.action === 'media.provider-analytics.ingest') {
+    const source = auditText(metadata?.source);
+    const totalRequests = auditValue(metadata, 'totalRequests');
+    return `Provider analytics${source ? ` from ${source}` : ''} recorded${totalRequests ? ` ${totalRequests} requests` : ''}.`;
   }
 
   if (log.action === 'delete') {
