@@ -442,6 +442,8 @@ const openMediaDetails = async (client, assetName) => {
       (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Edit metadata for ${assetName}`)}
     )) || Array.from(document.querySelectorAll('button')).find((candidate) => (
       (candidate.textContent || '').trim() === ${JSON.stringify(`Open ${assetName}`)}
+    )) || Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').includes(${JSON.stringify(assetName)})
     ));
     if (!(button instanceof HTMLButtonElement)) {
       return {
@@ -814,6 +816,29 @@ const replaceAssetThroughDetails = async (client, replacementPath, replacementNa
     }
     if (attempt === 119) {
       throw new Error(`Media replacement did not finish in details dialog: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const restoreAssetVersionThroughDetails = async (client) => {
+  await clickDetailsButton(client, 'Restore');
+  await clickDetailsButton(client, 'Confirm restore');
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      restoring: document.body?.innerText?.includes('Restoring...') || false,
+      hasHistory: document.body?.innerText?.includes('Replacement history') || false,
+      hasVersionCount: document.body?.innerText?.includes('1 previous') || false,
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (!state.restoring && state.hasHistory && state.hasVersionCount) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Media retained version restore did not finish in details dialog: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -1227,6 +1252,23 @@ const main = async () => {
       versionsPayload.data?.source === 'database' || versionsPayload.data?.source === 'metadata',
       `Media versions endpoint did not report a valid source: ${JSON.stringify(versionsPayload.data).slice(0, 500)}`,
     );
+    await restoreAssetVersionThroughDetails(client);
+    const restoredImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.originalName === imageName &&
+      Array.isArray(item.metadata?.replacementVersions) &&
+      item.metadata.replacementVersions.length === 1 &&
+      item.metadata.replacementVersions[0]?.originalName === replacementName
+    ));
+    assert(restoredImage.id === publicImage.id, 'Media version restore changed the stable asset id.');
+    const versionsAfterRestorePayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions`);
+    const retainedAfterRestore = versionsAfterRestorePayload.data?.versions || [];
+    const retainedReplacementVersion = retainedAfterRestore.find((version) => version.originalName === replacementName);
+    assert(retainedReplacementVersion?.id, `Media version restore did not retain the displaced replacement: ${JSON.stringify(retainedAfterRestore).slice(0, 500)}`);
+    assert(
+      !retainedAfterRestore.some((version) => version.id === retainedOriginalVersion.id),
+      'Media version restore still returned the restored retained version as historical.',
+    );
     await assertMediaActivityDetails(client, imageName);
     await prepareVariantsThroughDetails(client);
     const transformedImage = await waitForMedia(marker, (item) => (
@@ -1278,7 +1320,7 @@ const main = async () => {
     await generateSignedUrl(client);
     await closeMediaDetails(client);
 
-    const deleteVersionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions/${retainedOriginalVersion.id}`, {
+    const deleteVersionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions/${retainedReplacementVersion.id}`, {
       method: 'DELETE',
     });
     assert(deleteVersionPayload.data?.deleted === true, 'Media retained version delete API did not report deletion.');
@@ -1289,7 +1331,7 @@ const main = async () => {
     const versionsAfterDeletePayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions`);
     const retainedAfterDelete = versionsAfterDeletePayload.data?.versions || [];
     assert(
-      !retainedAfterDelete.some((version) => version.id === retainedOriginalVersion.id),
+      !retainedAfterDelete.some((version) => version.id === retainedReplacementVersion.id),
       'Media versions endpoint still returned a deleted retained version.',
     );
 

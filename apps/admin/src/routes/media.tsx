@@ -38,6 +38,7 @@ import {
   listMediaVersions,
   prepareMediaTransforms,
   replaceMedia,
+  restoreMediaVersion,
   updateMediaFolder,
   updateMedia,
   uploadMedia,
@@ -54,7 +55,7 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quarantined';
-type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.delete' | 'media.transforms.prepare' | 'media.bind' | 'media.unbind' | 'delete';
+type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
@@ -80,6 +81,7 @@ const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: 
   { value: 'create', label: 'Uploads' },
   { value: 'update', label: 'Metadata edits' },
   { value: 'media.replace', label: 'Replacements' },
+  { value: 'media.version.restore', label: 'Version restores' },
   { value: 'media.version.delete', label: 'Version deletes' },
   { value: 'media.transforms.prepare', label: 'Transforms' },
   { value: 'media.bind', label: 'Bindings' },
@@ -587,6 +589,7 @@ function MediaPage() {
   const [isCreatingSignedUrl, setIsCreatingSignedUrl] = useState(false);
   const [isUpdatingBinding, setIsUpdatingBinding] = useState(false);
   const [isReplacingAsset, setIsReplacingAsset] = useState(false);
+  const [isRestoringAssetVersion, setIsRestoringAssetVersion] = useState(false);
   const [isDeletingAssetVersion, setIsDeletingAssetVersion] = useState(false);
   const [isPreparingTransforms, setIsPreparingTransforms] = useState(false);
   const [isUpdatingSafety, setIsUpdatingSafety] = useState(false);
@@ -636,6 +639,7 @@ function MediaPage() {
   const [bulkTagMode, setBulkTagMode] = useState<'keep' | 'merge' | 'replace' | 'clear'>('keep');
   const [bulkTags, setBulkTags] = useState('');
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
+  const [pendingRestoreVersionId, setPendingRestoreVersionId] = useState<string | null>(null);
   const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<string | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
@@ -696,6 +700,7 @@ function MediaPage() {
     isCreatingSignedUrl ||
     isUpdatingBinding ||
     isReplacingAsset ||
+    isRestoringAssetVersion ||
     isDeletingAssetVersion ||
     isPreparingTransforms ||
     isUpdatingSafety ||
@@ -1581,6 +1586,7 @@ function MediaPage() {
     setAssetVersionRecords([]);
     setAssetVersionSource(null);
     setIsLoadingAssetVersions(false);
+    setPendingRestoreVersionId(null);
     setPendingDeleteVersionId(null);
     setSignedUrl(null);
     setBindingTargetId('');
@@ -2203,6 +2209,7 @@ function MediaPage() {
 
     if (pendingDeleteVersionId !== version.id) {
       setPendingDeleteVersionId(version.id);
+      setPendingRestoreVersionId(null);
       return;
     }
 
@@ -2223,6 +2230,33 @@ function MediaPage() {
       setAssetReplacementError(deleteError instanceof Error ? deleteError.message : 'Unable to delete retained version.');
     } finally {
       setIsDeletingAssetVersion(false);
+    }
+  };
+
+  const handleRestoreAssetVersion = async (version: ReplacementVersion) => {
+    if (isMediaMutationBusy || !selectedAsset || !version.id) return;
+
+    if (pendingRestoreVersionId !== version.id) {
+      setPendingRestoreVersionId(version.id);
+      setPendingDeleteVersionId(null);
+      return;
+    }
+
+    setIsRestoringAssetVersion(true);
+    setAssetReplacementError(null);
+
+    try {
+      const result = await restoreMediaVersion(selectedAsset.id, version.id, siteId);
+      applyUpdatedAsset(result.media);
+      setPendingRestoreVersionId(null);
+      void loadLibrary();
+      void loadAssetAuditLogs(result.media.id);
+      void loadLibraryAuditLogs(0);
+      void loadAssetVersions(result.media.id);
+    } catch (restoreError) {
+      setAssetReplacementError(restoreError instanceof Error ? restoreError.message : 'Unable to restore retained version.');
+    } finally {
+      setIsRestoringAssetVersion(false);
     }
   };
 
@@ -5021,6 +5055,19 @@ function MediaPage() {
                               <Button
                                 type="button"
                                 size="sm"
+                                variant={pendingRestoreVersionId === version.id ? 'primary' : 'outline'}
+                                disabled={isMediaMutationBusy || !version.id}
+                                onClick={() => void handleRestoreAssetVersion(version)}
+                                title={version.id ? 'Restore retained version' : 'This retained version cannot be restored because it has no version id.'}
+                              >
+                                <RefreshCw className="size-3.5" />
+                                {pendingRestoreVersionId === version.id
+                                  ? (isRestoringAssetVersion ? 'Restoring...' : 'Confirm restore')
+                                  : 'Restore'}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
                                 variant={pendingDeleteVersionId === version.id ? 'danger' : 'outline'}
                                 disabled={isMediaMutationBusy || !version.id}
                                 onClick={() => void handleDeleteAssetVersion(version)}
@@ -6526,6 +6573,7 @@ const mediaAuditTitle = (log: AdminAuditLog) => {
   if (log.action === 'media.bind') return 'Asset bound to content';
   if (log.action === 'media.unbind') return 'Asset removed from content';
   if (log.action === 'media.replace') return 'Asset file replaced';
+  if (log.action === 'media.version.restore') return 'Retained version restored';
   if (log.action === 'media.version.delete') return 'Retained version deleted';
   return log.action;
 };
@@ -6534,7 +6582,7 @@ const mediaAuditPermission = (action: string): MediaPermissionKey => {
   if (action === 'delete') return 'media.delete';
   if (action === 'media.signed-url' || action === 'media.delivery') return 'media.view';
   if (action === 'media.configure') return 'media.configure';
-  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace') {
+  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace' || action === 'media.version.restore') {
     return 'media.create';
   }
   if (action === 'media.version.delete') return 'media.delete';
@@ -6590,6 +6638,17 @@ const mediaAuditDetails = (log: AdminAuditLog): Array<{ label: string; value: st
     const source = auditText(metadata?.source);
     if (source) {
       details.push({ label: 'Source', value: source });
+    }
+  }
+
+  if (log.action === 'media.version.restore') {
+    const restoredFilename = auditText(metadata?.restoredFilename);
+    const retainedFilename = auditText(metadata?.retainedFilename);
+    if (restoredFilename) {
+      details.push({ label: 'Restored', value: restoredFilename });
+    }
+    if (retainedFilename) {
+      details.push({ label: 'Retained current file', value: retainedFilename });
     }
   }
 
@@ -6664,6 +6723,12 @@ const mediaAuditDescription = (log: AdminAuditLog) => {
 
   if (log.action === 'media.version.delete') {
     return `${filename || 'A retained version'} was removed from replacement history.`;
+  }
+
+  if (log.action === 'media.version.restore') {
+    const restoredFilename = auditText(metadata?.restoredFilename);
+    const retainedFilename = auditText(metadata?.retainedFilename);
+    return `${restoredFilename || 'A retained version'} was restored${retainedFilename ? ` and ${retainedFilename} was retained` : ''}.`;
   }
 
   if (log.action === 'delete') {

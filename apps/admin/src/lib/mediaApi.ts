@@ -120,6 +120,22 @@ interface ApiMediaVersionDeleteResponse {
   };
 }
 
+interface ApiMediaVersionRestoreResponse {
+  success: boolean;
+  data?: {
+    restored: boolean;
+    mediaId: string;
+    versionId: string;
+    source: 'database' | 'metadata';
+    media: ApiMediaItem;
+    restoredVersion?: MediaVersionRecord;
+    retainedVersion?: MediaVersionRecord;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiMediaBindResponse {
   success: boolean;
   data?: {
@@ -653,6 +669,35 @@ export async function deleteMediaVersion(
     media: payload.data.media ? toMediaAsset(payload.data.media) : undefined,
     source: payload.data.source,
     version: payload.data.version,
+  };
+}
+
+export async function restoreMediaVersion(
+  mediaId: string,
+  versionId: string,
+  siteId = getDefaultMediaSiteId(),
+): Promise<{ media: MediaAsset; source: 'database' | 'metadata'; restoredVersion?: MediaVersionRecord; retainedVersion?: MediaVersionRecord }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/versions/${versionId}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      restoredBy: 'admin',
+      reason: 'Manual restore from media detail',
+    }),
+  });
+  const payload = await response.json() as ApiMediaVersionRestoreResponse;
+
+  if (!response.ok || !payload.success || !payload.data?.restored || !payload.data.media) {
+    throw new Error(payload.error?.message || 'Unable to restore media version');
+  }
+
+  return {
+    media: toMediaAsset(payload.data.media),
+    source: payload.data.source,
+    restoredVersion: payload.data.restoredVersion,
+    retainedVersion: payload.data.retainedVersion,
   };
 }
 
