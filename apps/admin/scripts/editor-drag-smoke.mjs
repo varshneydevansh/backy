@@ -2938,8 +2938,12 @@ const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-hea
 
 const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) => {
   const state = await evaluate(client, `(() => {
+    let helperResult = null;
     if (typeof window.__backySelectActiveEditorText === 'function') {
-      return window.__backySelectActiveEditorText(${JSON.stringify(startNeedle)}, ${JSON.stringify(endNeedle)});
+      helperResult = window.__backySelectActiveEditorText(${JSON.stringify(startNeedle)}, ${JSON.stringify(endNeedle)});
+      if (helperResult?.ok) {
+        return helperResult;
+      }
     }
 
     const host = document.querySelector('[data-element-id="${elementId}"]');
@@ -2948,6 +2952,7 @@ const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) 
       return {
         ok: false,
         reason: 'missing-editor',
+        helperResult,
         html: host?.innerHTML || '',
       };
     }
@@ -3129,6 +3134,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
 
   await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
+  await dispatchMouseDownByTestId(client, 'rich-text-font-size');
   await setFormControlByTestId(client, 'rich-text-font-size', '32');
   await sleep(500);
 
@@ -3338,6 +3344,57 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table row/column remove controls lost original cell content: ${JSON.stringify(trimmedTableState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedHeaderCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedHeaderCell?.ok, `Unable to select first table cell before header-row toggle: ${JSON.stringify(selectedHeaderCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-row');
+  await sleep(500);
+
+  const headerSlateState = await evaluate(client, `(() => {
+    if (typeof window.__backyReadActiveEditorTableState !== 'function') {
+      return { ok: false, reason: 'missing-table-state-helper' };
+    }
+
+    return window.__backyReadActiveEditorTableState();
+  })()`);
+
+  const headerTableState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const firstRow = rows[0];
+    const firstRowHeaders = Array.from(firstRow?.querySelectorAll('th') || []);
+    const bodyCells = Array.from(host?.querySelectorAll('td') || []);
+    return {
+      text: host?.textContent || '',
+      rowCount: rows.length,
+      firstRowHeaderCount: firstRowHeaders.length,
+      bodyCellCount: bodyCells.length,
+      firstRowHeaderTexts: firstRowHeaders.map((node) => node.textContent || ''),
+      slateState: ${JSON.stringify(null)},
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  headerTableState.slateState = headerSlateState;
+
+  assert(
+    headerTableState.rowCount === 2 &&
+      headerTableState.firstRowHeaderCount === 2 &&
+      headerTableState.bodyCellCount === 2,
+    `Table header-row toggle did not produce semantic header cells: ${JSON.stringify(headerTableState)}`,
+  );
+  assert(
+    headerTableState.firstRowHeaderTexts.includes('Column 1') &&
+      headerTableState.firstRowHeaderTexts.includes('Column 2'),
+    `Table header-row toggle lost header text: ${JSON.stringify(headerTableState)}`,
+  );
+
   return {
     seeded,
     selected,
@@ -3347,6 +3404,8 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     tableState,
     editedTableState,
     trimmedTableState,
+    selectedHeaderCell,
+    headerTableState,
   };
 };
 
@@ -3387,10 +3446,12 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   const tableCount = types.filter((type) => type === 'table').length;
   const rowCount = types.filter((type) => type === 'tr').length;
   const cellCount = types.filter((type) => type === 'td' || type === 'th').length;
+  const headerCellCount = types.filter((type) => type === 'th').length;
   const text = leaves.map((leaf) => leaf.text || '').join(' ');
 
   assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
   assert(tableCount >= 1 && rowCount === 2 && cellCount === 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
+  assert(headerCellCount === 2, `Persisted table header-row cells missing: ${JSON.stringify({ types, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
   assert(text.includes('Column 1') && text.includes('Value 2'), `Persisted table text missing: ${JSON.stringify(leaves)}`);
 
@@ -3399,6 +3460,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     tableCount,
     rowCount,
     cellCount,
+    headerCellCount,
     text,
   };
 };

@@ -44,6 +44,7 @@ import {
   Columns3,
   Rows2,
   Columns2,
+  TableProperties,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -116,6 +117,7 @@ export function RichTextFormatting({
     addTableColumn,
     removeTableRow,
     removeTableColumn,
+    toggleTableHeaderRow,
     storeSelection,
     syncActiveEditorContent,
   } = useActiveEditor();
@@ -1473,6 +1475,12 @@ export function RichTextFormatting({
     });
   }, [removeTableColumn, runOrActivateTextEditor]);
 
+  const toggleTableHeaderRowAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-toggle-header-row', () => {
+      toggleTableHeaderRow();
+    });
+  }, [runOrActivateTextEditor, toggleTableHeaderRow]);
+
   const onFontSizeBlur = (event: FocusEvent<HTMLInputElement>) => {
     logTextAction('content-property.font-size-blur', {
       actionName: 'font-size-blur',
@@ -2030,6 +2038,19 @@ export function RichTextFormatting({
             title="Remove table column"
           >
             <Columns2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-toggle-header-row', () => toggleTableHeaderRowAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-toggle-header-row"
+            title="Toggle table header row"
+          >
+            <TableProperties className="w-4 h-4" />
           </button>
           <button
             type="button"

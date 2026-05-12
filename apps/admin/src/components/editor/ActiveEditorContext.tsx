@@ -57,6 +57,8 @@ interface ActiveEditorContextType {
   removeTableRow: () => boolean;
   /** Remove the current table column when rows have more than one column */
   removeTableColumn: () => boolean;
+  /** Toggle the current table row between body cells and header cells */
+  toggleTableHeaderRow: () => boolean;
   /** Check if mark is active */
   isMarkActive: (format: string) => boolean;
   /** Whether a range selection is currently available for formatting */
@@ -104,6 +106,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   addTableColumn: () => false,
   removeTableRow: () => false,
   removeTableColumn: () => false,
+  toggleTableHeaderRow: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
   hasSelection: () => false,
@@ -437,6 +440,34 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const toggleSelectedTableHeaderRow = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rowChildren = Array.isArray((context.rowNode as any).children) ? (context.rowNode as any).children : [];
+    if (rowChildren.length === 0) {
+      return false;
+    }
+
+    const shouldApplyHeader = rowChildren.some((cell: any) => cell?.type !== 'th');
+    rowChildren.forEach((cell: any, index: number) => {
+      if (cell?.type === 'td' || cell?.type === 'th') {
+        Transforms.setNodes(editor as any, { type: shouldApplyHeader ? 'th' : 'td' } as any, {
+          at: [...context.rowPath, index],
+        });
+      }
+    });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after header-row toggle.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
   const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
     if (typeof window === 'undefined') {
       return null;
@@ -555,6 +586,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       __backySetActiveEditorContent?: (content: unknown) => unknown;
       __backyCollapseActiveEditorToEnd?: () => unknown;
       __backyInsertActiveEditorTable?: () => unknown;
+      __backySelectActiveEditorTableCell?: (needle: string) => unknown;
+      __backyReadActiveEditorTableState?: () => unknown;
     };
 
     targetWindow.__backyCollapseActiveEditorToEnd = () => {
@@ -604,6 +637,82 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           reason: 'insert-table-failed',
           error: (error as Error)?.message || String(error),
           childTypes: ((editor as any).children || []).map((node: { type?: string }) => node?.type || ''),
+        };
+      }
+    };
+
+    targetWindow.__backyReadActiveEditorTableState = () => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const types = Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (node) => SlateElement.isElement(node),
+          })
+        ).map(([node, path]) => ({
+          type: (node as { type?: string }).type || '',
+          path,
+          text: Editor.string(editor as any, path as any),
+        }));
+        return {
+          ok: true,
+          selection: describeSelection(editor.selection || null),
+          types,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'read-table-state-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
+    };
+
+    targetWindow.__backySelectActiveEditorTableCell = (needle: string) => {
+      const editor = getActiveEditor();
+      if (!editor || !needle) {
+        return { ok: false, reason: !editor ? 'missing-editor' : 'missing-needle' };
+      }
+
+      try {
+        const cellEntry = Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+          })
+        ).find(([, path]) => Editor.string(editor as any, path as any).includes(needle));
+
+        if (!cellEntry) {
+          return {
+            ok: false,
+            reason: 'missing-cell',
+            needle,
+            text: Editor.string(editor as any, []),
+          };
+        }
+
+        const [, cellPath] = cellEntry as [unknown, number[]];
+        const nextSelection = {
+          anchor: Editor.start(editor as any, cellPath),
+          focus: Editor.end(editor as any, cellPath),
+        };
+        Transforms.select(editor as any, nextSelection);
+        setStoredSelection(nextSelection);
+        return {
+          ok: true,
+          text: Editor.string(editor as any, nextSelection),
+          selection: describeSelection(nextSelection),
+          cellPath,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'select-table-cell-failed',
+          error: (error as Error)?.message || String(error),
         };
       }
     };
@@ -779,6 +888,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
       if (targetWindow.__backyInsertActiveEditorTable) {
         delete targetWindow.__backyInsertActiveEditorTable;
+      }
+      if (targetWindow.__backySelectActiveEditorTableCell) {
+        delete targetWindow.__backySelectActiveEditorTableCell;
+      }
+      if (targetWindow.__backyReadActiveEditorTableState) {
+        delete targetWindow.__backyReadActiveEditorTableState;
       }
     };
   }, [describeSelection, getActiveEditor, insertDefaultTableNode, setStoredSelection, syncActiveEditorContentSoon]);
@@ -1269,6 +1384,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, removeSelectedTableColumn, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const toggleTableHeaderRow = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('toggleTableHeaderRow.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!toggleSelectedTableHeaderRow(editor)) return false;
+
+      debug('toggleTableHeaderRow.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('toggleTableHeaderRow failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderRow]);
+
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
     if (!editor || !url) {
@@ -1570,6 +1710,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       addTableColumn,
       removeTableRow,
       removeTableColumn,
+      toggleTableHeaderRow,
       isMarkActive,
       hasRangeSelection,
       hasSelection,
