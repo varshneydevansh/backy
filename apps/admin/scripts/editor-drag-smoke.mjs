@@ -17,6 +17,7 @@ const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
 const CONFLICT_SMOKE = process.env.BACKY_EDITOR_CONFLICT_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const RICH_TEXT_SMOKE = process.env.BACKY_EDITOR_RICH_TEXT_SMOKE === '1';
+const RESPONSIVE_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
@@ -2395,6 +2396,90 @@ const waitForElementState = async (client, elementId, predicate, label) => {
   throw new Error(`${label}: ${JSON.stringify(lastState)}`);
 };
 
+const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expected, label) => {
+  await scrollElementIntoView(client, elementId);
+  const box = await getElementBox(client, elementId);
+  assert(box, `${label}: missing rendered element ${elementId}`);
+
+  const cssX = parseCssPixel(box.left);
+  const cssWidth = parseCssPixel(box.cssWidth);
+  const scaleX = getVisualScale(box, 'x');
+  const visualCanvasX = getCanvasVisualX(box);
+  const visualCanvasWidth = scaleX ? box.width / scaleX : box.width;
+  const hitTest = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(centerX, centerY);
+    const owner = hit?.closest?.('[data-element-id]');
+    return {
+      centerX,
+      centerY,
+      hitElementId: owner?.getAttribute('data-element-id') || null,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
+    };
+  })()`);
+
+  assert(
+    cssX !== null &&
+      cssWidth !== null &&
+      Math.abs(cssX - expected.x) <= 1 &&
+      Math.abs(cssWidth - expected.width) <= 1,
+    `${label}: CSS geometry expected x=${expected.x}, width=${expected.width}; got ${JSON.stringify({ left: box.left, cssWidth: box.cssWidth })}`,
+  );
+  assert(
+    Number.isFinite(visualCanvasX) &&
+      Math.abs(visualCanvasX - expected.x) <= 2 &&
+      Math.abs(visualCanvasWidth - expected.width) <= 2 &&
+      box.width > 0 &&
+      box.height > 0,
+    `${label}: visual geometry expected x=${expected.x}, width=${expected.width}; got ${JSON.stringify({ visualCanvasX, visualCanvasWidth, box, scaleX })}`,
+  );
+  assert(
+    hitTest?.visible === true &&
+      hitTest.centerX >= 0 &&
+      hitTest.centerY >= 0 &&
+      hitTest.centerX <= hitTest.viewportWidth &&
+      hitTest.centerY <= hitTest.viewportHeight &&
+      hitTest.hitElementId === elementId,
+    `${label}: rendered element was not visibly hittable at its thresholded geometry: ${JSON.stringify({ hitTest, box })}`,
+  );
+
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    clip: {
+      x: Math.max(0, Math.floor(box.x)),
+      y: Math.max(0, Math.floor(box.y)),
+      width: Math.max(1, Math.ceil(box.width)),
+      height: Math.max(1, Math.ceil(box.height)),
+      scale: 1,
+    },
+  });
+  assert(
+    typeof screenshot?.data === 'string' && screenshot.data.length > 128,
+    `${label}: clipped visual snapshot was empty for ${elementId}`,
+  );
+
+  return {
+    label,
+    elementId,
+    css: {
+      x: Math.round(cssX),
+      width: Math.round(cssWidth),
+    },
+    visual: {
+      x: Math.round(visualCanvasX),
+      width: Math.round(visualCanvasWidth),
+      scaleX: scaleX === null ? null : Number(scaleX.toFixed(4)),
+      screenshotBytes: Buffer.byteLength(screenshot.data, 'base64'),
+    },
+  };
+};
+
 const readPersistedElement = async (pageId, elementId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const elements = payload.data?.page?.content?.elements || [];
@@ -2482,6 +2567,12 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     resetLayerState.hidden === false && resetLayerState.locked === false,
     `Layer reset control did not restore inherited desktop layer state: ${JSON.stringify(resetLayerState)}`,
   );
+  const breakpointVisual = await assertResponsiveBreakpointVisualGeometry(
+    client,
+    elementId,
+    { x: expectedBreakpointX, width: expectedBreakpointWidth },
+    `${breakpointLabel} breakpoint visual geometry`,
+  );
   await setLayerHiddenState(client, elementId, true);
   await setLayerLockedState(client, elementId, true);
 
@@ -2524,6 +2615,12 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
       desktopAfter[elementId].width === Math.round(desktopBefore.width),
     `Desktop canvas did not retain base layout after ${breakpoint} override: ${JSON.stringify({ desktopBefore, desktopAfter })}`,
   );
+  const desktopVisualAfter = await assertResponsiveBreakpointVisualGeometry(
+    client,
+    elementId,
+    { x: Math.round(desktopBefore.x), width: Math.round(desktopBefore.width) },
+    `Desktop visual geometry after ${breakpoint} override`,
+  );
 
   await clickButtonByAriaLabel(client, breakpointCanvasLabel);
   const breakpointLayerAfter = await readLayerActionState(client, elementId);
@@ -2542,7 +2639,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     breakpointOverride: persistedElement.responsive[breakpoint],
     breakpointLayerHidden,
     breakpointLayerLocked,
+    breakpointVisual,
     desktopAfter: desktopAfter[elementId],
+    desktopVisualAfter,
     breakpointAfter: {
       ...breakpointState[elementId],
       hidden: breakpointLayerAfter.hidden,
@@ -9423,7 +9522,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -9676,6 +9775,79 @@ const main = async () => {
         selectedRangeSavedStatus,
         persistedBlocks,
         savedStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (RESPONSIVE_SMOKE) {
+      assert(!EDITOR_PATH, 'Responsive smoke currently requires an internally created smoke page');
+      const responsiveEditing = {
+        mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
+          breakpoint: 'mobile',
+          expectedX: 24,
+          expectedWidth: 300,
+        }),
+        tablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
+          breakpoint: 'tablet',
+          expectedX: 64,
+          expectedWidth: 360,
+        }),
+      };
+
+      let reloadClient = null;
+      let reloadedResponsiveEditing = null;
+      try {
+        reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+        await waitForEditorElements(reloadClient, ['smoke-heading']);
+        reloadedResponsiveEditing = {
+          mobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-heading',
+            {
+              breakpoint: 'mobile',
+              expectedX: 24,
+              expectedWidth: 300,
+              expectExistingLayerOverride: true,
+            },
+          ),
+          tablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-heading',
+            {
+              breakpoint: 'tablet',
+              expectedX: 64,
+              expectedWidth: 360,
+              expectExistingLayerOverride: true,
+            },
+          ),
+        };
+      } finally {
+        if (reloadClient) {
+          try {
+            await reloadClient.send('Page.close');
+          } catch {
+            // The target may already be closed by Chrome during cleanup.
+          }
+          reloadClient.close();
+        }
+      }
+
+      assert(
+        reloadedResponsiveEditing.mobile.breakpointAfter.x === responsiveEditing.mobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.mobile.breakpointAfter.width === responsiveEditing.mobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.tablet.breakpointAfter.x === responsiveEditing.tablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.tablet.breakpointAfter.width === responsiveEditing.tablet.breakpointAfter.width,
+        `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
+      );
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'responsive',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        responsiveEditing,
+        reloadedResponsiveEditing,
       }, null, 2));
       return;
     }

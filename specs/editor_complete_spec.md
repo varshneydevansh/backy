@@ -166,8 +166,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Active breakpoint override groups show which element areas inherit desktop, and layout/layer/content/style groups can be reset independently
 - Public rendering applies responsive overrides from the rendered container width
 - `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration
+- Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, and reload hydration
 - **Remaining Improvements Needed:**
-    - Add broader visual regression snapshots and thresholded screenshot comparison
+    - Broaden pixel-level screenshot comparison across more templates and component types
 - **Implemented Contract:**
     ```typescript
     interface CanvasElement {
@@ -478,7 +479,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence are covered by editor smoke; still needs visual regression thresholds.
+  - Mobile and tablet persistence plus thresholded editor visual geometry are covered by responsive smoke; still needs broader pixel-level comparison across templates/components.
 - ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates
