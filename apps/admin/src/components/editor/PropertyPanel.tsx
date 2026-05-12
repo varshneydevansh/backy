@@ -2775,6 +2775,58 @@ function ContentProperties({
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
+              Marker Label
+            </label>
+            <input
+              type="text"
+              value={element.props.markerLabel || ''}
+              onChange={(e) => onChange({ markerLabel: e.target.value })}
+              data-testid="editor-map-marker-label"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Main office"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Latitude
+              </label>
+              <input
+                type="number"
+                step="0.000001"
+                value={element.props.markerLatitude ?? ''}
+                onChange={(e) => onChange({ markerLatitude: e.target.value === '' ? undefined : Number(e.target.value) })}
+                data-testid="editor-map-marker-latitude"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="19.076"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Longitude
+              </label>
+              <input
+                type="number"
+                step="0.000001"
+                value={element.props.markerLongitude ?? ''}
+                onChange={(e) => onChange({ markerLongitude: e.target.value === '' ? undefined : Number(e.target.value) })}
+                data-testid="editor-map-marker-longitude"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="72.8777"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
               Zoom Level
             </label>
             <input

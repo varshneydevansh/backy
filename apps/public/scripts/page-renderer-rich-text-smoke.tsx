@@ -364,6 +364,9 @@ const content: PageContent = {
       props: {
         address: 'Mumbai India',
         zoom: 17,
+        markerLabel: 'Renderer office',
+        markerLatitude: 19.076,
+        markerLongitude: 72.8777,
         title: 'Styled map',
         loading: 'eager',
         referrerPolicy: 'origin',
@@ -733,8 +736,12 @@ assert(html.includes('src="https://example.com/embed"'), `Embed src was not rend
 assert(html.includes('border-style:double'), `Embed border style was not rendered: ${html}`);
 assert(html.includes('border-color:#7c3aed'), `Embed border color was not rendered: ${html}`);
 assert(html.includes('title="Styled map"'), `Map title was not rendered: ${html}`);
-assert(html.includes('q=Mumbai+India'), `Map address was not rendered: ${html}`);
+assert(html.includes('q=19.076%2C72.8777'), `Map marker coordinates were not rendered: ${html}`);
 assert(html.includes('z=17'), `Map zoom was not rendered: ${html}`);
+assert(html.includes('data-backy-map-address="Mumbai India"'), `Map address metadata was not rendered: ${html}`);
+assert(html.includes('data-backy-map-marker-label="Renderer office"'), `Map marker label metadata was not rendered: ${html}`);
+assert(html.includes('data-backy-map-marker-latitude="19.076"'), `Map marker latitude metadata was not rendered: ${html}`);
+assert(html.includes('data-backy-map-marker-longitude="72.8777"'), `Map marker longitude metadata was not rendered: ${html}`);
 assert(html.includes('border-color:#0e7490'), `Map border color was not rendered: ${html}`);
 assert(html.includes('name="styled_email"'), `Input name was not rendered: ${html}`);
 assert(html.includes('type="email"'), `Input type was not rendered: ${html}`);

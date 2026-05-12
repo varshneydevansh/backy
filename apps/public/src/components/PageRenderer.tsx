@@ -1400,6 +1400,31 @@ const normalizeMapUrl = (addressOrUrl: unknown, zoom?: unknown): string => {
   return appendMapZoom(`https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`, zoom);
 };
 
+const normalizeMapCoordinate = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number.parseFloat(value)
+      : NaN;
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const getMapSource = (props: Record<string, unknown>): string => {
+  const customSource = sanitizeText(props.src);
+  if (customSource) {
+    return customSource;
+  }
+
+  const latitude = normalizeMapCoordinate(props.markerLatitude);
+  const longitude = normalizeMapCoordinate(props.markerLongitude);
+  if (latitude !== undefined && longitude !== undefined) {
+    return `${latitude},${longitude}`;
+  }
+
+  return sanitizeText(props.address);
+};
+
 /**
  * Render a text element
  */
@@ -3427,7 +3452,7 @@ function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: 
 function MapElement({ element }: ElementRendererProps) {
   const { props, styles, width, height } = element;
 
-  const src = normalizeMapUrl(getNameClass(props.src) || getNameClass(props.address) || '', props.zoom);
+  const src = normalizeMapUrl(getMapSource(props), props.zoom);
 
   if (!src) {
     return <div style={{ ...styles }}>Add a map URL or address</div>;
@@ -3448,6 +3473,10 @@ function MapElement({ element }: ElementRendererProps) {
       loading={normalizeIframeLoading(props.loading)}
       allowFullScreen={getBooleanWithFallback(props.allowFullScreen, true)}
       referrerPolicy={normalizeIframeReferrerPolicy(props.referrerPolicy) || 'no-referrer'}
+      data-backy-map-address={getNameClass(props.address) || undefined}
+      data-backy-map-marker-label={getNameClass(props.markerLabel) || undefined}
+      data-backy-map-marker-latitude={normalizeMapCoordinate(props.markerLatitude)}
+      data-backy-map-marker-longitude={normalizeMapCoordinate(props.markerLongitude)}
     />
   );
 }

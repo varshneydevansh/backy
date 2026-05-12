@@ -746,6 +746,31 @@ const normalizeMapUrl = (addressOrUrl: unknown, zoom?: unknown): string => {
   return appendMapZoom(`https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`, zoom);
 };
 
+const normalizeMapCoordinate = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number.parseFloat(value)
+      : NaN;
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const getMapSource = (props: Record<string, unknown>): string => {
+  const customSource = sanitizeText(props.src);
+  if (customSource) {
+    return customSource;
+  }
+
+  const latitude = normalizeMapCoordinate(props.markerLatitude);
+  const longitude = normalizeMapCoordinate(props.markerLongitude);
+  if (latitude !== undefined && longitude !== undefined) {
+    return `${latitude},${longitude}`;
+  }
+
+  return sanitizeText(props.address);
+};
+
 const parseFormOptions = (value: unknown): string[] => {
   if (!Array.isArray(value) && typeof value !== 'string') {
     return [];
@@ -3881,7 +3906,7 @@ function CanvasElementComponent({
       }
 
       case 'map':
-        const mapSrc = normalizeMapUrl(p.src || p.address, p.zoom);
+        const mapSrc = normalizeMapUrl(getMapSource(p), p.zoom);
         if (!mapSrc) {
           return (
             <div
@@ -3917,6 +3942,10 @@ function CanvasElementComponent({
             allowFullScreen={parseBooleanSetting(p.allowFullScreen, true)}
             loading={normalizeIframeLoading(p.loading)}
             referrerPolicy={normalizeIframeReferrerPolicy(p.referrerPolicy) || 'no-referrer'}
+            data-backy-map-address={sanitizeText(p.address) || undefined}
+            data-backy-map-marker-label={sanitizeText(p.markerLabel) || undefined}
+            data-backy-map-marker-latitude={normalizeMapCoordinate(p.markerLatitude)}
+            data-backy-map-marker-longitude={normalizeMapCoordinate(p.markerLongitude)}
           />
         );
 

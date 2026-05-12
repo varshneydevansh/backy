@@ -31,6 +31,9 @@ const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
 const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
+const SMOKE_MAP_MARKER_LABEL = 'Backy Mumbai office';
+const SMOKE_MAP_MARKER_LATITUDE = '19.076';
+const SMOKE_MAP_MARKER_LONGITUDE = '72.8777';
 const SMOKE_ICON_PICKER_EMOJI = '\u{1F680}';
 const FORM_SCHEMA_FIELDS = [
   {
@@ -6620,6 +6623,9 @@ const testMapBehaviorControls = async (client) => {
 
   await setFormControlByTestId(client, 'editor-map-address', SMOKE_MAP_ADDRESS);
   await setFormControlByTestId(client, 'editor-map-src', '');
+  await setFormControlByTestId(client, 'editor-map-marker-label', SMOKE_MAP_MARKER_LABEL);
+  await setFormControlByTestId(client, 'editor-map-marker-latitude', SMOKE_MAP_MARKER_LATITUDE);
+  await setFormControlByTestId(client, 'editor-map-marker-longitude', SMOKE_MAP_MARKER_LONGITUDE);
   await setFormControlByTestId(client, 'editor-map-title', 'Smoke map frame');
   await setFormControlByTestId(client, 'editor-map-zoom', '17');
   await setFormControlByTestId(client, 'editor-map-loading', 'eager');
@@ -6638,6 +6644,9 @@ const testMapBehaviorControls = async (client) => {
     return {
       address: value('editor-map-address'),
       src: value('editor-map-src'),
+      markerLabel: value('editor-map-marker-label'),
+      markerLatitude: value('editor-map-marker-latitude'),
+      markerLongitude: value('editor-map-marker-longitude'),
       title: value('editor-map-title'),
       zoom: value('editor-map-zoom'),
       loading: value('editor-map-loading'),
@@ -6646,6 +6655,10 @@ const testMapBehaviorControls = async (client) => {
       previewSrc,
       decodedPreviewSrc: previewSrc ? decodeURIComponent(previewSrc) : '',
       previewTitle: iframe?.getAttribute('title') || '',
+      previewMapAddress: iframe?.getAttribute('data-backy-map-address') || '',
+      previewMarkerLabel: iframe?.getAttribute('data-backy-map-marker-label') || '',
+      previewMarkerLatitude: iframe?.getAttribute('data-backy-map-marker-latitude') || '',
+      previewMarkerLongitude: iframe?.getAttribute('data-backy-map-marker-longitude') || '',
       previewLoading: iframe?.getAttribute('loading') || '',
       previewReferrerPolicy: iframe?.getAttribute('referrerpolicy') || '',
       previewAllowFullScreen: iframe instanceof HTMLIFrameElement ? iframe.allowFullscreen : null,
@@ -6654,9 +6667,13 @@ const testMapBehaviorControls = async (client) => {
 
   assert(state.address === SMOKE_MAP_ADDRESS, `Map address control mismatch: ${JSON.stringify(state)}`);
   assert(state.src === '', `Map custom src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.markerLabel === SMOKE_MAP_MARKER_LABEL && state.previewMarkerLabel === SMOKE_MAP_MARKER_LABEL, `Map marker label mismatch: ${JSON.stringify(state)}`);
+  assert(state.markerLatitude === SMOKE_MAP_MARKER_LATITUDE && state.previewMarkerLatitude === SMOKE_MAP_MARKER_LATITUDE, `Map marker latitude mismatch: ${JSON.stringify(state)}`);
+  assert(state.markerLongitude === SMOKE_MAP_MARKER_LONGITUDE && state.previewMarkerLongitude === SMOKE_MAP_MARKER_LONGITUDE, `Map marker longitude mismatch: ${JSON.stringify(state)}`);
   assert(state.title === 'Smoke map frame' && state.previewTitle === 'Smoke map frame', `Map title control mismatch: ${JSON.stringify(state)}`);
   assert(state.zoom === '17' && /[?&]z=17(&|$)/.test(state.previewSrc), `Map zoom control mismatch: ${JSON.stringify(state)}`);
-  assert(state.decodedPreviewSrc.replace(/\+/g, ' ').includes(SMOKE_MAP_ADDRESS) && state.previewSrc.includes('output=embed'), `Map address was not reflected in embed URL: ${JSON.stringify(state)}`);
+  assert(state.previewMapAddress === SMOKE_MAP_ADDRESS, `Map address data attribute mismatch: ${JSON.stringify(state)}`);
+  assert(state.decodedPreviewSrc.includes(`${SMOKE_MAP_MARKER_LATITUDE},${SMOKE_MAP_MARKER_LONGITUDE}`) && state.previewSrc.includes('output=embed'), `Map marker coordinates were not reflected in embed URL: ${JSON.stringify(state)}`);
   assert(state.loading === 'eager' && state.previewLoading === 'eager', `Map loading control mismatch: ${JSON.stringify(state)}`);
   assert(state.referrerPolicy === 'origin' && state.previewReferrerPolicy === 'origin', `Map referrer policy mismatch: ${JSON.stringify(state)}`);
   assert(state.allowFullScreen === false && state.previewAllowFullScreen === false, `Map fullscreen control mismatch: ${JSON.stringify(state)}`);
@@ -6673,6 +6690,9 @@ const assertPersistedMapBehavior = async (pageId) => {
   assert(map?.type === 'map', `Persisted smoke-map missing: ${JSON.stringify(map)}`);
   assert(props.address === SMOKE_MAP_ADDRESS, `Persisted map address mismatch: ${JSON.stringify(props)}`);
   assert(props.src === undefined || props.src === '', `Persisted map src mismatch: ${JSON.stringify(props)}`);
+  assert(props.markerLabel === SMOKE_MAP_MARKER_LABEL, `Persisted map marker label mismatch: ${JSON.stringify(props)}`);
+  assert(props.markerLatitude === Number(SMOKE_MAP_MARKER_LATITUDE), `Persisted map marker latitude mismatch: ${JSON.stringify(props)}`);
+  assert(props.markerLongitude === Number(SMOKE_MAP_MARKER_LONGITUDE), `Persisted map marker longitude mismatch: ${JSON.stringify(props)}`);
   assert(props.title === 'Smoke map frame', `Persisted map title mismatch: ${JSON.stringify(props)}`);
   assert(props.zoom === 17, `Persisted map zoom mismatch: ${JSON.stringify(props)}`);
   assert(props.loading === 'eager', `Persisted map loading mismatch: ${JSON.stringify(props)}`);
