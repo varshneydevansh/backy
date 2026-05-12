@@ -7562,6 +7562,7 @@ const testHeadingTypographyControls = async (client) => {
     const headingRoot = document.querySelector('[data-element-id="smoke-heading"]');
     const preview = headingRoot?.querySelector('[contenteditable="true"]') || headingRoot?.firstElementChild?.firstElementChild || headingRoot?.firstElementChild;
     const style = preview ? getComputedStyle(preview) : null;
+    const feedback = document.querySelector('[data-testid="editor-property-feedback"]');
     return {
       level: value('editor-heading-level'),
       fontSize: value('editor-style-font-size'),
@@ -7590,6 +7591,9 @@ const testHeadingTypographyControls = async (client) => {
       previewBackgroundColor: style?.backgroundColor || '',
       previewTextDecoration: style?.textDecorationLine || '',
       previewFontStyle: style?.fontStyle || '',
+      feedbackState: feedback?.getAttribute('data-feedback-state') || '',
+      feedbackCount: Number(feedback?.getAttribute('data-feedback-count') || 0),
+      feedbackText: feedback?.textContent || '',
     };
   })()`);
 
@@ -7612,6 +7616,7 @@ const testHeadingTypographyControls = async (client) => {
   assert(state.backgroundColor === '#fff7ed' && /255,\s*247,\s*237/.test(state.previewBackgroundColor), `Heading background mismatch: ${JSON.stringify(state)}`);
   assert(state.textDecoration === 'underline' && state.previewTextDecoration.includes('underline'), `Heading decoration mismatch: ${JSON.stringify(state)}`);
   assert(state.fontStyle === 'italic' && state.previewFontStyle === 'italic', `Heading font style mismatch: ${JSON.stringify(state)}`);
+  assert(state.feedbackState === 'applied' && state.feedbackCount > 0 && /Applied/.test(state.feedbackText), `Property panel feedback did not show applied state: ${JSON.stringify(state)}`);
 
   return state;
 };

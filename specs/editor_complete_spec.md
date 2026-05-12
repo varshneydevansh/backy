@@ -16,7 +16,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 2 | Canvas | ✅ | Drop zone for elements |
 | 3 | Element Drag | ✅ | Move elements on canvas |
 | 4 | Element Resize | ✅ | Resize via corner handles |
-| 5 | Property Panel (Right Panel) | ⚠️ | Animation controls are wired, typography panel includes text transform/spacing/shadow controls; still missing full Canva-level workflow parity |
+| 5 | Property Panel (Right Panel) | ⚠️ | Animation controls, typography controls, and applied-change feedback are wired; still missing full Canva-level workflow parity |
 | 6 | Element Selection | ✅ | Click to select |
 | 7 | Preview Mode | ✅ | Toggle to preview |
 | 8 | Breakpoint Toggle | ⚠️ | Desktop/Tablet/Mobile - UI only |
@@ -127,12 +127,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
     - Rich text multi-block/table/blockquote behavior still needs parity cleanup
-    - No visual feedback when changes apply
     - Full list indent/empty-line parity is not complete
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
+    - Added applied-change feedback in both standalone and embedded inspector layouts.
 
 ### 6. Element Selection
 **File:** `Canvas.tsx` (handleSelect), `pages.$pageId.edit.tsx`
@@ -356,6 +356,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added full resize handle coverage for eight handles, single-axis edge resizing, Shift aspect-ratio resize, and Alt center resize via `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Added Property Panel applied-change feedback with focused coverage in the heading component smoke via `BACKY_EDITOR_COMPONENT_SMOKE=heading npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.
