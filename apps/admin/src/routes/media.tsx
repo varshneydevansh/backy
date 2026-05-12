@@ -53,7 +53,7 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quarantined';
-type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.bind' | 'media.unbind' | 'delete';
+type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.transforms.prepare' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
@@ -79,10 +79,12 @@ const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: 
   { value: 'create', label: 'Uploads' },
   { value: 'update', label: 'Metadata edits' },
   { value: 'media.replace', label: 'Replacements' },
+  { value: 'media.transforms.prepare', label: 'Transforms' },
   { value: 'media.bind', label: 'Bindings' },
   { value: 'media.unbind', label: 'Unbindings' },
   { value: 'delete', label: 'Deletes' },
 ];
+const MEDIA_AUDIT_PAGE_SIZE = 12;
 const MEDIA_IMAGE_OBJECT_FIT_OPTIONS: MediaImageObjectFit[] = ['cover', 'contain'];
 const MEDIA_IMAGE_ASPECT_RATIO_OPTIONS: Array<{ value: MediaImageAspectRatio; label: string; cssValue: string }> = [
   { value: 'original', label: 'Original', cssValue: '1 / 1' },
@@ -585,6 +587,11 @@ function MediaPage() {
   const [isLoadingAssetAudit, setIsLoadingAssetAudit] = useState(false);
   const [assetAuditError, setAssetAuditError] = useState<string | null>(null);
   const [assetAuditActionFilter, setAssetAuditActionFilter] = useState<MediaAuditActionFilter>('all');
+  const [libraryAuditLogs, setLibraryAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [libraryAuditPagination, setLibraryAuditPagination] = useState({ total: 0, limit: MEDIA_AUDIT_PAGE_SIZE, offset: 0, hasMore: false });
+  const [isLoadingLibraryAudit, setIsLoadingLibraryAudit] = useState(false);
+  const [libraryAuditError, setLibraryAuditError] = useState<string | null>(null);
+  const [libraryAuditActionFilter, setLibraryAuditActionFilter] = useState<MediaAuditActionFilter>('all');
   const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
@@ -1572,6 +1579,29 @@ function MediaPage() {
     }
   }, [siteId]);
 
+  const loadLibraryAuditLogs = useCallback(async (offset = 0) => {
+    setIsLoadingLibraryAudit(true);
+    setLibraryAuditError(null);
+
+    try {
+      const result = await listAdminAuditLogs({
+        siteId,
+        entity: 'media',
+        action: libraryAuditActionFilter === 'all' ? undefined : libraryAuditActionFilter,
+        limit: MEDIA_AUDIT_PAGE_SIZE,
+        offset,
+      });
+      setLibraryAuditLogs(result.logs);
+      setLibraryAuditPagination(result.pagination);
+    } catch (auditError) {
+      setLibraryAuditLogs([]);
+      setLibraryAuditPagination({ total: 0, limit: MEDIA_AUDIT_PAGE_SIZE, offset, hasMore: false });
+      setLibraryAuditError(auditError instanceof Error ? auditError.message : 'Unable to load media activity.');
+    } finally {
+      setIsLoadingLibraryAudit(false);
+    }
+  }, [libraryAuditActionFilter, siteId]);
+
   const loadAssetAuditLogs = useCallback(async (mediaId: string) => {
     setIsLoadingAssetAudit(true);
     setAssetAuditError(null);
@@ -1592,6 +1622,10 @@ function MediaPage() {
       setIsLoadingAssetAudit(false);
     }
   }, [assetAuditActionFilter, siteId]);
+
+  useEffect(() => {
+    void loadLibraryAuditLogs(0);
+  }, [loadLibraryAuditLogs]);
 
   const selectedAssetId = selectedAsset?.id;
 
@@ -1664,6 +1698,7 @@ function MediaPage() {
       });
       applyUpdatedAsset(updated);
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (prepareError) {
       setAssetDeliveryError(prepareError instanceof Error ? prepareError.message : 'Unable to prepare responsive variants.');
     } finally {
@@ -1697,6 +1732,7 @@ function MediaPage() {
       setSignedUrl(null);
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (quarantineError) {
       setError(quarantineError instanceof Error ? quarantineError.message : 'Unable to quarantine media.');
     } finally {
@@ -1730,6 +1766,7 @@ function MediaPage() {
       setSignedUrl(null);
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (releaseError) {
       setError(releaseError instanceof Error ? releaseError.message : 'Unable to release media quarantine.');
     } finally {
@@ -1803,6 +1840,7 @@ function MediaPage() {
         }
         setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.`);
         void loadLibrary();
+        void loadLibraryAuditLogs(0);
       }
 
       setRecentUploadSummary({
@@ -1847,6 +1885,7 @@ function MediaPage() {
         updateMediaRouteSearch({ assetId: undefined });
       }
       setPendingDeleteAsset(null);
+      void loadLibraryAuditLogs(0);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete media.');
     } finally {
@@ -1972,6 +2011,7 @@ function MediaPage() {
       setBulkTagMode('keep');
       setBulkTags('');
       void loadLibrary();
+      void loadLibraryAuditLogs(0);
     }
 
     if (failedIds.length > 0) {
@@ -2019,6 +2059,7 @@ function MediaPage() {
         updateMediaRouteSearch({ assetId: undefined });
       }
       void loadLibrary();
+      void loadLibraryAuditLogs(0);
     }
 
     if (failedIds.length > 0) {
@@ -2081,6 +2122,7 @@ function MediaPage() {
       setMedia(files.map((file) => file.id === updated.id ? updated : file));
       setSelectedAsset(updated);
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update media metadata.');
     } finally {
@@ -2125,6 +2167,7 @@ function MediaPage() {
       applyUpdatedAsset(updated);
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
       void loadAssetVersions(updated.id);
     } catch (replaceError) {
       setAssetReplacementError(replaceError instanceof Error ? replaceError.message : 'Unable to replace this asset.');
@@ -2154,6 +2197,7 @@ function MediaPage() {
       applyUpdatedAsset(updated);
       setBindingTargetId('');
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (bindError) {
       setAssetReferenceError(bindError instanceof Error ? bindError.message : 'Unable to bind this asset.');
     } finally {
@@ -2181,6 +2225,7 @@ function MediaPage() {
       }, siteId);
       applyUpdatedAsset(updated);
       void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
     } catch (unbindError) {
       setAssetReferenceError(unbindError instanceof Error ? unbindError.message : 'Unable to remove this reference.');
     } finally {
@@ -2351,6 +2396,39 @@ function MediaPage() {
     URL.revokeObjectURL(url);
     setError(null);
     setBulkNotice(`${displayedFiles.length} visible media asset${displayedFiles.length === 1 ? '' : 's'} exported.`);
+  };
+  const exportMediaAuditCsv = () => {
+    if (libraryAuditLogs.length === 0) return;
+
+    const columns = ['createdAt', 'action', 'entityId', 'actorId', 'requestId', 'summary', 'details'];
+    const rows = libraryAuditLogs.map((log) => {
+      const details = mediaAuditDetails(log)
+        .map((detail) => `${detail.label}: ${detail.value}`)
+        .join(' | ');
+      return [
+        log.createdAt,
+        log.action,
+        log.entityId,
+        log.actorId || 'admin',
+        log.requestId || '',
+        mediaAuditDescription(log),
+        details,
+      ];
+    });
+    const csv = [columns, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteId}-media-activity.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setBulkNotice(`${libraryAuditLogs.length} media activity record${libraryAuditLogs.length === 1 ? '' : 's'} exported.`);
   };
 
   const referencedPages = selectedAsset
@@ -3626,6 +3704,163 @@ function MediaPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel className="mb-6 scroll-mt-24" id="media-activity" data-testid="media-library-activity">
+        <PanelHeader
+          title="Media activity"
+          description="Review recent uploads, edits, replacements, transform preparation, bindings, quarantine changes, and deletions across the library."
+          icon={<FileText className="size-4" />}
+          action={
+            <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+              {libraryAuditPagination.total} records
+            </span>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
+              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Access contract:</span>{' '}
+                {mediaAccessRows.find((row) => row.permission === 'activity.export')?.allowed
+                  ? 'Current role can read and export the media audit feed.'
+                  : 'Current role is expected to be blocked from audit export by the admin API.'}
+                <span className="ml-2 rounded bg-background px-2 py-1 font-mono text-xs">activity.export</span>
+              </div>
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Activity type
+                <select
+                  value={libraryAuditActionFilter}
+                  onChange={(event) => setLibraryAuditActionFilter(event.target.value as MediaAuditActionFilter)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                  aria-label="Filter media library activity"
+                >
+                  {MEDIA_AUDIT_ACTION_FILTERS.map((filter) => (
+                    <option key={filter.value} value={filter.value}>{filter.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isLoadingLibraryAudit}
+                  onClick={() => void loadLibraryAuditLogs(libraryAuditPagination.offset)}
+                  className="w-full"
+                >
+                  Refresh
+                </Button>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isLoadingLibraryAudit || libraryAuditLogs.length === 0}
+                  onClick={exportMediaAuditCsv}
+                  className="w-full"
+                  iconStart={<Download className="size-4" />}
+                >
+                  Export audit
+                </Button>
+              </div>
+            </div>
+
+            {libraryAuditError && (
+              <Notice tone="warning">
+                {libraryAuditError}
+              </Notice>
+            )}
+
+            {isLoadingLibraryAudit ? (
+              <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                Loading media activity...
+              </div>
+            ) : libraryAuditLogs.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+                No media audit records match this view yet.
+              </div>
+            ) : (
+              <div className="grid gap-2 lg:grid-cols-2">
+                {libraryAuditLogs.map((log) => {
+                  const details = mediaAuditDetails(log);
+                  const asset = files.find((file) => file.id === log.entityId);
+
+                  return (
+                    <div key={log.id} className="rounded-lg border border-border bg-background px-3 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{mediaAuditTitle(log)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{mediaAuditDescription(log)}</p>
+                        </div>
+                        <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
+                          {formatAuditDate(log.createdAt)}
+                        </time>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span className="rounded bg-muted px-2 py-1">{mediaAuditPermission(log.action)}</span>
+                        <span className="rounded bg-muted px-2 py-1">Actor {log.actorId || 'admin'}</span>
+                        <span className="rounded bg-muted px-2 py-1 font-mono">{log.entityId}</span>
+                        {log.requestId && (
+                          <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+                        )}
+                      </div>
+                      {asset && (
+                        <button
+                          type="button"
+                          className="mt-2 text-xs font-medium text-primary hover:underline"
+                          onClick={() => openMetadataEditor(asset)}
+                        >
+                          Open {asset.name}
+                        </button>
+                      )}
+                      {details.length > 0 && (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {details.map((detail) => (
+                            <div key={detail.label} className="rounded bg-muted px-2 py-1.5 text-xs">
+                              <div className="font-medium text-muted-foreground">{detail.label}</div>
+                              <div className="mt-1 break-all font-mono text-[11px] text-foreground">{detail.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                Showing {libraryAuditLogs.length === 0 ? 0 : libraryAuditPagination.offset + 1}
+                {'-'}
+                {libraryAuditPagination.offset + libraryAuditLogs.length}
+                {' '}of {libraryAuditPagination.total}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isLoadingLibraryAudit || libraryAuditPagination.offset <= 0}
+                  onClick={() => void loadLibraryAuditLogs(Math.max(0, libraryAuditPagination.offset - libraryAuditPagination.limit))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isLoadingLibraryAudit || !libraryAuditPagination.hasMore}
+                  onClick={() => void loadLibraryAuditLogs(libraryAuditPagination.offset + libraryAuditPagination.limit)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
         </PanelContent>

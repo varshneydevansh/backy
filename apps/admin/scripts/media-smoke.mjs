@@ -377,6 +377,10 @@ const assertMediaLayout = async (client, expectedText) => {
     hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
       document.body?.innerText?.includes('Scanner env contract') &&
       document.body?.innerText?.includes('BACKY_MEDIA_SCAN_ENDPOINT'),
+    hasLibraryActivity: Boolean(document.querySelector('[data-testid="media-library-activity"]')) &&
+      document.body?.innerText?.includes('Media activity') &&
+      document.body?.innerText?.includes('activity.export') &&
+      Boolean(document.querySelector('select[aria-label="Filter media library activity"]')),
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
     hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
@@ -385,7 +389,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -436,6 +440,8 @@ const openMediaDetails = async (client, assetName) => {
   const result = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
       (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Edit metadata for ${assetName}`)}
+    )) || Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === ${JSON.stringify(`Open ${assetName}`)}
     ));
     if (!(button instanceof HTMLButtonElement)) {
       return {
@@ -496,6 +502,38 @@ const assertMediaActivityDetails = async (client, expectedText) => {
     }
     if (attempt === 79) {
       throw new Error(`Media activity details did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertMediaLibraryActivity = async (client, expectedText) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const filter = document.querySelector('select[aria-label="Filter media library activity"]');
+      if (filter instanceof HTMLSelectElement) {
+        filter.value = 'media.replace';
+        filter.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const panel = document.querySelector('[data-testid="media-library-activity"]');
+      const panelText = panel?.textContent || '';
+      return {
+        hasPanel: panel instanceof HTMLElement,
+        hasFilter: filter instanceof HTMLSelectElement,
+        hasExport: panelText.includes('Export audit'),
+        hasPermission: panelText.includes('activity.export'),
+        hasReplacement: panelText.includes('Asset file replaced') || panelText.includes('Replacements'),
+        hasExpected: panelText.includes(${JSON.stringify(expectedText)}),
+        body: panelText.slice(0, 2200),
+      };
+    })()`);
+    if (state.hasPanel && state.hasFilter && state.hasExport && state.hasPermission && state.hasReplacement && state.hasExpected) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media library activity did not render: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -1195,6 +1233,7 @@ const main = async () => {
       item.metadata.generatedTransforms.variants.length > 0
     ));
     assert(transformedImage.metadata.generatedTransforms.preparedBy === 'admin', 'UI transform preparation did not record the admin actor.');
+    await assertMediaLibraryActivity(client, imageName);
     await setDetailsField(client, 'Focal X', 28);
     await setDetailsField(client, 'Focal Y', 72);
     await setDetailsField(client, 'Crop fit', 'contain');
