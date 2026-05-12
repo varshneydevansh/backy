@@ -68,6 +68,11 @@ const COMMENT_CONTROL_AREAS = [
     href: '#comments-metrics',
   },
   {
+    title: 'Thread map',
+    detail: 'Review parent comments, replies, report load, and thread-specific queues.',
+    href: '#comments-threads',
+  },
+  {
     title: 'Moderation API',
     detail: 'List comments, bulk update records, and sync public discussion state.',
     href: '#comments-api',
@@ -152,6 +157,23 @@ interface CommentTargetSummary {
   path: string;
 }
 
+interface CommentThreadSummary {
+  id: string;
+  targetKey: string;
+  target?: CommentTargetSummary;
+  rootComment?: AdminComment;
+  latestComment?: AdminComment;
+  total: number;
+  replies: number;
+  pending: number;
+  reported: number;
+  flagged: number;
+  statuses: CommentModerationStatus[];
+  authorNames: string[];
+  createdAt?: string;
+  latestAt?: string;
+}
+
 type CommentPolicyDraft = Required<Omit<SiteCommentPolicy, 'blockedTerms'>> & {
   blockedTerms: string[];
 };
@@ -178,6 +200,8 @@ const normalizeCommentPolicyDraft = (policy?: SiteCommentPolicy | null): Comment
   closedMessage: policy?.closedMessage?.trim() || DEFAULT_COMMENT_POLICY.closedMessage,
 });
 
+const getCommentThreadKey = (comment: AdminComment) => comment.commentThreadId || comment.parentId || comment.id;
+
 function CommentsRoute() {
   const { sites } = useStore();
   const navigate = useNavigate();
@@ -193,6 +217,7 @@ function CommentsRoute() {
   const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>('all');
   const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>('all');
   const [triageFilter, setTriageFilter] = useState<CommentTriageFilter>('all');
+  const [threadFilter, setThreadFilter] = useState('all');
   const [sortFilter, setSortFilter] = useState<CommentSortFilter>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [moderationReason, setModerationReason] = useState('');
@@ -219,6 +244,72 @@ function CommentsRoute() {
     targets.forEach((target) => map.set(`${target.type}:${target.id}`, target));
     return map;
   }, [targets]);
+  const commentById = useMemo(() => {
+    const map = new Map<string, AdminComment>();
+    comments.forEach((comment) => map.set(comment.id, comment));
+    return map;
+  }, [comments]);
+  const replyCountByParent = useMemo(() => {
+    const map = new Map<string, number>();
+    comments.forEach((comment) => {
+      if (!comment.parentId) return;
+      map.set(comment.parentId, (map.get(comment.parentId) || 0) + 1);
+    });
+    return map;
+  }, [comments]);
+  const threadSummaries = useMemo(() => {
+    const map = new Map<string, CommentThreadSummary>();
+
+    comments.forEach((comment) => {
+      const threadId = getCommentThreadKey(comment);
+      const targetKey = `${comment.targetType}:${comment.targetId}`;
+      const target = targetByKey.get(targetKey);
+      const createdTime = new Date(comment.createdAt).getTime();
+      const isReported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
+      const isFlagged = isReported || comment.status === 'spam' || comment.status === 'blocked';
+      const existing = map.get(threadId);
+
+      if (!existing) {
+        map.set(threadId, {
+          id: threadId,
+          targetKey,
+          target,
+          rootComment: comment.parentId ? undefined : comment,
+          latestComment: comment,
+          total: 1,
+          replies: comment.parentId ? 1 : 0,
+          pending: comment.status === 'pending' ? 1 : 0,
+          reported: isReported ? 1 : 0,
+          flagged: isFlagged ? 1 : 0,
+          statuses: [comment.status],
+          authorNames: comment.authorName ? [comment.authorName] : [],
+          createdAt: comment.createdAt,
+          latestAt: comment.createdAt,
+        });
+        return;
+      }
+
+      existing.total += 1;
+      existing.replies += comment.parentId ? 1 : 0;
+      existing.pending += comment.status === 'pending' ? 1 : 0;
+      existing.reported += isReported ? 1 : 0;
+      existing.flagged += isFlagged ? 1 : 0;
+      if (!existing.statuses.includes(comment.status)) existing.statuses.push(comment.status);
+      if (comment.authorName && !existing.authorNames.includes(comment.authorName)) existing.authorNames.push(comment.authorName);
+      if (!existing.rootComment && !comment.parentId) existing.rootComment = comment;
+      if (!existing.createdAt || createdTime < new Date(existing.createdAt).getTime()) existing.createdAt = comment.createdAt;
+      if (!existing.latestAt || createdTime > new Date(existing.latestAt).getTime()) {
+        existing.latestAt = comment.createdAt;
+        existing.latestComment = comment;
+      }
+    });
+
+    return Array.from(map.values()).sort((left, right) => {
+      const leftTime = new Date(left.latestAt || left.createdAt || 0).getTime();
+      const rightTime = new Date(right.latestAt || right.createdAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+  }, [comments, targetByKey]);
   const moderationListUrl = useMemo(() => {
     const query = new URLSearchParams();
     query.set('limit', '100');
@@ -226,10 +317,11 @@ function CommentsRoute() {
     if (statusFilter !== 'all') query.set('status', statusFilter);
     if (targetTypeFilter !== 'all') query.set('targetType', targetTypeFilter);
     if (searchQuery.trim()) query.set('q', searchQuery.trim());
+    if (threadFilter !== 'all') query.set('commentThreadId', threadFilter);
     if (sortFilter) query.set('sort', sortFilter);
 
     return `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments?${query.toString()}`;
-  }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter]);
+  }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter, threadFilter]);
   const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
   const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
   const blocklistUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/blocklist`;
@@ -239,6 +331,7 @@ function CommentsRoute() {
     return comments.filter((comment) => {
       const matchesStatus = statusFilter === 'all' || comment.status === statusFilter;
       const matchesTarget = targetTypeFilter === 'all' || comment.targetType === targetTypeFilter;
+      const matchesThread = threadFilter === 'all' || getCommentThreadKey(comment) === threadFilter;
       const isReported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
       const isReply = Boolean(comment.parentId);
       const isAuthenticated = Boolean(comment.userId);
@@ -269,13 +362,13 @@ function CommentsRoute() {
         target?.path,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesStatus && matchesTarget && matchesTriage && matchesSearch;
+      return matchesStatus && matchesTarget && matchesThread && matchesTriage && matchesSearch;
     }).sort((left, right) => {
       const leftTime = new Date(left.createdAt).getTime();
       const rightTime = new Date(right.createdAt).getTime();
       return sortFilter === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
     });
-  }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetTypeFilter, triageFilter]);
+  }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetTypeFilter, threadFilter, triageFilter]);
   const filteredBlocklist = useMemo(() => {
     const normalizedSearch = blocklistSearch.trim().toLowerCase();
 
@@ -295,6 +388,7 @@ function CommentsRoute() {
     statusFilter !== 'all' ||
     targetTypeFilter !== 'all' ||
     triageFilter !== 'all' ||
+    threadFilter !== 'all' ||
     sortFilter !== 'newest',
   );
   const metrics = useMemo(() => ({
@@ -334,6 +428,13 @@ function CommentsRoute() {
         label: 'Review queue',
         detail: reviewComplete ? 'No pending comments need approval.' : `${metrics.pending} pending comment${metrics.pending === 1 ? '' : 's'} need review`,
         ready: reviewComplete,
+      },
+      {
+        label: 'Thread context',
+        detail: comments.length > 0
+          ? `${threadSummaries.length} discussion thread${threadSummaries.length === 1 ? '' : 's'} with ${threadSummaries.reduce((total, thread) => total + thread.replies, 0)} repl${threadSummaries.reduce((total, thread) => total + thread.replies, 0) === 1 ? 'y' : 'ies'} mapped.`
+          : 'Thread context appears when comments are submitted.',
+        ready: comments.length === 0 || threadSummaries.length > 0,
       },
       {
         label: 'Safety flags',
@@ -379,7 +480,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
+  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -413,6 +514,7 @@ function CommentsRoute() {
       status: statusFilter,
       targetType: targetTypeFilter,
       triage: triageFilter,
+      thread: threadFilter,
       sort: sortFilter,
       query: searchQuery.trim(),
       visible: filteredComments.length,
@@ -421,6 +523,22 @@ function CommentsRoute() {
       blocklistTotal: blocklistCount,
     },
     moderationStates: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
+    threads: threadSummaries.map((thread) => ({
+      id: thread.id,
+      targetType: thread.target?.type || thread.rootComment?.targetType || thread.latestComment?.targetType,
+      targetId: thread.target?.id || thread.rootComment?.targetId || thread.latestComment?.targetId,
+      targetLabel: thread.target?.label,
+      rootCommentId: thread.rootComment?.id || null,
+      latestCommentId: thread.latestComment?.id || null,
+      total: thread.total,
+      replies: thread.replies,
+      pending: thread.pending,
+      reported: thread.reported,
+      flagged: thread.flagged,
+      statuses: thread.statuses,
+      createdAt: thread.createdAt,
+      latestAt: thread.latestAt,
+    })),
     sitePolicy: {
       ...commentPolicyDraft,
       dirty: commentPolicyDirty,
@@ -521,6 +639,8 @@ function CommentsRoute() {
     targetByKey,
     targetTypeFilter,
     targets,
+    threadFilter,
+    threadSummaries,
     triageFilter,
   ]);
   const moderationHandoffText = useMemo(() => JSON.stringify(moderationHandoff, null, 2), [moderationHandoff]);
@@ -772,6 +892,7 @@ function CommentsRoute() {
     setStatusFilter('all');
     setTargetTypeFilter('all');
     setTriageFilter('all');
+    setThreadFilter('all');
     setSortFilter('newest');
   };
   const selectCommentsSite = (nextSiteId: string) => {
@@ -969,7 +1090,7 @@ function CommentsRoute() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Comments control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, moderation health, API handoff, queue review, and bulk decisions.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
             {COMMENT_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -1187,6 +1308,74 @@ function CommentsRoute() {
         <Metric label="Approved" value={metrics.approved} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
+
+      <Panel id="comments-threads" className="mb-6 scroll-mt-24" data-testid="comments-thread-panel">
+        <PanelHeader
+          title="Thread map"
+          description={`${threadSummaries.length} discussion thread${threadSummaries.length === 1 ? '' : 's'} mapped across visible page and blog targets`}
+          icon={<MessageSquare className="size-4" />}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label="Comment thread filter"
+                value={threadFilter}
+                disabled={isCommentsBusy}
+                onChange={(event) => setThreadFilter(event.target.value)}
+                data-testid="comments-thread-filter"
+                className="min-h-10 max-w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="all">All threads</option>
+                {threadSummaries.slice(0, 50).map((thread) => (
+                  <option key={thread.id} value={thread.id}>
+                    {formatThreadOption(thread)}
+                  </option>
+                ))}
+              </select>
+              {threadFilter !== 'all' ? (
+                <Button size="sm" variant="outline" disabled={isCommentsBusy} onClick={() => setThreadFilter('all')}>
+                  Clear thread
+                </Button>
+              ) : null}
+            </div>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="text-sm font-semibold">Thread triage</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Replies stay tied to the parent discussion so reviewers can avoid approving, rejecting, or blocking a reply without seeing the thread context.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MetaTile label="Threads" value={`${threadSummaries.length}`} />
+                <MetaTile label="Replies" value={`${threadSummaries.reduce((total, thread) => total + thread.replies, 0)}`} />
+                <MetaTile label="Pending replies" value={`${threadSummaries.reduce((total, thread) => total + Math.min(thread.pending, thread.replies), 0)}`} />
+                <MetaTile label="Reported threads" value={`${threadSummaries.filter((thread) => thread.reported > 0).length}`} />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {threadSummaries.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                  <MessageSquare className="mx-auto size-8 text-muted-foreground" />
+                  <div className="mt-3 text-sm font-medium text-foreground">No comment threads yet</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    Page and blog comments will appear here with parent and reply counts once submitted.
+                  </div>
+                </div>
+              ) : threadSummaries.slice(0, 6).map((thread) => (
+                <ThreadSummaryRow
+                  key={thread.id}
+                  thread={thread}
+                  active={threadFilter === thread.id}
+                  disabled={isCommentsBusy}
+                  onReview={() => setThreadFilter(thread.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
 
       <Panel id="comments-blocklist" className="mb-6 scroll-mt-24" data-testid="comments-blocklist-panel">
         <PanelHeader
@@ -1457,6 +1646,23 @@ function CommentsRoute() {
               <option value="unreviewed">Unreviewed</option>
             </select>
             <select
+              aria-label="Comment queue thread filter"
+              value={threadFilter}
+              disabled={isCommentsBusy}
+              onChange={(event) => {
+                if (isCommentsBusy) return;
+                setThreadFilter(event.target.value);
+              }}
+              className="min-h-10 max-w-72 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="all">All threads</option>
+              {threadSummaries.slice(0, 50).map((thread) => (
+                <option key={thread.id} value={thread.id}>
+                  {formatThreadOption(thread)}
+                </option>
+              ))}
+            </select>
+            <select
               aria-label="Comment sort order"
               value={sortFilter}
               disabled={isCommentsBusy}
@@ -1585,6 +1791,9 @@ function CommentsRoute() {
                   key={comment.id}
                   comment={comment}
                   target={targetByKey.get(`${comment.targetType}:${comment.targetId}`)}
+                  parentComment={comment.parentId ? commentById.get(comment.parentId) : undefined}
+                  replyCount={replyCountByParent.get(comment.id) || 0}
+                  threadKey={getCommentThreadKey(comment)}
                   selected={selectedSet.has(comment.id)}
                   disabled={isCommentsBusy}
                   onSelect={(checked) => {
@@ -1642,6 +1851,74 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatThreadOption(thread: CommentThreadSummary) {
+  const target = thread.target?.label || thread.targetKey;
+  const rootAuthor = thread.rootComment?.authorName || thread.latestComment?.authorName || 'Anonymous';
+  const flags = [
+    `${thread.total} comment${thread.total === 1 ? '' : 's'}`,
+    `${thread.replies} repl${thread.replies === 1 ? 'y' : 'ies'}`,
+    thread.pending > 0 ? `${thread.pending} pending` : null,
+    thread.reported > 0 ? `${thread.reported} reported` : null,
+  ].filter(Boolean).join(', ');
+
+  return `${target} - ${rootAuthor} (${flags})`;
+}
+
+function ThreadSummaryRow({
+  thread,
+  active,
+  disabled,
+  onReview,
+}: {
+  thread: CommentThreadSummary;
+  active: boolean;
+  disabled: boolean;
+  onReview: () => void;
+}) {
+  const rootAuthor = thread.rootComment?.authorName || thread.latestComment?.authorName || 'Anonymous';
+  const latestAuthor = thread.latestComment?.authorName || 'Anonymous';
+
+  return (
+    <div className={cn('rounded-lg border bg-background px-4 py-3', active ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">{thread.target?.label || thread.targetKey}</span>
+            {thread.reported > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                <Flag className="size-3" />
+                {thread.reported} reported
+              </span>
+            ) : null}
+            {thread.pending > 0 ? <StatusBadge status={`${thread.pending} pending`} type="warning" /> : null}
+          </div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">
+            Root: {rootAuthor} · Latest: {latestAuthor}{thread.latestAt ? ` at ${formatDate(thread.latestAt)}` : ''}
+          </div>
+          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+            {thread.id}
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant={active ? 'primary' : 'outline'}
+          disabled={disabled}
+          onClick={onReview}
+          aria-label={`Review thread ${thread.id}`}
+        >
+          Review thread
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <MetaTile label="Total" value={`${thread.total}`} />
+        <MetaTile label="Replies" value={`${thread.replies}`} />
+        <MetaTile label="Flagged" value={`${thread.flagged}`} />
+        <MetaTile label="States" value={thread.statuses.join(', ')} />
+      </div>
+    </div>
+  );
+}
+
 function ModerationCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
   const Icon = ready ? CheckCircle2 : ShieldAlert;
 
@@ -1673,6 +1950,9 @@ function ModerationWorkflowStep({ index, label, detail }: { index: number; label
 function CommentCard({
   comment,
   target,
+  parentComment,
+  replyCount,
+  threadKey,
   selected,
   disabled,
   onSelect,
@@ -1684,6 +1964,9 @@ function CommentCard({
 }: {
   comment: AdminComment;
   target?: CommentTargetSummary;
+  parentComment?: AdminComment;
+  replyCount: number;
+  threadKey: string;
   selected: boolean;
   disabled: boolean;
   onSelect: (checked: boolean) => void;
@@ -1695,9 +1978,10 @@ function CommentCard({
 }) {
   const reports = comment.reportReasons?.length ? comment.reportReasons.join(', ') : null;
   const hasReports = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
+  const isReply = Boolean(comment.parentId);
 
   return (
-    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
+    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')} data-testid="comment-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <input
@@ -1722,6 +2006,7 @@ function CommentCard({
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {comment.authorEmail ? <span>{comment.authorEmail}</span> : null}
               <span>{comment.targetType}</span>
+              <span>{isReply ? 'reply' : 'top-level'}</span>
               {target ? (
                 <Link
                   to={target.type === 'page' ? '/pages/$pageId/edit' : '/blog/$postId'}
@@ -1739,6 +2024,16 @@ function CommentCard({
                 <span>{comment.targetId}</span>
               )}
               <span>{formatDate(comment.createdAt)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 font-mono">Thread {threadKey}</span>
+              {isReply ? (
+                <span>
+                  Reply to {parentComment?.authorName || parentComment?.authorEmail || comment.parentId}
+                </span>
+              ) : (
+                <span>{replyCount} repl{replyCount === 1 ? 'y' : 'ies'}</span>
+              )}
             </div>
           </div>
         </div>

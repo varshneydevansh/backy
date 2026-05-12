@@ -91,7 +91,7 @@ const deletePage = async (pageId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
 };
 
-const submitComment = async ({ pageId, authorName, authorEmail, content, requestId }) => {
+const submitComment = async ({ pageId, authorName, authorEmail, content, requestId, parentId, commentThreadId }) => {
   const payload = await requestApi(`/api/sites/${SITE_ID}/pages/${pageId}/comments`, {
     method: 'POST',
     body: JSON.stringify({
@@ -99,6 +99,8 @@ const submitComment = async ({ pageId, authorName, authorEmail, content, request
       authorName,
       authorEmail,
       requestId,
+      parentId,
+      commentThreadId,
       honeypot: '',
       rateLimitBypass: true,
       startedAt: Date.now() - 3000,
@@ -175,6 +177,18 @@ const deleteBlocklistEntries = async (ids) => {
     body: JSON.stringify({ ids }),
   });
   return payload.data || payload;
+};
+
+const cleanupSmokeBlocklistResidue = async () => {
+  const staleEntries = (await listBlocklist()).filter((entry) => (
+    String(entry.requestId || '').startsWith('comments-smoke-') ||
+    String(entry.reason || '').includes('comments smoke') ||
+    String(entry.value || '').startsWith('comments-')
+  ));
+
+  if (staleEntries.length > 0) {
+    await deleteBlocklistEntries(staleEntries.map((entry) => entry.id));
+  }
 };
 
 const waitForCommentStatus = async (commentId, requestId, status) => {
@@ -577,14 +591,44 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+    hasThreadPanel: Boolean(document.querySelector('[data-testid="comments-thread-panel"]')),
     hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
     hasApi: document.body?.innerText?.includes('Comment moderation API') || false,
     hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const assertThreadContext = async (client, parentAuthor, replyAuthor) => {
+  const state = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="comments-thread-panel"]');
+    const filter = document.querySelector('[data-testid="comments-thread-filter"]');
+    const bodyText = document.body?.innerText || '';
+    const parentCard = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => (
+      (candidate.textContent || '').includes(${JSON.stringify(parentAuthor)}) &&
+      !(candidate.textContent || '').includes(${JSON.stringify(replyAuthor)})
+    ));
+    const replyCard = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => (
+      (candidate.textContent || '').includes(${JSON.stringify(replyAuthor)})
+    ));
+
+    return {
+      hasPanel: Boolean(panel),
+      hasFilter: filter instanceof HTMLSelectElement,
+      optionCount: filter instanceof HTMLSelectElement ? filter.options.length : 0,
+      panelText: panel?.textContent || '',
+      hasParentReplyCount: Boolean(parentCard && (parentCard.textContent || '').includes('1 reply')),
+      hasReplyParent: Boolean(replyCard && (replyCard.textContent || '').includes(${JSON.stringify(`Reply to ${parentAuthor}`)})),
+      hasThreadCopy: bodyText.includes('Thread map') && bodyText.includes('Thread triage'),
+    };
+  })()`);
+
+  assert(state.hasPanel && state.hasFilter && state.optionCount > 1, `Comments thread panel did not expose thread controls: ${JSON.stringify(state)}`);
+  assert(state.hasParentReplyCount && state.hasReplyParent && state.hasThreadCopy, `Comments thread context missing parent/reply details: ${JSON.stringify(state)}`);
+  return state;
 };
 
 const launchChrome = () => {
@@ -645,13 +689,16 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await cleanupSmokeBlocklistResidue();
     page = await createPage();
     const suffix = Date.now().toString(36);
     const approveRequestId = `comments-smoke-approve-${suffix}`;
     const rejectRequestId = `comments-smoke-reject-${suffix}`;
     const reportRequestId = `comments-smoke-report-${suffix}`;
     const blockRequestId = `comments-smoke-block-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId);
+    const threadParentRequestId = `comments-smoke-thread-parent-${suffix}`;
+    const threadReplyRequestId = `comments-smoke-thread-reply-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId);
 
     const approveComment = await submitComment({
       pageId: page.id,
@@ -681,6 +728,23 @@ const main = async () => {
       content: 'Please block this temporary page comment from the moderation smoke.',
       requestId: blockRequestId,
     });
+    const threadParentComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Thread Parent',
+      authorEmail: 'comments-thread-parent@example.com',
+      content: 'Temporary parent comment for the comments thread map smoke.',
+      requestId: threadParentRequestId,
+    });
+    const threadReplyComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Thread Reply',
+      authorEmail: 'comments-thread-reply@example.com',
+      content: 'Temporary reply comment for the comments thread map smoke.',
+      requestId: threadReplyRequestId,
+      parentId: threadParentComment.id,
+      commentThreadId: threadParentComment.commentThreadId,
+    });
+    assert(threadReplyComment.parentId === threadParentComment.id, `Reply comment did not preserve parent id: ${JSON.stringify(threadReplyComment)}`);
     await reportComment({
       commentId: reportedComment.id,
       reason: 'harassment',
@@ -702,7 +766,15 @@ const main = async () => {
     });
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: getAuthStorageScript() });
 
-    await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject', 'Comments Smoke Report', 'Comments Smoke Block']);
+    await navigateToComments(client, [
+      'Comments Smoke Approve',
+      'Comments Smoke Reject',
+      'Comments Smoke Report',
+      'Comments Smoke Block',
+      'Comments Smoke Thread Parent',
+      'Comments Smoke Thread Reply',
+    ]);
+    await assertThreadContext(client, 'Comments Smoke Thread Parent', 'Comments Smoke Thread Reply');
     await savePolicyInUi(client, 'bannedphrase');
     for (let attempt = 0; attempt < 80; attempt += 1) {
       const site = await getAdminSite();
@@ -802,6 +874,8 @@ const main = async () => {
       rejectedCommentId: rejectComment.id,
       resolvedReportCommentId: reportedComment.id,
       blockedCommentId: blockedComment.id,
+      threadParentCommentId: threadParentComment.id,
+      threadReplyCommentId: threadReplyComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

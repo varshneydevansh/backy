@@ -1836,6 +1836,7 @@ export interface CommentListFilters {
   q?: string;
   parentOnly?: boolean;
   parentId?: string | null;
+  commentThreadId?: string;
   sort?: CommentModerationSort;
   limit?: number;
   offset?: number;
@@ -3933,6 +3934,7 @@ export async function listComments(
   if (filters.q) query.set('q', filters.q);
   if (filters.parentOnly !== undefined) query.set('parentOnly', String(filters.parentOnly));
   if (filters.parentId !== undefined && filters.parentId !== null) query.set('parentId', filters.parentId);
+  if (filters.commentThreadId) query.set('commentThreadId', filters.commentThreadId);
   if (filters.sort) query.set('sort', filters.sort);
 
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments?${query.toString()}`);
