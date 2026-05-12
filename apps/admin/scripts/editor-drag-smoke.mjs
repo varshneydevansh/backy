@@ -1256,6 +1256,7 @@ const pressKey = async (client, key, options = {}) => {
     Delete: 'Delete',
     Backspace: 'Backspace',
     Escape: 'Escape',
+    Tab: 'Tab',
     a: 'KeyA',
     c: 'KeyC',
     d: 'KeyD',
@@ -1274,6 +1275,7 @@ const pressKey = async (client, key, options = {}) => {
     Delete: 46,
     Backspace: 8,
     Escape: 27,
+    Tab: 9,
     a: 65,
     c: 67,
     d: 68,
@@ -2417,12 +2419,16 @@ const readShortcutSelectionState = async (client, label) => evaluate(client, `((
   const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
     .map((node) => node.getAttribute('data-layer-id'))
     .filter(Boolean);
+  const selectedCanvasElements = Array.from(document.querySelectorAll('[data-element-id][data-selected-ids]'))
+    .map((node) => node.getAttribute('data-element-id'))
+    .filter(Boolean);
   const inspectorSelection = document.querySelector('[data-testid="editor-inspector-selection"]');
   const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
 
   return {
     label: ${JSON.stringify(label)},
     selectedLayers,
+    selectedCanvasElements: Array.from(new Set(selectedCanvasElements)),
     hasInspectorSelection: Boolean(inspectorSelection),
     hasMultiSelection: Boolean(multiSelection),
     inspectorText: inspectorSelection?.textContent || '',
@@ -2452,6 +2458,42 @@ const testEscapeDeselectShortcut = async (client, elementId) => {
     elementId,
     before,
     after,
+  };
+};
+
+const assertSingleShortcutSelection = (state, expectedId, label) => {
+  assert(
+    state.selectedCanvasElements.length === 1 &&
+      state.selectedCanvasElements[0] === expectedId &&
+      state.hasInspectorSelection &&
+      state.inspectorText.includes(expectedId),
+    `${label} expected only ${expectedId} to be selected: ${JSON.stringify(state)}`,
+  );
+};
+
+const testTabCycleSelectionShortcut = async (client) => {
+  await selectLayerById(client, 'smoke-heading');
+  await blurActiveElement(client);
+  const before = await readShortcutSelectionState(client, 'before tab cycle');
+  assertSingleShortcutSelection(before, 'smoke-heading', 'before tab cycle');
+
+  await pressKey(client, 'Tab');
+  const afterFirstTab = await readShortcutSelectionState(client, 'after first tab');
+  assertSingleShortcutSelection(afterFirstTab, 'smoke-image', 'after first tab');
+
+  await pressKey(client, 'Tab');
+  const afterSecondTab = await readShortcutSelectionState(client, 'after second tab');
+  assertSingleShortcutSelection(afterSecondTab, 'smoke-video', 'after second tab');
+
+  await pressKey(client, 'Tab', { shiftKey: true });
+  const afterShiftTab = await readShortcutSelectionState(client, 'after shift tab');
+  assertSingleShortcutSelection(afterShiftTab, 'smoke-image', 'after shift tab');
+
+  return {
+    before,
+    afterFirstTab,
+    afterSecondTab,
+    afterShiftTab,
   };
 };
 
@@ -2631,6 +2673,9 @@ const testEditorShortcutGuards = async (client, elementId) => {
   })()`);
 
   assert(focusedSelect?.ok, `Unable to focus heading level select for shortcut guard: ${JSON.stringify(focusedSelect)}`);
+  await pressKey(client, 'Tab');
+  const afterFocusedSelectTab = await readShortcutSelectionState(client, 'after focused select tab');
+  assertSingleShortcutSelection(afterFocusedSelectTab, elementId, 'focused select tab shortcut guard');
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   await pressKey(client, 'Delete');
   await pressKey(client, 'g', { ctrlKey: true });
@@ -2711,6 +2756,7 @@ const testEditorShortcutGuards = async (client, elementId) => {
     elementId,
     focusedSelect,
     focusedDialog,
+    afterFocusedSelectTab,
     before: before[elementId],
     afterSelectShortcuts: afterSelectShortcuts[elementId],
     afterDialogShortcuts: afterDialogShortcuts[elementId],
@@ -3933,6 +3979,7 @@ const testKeyboardShortcutControls = async (client, pageId) => {
   const shiftNudge = await testKeyboardNudge(client, 'smoke-image');
   const undoRedo = await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge');
   const escapeDeselect = await testEscapeDeselectShortcut(client, 'smoke-icon');
+  const tabCycle = await testTabCycleSelectionShortcut(client);
   const siblingScopeSelection = await testSiblingScopeSelectionShortcut(client, ['smoke-heading', 'smoke-image']);
   const grouping = await testLayerGrouping(client, ['smoke-heading', 'smoke-image']);
   const clipboard = await testClipboardEditingControls(client, 'smoke-heading');
@@ -3969,6 +4016,7 @@ const testKeyboardShortcutControls = async (client, pageId) => {
     shiftNudge,
     undoRedo,
     escapeDeselect,
+    tabCycle,
     siblingScopeSelection,
     grouping,
     clipboard,

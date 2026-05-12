@@ -141,12 +141,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Click canvas to deselect
 - Selected element shows ring highlight
 - Shift/Cmd/Ctrl-click on the canvas toggles multi-selection.
+- Tab and Shift+Tab cycle single selection through visible canvas elements in render order.
 - Multi-selection supports group/ungroup, drag, resize, alignment/distribution controls, and selected sibling operations.
 - Locked layers remain selectable but are skipped by destructive/transform actions.
 - Focused smoke coverage: `BACKY_EDITOR_MULTI_SELECT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - **Issues:** None
-- **Improvements Needed:**
-    - Tab to cycle through elements
+- **Improvements Needed:** None currently tracked for this interaction
 
 ### 7. Preview Mode
 **File:** `pages.$pageId.edit.tsx` (isPreviewMode state)
@@ -322,11 +322,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | Arrow keys | Nudge selected elements 1px |
 | Shift+Arrow | Nudge selected elements 10px |
 | Escape | Deselect canvas elements |
+| Tab / Shift+Tab | Cycle single selection forward/backward through visible canvas elements |
 | Ctrl/Cmd+A | Select all unlocked siblings in the active canvas scope |
 | Ctrl/Cmd+G | Group selected sibling elements |
 | Ctrl/Cmd+Shift+G | Ungroup selected group |
 
-- Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, or save actions.
+- Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
 - Focused smoke coverage: `BACKY_EDITOR_SHORTCUTS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ### 22. Markdown-like Text Shortcuts
@@ -369,6 +370,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel table row/column removal controls, with browser smoke coverage proving 3x3 tables shrink back to persisted 2x2 structures without losing original cell content.
 - Added Property Panel table header-row toggle controls, with browser smoke coverage proving selected rows render and persist as semantic `th` cells.
 - Added Property Panel whole-table removal controls, with browser smoke coverage proving the active table can be removed without deleting surrounding blockquote content.
+- Added Tab and Shift+Tab canvas selection cycling through visible elements, with keyboard shortcut smoke coverage and focused-control guard coverage.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.

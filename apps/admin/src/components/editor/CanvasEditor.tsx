@@ -1273,6 +1273,26 @@ export function CanvasEditor({
     return null;
   }, []);
 
+  const collectCyclableElementIds = useCallback((items: CanvasElement[]): string[] => {
+    const ids: string[] = [];
+    const walk = (nodes: CanvasElement[], parentVisible = true) => {
+      nodes.forEach((element) => {
+        const isVisible = parentVisible && element.visible !== false;
+        if (!isVisible) {
+          return;
+        }
+
+        ids.push(element.id);
+        if (element.children?.length) {
+          walk(element.children, isVisible);
+        }
+      });
+    };
+
+    walk(items);
+    return ids;
+  }, []);
+
   const getElementAbsoluteOffset = useCallback((
     items: CanvasElement[],
     targetId: string,
@@ -2715,6 +2735,27 @@ export function CanvasEditor({
     setRightPanel('layers');
   }, [selectableSiblingIds]);
 
+  const cycleElementSelection = useCallback((direction: 1 | -1) => {
+    const selectableIds = collectCyclableElementIds(displayedElements);
+    if (selectableIds.length === 0) {
+      setSelectedId(null);
+      setSelectedIds([]);
+      return;
+    }
+
+    const currentIndex = selectedId ? selectableIds.indexOf(selectedId) : -1;
+    const nextIndex = currentIndex === -1
+      ? direction === 1 ? 0 : selectableIds.length - 1
+      : (currentIndex + direction + selectableIds.length) % selectableIds.length;
+    const nextId = selectableIds[nextIndex] || null;
+
+    setSelectedId(nextId);
+    setSelectedIds(nextId ? [nextId] : []);
+    if (nextId) {
+      setRightPanel('properties');
+    }
+  }, [collectCyclableElementIds, displayedElements, selectedId]);
+
   /**
    * Handle elements change
    */
@@ -3578,6 +3619,13 @@ export function CanvasEditor({
         return;
       }
 
+      // Tab / Shift+Tab (Cycle canvas element selection)
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        cycleElementSelection(e.shiftKey ? -1 : 1);
+        return;
+      }
+
       // Escape (Deselect canvas elements)
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -3687,6 +3735,7 @@ export function CanvasEditor({
     handleGroupSelected,
     handleUngroupSelected,
     handleSelectSiblingScope,
+    cycleElementSelection,
     nudgeSelectedElement,
     isPreview,
     isSaving,
