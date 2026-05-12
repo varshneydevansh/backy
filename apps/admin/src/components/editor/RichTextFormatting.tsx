@@ -136,6 +136,7 @@ export function RichTextFormatting({
     toggleTableHeaderRow,
     toggleTableHeaderColumn,
     toggleTableHeaderCell,
+    setTableCellBackgroundColor,
     setTableCaption,
     removeTable,
     storeSelection,
@@ -1587,6 +1588,7 @@ export function RichTextFormatting({
   const [selectedFontSizeValue, setSelectedFontSizeValue] = useState('');
   const [selectedFontColorValue, setSelectedFontColorValue] = useState('');
   const [selectedHighlightColorValue, setSelectedHighlightColorValue] = useState('');
+  const [selectedTableCellFillValue, setSelectedTableCellFillValue] = useState('');
   const [selectedTableCaptionValue, setSelectedTableCaptionValue] = useState('');
   const [insertDialog, setInsertDialog] = useState<{
     mode: InsertDialogMode;
@@ -1700,6 +1702,7 @@ export function RichTextFormatting({
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const textColorTriggerRef = useRef<HTMLSpanElement>(null);
   const highlightColorTriggerRef = useRef<HTMLSpanElement>(null);
+  const tableCellFillTriggerRef = useRef<HTMLSpanElement>(null);
   const quickFontFamilies = useMemo(() => {
     const list = fontFamilies.some((font) => font.value === 'inherit')
       ? fontFamilies
@@ -1893,6 +1896,31 @@ export function RichTextFormatting({
     return typeof tableNode?.caption === 'string' ? tableNode.caption : '';
   }, [getActiveEditor]);
 
+  const readSelectedTableCellFill = useCallback(() => {
+    const editor = getActiveEditor();
+    const selection = editor?.selection;
+    if (!editor || !selection || !SlateRange.isRange(selection)) {
+      return '';
+    }
+
+    const cellEntry = Editor.above(editor as any, {
+      at: selection,
+      match: (node) => {
+        const type = (node as { type?: unknown }).type;
+        return type === 'td' || type === 'th';
+      },
+    });
+    const cellNode = cellEntry?.[0] as { backgroundColor?: unknown } | undefined;
+    return typeof cellNode?.backgroundColor === 'string' ? cellNode.backgroundColor : '';
+  }, [getActiveEditor]);
+
+  const updateTableCellFillAtSelection = useCallback((color: string) => {
+    setSelectedTableCellFillValue(color);
+    runOrActivateTextEditor('table-cell-fill', () => {
+      setTableCellBackgroundColor(color);
+    });
+  }, [runOrActivateTextEditor, setTableCellBackgroundColor]);
+
   const updateTableCaptionAtSelection = useCallback((caption: string) => {
     setSelectedTableCaptionValue(caption);
     runOrActivateTextEditor('table-caption', () => {
@@ -2023,7 +2051,8 @@ export function RichTextFormatting({
     }
 
     setSelectedTableCaptionValue(readSelectedTableCaption());
-  }, [isTargetEditorInEditableMode, readSelectedTableCaption, selectionRevision]);
+    setSelectedTableCellFillValue(readSelectedTableCellFill());
+  }, [isTargetEditorInEditableMode, readSelectedTableCaption, readSelectedTableCellFill, selectionRevision]);
 
   useEffect(() => {
     if (fontFamilies.length === 0) {
@@ -2662,6 +2691,23 @@ export function RichTextFormatting({
           </button>
         </div>
       </div>
+
+      <label className="flex min-w-0 items-center gap-2 text-xs">
+        <Palette className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground whitespace-nowrap">Cell Fill</span>
+        <span className="ml-auto inline-flex" ref={tableCellFillTriggerRef}>
+          <ColorPicker
+            value={selectedTableCellFillValue}
+            testId="rich-text-table-cell-fill"
+            triggerRef={tableCellFillTriggerRef}
+            onChange={(color) => {
+              runContentProperty('table-cell-fill', () => {
+                updateTableCellFillAtSelection(color);
+              }, { requireActiveEditor: false });
+            }}
+          />
+        </span>
+      </label>
 
       <label className="flex min-w-0 items-center gap-2 text-xs">
         <TableProperties className="w-3 h-3 text-muted-foreground" />

@@ -630,6 +630,9 @@ export const BackyEditor = ({
 
         if (tableNodeType === 'td' || tableNodeType === 'th') {
             const Tag = tableNodeType as 'td' | 'th';
+            const backgroundColor = typeof element?.backgroundColor === 'string'
+                ? element.backgroundColor.trim()
+                : '';
             return (
                 <Tag
                     {...attributes}
@@ -639,6 +642,7 @@ export const BackyEditor = ({
                         border: '1px solid #e5e7eb',
                         padding: '0.375rem 0.5rem',
                         verticalAlign: 'top',
+                        ...(backgroundColor ? { backgroundColor } : {}),
                     }}
                 >
                     {children}

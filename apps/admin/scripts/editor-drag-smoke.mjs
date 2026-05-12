@@ -4347,6 +4347,61 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Rich-text table caption control did not render and sync caption metadata: ${JSON.stringify(tableCaptionState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedFillTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedFillTableCell?.ok, `Unable to reselect table cell before cell fill control: ${JSON.stringify(selectedFillTableCell)}`);
+
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#c9daf8');
+  await sleep(500);
+  await activateTextEditing(client, elementId);
+  const reselectedFillTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(reselectedFillTableCell?.ok, `Unable to reselect table cell before cell fill metadata check: ${JSON.stringify(reselectedFillTableCell)}`);
+
+  const tableCellFillState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 1'));
+    const otherCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const targetCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 1')
+    ));
+    const otherCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 2')
+    ));
+    return {
+      targetText: targetCell?.textContent || '',
+      targetBackgroundColor: targetCell ? window.getComputedStyle(targetCell).backgroundColor : '',
+      otherBackgroundColor: otherCell ? window.getComputedStyle(otherCell).backgroundColor : '',
+      targetCellBackgroundColor: targetCellNode?.backgroundColor || '',
+      otherCellBackgroundColor: otherCellNode?.backgroundColor || '',
+      html: targetCell?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCellFillState.targetBackgroundColor === 'rgb(201, 218, 248)' &&
+      tableCellFillState.targetCellBackgroundColor === '#c9daf8' &&
+      tableCellFillState.otherCellBackgroundColor !== '#c9daf8',
+    `Rich-text table cell fill control did not apply only to the selected cell: ${JSON.stringify(tableCellFillState)}`,
+  );
+
   await mouseDownControlByTestId(client, 'rich-text-align-center');
   await sleep(500);
 
@@ -4447,6 +4502,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     restoredHeaderCell,
     selectedCaptionTableCell,
     tableCaptionState,
+    selectedFillTableCell,
+    reselectedFillTableCell,
+    tableCellFillState,
     tableCellAlignmentState,
     reselectedHeaderCell,
     restoredHeaderTableState,
@@ -4538,7 +4596,17 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     node.type === 'p' &&
     collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Column 1'))
   ));
+  const filledColumnOneCell = elements.find((node) => (
+    (node.type === 'td' || node.type === 'th') &&
+    collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Column 1'))
+  ));
+  const unfilledColumnTwoCell = elements.find((node) => (
+    (node.type === 'td' || node.type === 'th') &&
+    collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Column 2'))
+  ));
   assert(alignedColumnOneBlock?.align === 'center', `Persisted table cell text alignment missing: ${JSON.stringify({ alignedColumnOneBlock, content })}`);
+  assert(filledColumnOneCell?.backgroundColor === '#c9daf8', `Persisted table cell fill missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
+  assert(unfilledColumnTwoCell?.backgroundColor !== '#c9daf8', `Persisted table cell fill leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
   assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
@@ -4553,6 +4621,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     cellCount,
     headerCellCount,
     alignedColumnOneBlock,
+    filledColumnOneCell,
     listItems,
     text,
   };
