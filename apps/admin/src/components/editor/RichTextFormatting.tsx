@@ -51,6 +51,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Square,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -129,6 +130,7 @@ export function RichTextFormatting({
     moveTableColumnRight,
     toggleTableHeaderRow,
     toggleTableHeaderColumn,
+    toggleTableHeaderCell,
     removeTable,
     storeSelection,
     syncActiveEditorContent,
@@ -1684,6 +1686,12 @@ export function RichTextFormatting({
     });
   }, [runOrActivateTextEditor, toggleTableHeaderColumn]);
 
+  const toggleTableHeaderCellAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-toggle-header-cell', () => {
+      toggleTableHeaderCell();
+    });
+  }, [runOrActivateTextEditor, toggleTableHeaderCell]);
+
   const removeTableAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-remove', () => {
       removeTable();
@@ -2345,6 +2353,19 @@ export function RichTextFormatting({
             title="Toggle table header column"
           >
             <Columns3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-toggle-header-cell', () => toggleTableHeaderCellAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-toggle-header-cell"
+            title="Toggle table header cell"
+          >
+            <Square className="w-4 h-4" />
           </button>
           <button
             type="button"

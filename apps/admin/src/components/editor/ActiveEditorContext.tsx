@@ -70,6 +70,8 @@ interface ActiveEditorContextType {
   toggleTableHeaderRow: () => boolean;
   /** Toggle the current table column between body cells and header cells */
   toggleTableHeaderColumn: () => boolean;
+  /** Toggle the current table cell between body and header semantics */
+  toggleTableHeaderCell: () => boolean;
   /** Remove the current table */
   removeTable: () => boolean;
   /** Check if mark is active */
@@ -125,6 +127,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   moveTableColumnRight: () => false,
   toggleTableHeaderRow: () => false,
   toggleTableHeaderColumn: () => false,
+  toggleTableHeaderCell: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
@@ -598,6 +601,29 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after header-column toggle.
     }
     return didToggleColumn;
+  }, [getSelectedTableContext]);
+
+  const toggleSelectedTableHeaderCell = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const cellNode = Node.get(editor as any, context.cellPath) as any;
+    if (cellNode?.type !== 'td' && cellNode?.type !== 'th') {
+      return false;
+    }
+
+    Transforms.setNodes(editor as any, { type: cellNode.type === 'th' ? 'td' : 'th' } as any, {
+      at: context.cellPath,
+    });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after header-cell toggle.
+    }
+    return true;
   }, [getSelectedTableContext]);
 
   const removeSelectedTable = useCallback((editor: PlateEditor) => {
@@ -1746,6 +1772,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderColumn]);
 
+  const toggleTableHeaderCell = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('toggleTableHeaderCell.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!toggleSelectedTableHeaderCell(editor)) return false;
+
+      debug('toggleTableHeaderCell.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('toggleTableHeaderCell failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderCell]);
+
   const removeTable = useCallback(() => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2078,6 +2129,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       moveTableColumnRight,
       toggleTableHeaderRow,
       toggleTableHeaderColumn,
+      toggleTableHeaderCell,
       removeTable,
       isMarkActive,
       hasRangeSelection,

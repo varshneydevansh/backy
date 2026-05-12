@@ -3627,6 +3627,58 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedHeaderCellOnly = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Value 2');
+  })()`);
+  assert(selectedHeaderCellOnly?.ok, `Unable to select table cell before single-cell header toggle: ${JSON.stringify(selectedHeaderCellOnly)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-cell');
+  await sleep(500);
+
+  const headerCellOnlyState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => ({
+        tag: cell.tagName.toLowerCase(),
+        text: cell.textContent || '',
+      }))),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    headerCellOnlyState.rows[1]?.[1]?.tag === 'th' &&
+      headerCellOnlyState.rows[0]?.[0]?.tag === 'td' &&
+      headerCellOnlyState.rows[0]?.[1]?.tag === 'td' &&
+      headerCellOnlyState.rows[1]?.[0]?.tag === 'td',
+    `Table header-cell toggle did not affect only the selected cell: ${JSON.stringify(headerCellOnlyState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-cell');
+  await sleep(500);
+
+  const restoredHeaderCellOnlyState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => ({
+        tag: cell.tagName.toLowerCase(),
+        text: cell.textContent || '',
+      }))),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredHeaderCellOnlyState.rows.every((row) => row.every((cell) => cell.tag === 'td')) &&
+      restoredHeaderCellOnlyState.rows[1]?.[1]?.text === 'Value 2',
+    `Table header-cell toggle did not restore the selected cell: ${JSON.stringify(restoredHeaderCellOnlyState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedHeaderCell = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -3784,6 +3836,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     selectedHeaderColumnCell,
     headerColumnState,
     restoredHeaderColumnState,
+    selectedHeaderCellOnly,
+    headerCellOnlyState,
+    restoredHeaderCellOnlyState,
     selectedHeaderCell,
     headerTableState,
     deletedTableState,
