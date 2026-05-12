@@ -773,6 +773,38 @@ const generateSignedUrl = async (client) => {
   return null;
 };
 
+const recordProviderMetricsThroughDetails = async (client) => {
+  await setDetailsField(client, 'Provider requests', 42);
+  await setDetailsField(client, 'Provider bytes served', 2048);
+  await setDetailsField(client, 'Analytics source', 'media-smoke-cdn');
+  await setDetailsField(client, 'Reporting window', 'smoke-window');
+  await clickDetailsButton(client, 'Record provider metrics');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-provider-analytics"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: text.includes('Provider metrics recorded') &&
+          text.includes('42') &&
+          text.includes('2 KB') &&
+          text.includes('media-smoke-cdn') &&
+          text.includes('smoke-window'),
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Provider metrics did not render after save: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const replaceAssetThroughDetails = async (client, replacementPath, replacementName) => {
   const markResult = await evaluate(client, `(() => {
     const label = Array.from(document.querySelectorAll('label')).find((candidate) => (
@@ -1273,6 +1305,14 @@ const main = async () => {
       versionsPayload.data?.source === 'database' || versionsPayload.data?.source === 'metadata',
       `Media versions endpoint did not report a valid source: ${JSON.stringify(versionsPayload.data).slice(0, 500)}`,
     );
+    await recordProviderMetricsThroughDetails(client);
+    const providerMetricImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.metadata?.providerDelivery?.totalRequests === 42 &&
+      item.metadata?.providerDelivery?.bytesServed === 2048 &&
+      item.metadata?.providerDelivery?.source === 'media-smoke-cdn'
+    ));
+    assert(providerMetricImage.metadata.providerDelivery.reportingWindow === 'smoke-window', 'Provider metrics did not persist the reporting window.');
     await compareAssetVersionThroughDetails(client);
     await restoreAssetVersionThroughDetails(client);
     const restoredImage = await waitForMedia(marker, (item) => (

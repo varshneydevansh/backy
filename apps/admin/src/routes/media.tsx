@@ -592,12 +592,14 @@ function MediaPage() {
   const [isRestoringAssetVersion, setIsRestoringAssetVersion] = useState(false);
   const [isDeletingAssetVersion, setIsDeletingAssetVersion] = useState(false);
   const [isPreparingTransforms, setIsPreparingTransforms] = useState(false);
+  const [isSavingProviderAnalytics, setIsSavingProviderAnalytics] = useState(false);
   const [isUpdatingSafety, setIsUpdatingSafety] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [isDeletingAsset, setIsDeletingAsset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bulkNotice, setBulkNotice] = useState<string | null>(null);
   const [assetDeliveryError, setAssetDeliveryError] = useState<string | null>(null);
+  const [assetProviderAnalyticsNotice, setAssetProviderAnalyticsNotice] = useState<string | null>(null);
   const [assetReferenceError, setAssetReferenceError] = useState<string | null>(null);
   const [assetReplacementError, setAssetReplacementError] = useState<string | null>(null);
   const [assetVersionRecords, setAssetVersionRecords] = useState<MediaVersionRecord[]>([]);
@@ -629,6 +631,10 @@ function MediaPage() {
   const [signedUrlDisposition, setSignedUrlDisposition] = useState<'inline' | 'attachment'>('inline');
   const [transformWidth, setTransformWidth] = useState(1200);
   const [transformQuality, setTransformQuality] = useState(75);
+  const [providerAnalyticsRequests, setProviderAnalyticsRequests] = useState('');
+  const [providerAnalyticsBytes, setProviderAnalyticsBytes] = useState('');
+  const [providerAnalyticsSource, setProviderAnalyticsSource] = useState('provider-console');
+  const [providerAnalyticsWindow, setProviderAnalyticsWindow] = useState('last-30-days');
   const [bindingTargetType, setBindingTargetType] = useState<'page' | 'post'>('page');
   const [bindingTargetId, setBindingTargetId] = useState('');
   const [bindingUsageType, setBindingUsageType] = useState<'content' | 'background' | 'thumbnail' | 'cover' | 'avatar' | 'document' | 'icon' | 'other'>('content');
@@ -704,6 +710,7 @@ function MediaPage() {
     isRestoringAssetVersion ||
     isDeletingAssetVersion ||
     isPreparingTransforms ||
+    isSavingProviderAnalytics ||
     isUpdatingSafety ||
     isBulkUpdating ||
     isDeletingAsset ||
@@ -869,6 +876,10 @@ function MediaPage() {
         : metadataReplacementVersions;
   const selectedDeliveryAnalytics = useMemo(
     () => getMediaDeliveryAnalytics(selectedAsset?.metadata),
+    [selectedAsset?.metadata],
+  );
+  const selectedProviderAnalytics = useMemo(
+    () => getMediaProviderDeliveryAnalytics(selectedAsset?.metadata),
     [selectedAsset?.metadata],
   );
   const selectedMediaSecurity = useMemo(
@@ -1530,6 +1541,7 @@ function MediaPage() {
     setSelectedAsset(asset);
     updateMediaRouteSearch({ assetId: asset.id });
     setAssetDeliveryError(null);
+    setAssetProviderAnalyticsNotice(null);
     setAssetReferenceError(null);
     setSignedUrl(null);
     setBindingTargetId('');
@@ -1593,6 +1605,14 @@ function MediaPage() {
     setSignedUrl(null);
     setBindingTargetId('');
   }, [selectedAsset?.id]);
+
+  useEffect(() => {
+    const providerAnalytics = getMediaProviderDeliveryAnalytics(selectedAsset?.metadata);
+    setProviderAnalyticsRequests(providerAnalytics ? String(providerAnalytics.totalRequests) : '');
+    setProviderAnalyticsBytes(providerAnalytics ? String(providerAnalytics.bytesServed) : '');
+    setProviderAnalyticsSource(providerAnalytics?.source || 'provider-console');
+    setProviderAnalyticsWindow(providerAnalytics?.reportingWindow || 'last-30-days');
+  }, [selectedAsset?.id, selectedAsset?.metadata]);
 
   const loadAssetVersions = useCallback(async (mediaId: string) => {
     setIsLoadingAssetVersions(true);
@@ -1733,6 +1753,43 @@ function MediaPage() {
       setAssetDeliveryError(prepareError instanceof Error ? prepareError.message : 'Unable to prepare responsive variants.');
     } finally {
       setIsPreparingTransforms(false);
+    }
+  };
+
+  const handleSaveProviderAnalytics = async () => {
+    if (isMediaMutationBusy || !selectedAsset) return;
+
+    const totalRequests = Math.max(0, Math.floor(Number(providerAnalyticsRequests) || 0));
+    const bytesServed = Math.max(0, Math.floor(Number(providerAnalyticsBytes) || 0));
+    const source = providerAnalyticsSource.trim() || 'provider-console';
+    const reportingWindow = providerAnalyticsWindow.trim() || 'last-30-days';
+
+    setIsSavingProviderAnalytics(true);
+    setAssetDeliveryError(null);
+    setAssetProviderAnalyticsNotice(null);
+
+    try {
+      const updated = await updateMedia(selectedAsset.id, {
+        metadata: {
+          ...selectedAsset.metadata,
+          providerDelivery: {
+            totalRequests,
+            bytesServed,
+            source,
+            reportingWindow,
+            lastSyncedAt: new Date().toISOString(),
+          },
+        },
+      }, siteId);
+      applyUpdatedAsset(updated);
+      setAssetProviderAnalyticsNotice('Provider metrics recorded.');
+      void loadLibrary();
+      void loadAssetAuditLogs(updated.id);
+      void loadLibraryAuditLogs(0);
+    } catch (providerError) {
+      setAssetDeliveryError(providerError instanceof Error ? providerError.message : 'Unable to record provider metrics.');
+    } finally {
+      setIsSavingProviderAnalytics(false);
     }
   };
 
@@ -3794,8 +3851,10 @@ function MediaPage() {
                         {row.requests} req · {formatBytes(row.bytesServed)}
                       </div>
                       <div className="text-xs text-muted-foreground md:col-span-4">
-                        {row.requests > 0
-                          ? `Last Backy delivery ${formatAuditDate(row.lastDeliveredAt || '')}.`
+                        {row.providerRequests > 0
+                          ? `Provider/CDN ${row.providerRequests} req · ${formatBytes(row.providerBytesServed)} served · synced ${formatAuditDate(row.providerLastSyncedAt || '')}.`
+                          : row.requests > 0
+                            ? `Last Backy delivery ${formatAuditDate(row.lastDeliveredAt || '')}.`
                           : row.provider === 'local' || row.provider === 'unknown'
                             ? 'No Backy delivery requests recorded yet.'
                             : 'Direct CDN/storage hits are read from the provider console; Backy records only routed file and transform endpoints.'}
@@ -4960,7 +5019,9 @@ function MediaPage() {
                       <div>
                         <dt className="text-muted-foreground">CDN analytics</dt>
                         <dd className="mt-1 font-medium">
-                          {selectedProviderInsight.cdnAnalyticsStatus === 'tracked-by-backy'
+                          {selectedProviderAnalytics
+                            ? 'Provider metrics recorded'
+                            : selectedProviderInsight.cdnAnalyticsStatus === 'tracked-by-backy'
                             ? 'Backy counters active'
                             : selectedProviderInsight.cdnAnalyticsStatus === 'provider-console-required'
                               ? 'Provider console required'
@@ -4974,6 +5035,100 @@ function MediaPage() {
                         </dd>
                       </div>
                     </dl>
+                    <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-3" data-testid="media-provider-analytics">
+                      {assetProviderAnalyticsNotice && (
+                        <Notice tone="success" className="mb-3">
+                          {assetProviderAnalyticsNotice}
+                        </Notice>
+                      )}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium">Provider/CDN metrics</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Record counters from S3, Supabase, CloudFront, or another CDN when media bypasses Backy delivery routes.
+                          </div>
+                        </div>
+                        {selectedProviderAnalytics && (
+                          <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                            synced {formatAuditDate(selectedProviderAnalytics.lastSyncedAt)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-4">
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Provider requests</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={providerAnalyticsRequests}
+                            onChange={(event) => setProviderAnalyticsRequests(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            placeholder="0"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Provider bytes served</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={providerAnalyticsBytes}
+                            onChange={(event) => setProviderAnalyticsBytes(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            placeholder="0"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Analytics source</span>
+                          <input
+                            value={providerAnalyticsSource}
+                            onChange={(event) => setProviderAnalyticsSource(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            placeholder="cloudfront"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                        <label className="space-y-1 text-sm">
+                          <span className="font-medium">Reporting window</span>
+                          <input
+                            value={providerAnalyticsWindow}
+                            onChange={(event) => setProviderAnalyticsWindow(event.target.value)}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            placeholder="last-30-days"
+                            disabled={isMediaMutationBusy}
+                          />
+                        </label>
+                      </div>
+                      {selectedProviderAnalytics && (
+                        <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Recorded requests</dt>
+                            <dd className="mt-1 font-mono">{selectedProviderAnalytics.totalRequests}</dd>
+                          </div>
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Recorded bytes</dt>
+                            <dd className="mt-1 font-mono">{formatBytes(selectedProviderAnalytics.bytesServed)}</dd>
+                          </div>
+                          <div className="rounded bg-background px-2 py-1.5">
+                            <dt className="text-muted-foreground">Source window</dt>
+                            <dd className="mt-1 font-mono">{selectedProviderAnalytics.source} · {selectedProviderAnalytics.reportingWindow}</dd>
+                          </div>
+                        </dl>
+                      )}
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isMediaMutationBusy}
+                          onClick={() => void handleSaveProviderAnalytics()}
+                        >
+                          <Cloud className="size-4" />
+                          {isSavingProviderAnalytics ? 'Recording...' : 'Record provider metrics'}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -6164,6 +6319,9 @@ type MediaAnalytics = {
     bytes: number;
     requests: number;
     bytesServed: number;
+    providerRequests: number;
+    providerBytesServed: number;
+    providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
   }>;
 };
@@ -6237,6 +6395,14 @@ type MediaDeliveryAnalytics = {
   }>;
 };
 
+type MediaProviderDeliveryAnalytics = {
+  totalRequests: number;
+  bytesServed: number;
+  source: string;
+  reportingWindow: string;
+  lastSyncedAt: string;
+};
+
 type MediaProviderInsight = {
   provider: string;
   storagePath?: string;
@@ -6283,6 +6449,24 @@ const getMediaDeliveryAnalytics = (metadata: Record<string, unknown> | undefined
             requests: numberValue(variant.requests),
           }))
       : [],
+  };
+};
+
+const getMediaProviderDeliveryAnalytics = (metadata: Record<string, unknown> | undefined): MediaProviderDeliveryAnalytics | undefined => {
+  const delivery = metadata?.providerDelivery;
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)) {
+    return undefined;
+  }
+
+  const record = delivery as Record<string, unknown>;
+  const lastSyncedAt = typeof record.lastSyncedAt === 'string' ? record.lastSyncedAt : '';
+
+  return {
+    totalRequests: numberValue(record.totalRequests),
+    bytesServed: numberValue(record.bytesServed),
+    source: typeof record.source === 'string' && record.source.trim().length > 0 ? record.source.trim() : 'provider-console',
+    reportingWindow: typeof record.reportingWindow === 'string' && record.reportingWindow.trim().length > 0 ? record.reportingWindow.trim() : 'not specified',
+    lastSyncedAt,
   };
 };
 
@@ -6440,6 +6624,9 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     bytes: number;
     requests: number;
     bytesServed: number;
+    providerRequests: number;
+    providerBytesServed: number;
+    providerLastSyncedAt?: string;
     lastDeliveredAt?: string;
   }>();
   let publicAssets = 0;
@@ -6467,8 +6654,12 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       bytes: 0,
       requests: 0,
       bytesServed: 0,
+      providerRequests: 0,
+      providerBytesServed: 0,
+      providerLastSyncedAt: undefined,
       lastDeliveredAt: undefined,
     };
+    const providerDelivery = getMediaProviderDeliveryAnalytics(asset.metadata);
     byProvider.set(provider, {
       count: currentProvider.count + 1,
       publicCount: currentProvider.publicCount + (asset.visibility === 'private' ? 0 : 1),
@@ -6476,6 +6667,12 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       bytes: currentProvider.bytes + bytes,
       requests: currentProvider.requests + (delivery?.totalRequests || 0),
       bytesServed: currentProvider.bytesServed + (delivery?.bytesServed || 0),
+      providerRequests: currentProvider.providerRequests + (providerDelivery?.totalRequests || 0),
+      providerBytesServed: currentProvider.providerBytesServed + (providerDelivery?.bytesServed || 0),
+      providerLastSyncedAt: [currentProvider.providerLastSyncedAt, providerDelivery?.lastSyncedAt]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .sort()
+        .at(-1),
       lastDeliveredAt: [currentProvider.lastDeliveredAt, delivery?.lastDeliveredAt]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .sort()
