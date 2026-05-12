@@ -82,6 +82,8 @@ interface ActiveEditorContextType {
   toggleTableHeaderCell: () => boolean;
   /** Set or clear the current table cell fill color */
   setTableCellBackgroundColor: (color: string) => boolean;
+  /** Set or clear the current table cell border color */
+  setTableCellBorderColor: (color: string) => boolean;
   /** Set or clear the current table caption */
   setTableCaption: (caption: string) => boolean;
   /** Remove the current table */
@@ -145,6 +147,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleTableHeaderColumn: () => false,
   toggleTableHeaderCell: () => false,
   setTableCellBackgroundColor: () => false,
+  setTableCellBorderColor: () => false,
   setTableCaption: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
@@ -835,6 +838,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const setSelectedTableCellBorderColor = useCallback((editor: PlateEditor, color: string) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const normalizedColor = color.trim();
+    if (normalizedColor) {
+      Transforms.setNodes(editor as any, { borderColor: normalizedColor } as any, {
+        at: context.cellPath,
+      });
+    } else {
+      Transforms.unsetNodes(editor as any, 'borderColor' as any, {
+        at: context.cellPath,
+      } as any);
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after cell style changes.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
   const setSelectedTableCaption = useCallback((editor: PlateEditor, caption: string) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -1120,6 +1148,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           type: (node as { type?: string }).type || '',
           caption: typeof (node as { caption?: unknown }).caption === 'string' ? (node as { caption?: string }).caption : undefined,
           backgroundColor: typeof (node as { backgroundColor?: unknown }).backgroundColor === 'string' ? (node as { backgroundColor?: string }).backgroundColor : undefined,
+          borderColor: typeof (node as { borderColor?: unknown }).borderColor === 'string' ? (node as { borderColor?: string }).borderColor : undefined,
           align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
@@ -2022,7 +2051,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       const restoredSelection = restoreSelection({ requireTextSelection: false });
       if (!restoredSelection) {
         if (!removeEmptyTableColumn(editor)) return false;
-      } else if (!removeSelectedTableColumn(editor) && !removeEmptyTableColumn(editor)) {
+      } else if (!removeEmptyTableColumn(editor) && !removeSelectedTableColumn(editor)) {
         return false;
       }
 
@@ -2238,6 +2267,32 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setSelectedTableCellBackgroundColor, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const setTableCellBorderColor = useCallback((color: string) => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('setTableCellBorderColor.start', {
+        color,
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!setSelectedTableCellBorderColor(editor, color)) return false;
+
+      debug('setTableCellBorderColor.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('setTableCellBorderColor failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setSelectedTableCellBorderColor, setStoredSelection, syncActiveEditorContentSoon]);
 
   const setTableCaption = useCallback((caption: string) => {
     const editor = getActiveEditor();
@@ -2611,6 +2666,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleTableHeaderColumn,
       toggleTableHeaderCell,
       setTableCellBackgroundColor,
+      setTableCellBorderColor,
       setTableCaption,
       removeTable,
       isMarkActive,

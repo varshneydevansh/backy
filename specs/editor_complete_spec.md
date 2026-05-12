@@ -133,6 +133,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
     - Rich-text tables support authored captions that render above the table, remain outside the editable Slate cell flow, sync to table metadata, and persist through save/reload smoke coverage.
     - Selected table cells can receive an independent fill color from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
+    - Selected table cells can receive an independent border color from the rich-text toolbar, render on the cell border, and persist without leaking to adjacent cells.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
     - Added applied-change feedback in both standalone and embedded inspector layouts.
 

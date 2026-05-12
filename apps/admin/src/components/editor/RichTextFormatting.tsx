@@ -137,6 +137,7 @@ export function RichTextFormatting({
     toggleTableHeaderColumn,
     toggleTableHeaderCell,
     setTableCellBackgroundColor,
+    setTableCellBorderColor,
     setTableCaption,
     removeTable,
     storeSelection,
@@ -1589,6 +1590,7 @@ export function RichTextFormatting({
   const [selectedFontColorValue, setSelectedFontColorValue] = useState('');
   const [selectedHighlightColorValue, setSelectedHighlightColorValue] = useState('');
   const [selectedTableCellFillValue, setSelectedTableCellFillValue] = useState('');
+  const [selectedTableCellBorderValue, setSelectedTableCellBorderValue] = useState('');
   const [selectedTableCaptionValue, setSelectedTableCaptionValue] = useState('');
   const [insertDialog, setInsertDialog] = useState<{
     mode: InsertDialogMode;
@@ -1703,6 +1705,7 @@ export function RichTextFormatting({
   const textColorTriggerRef = useRef<HTMLSpanElement>(null);
   const highlightColorTriggerRef = useRef<HTMLSpanElement>(null);
   const tableCellFillTriggerRef = useRef<HTMLSpanElement>(null);
+  const tableCellBorderTriggerRef = useRef<HTMLSpanElement>(null);
   const quickFontFamilies = useMemo(() => {
     const list = fontFamilies.some((font) => font.value === 'inherit')
       ? fontFamilies
@@ -1914,12 +1917,37 @@ export function RichTextFormatting({
     return typeof cellNode?.backgroundColor === 'string' ? cellNode.backgroundColor : '';
   }, [getActiveEditor]);
 
+  const readSelectedTableCellBorder = useCallback(() => {
+    const editor = getActiveEditor();
+    const selection = editor?.selection;
+    if (!editor || !selection || !SlateRange.isRange(selection)) {
+      return '';
+    }
+
+    const cellEntry = Editor.above(editor as any, {
+      at: selection,
+      match: (node) => {
+        const type = (node as { type?: unknown }).type;
+        return type === 'td' || type === 'th';
+      },
+    });
+    const cellNode = cellEntry?.[0] as { borderColor?: unknown } | undefined;
+    return typeof cellNode?.borderColor === 'string' ? cellNode.borderColor : '';
+  }, [getActiveEditor]);
+
   const updateTableCellFillAtSelection = useCallback((color: string) => {
     setSelectedTableCellFillValue(color);
     runOrActivateTextEditor('table-cell-fill', () => {
       setTableCellBackgroundColor(color);
     });
   }, [runOrActivateTextEditor, setTableCellBackgroundColor]);
+
+  const updateTableCellBorderAtSelection = useCallback((color: string) => {
+    setSelectedTableCellBorderValue(color);
+    runOrActivateTextEditor('table-cell-border', () => {
+      setTableCellBorderColor(color);
+    });
+  }, [runOrActivateTextEditor, setTableCellBorderColor]);
 
   const updateTableCaptionAtSelection = useCallback((caption: string) => {
     setSelectedTableCaptionValue(caption);
@@ -2052,7 +2080,8 @@ export function RichTextFormatting({
 
     setSelectedTableCaptionValue(readSelectedTableCaption());
     setSelectedTableCellFillValue(readSelectedTableCellFill());
-  }, [isTargetEditorInEditableMode, readSelectedTableCaption, readSelectedTableCellFill, selectionRevision]);
+    setSelectedTableCellBorderValue(readSelectedTableCellBorder());
+  }, [isTargetEditorInEditableMode, readSelectedTableCaption, readSelectedTableCellBorder, readSelectedTableCellFill, selectionRevision]);
 
   useEffect(() => {
     if (fontFamilies.length === 0) {
@@ -2703,6 +2732,23 @@ export function RichTextFormatting({
             onChange={(color) => {
               runContentProperty('table-cell-fill', () => {
                 updateTableCellFillAtSelection(color);
+              }, { requireActiveEditor: false });
+            }}
+          />
+        </span>
+      </label>
+
+      <label className="flex min-w-0 items-center gap-2 text-xs">
+        <Square className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground whitespace-nowrap">Cell Border</span>
+        <span className="ml-auto inline-flex" ref={tableCellBorderTriggerRef}>
+          <ColorPicker
+            value={selectedTableCellBorderValue}
+            testId="rich-text-table-cell-border"
+            triggerRef={tableCellBorderTriggerRef}
+            onChange={(color) => {
+              runContentProperty('table-cell-border', () => {
+                updateTableCellBorderAtSelection(color);
               }, { requireActiveEditor: false });
             }}
           />

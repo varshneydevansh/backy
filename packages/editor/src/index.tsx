@@ -633,13 +633,16 @@ export const BackyEditor = ({
             const backgroundColor = typeof element?.backgroundColor === 'string'
                 ? element.backgroundColor.trim()
                 : '';
+            const borderColor = typeof element?.borderColor === 'string'
+                ? element.borderColor.trim()
+                : '';
             return (
                 <Tag
                     {...attributes}
                     data-backy-rich-table-cell="true"
                     style={{
                         ...elementStyle,
-                        border: '1px solid #e5e7eb',
+                        border: `1px solid ${borderColor || '#e5e7eb'}`,
                         padding: '0.375rem 0.5rem',
                         verticalAlign: 'top',
                         ...(backgroundColor ? { backgroundColor } : {}),

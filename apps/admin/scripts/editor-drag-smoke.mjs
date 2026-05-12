@@ -4402,6 +4402,61 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Rich-text table cell fill control did not apply only to the selected cell: ${JSON.stringify(tableCellFillState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedBorderTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedBorderTableCell?.ok, `Unable to reselect table cell before cell border control: ${JSON.stringify(selectedBorderTableCell)}`);
+
+  await selectColorPickerValue(client, 'rich-text-table-cell-border', '#f4cccc');
+  await sleep(500);
+  await activateTextEditing(client, elementId);
+  const reselectedBorderTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(reselectedBorderTableCell?.ok, `Unable to reselect table cell before cell border metadata check: ${JSON.stringify(reselectedBorderTableCell)}`);
+
+  const tableCellBorderState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 1'));
+    const otherCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const targetCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 1')
+    ));
+    const otherCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 2')
+    ));
+    return {
+      targetText: targetCell?.textContent || '',
+      targetBorderColor: targetCell ? window.getComputedStyle(targetCell).borderTopColor : '',
+      otherBorderColor: otherCell ? window.getComputedStyle(otherCell).borderTopColor : '',
+      targetCellBorderColor: targetCellNode?.borderColor || '',
+      otherCellBorderColor: otherCellNode?.borderColor || '',
+      html: targetCell?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCellBorderState.targetBorderColor === 'rgb(244, 204, 204)' &&
+      tableCellBorderState.targetCellBorderColor === '#f4cccc' &&
+      tableCellBorderState.otherCellBorderColor !== '#f4cccc',
+    `Rich-text table cell border control did not apply only to the selected cell: ${JSON.stringify(tableCellBorderState)}`,
+  );
+
   await mouseDownControlByTestId(client, 'rich-text-align-center');
   await sleep(500);
 
@@ -4505,6 +4560,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     selectedFillTableCell,
     reselectedFillTableCell,
     tableCellFillState,
+    selectedBorderTableCell,
+    reselectedBorderTableCell,
+    tableCellBorderState,
     tableCellAlignmentState,
     reselectedHeaderCell,
     restoredHeaderTableState,
@@ -4607,6 +4665,8 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   assert(alignedColumnOneBlock?.align === 'center', `Persisted table cell text alignment missing: ${JSON.stringify({ alignedColumnOneBlock, content })}`);
   assert(filledColumnOneCell?.backgroundColor === '#c9daf8', `Persisted table cell fill missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
   assert(unfilledColumnTwoCell?.backgroundColor !== '#c9daf8', `Persisted table cell fill leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
+  assert(filledColumnOneCell?.borderColor === '#f4cccc', `Persisted table cell border color missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
+  assert(unfilledColumnTwoCell?.borderColor !== '#f4cccc', `Persisted table cell border color leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
   assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
