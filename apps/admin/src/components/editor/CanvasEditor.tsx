@@ -32,6 +32,7 @@ import {
   Eye,
   Group,
   Layers,
+  Magnet,
   SlidersHorizontal,
   Scissors,
   Monitor,
@@ -42,8 +43,11 @@ import {
   RefreshCw,
   SendToBack,
   Trash2,
+  ToggleLeft,
+  ToggleRight,
   Undo,
   Redo,
+  Ruler,
   Settings,
   ZoomIn,
   ZoomOut,
@@ -138,6 +142,8 @@ type EditorHistoryEntry = {
 const RULER_SIZE = 28;
 const RULER_MAJOR_STEP = 100;
 const RULER_MINOR_STEP = 50;
+const MIN_GRID_SIZE = 1;
+const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
 const MAX_CANVAS_DIMENSION = 3840;
 const EDITOR_SHORTCUT_BLOCK_SELECTOR = [
@@ -240,6 +246,14 @@ const reorderSelectedSiblingStack = (
 };
 
 const formatChangeCount = (count: number) => `${count} unsaved ${count === 1 ? 'change' : 'changes'}`;
+
+const normalizeEditorGridSize = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 10;
+  }
+
+  return Math.min(MAX_GRID_SIZE, Math.max(MIN_GRID_SIZE, Math.round(value)));
+};
 
 const EDITOR_AUTOSAVE_DELAY_MS = 5000;
 const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
@@ -963,6 +977,8 @@ export function CanvasEditor({
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [gridSize, setGridSize] = useState(10);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
@@ -1050,6 +1066,14 @@ export function CanvasEditor({
     setIsCanvasAutoFit(false);
     setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
   }, [clampCanvasZoom]);
+
+  const handleToggleSnap = useCallback(() => {
+    setSnapEnabled((current) => !current);
+  }, []);
+
+  const handleGridSizeChange = useCallback((value: string) => {
+    setGridSize(normalizeEditorGridSize(Number(value)));
+  }, []);
 
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
@@ -4408,6 +4432,8 @@ export function CanvasEditor({
                       isPreview={isPreview}
                       disabled={isCanvasMutationDisabled}
                       viewportScale={activeCanvasScale}
+                      snapEnabled={snapEnabled}
+                      gridSize={gridSize}
                     />
                   </div>
                 ) : (
@@ -4482,6 +4508,8 @@ export function CanvasEditor({
                           isPreview={isPreview}
                           disabled={isCanvasMutationDisabled}
                           viewportScale={activeCanvasScale}
+                          snapEnabled={snapEnabled}
+                          gridSize={gridSize}
                         />
                       </div>
                     </div>
@@ -4489,6 +4517,47 @@ export function CanvasEditor({
                 )}
               </div>
             </div>
+
+            {!isPreview && (
+              <div
+                className="absolute bottom-4 left-4 z-30 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
+                data-testid="editor-grid-snap-controls"
+                data-snap-enabled={snapEnabled ? 'true' : 'false'}
+                data-grid-size={gridSize}
+              >
+                <button
+                  type="button"
+                  onClick={handleToggleSnap}
+                  className={cn(
+                    'flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
+                    snapEnabled
+                      ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
+                  )}
+                  title={snapEnabled ? 'Disable snapping' : 'Enable snapping'}
+                  aria-label={snapEnabled ? 'Disable snapping' : 'Enable snapping'}
+                  aria-pressed={snapEnabled}
+                  data-testid="editor-snap-toggle"
+                >
+                  <Magnet className="h-4 w-4" />
+                  {snapEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                </button>
+                <label className="flex items-center gap-1.5" title="Grid size">
+                  <Ruler className="h-4 w-4 text-slate-500" />
+                  <input
+                    type="number"
+                    min={MIN_GRID_SIZE}
+                    max={MAX_GRID_SIZE}
+                    step={1}
+                    value={gridSize}
+                    onChange={(event) => handleGridSizeChange(event.target.value)}
+                    className="h-7 w-14 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                    aria-label="Grid size"
+                    data-testid="editor-grid-size"
+                  />
+                </label>
+              </div>
+            )}
 
             {!isPreview && (
               <div

@@ -252,12 +252,26 @@ const isEmbedHostAllowed = (host: string, allowedHosts: string[]): boolean => {
   ));
 };
 
-const GRID_SIZE = 10;
+const DEFAULT_GRID_SIZE = 10;
 const SMART_GUIDE_THRESHOLD = 6;
 
-const snapToGrid = (value: number): number => (
-  Math.round(Math.max(0, value) / GRID_SIZE) * GRID_SIZE
-);
+const normalizeGridSize = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_GRID_SIZE;
+  }
+
+  return Math.min(100, Math.max(1, Math.round(value)));
+};
+
+const snapToGrid = (value: number, gridSize: number, enabled = true): number => {
+  const safeValue = Math.max(0, value);
+  if (!enabled) {
+    return safeValue;
+  }
+
+  const safeGridSize = normalizeGridSize(gridSize);
+  return Math.round(safeValue / safeGridSize) * safeGridSize;
+};
 
 const clampToCanvas = (
   value: number,
@@ -410,6 +424,8 @@ const resizeBoundsFromHandle = (
   handle: ResizeHandlePosition,
   deltaX: number,
   deltaY: number,
+  gridSize: number,
+  snapEnabled: boolean,
 ) => {
   let nextX = bounds.x;
   let nextY = bounds.y;
@@ -449,10 +465,10 @@ const resizeBoundsFromHandle = (
   nextY = clampToCanvas(nextY, nextHeight, bounds.boundsHeight);
 
   return {
-    x: snapToGrid(nextX),
-    y: snapToGrid(nextY),
-    width: Math.max(minWidth, snapToGrid(nextWidth)),
-    height: Math.max(minHeight, snapToGrid(nextHeight)),
+    x: snapToGrid(nextX, gridSize, snapEnabled),
+    y: snapToGrid(nextY, gridSize, snapEnabled),
+    width: Math.max(minWidth, snapToGrid(nextWidth, gridSize, snapEnabled)),
+    height: Math.max(minHeight, snapToGrid(nextHeight, gridSize, snapEnabled)),
     boundsWidth: bounds.boundsWidth,
     boundsHeight: bounds.boundsHeight,
   };
@@ -1277,6 +1293,10 @@ interface CanvasProps {
   disabled?: boolean;
   /** Visual viewport scale applied by the editor shell */
   viewportScale?: number;
+  /** Whether drag/drop/resize coordinates snap to grid and alignment guides */
+  snapEnabled?: boolean;
+  /** Canvas grid spacing in CSS pixels */
+  gridSize?: number;
 }
 
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
@@ -1373,6 +1393,8 @@ export function Canvas({
   isPreview = false,
   disabled = false,
   viewportScale = 1,
+  snapEnabled = true,
+  gridSize = DEFAULT_GRID_SIZE,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1386,6 +1408,7 @@ export function Canvas({
   const safeViewportScale = Number.isFinite(viewportScale) && viewportScale > 0
     ? viewportScale
     : 1;
+  const safeGridSize = normalizeGridSize(gridSize);
   const toCanvasDelta = useCallback((value: number) => value / safeViewportScale, [safeViewportScale]);
 
   const getTargetElement = useCallback((target: EventTarget | null) => {
@@ -1742,6 +1765,8 @@ export function Canvas({
           activeResizeState.handle,
           deltaX,
           deltaY,
+          safeGridSize,
+          snapEnabled,
         );
         const scaleX = nextBounds.width / Math.max(1, activeResizeState.bounds.width);
         const scaleY = nextBounds.height / Math.max(1, activeResizeState.bounds.height);
@@ -1749,10 +1774,10 @@ export function Canvas({
         for (const snapshot of activeResizeState.snapshots) {
           const relativeX = snapshot.x - activeResizeState.bounds.x;
           const relativeY = snapshot.y - activeResizeState.bounds.y;
-          const nextWidth = Math.max(20, snapToGrid(snapshot.width * scaleX));
-          const nextHeight = Math.max(20, snapToGrid(snapshot.height * scaleY));
-          const nextX = snapToGrid(nextBounds.x + relativeX * scaleX);
-          const nextY = snapToGrid(nextBounds.y + relativeY * scaleY);
+          const nextWidth = Math.max(20, snapToGrid(snapshot.width * scaleX, safeGridSize, snapEnabled));
+          const nextHeight = Math.max(20, snapToGrid(snapshot.height * scaleY, safeGridSize, snapEnabled));
+          const nextX = snapToGrid(nextBounds.x + relativeX * scaleX, safeGridSize, snapEnabled);
+          const nextY = snapToGrid(nextBounds.y + relativeY * scaleY, safeGridSize, snapEnabled);
 
           const result = updateElementById(nextElements, snapshot.id, (element) => ({
             ...element,
@@ -1777,6 +1802,8 @@ export function Canvas({
           activeResizeState.handle,
           deltaX,
           deltaY,
+          safeGridSize,
+          snapEnabled,
         );
 
         const result = updateElementById(nextElements, activeResizeState.elementId, (element) => ({
@@ -1812,22 +1839,28 @@ export function Canvas({
     const newY = activeDragState.bounds.y + deltaY;
     let nextGuides: AlignmentGuide[] = [];
 
-    const snappedX = snapToGrid(clampToCanvas(newX, activeDragState.bounds.width, activeDragState.bounds.boundsWidth));
-    const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, activeDragState.bounds.boundsHeight));
+    const snappedX = snapToGrid(clampToCanvas(newX, activeDragState.bounds.width, activeDragState.bounds.boundsWidth), safeGridSize, snapEnabled);
+    const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, activeDragState.bounds.boundsHeight), safeGridSize, snapEnabled);
     const activeParentId = activeDragState.snapshots[0]?.parentId ?? null;
     const guideScope = getSiblingScopeForParent(elementsRef.current, activeParentId);
-    const smartSnap = resolveSmartDragSnap(
-      guideScope,
-      activeDragState.elementIds,
-      {
-        width: activeDragState.bounds.boundsWidth,
-        height: activeDragState.bounds.boundsHeight,
-      },
-      snappedX,
-      snappedY,
-      activeDragState.bounds.width,
-      activeDragState.bounds.height,
-    );
+    const smartSnap = snapEnabled
+      ? resolveSmartDragSnap(
+        guideScope,
+        activeDragState.elementIds,
+        {
+          width: activeDragState.bounds.boundsWidth,
+          height: activeDragState.bounds.boundsHeight,
+        },
+        snappedX,
+        snappedY,
+        activeDragState.bounds.width,
+        activeDragState.bounds.height,
+      )
+      : {
+        x: snappedX,
+        y: snappedY,
+        guides: [],
+      };
     nextGuides = smartSnap.guides;
 
     const moveDeltaX = clampToCanvas(smartSnap.x, activeDragState.bounds.width, activeDragState.bounds.boundsWidth) - activeDragState.bounds.x;
@@ -1856,7 +1889,7 @@ export function Canvas({
     setAlignmentGuides(nextGuides);
     elementsRef.current = nextElements;
     onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
-  }, [disabled, isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
+  }, [disabled, isPreview, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
     const activeDragState = dragStateRef.current;
@@ -1920,8 +1953,8 @@ export function Canvas({
           return;
         }
 
-        const parsedX = snapToGrid(toCanvasDelta(event.clientX - canvasRect.left));
-        const parsedY = snapToGrid(toCanvasDelta(event.clientY - canvasRect.top));
+        const parsedX = snapToGrid(toCanvasDelta(event.clientX - canvasRect.left), safeGridSize, snapEnabled);
+        const parsedY = snapToGrid(toCanvasDelta(event.clientY - canvasRect.top), safeGridSize, snapEnabled);
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
@@ -1933,8 +1966,8 @@ export function Canvas({
 
           if (isDropTarget && dropHost) {
             const hostRect = dropHost.getBoundingClientRect();
-            const childX = snapToGrid(toCanvasDelta(event.clientX - hostRect.left));
-            const childY = snapToGrid(toCanvasDelta(event.clientY - hostRect.top));
+            const childX = snapToGrid(toCanvasDelta(event.clientX - hostRect.left), safeGridSize, snapEnabled);
+            const childY = snapToGrid(toCanvasDelta(event.clientY - hostRect.top), safeGridSize, snapEnabled);
 
             if (item.reusableContent?.elements?.length) {
               const reusableChildren = createCanvasElementsFromReusableContent(
@@ -2224,12 +2257,14 @@ export function Canvas({
       {!isPreview && (
         <div
           className="absolute inset-0 pointer-events-none opacity-20"
+          data-testid="editor-canvas-grid"
+          data-grid-size={safeGridSize}
           style={{
             backgroundImage: `
               linear-gradient(to right, #cbd5e1 1px, transparent 1px),
               linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)
             `,
-            backgroundSize: '10px 10px',
+            backgroundSize: `${safeGridSize}px ${safeGridSize}px`,
           }}
         />
       )}

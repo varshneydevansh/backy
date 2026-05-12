@@ -21,6 +21,7 @@ const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
+const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -3608,6 +3609,150 @@ const testZoomControls = async (client) => {
     afterZoomOut,
     afterZoomIn,
     afterFit,
+  };
+};
+
+const readGridSnapControlState = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const controls = document.querySelector('[data-testid="editor-grid-snap-controls"]');
+    const toggle = document.querySelector('[data-testid="editor-snap-toggle"]');
+    const input = document.querySelector('[data-testid="editor-grid-size"]');
+    const grid = document.querySelector('[data-testid="editor-canvas-grid"]');
+    const gridStyle = grid instanceof HTMLElement ? window.getComputedStyle(grid) : null;
+    return {
+      label: ${JSON.stringify(label)},
+      hasControls: Boolean(controls),
+      snapEnabled: controls?.getAttribute('data-snap-enabled') === 'true',
+      togglePressed: toggle?.getAttribute('aria-pressed') === 'true',
+      gridSize: Number(controls?.getAttribute('data-grid-size') || 0),
+      inputValue: input instanceof HTMLInputElement ? input.value : '',
+      gridDataSize: Number(grid?.getAttribute('data-grid-size') || 0),
+      backgroundSize: gridStyle?.backgroundSize || '',
+    };
+  })()`);
+
+  assert(state.hasControls, `Grid/snap controls are missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.snapEnabled === state.togglePressed, `Snap toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.gridSize === Number(state.inputValue), `Grid input does not match control state during ${label}: ${JSON.stringify(state)}`);
+  assert(state.gridSize === state.gridDataSize, `Canvas grid data size does not match control state during ${label}: ${JSON.stringify(state)}`);
+  assert(state.backgroundSize.includes(`${state.gridSize}px`), `Canvas grid background size does not reflect grid size during ${label}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const dragElementByCanvasDelta = async (client, elementId, canvasDeltaX, canvasDeltaY) => {
+  await scrollElementIntoView(client, elementId);
+  const before = await getElementBox(client, elementId);
+  assert(before, `Missing draggable element ${elementId}`);
+
+  const canvasScale = await readCanvasScale(client);
+  const startPoint = await getElementDragStartPoint(client, elementId, before);
+  const screenDeltaX = Math.round(canvasDeltaX * canvasScale);
+  const screenDeltaY = Math.round(canvasDeltaY * canvasScale);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: startPoint.x,
+    y: startPoint.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: startPoint.x,
+    y: startPoint.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+
+  for (let step = 1; step <= 8; step += 1) {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: Math.round(startPoint.x + (screenDeltaX * step) / 8),
+      y: Math.round(startPoint.y + (screenDeltaY * step) / 8),
+      button: 'left',
+      buttons: 1,
+    });
+    await sleep(30);
+  }
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: startPoint.x + screenDeltaX,
+    y: startPoint.y + screenDeltaY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(300);
+
+  const after = await getElementBox(client, elementId);
+  assert(after, `Element ${elementId} disappeared after grid/snap drag`);
+
+  return {
+    elementId,
+    canvasScale,
+    before,
+    after,
+    canvasDelta: {
+      x: Math.round(after.canvasX - before.canvasX),
+      y: Math.round(after.canvasY - before.canvasY),
+      expectedX: canvasDeltaX,
+      expectedY: canvasDeltaY,
+    },
+  };
+};
+
+const distanceToGridLine = (value, gridSize) => {
+  const remainder = Math.abs(value % gridSize);
+  return Math.min(remainder, Math.abs(gridSize - remainder));
+};
+
+const testGridSnapControls = async (client) => {
+  const initial = await readGridSnapControlState(client, 'initial');
+  assert(initial.snapEnabled === true, `Snap should default to enabled: ${JSON.stringify(initial)}`);
+
+  await setFormControlByTestId(client, 'editor-grid-size', '20');
+  await sleep(150);
+  const grid20 = await readGridSnapControlState(client, 'grid size 20');
+  assert(grid20.gridSize === 20, `Grid size input did not apply 20px grid: ${JSON.stringify(grid20)}`);
+
+  const snapOnDrag = await dragElementByCanvasDelta(client, 'smoke-icon', 17, 13);
+  const snapOnState = await getElementBox(client, 'smoke-icon');
+  assert(
+    distanceToGridLine(snapOnState.canvasX, 20) <= 1 && distanceToGridLine(snapOnState.canvasY, 20) <= 1,
+    `Snap-on drag did not land on 20px grid: ${JSON.stringify({ grid20, snapOnDrag, snapOnState })}`,
+  );
+
+  await clickControlByTestId(client, 'editor-snap-toggle');
+  await sleep(150);
+  const snapOff = await readGridSnapControlState(client, 'snap off');
+  assert(snapOff.snapEnabled === false, `Snap toggle did not turn snapping off: ${JSON.stringify(snapOff)}`);
+
+  const snapOffBefore = await getElementBox(client, 'smoke-icon');
+  const snapOffDrag = await dragElementByCanvasDelta(client, 'smoke-icon', 7, 5);
+  const snapOffAfter = await getElementBox(client, 'smoke-icon');
+  assert(
+    Math.abs((snapOffAfter.canvasX - snapOffBefore.canvasX) - 7) <= 2 &&
+      Math.abs((snapOffAfter.canvasY - snapOffBefore.canvasY) - 5) <= 2,
+    `Snap-off drag should preserve unsnapped canvas delta: ${JSON.stringify({ snapOffBefore, snapOffDrag, snapOffAfter })}`,
+  );
+  assert(
+    distanceToGridLine(snapOffAfter.canvasX, 20) > 1 || distanceToGridLine(snapOffAfter.canvasY, 20) > 1,
+    `Snap-off drag unexpectedly stayed on the 20px grid: ${JSON.stringify({ snapOffBefore, snapOffDrag, snapOffAfter })}`,
+  );
+
+  await clickControlByTestId(client, 'editor-snap-toggle');
+  await sleep(150);
+  const restored = await readGridSnapControlState(client, 'snap restored');
+  assert(restored.snapEnabled === true, `Snap toggle did not restore snapping: ${JSON.stringify(restored)}`);
+
+  return {
+    initial,
+    grid20,
+    snapOnDrag,
+    snapOff,
+    snapOffDrag,
+    restored,
   };
 };
 
@@ -7599,7 +7744,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -7747,6 +7892,19 @@ const main = async () => {
         mode: 'zoom',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         zoomControls,
+      }, null, 2));
+      return;
+    }
+
+    if (GRID_SNAP_SMOKE) {
+      assert(!EDITOR_PATH, 'Grid/snap smoke currently requires an internally created smoke page');
+      const gridSnapControls = await testGridSnapControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'grid-snap',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        gridSnapControls,
       }, null, 2));
       return;
     }
