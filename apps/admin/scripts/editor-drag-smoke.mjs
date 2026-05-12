@@ -5964,7 +5964,26 @@ const testLinkBehaviorControls = async (client) => {
   await setFormControlByTestId(client, 'editor-link-text', 'Smoke docs link');
   await setFormControlByTestId(client, 'editor-link-href', '/docs');
   await setFormControlByTestId(client, 'editor-link-target', '_blank');
-  await setFormControlByTestId(client, 'editor-link-rel', 'noopener noreferrer nofollow');
+  await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="editor-link-rel"]');
+    if (!(control instanceof HTMLInputElement)) {
+      return false;
+    }
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(control, 'nofollow');
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  let normalizedRel = '';
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    normalizedRel = await evaluate(client, `document.querySelector('[data-testid="editor-link-rel"]')?.value || ''`);
+    if (normalizedRel === 'noopener noreferrer nofollow') {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(normalizedRel === 'noopener noreferrer nofollow', `Link rel normalization did not apply noopener/noreferrer: ${normalizedRel}`);
   await setFormControlByTestId(client, 'editor-link-aria-label', 'Read Backy docs');
   await setFormControlByTestId(client, 'editor-link-title', 'Open docs');
   await setCheckboxByTestId(client, 'editor-link-underline', false);

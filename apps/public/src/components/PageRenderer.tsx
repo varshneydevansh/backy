@@ -679,6 +679,30 @@ function getBooleanWithFallback(value: unknown, fallback: boolean): boolean {
   return value === undefined || value === null ? fallback : parseBooleanSetting(value, fallback);
 }
 
+function normalizeLinkTargetValue(value: unknown): '_self' | '_blank' | '_parent' | '_top' | undefined {
+  const target = getNameClass(value).trim();
+  return target === '_self' || target === '_blank' || target === '_parent' || target === '_top'
+    ? target
+    : undefined;
+}
+
+function normalizeLinkRelValue(target: unknown, value: unknown): string | undefined {
+  const tokens = getNameClass(value).trim().split(/\s+/).filter(Boolean);
+
+  if (target === '_blank') {
+    const lowerTokens = new Set(tokens.map((token) => token.toLowerCase()));
+    if (!lowerTokens.has('noopener')) {
+      tokens.unshift('noopener');
+    }
+    if (!lowerTokens.has('noreferrer')) {
+      const insertAt = tokens[0]?.toLowerCase() === 'noopener' ? 1 : 0;
+      tokens.splice(insertAt, 0, 'noreferrer');
+    }
+  }
+
+  return tokens.length > 0 ? tokens.join(' ') : undefined;
+}
+
 function parseBooleanSetting(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') {
     return value;
@@ -1532,8 +1556,8 @@ function ButtonElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const buttonType = props.type === 'submit' || props.type === 'reset' ? props.type : 'button';
   const isSubmit = buttonType === 'submit';
-  const target = getNameClass(props.target) || undefined;
-  const rel = getNameClass(props.rel) || (target === '_blank' ? 'noopener noreferrer' : undefined);
+  const target = normalizeLinkTargetValue(props.target);
+  const rel = normalizeLinkRelValue(target, props.rel);
   const title = getNameClass(props.title) || undefined;
   const ariaLabel = getNameClass(props.ariaLabel) || undefined;
   const buttonStyles: React.CSSProperties = {
@@ -2043,8 +2067,8 @@ function QuoteElement({ element }: ElementRendererProps) {
 function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) {
   const { props, styles } = element;
   const linkText = getNameClass(props.content) || getNameClass(props.label) || 'Link';
-  const target = getNameClass(props.target) || undefined;
-  const rel = getNameClass(props.rel) || (target === '_blank' ? 'noopener noreferrer' : undefined);
+  const target = normalizeLinkTargetValue(props.target);
+  const rel = normalizeLinkRelValue(target, props.rel);
   const title = getNameClass(props.title) || undefined;
   const ariaLabel = getNameClass(props.ariaLabel) || undefined;
 
@@ -2059,7 +2083,11 @@ function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) 
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
         display: 'inline-block',
-        textDecoration: props.underline === true ? 'underline' : getNameClass(props.textDecoration),
+        textDecoration: props.underline === false
+          ? 'none'
+          : props.underline === true
+            ? 'underline'
+            : getNameClass(props.textDecoration) || undefined,
       }}
     >
       {linkText}

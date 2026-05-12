@@ -214,6 +214,24 @@ const normalizeLinkTarget = (value: unknown): '_self' | '_blank' | '_parent' | '
   return '_self';
 };
 
+const normalizeRelForTarget = (target: unknown, value: unknown): string | undefined => {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const tokens = raw.split(/\s+/).filter(Boolean);
+
+  if (target === '_blank') {
+    const lowerTokens = new Set(tokens.map((token) => token.toLowerCase()));
+    if (!lowerTokens.has('noopener')) {
+      tokens.unshift('noopener');
+    }
+    if (!lowerTokens.has('noreferrer')) {
+      const insertAt = tokens[0]?.toLowerCase() === 'noopener' ? 1 : 0;
+      tokens.splice(insertAt, 0, 'noreferrer');
+    }
+  }
+
+  return tokens.length > 0 ? tokens.join(' ') : undefined;
+};
+
 const BUTTON_ACTION_PRESETS = new Set(['custom', 'page', 'section', 'email', 'phone', 'download']);
 
 const normalizeButtonActionPreset = (value: unknown): string => (
@@ -3114,7 +3132,13 @@ function LinkBehaviorProperties({
           </label>
           <select
             value={target}
-            onChange={(e) => onChange({ target: e.target.value })}
+            onChange={(e) => {
+              const nextTarget = normalizeLinkTarget(e.target.value);
+              onChange({
+                target: nextTarget,
+                rel: normalizeRelForTarget(nextTarget, props.rel),
+              });
+            }}
             data-testid={`editor-${prefix}-target`}
             className={cn(
               'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -3156,7 +3180,7 @@ function LinkBehaviorProperties({
         <input
           type="text"
           value={props.rel || ''}
-          onChange={(e) => onChange({ rel: e.target.value })}
+          onChange={(e) => onChange({ rel: normalizeRelForTarget(target, e.target.value) })}
           data-testid={`editor-${prefix}-rel`}
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',

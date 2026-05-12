@@ -147,6 +147,26 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-link',
+      type: 'link',
+      x: 580,
+      y: 240,
+      width: 220,
+      height: 32,
+      props: {
+        content: 'Styled docs link',
+        href: '/docs',
+        target: '_blank',
+        rel: 'nofollow',
+        ariaLabel: 'Read renderer docs',
+        title: 'Renderer docs',
+        underline: false,
+        color: '#2563eb',
+        fontSize: 17,
+        fontWeight: '600',
+      },
+    },
+    {
       id: 'styled-image',
       type: 'image',
       x: 24,
@@ -642,6 +662,14 @@ assert(html.includes('border-style:solid'), `Button border style was not rendere
 assert(html.includes('border-color:#fde047'), `Button border color was not rendered: ${html}`);
 assert(html.includes('margin:6px'), `Button margin was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 8px 16px rgba(22, 163, 74, 0.25)'), `Button shadow was not rendered: ${html}`);
+const styledLink = html.match(/<a[^>]*href="\/docs"[^>]*>Styled docs link<\/a>/)?.[0] || '';
+assert(styledLink.length > 0, `Link output was not rendered: ${html}`);
+assert(styledLink.includes('target="_blank"'), `Link target was not rendered: ${styledLink}`);
+assert(styledLink.includes('rel="noopener noreferrer nofollow"'), `Link rel safety tokens were not rendered: ${styledLink}`);
+assert(styledLink.includes('aria-label="Read renderer docs"'), `Link aria label was not rendered: ${styledLink}`);
+assert(styledLink.includes('title="Renderer docs"'), `Link title was not rendered: ${styledLink}`);
+assert(styledLink.includes('text-decoration:none'), `Link underline off state was not rendered: ${styledLink}`);
+assert(styledLink.includes('font-size:17px'), `Link font size was not rendered: ${styledLink}`);
 assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
 assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);
 assert(html.includes('object-fit:contain'), `Image object fit was not rendered: ${html}`);
@@ -767,6 +795,7 @@ console.log(JSON.stringify({
     citation: true,
     styledBox: true,
     styledButton: true,
+    styledLink: true,
     styledImage: true,
     styledVideo: true,
     styledIcon: true,

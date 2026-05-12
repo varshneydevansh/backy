@@ -79,6 +79,28 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const normalizeLinkTargetValue = (value: unknown): '_self' | '_blank' | '_parent' | '_top' => {
+  const target = sanitizeText(value);
+  return target === '_blank' || target === '_parent' || target === '_top' ? target : '_self';
+};
+
+const normalizeLinkRelValue = (target: unknown, value: unknown): string | undefined => {
+  const tokens = sanitizeText(value).split(/\s+/).filter(Boolean);
+
+  if (target === '_blank') {
+    const lowerTokens = new Set(tokens.map((token) => token.toLowerCase()));
+    if (!lowerTokens.has('noopener')) {
+      tokens.unshift('noopener');
+    }
+    if (!lowerTokens.has('noreferrer')) {
+      const insertAt = tokens[0]?.toLowerCase() === 'noopener' ? 1 : 0;
+      tokens.splice(insertAt, 0, 'noreferrer');
+    }
+  }
+
+  return tokens.length > 0 ? tokens.join(' ') : undefined;
+};
+
 const normalizeInputType = (value: unknown): string => {
   const inputType = sanitizeText(value).toLowerCase();
 
@@ -2361,12 +2383,8 @@ function CanvasElementComponent({
       }
 
       case 'button': {
-        const target = typeof p.target === 'string' ? p.target : '_self';
-        const rel = typeof p.rel === 'string' && p.rel.trim()
-          ? p.rel
-          : target === '_blank'
-            ? 'noopener noreferrer'
-            : undefined;
+        const target = normalizeLinkTargetValue(p.target);
+        const rel = normalizeLinkRelValue(target, p.rel);
         const commonInteractiveProps = {
           title: typeof p.title === 'string' && p.title.trim() ? p.title : undefined,
           'aria-label': typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined,
@@ -2968,12 +2986,8 @@ function CanvasElementComponent({
 
       case 'link':
         {
-          const target = typeof p.target === 'string' ? p.target : '_self';
-          const rel = typeof p.rel === 'string' && p.rel.trim()
-            ? p.rel
-            : target === '_blank'
-              ? 'noopener noreferrer'
-              : undefined;
+          const target = normalizeLinkTargetValue(p.target);
+          const rel = normalizeLinkRelValue(target, p.rel);
         return (
           <a
             href={isPreview ? (p.href ?? '#') : undefined}

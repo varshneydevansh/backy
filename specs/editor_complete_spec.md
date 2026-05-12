@@ -47,7 +47,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
 | button | ✅ label/link-like styling + action presets | ✅ | ✅ | Action presets now normalize page/section/email/phone/download/custom href behavior with smoke coverage | ✅ |
-| link | ✅ href/content/underline | ✅ | ✅ | Keyboard interaction semantics for target/rel | ⚠️ |
+| link | ✅ href/content/underline/target/rel | ✅ | ✅ | `_blank` target now enforces `noopener noreferrer` in property controls, editor preview, persistence, and public rendering | ✅ |
 | divider | ✅ style controls | ✅ | ✅ | minor spacing parity | ⚠️ |
 | spacer | ✅ layout-only | ✅ | ✅ | no visual handle difference in preview | ✅ |
 | icon | ✅ symbol/size/color | ✅ | ✅ | Public renderer now preserves icon/symbol fallback, size, color, title, and aria label | ✅ |
@@ -336,6 +336,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### ✅ Completed in this pass
 - Replaced public columns placeholder behavior with real column slots, child placement, and renderer smoke coverage.
 - Added button action presets in the property panel with normalized href generation, download flag persistence, editor smoke coverage, and public/editor download attribute rendering.
+- Tightened link target/rel semantics so `_blank` links cannot drop `noopener noreferrer`, public links preserve underline-off styling, and focused link/public renderer smoke covers the contract.
 - Brought public quote rendering into parity for appearance, typography, border, and citation styles with renderer smoke coverage.
 - Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.
