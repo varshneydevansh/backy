@@ -6,6 +6,7 @@ import {
   updateCommentThread,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
@@ -281,6 +282,35 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: payload.status || 'thread-updated',
         actor: payload.actor || payload.reviewedBy,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'comment',
+        entityId: updated.id,
+        action: payload.status ? 'comment.moderate' : 'comment.thread.update',
+        before: {
+          status: comment.status,
+          parentId: comment.parentId || null,
+          commentThreadId: comment.commentThreadId || null,
+          reportCount: comment.reportCount || 0,
+        },
+        after: {
+          status: updated.status,
+          parentId: updated.parentId || null,
+          commentThreadId: updated.commentThreadId || null,
+          reportCount: updated.reportCount || 0,
+        },
+        metadata: {
+          permission: 'comments.manage',
+          targetType: updated.targetType,
+          targetId: updated.targetId,
+          status: payload.status || null,
+          reason: payload.status || 'thread-updated',
+          parentId: updated.parentId || null,
+        },
+        requestId,
+      });
 
       return privateResponse({
         success: true,
@@ -362,6 +392,34 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       requestId,
       reason: payload.status || 'thread-updated',
       actor: payload.actor || payload.reviewedBy,
+    });
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'comment',
+      entityId: updated.id,
+      action: payload.status ? 'comment.moderate' : 'comment.thread.update',
+      before: {
+        status: comment.status,
+        parentId: comment.parentId || null,
+        commentThreadId: comment.commentThreadId || null,
+        reportCount: comment.reportCount || 0,
+      },
+      after: {
+        status: updated.status,
+        parentId: updated.parentId || null,
+        commentThreadId: updated.commentThreadId || null,
+        reportCount: updated.reportCount || 0,
+      },
+      metadata: {
+        permission: 'comments.manage',
+        targetType: updated.targetType,
+        targetId: updated.targetId,
+        status: payload.status || null,
+        reason: payload.status || 'thread-updated',
+        parentId: updated.parentId || null,
+      },
+      requestId,
     });
 
     return privateResponse({

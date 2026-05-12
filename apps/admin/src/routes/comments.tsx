@@ -24,6 +24,7 @@ import {
   getCommentAnalytics,
   deleteCommentBlocklistEntries,
   listCommentDeliveryEvents,
+  listAdminAuditLogs,
   listBlogPosts,
   listCommentBlocklist,
   listComments,
@@ -34,6 +35,7 @@ import {
   updateComments,
   type AdminComment,
   type AdminCommentBlocklistEntry,
+  type AdminAuditLog,
   type CommentDeliveryEvent,
   type CommentAnalytics,
   type CommentModerationStatus,
@@ -241,6 +243,8 @@ function CommentsRoute() {
   const [commentAnalytics, setCommentAnalytics] = useState<CommentAnalytics | null>(null);
   const [commentDeliveryEvents, setCommentDeliveryEvents] = useState<CommentDeliveryEvent[]>([]);
   const [commentDeliveryError, setCommentDeliveryError] = useState<string | null>(null);
+  const [commentAuditLogs, setCommentAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [commentAuditError, setCommentAuditError] = useState<string | null>(null);
   const [blocklist, setBlocklist] = useState<AdminCommentBlocklistEntry[]>([]);
   const [blocklistCount, setBlocklistCount] = useState(0);
   const [blocklistTypeFilter, setBlocklistTypeFilter] = useState<'all' | 'email' | 'ip'>('all');
@@ -461,6 +465,12 @@ function CommentsRoute() {
     reported: commentDeliveryEvents.filter((event) => event.kind === 'comment-reported').length,
     failed: commentDeliveryEvents.filter((event) => event.status === 'failed').length,
   }), [commentDeliveryEvents]);
+  const auditMetrics = useMemo(() => ({
+    total: commentAuditLogs.length,
+    policy: commentAuditLogs.filter((log) => log.action === 'commentPolicy.update').length,
+    moderation: commentAuditLogs.filter((log) => log.action === 'comment.moderate' || log.action === 'comment.reports.clear').length,
+    operations: commentAuditLogs.filter((log) => log.action === 'comment.thread.update' || log.action === 'commentDelivery.retry' || log.action === 'commentBlocklist.delete').length,
+  }), [commentAuditLogs]);
   const hasSelection = selectedIds.length > 0;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedReportedIds = useMemo(() => comments
@@ -535,6 +545,13 @@ function CommentsRoute() {
           : 'Comment delivery events appear after public submissions, reports, or moderation actions.',
         ready: comments.length === 0 || deliveryMetrics.total > 0,
       },
+      {
+        label: 'Audit trail',
+        detail: auditMetrics.total > 0
+          ? `${auditMetrics.total} admin audit event${auditMetrics.total === 1 ? '' : 's'} cover policy, moderation, retry, or blocklist actions.`
+          : 'Admin audit events appear after policy saves or moderation actions.',
+        ready: auditMetrics.total > 0 || comments.length === 0,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -548,7 +565,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, deliveryMetrics.total, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
+  }, [activeSite, auditMetrics.total, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, comments.length, deliveryMetrics.total, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length, threadSummaries]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -604,6 +621,18 @@ function CommentsRoute() {
         reason: event.reason,
         requestId: event.requestId,
         createdAt: event.createdAt,
+      })),
+    },
+    audit: {
+      metrics: auditMetrics,
+      recent: commentAuditLogs.slice(0, 20).map((log) => ({
+        id: log.id,
+        action: log.action,
+        entity: log.entity,
+        entityId: log.entityId,
+        actorId: log.actorId || null,
+        requestId: log.requestId || null,
+        createdAt: log.createdAt,
       })),
     },
     filters: {
@@ -740,6 +769,8 @@ function CommentsRoute() {
     threadFilter,
     threadSummaries,
     triageFilter,
+    auditMetrics,
+    commentAuditLogs,
     deliveryMetrics,
     commentDeliveryEvents,
   ]);
@@ -775,6 +806,19 @@ function CommentsRoute() {
     }
   };
 
+  const refreshCommentAuditLogs = async () => {
+    setCommentAuditError(null);
+    try {
+      const result = await listAdminAuditLogs({ siteId: activeSiteId, limit: 80 });
+      setCommentAuditLogs(result.logs.filter(isCommentAuditLog));
+      return result;
+    } catch (auditError) {
+      setCommentAuditError(auditError instanceof Error ? auditError.message : 'Unable to load comment audit logs');
+      setCommentAuditLogs([]);
+      return null;
+    }
+  };
+
   const handleRetryCommentDelivery = async (event: CommentDeliveryEvent) => {
     if (isCommentsBusy || !event.commentId) return;
 
@@ -788,6 +832,7 @@ function CommentsRoute() {
         comment.id === result.comment.id ? result.comment : comment
       )));
       await refreshCommentDeliveryEvents().catch(() => null);
+      await refreshCommentAuditLogs().catch(() => null);
       const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'delivery';
       setNotice(`Comment ${channel} retry ${result.delivery.status}.`);
     } catch (retryError) {
@@ -805,7 +850,7 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult] = await Promise.all([
+      const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult, auditResult] = await Promise.all([
         listComments(activeSiteId, { status: 'all', limit: 100, sort: 'newest' }),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
@@ -813,6 +858,10 @@ function CommentsRoute() {
         refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })),
         listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
           setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
+          return null;
+        }),
+        listAdminAuditLogs({ siteId: activeSiteId, limit: 80 }).catch((auditError) => {
+          setCommentAuditError(auditError instanceof Error ? auditError.message : 'Unable to load comment audit logs');
           return null;
         }),
       ]);
@@ -823,6 +872,8 @@ function CommentsRoute() {
       setCommentAnalytics(analyticsResult);
       setCommentDeliveryEvents(deliveryResult?.events || []);
       if (deliveryResult) setCommentDeliveryError(null);
+      setCommentAuditLogs(auditResult?.logs.filter(isCommentAuditLog) || []);
+      if (auditResult) setCommentAuditError(null);
       setBlocklist(blocklistResult.blocklist || []);
       setBlocklistCount(blocklistResult.count || 0);
       setCommentPolicyDraft(nextPolicy);
@@ -916,6 +967,7 @@ function CommentsRoute() {
         await refreshBlocklist();
       }
       await refreshCommentDeliveryEvents().catch(() => null);
+      await refreshCommentAuditLogs().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
       setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
     } catch (updateError) {
@@ -936,6 +988,7 @@ function CommentsRoute() {
       const result = await deleteCommentBlocklistEntries(activeSiteId, ids);
       setBlocklist((current) => current.filter((entry) => !result.deleted.some((deleted) => deleted.id === entry.id)));
       setBlocklistCount((current) => Math.max(0, current - result.deletedCount));
+      await refreshCommentAuditLogs().catch(() => null);
       setNotice(`${result.deletedCount} author blocklist entr${result.deletedCount === 1 ? 'y' : 'ies'} removed.`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to remove author blocklist entries');
@@ -978,6 +1031,7 @@ function CommentsRoute() {
       const nextPolicy = normalizeCommentPolicyDraft(site?.settings?.commentPolicy || commentPolicyDraft);
       setCommentPolicyDraft(nextPolicy);
       setSavedCommentPolicy(nextPolicy);
+      await refreshCommentAuditLogs().catch(() => null);
       setNotice('Comment policy saved.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save comment policy');
@@ -1004,6 +1058,7 @@ function CommentsRoute() {
         result.updated.find((updated) => updated.id === comment.id) || comment
       )));
       await refreshCommentDeliveryEvents().catch(() => null);
+      await refreshCommentAuditLogs().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
       setNotice(`${result.updatedCount} report flag${result.updatedCount === 1 ? '' : 's'} resolved.`);
     } catch (updateError) {
@@ -1120,6 +1175,7 @@ function CommentsRoute() {
       setThreadFilter(getCommentThreadKey(updated));
       await refreshCommentAnalytics().catch(() => null);
       await refreshCommentDeliveryEvents().catch(() => null);
+      await refreshCommentAuditLogs().catch(() => null);
       setNotice(`Reply moved under ${nextParent.authorName || nextParent.authorEmail || 'the selected parent'}.`);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : 'Unable to move reply');
@@ -1741,6 +1797,75 @@ function CommentsRoute() {
                       isRetrying={retryingDeliveryIds.includes(event.id)}
                       onRetry={handleRetryCommentDelivery}
                     />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel id="comments-audit" className="mb-6 scroll-mt-24" data-testid="comments-audit-panel">
+        <PanelHeader
+          title="Comment audit trail"
+          description="Admin policy, moderation, retry, thread, and blocklist actions with request-id correlation."
+          icon={<ShieldAlert className="size-4" />}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isCommentsBusy}
+              onClick={() => void refreshCommentAuditLogs()}
+              iconStart={<RefreshCw className="size-4" />}
+              data-testid="comments-audit-refresh"
+            >
+              Refresh audit
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Code2 className="size-4" />
+                Admin audit API
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Custom admin dashboards can read the same private audit log to prove who changed comment policy, moderation state, delivery retries, or author blocks.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MetaTile label="Audit events" value={`${auditMetrics.total}`} />
+                <MetaTile label="Policy" value={`${auditMetrics.policy}`} />
+                <MetaTile label="Moderation" value={`${auditMetrics.moderation}`} />
+                <MetaTile label="Operations" value={`${auditMetrics.operations}`} />
+              </div>
+              {commentAuditError ? (
+                <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {commentAuditError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Recent moderation audit</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Newest admin audit entries scoped to comment policy and moderation workflows.
+                  </div>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                  {auditMetrics.total} total
+                </span>
+              </div>
+              {commentAuditLogs.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
+                  No comment audit entries have been recorded yet.
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3" data-testid="comments-audit-list">
+                  {commentAuditLogs.slice(0, 8).map((log) => (
+                    <CommentAuditLogCard key={log.id} log={log} />
                   ))}
                 </div>
               )}
@@ -2382,6 +2507,91 @@ function isRetryableCommentDeliveryEvent(event: CommentDeliveryEvent) {
   return event.status === 'failed'
     && Boolean(event.commentId)
     && (channel === 'webhook' || channel === 'email');
+}
+
+function isCommentAuditLog(log: AdminAuditLog): boolean {
+  if (log.entity === 'comment') {
+    return String(log.action).startsWith('comment');
+  }
+
+  return log.entity === 'site' && log.action === 'commentPolicy.update';
+}
+
+function auditMetadataText(log: AdminAuditLog, key: string): string {
+  const value = log.metadata?.[key];
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function commentAuditTitle(log: AdminAuditLog): string {
+  if (log.action === 'commentPolicy.update') return 'Policy updated';
+  if (log.action === 'comment.moderate') return 'Comments moderated';
+  if (log.action === 'comment.reports.clear') return 'Reports resolved';
+  if (log.action === 'comment.thread.update') return 'Reply moved';
+  if (log.action === 'commentDelivery.retry') return 'Delivery retried';
+  if (log.action === 'commentBlocklist.delete') return 'Blocklist entries removed';
+
+  return log.action.replace(/[._-]+/g, ' ');
+}
+
+function commentAuditDescription(log: AdminAuditLog): string {
+  const status = auditMetadataText(log, 'status');
+  const updatedCount = auditMetadataText(log, 'updatedCount');
+  const deletedCount = auditMetadataText(log, 'deletedCount');
+  const deliveryStatus = auditMetadataText(log, 'deliveryStatus');
+  const channel = auditMetadataText(log, 'channel');
+  const targetType = auditMetadataText(log, 'targetType');
+  const targetId = auditMetadataText(log, 'targetId');
+
+  if (log.action === 'commentPolicy.update') {
+    return 'Site-level comment moderation policy changed.';
+  }
+  if (log.action === 'comment.moderate') {
+    return `${updatedCount || '1'} comment${updatedCount === '1' ? '' : 's'} marked ${status || 'updated'}.`;
+  }
+  if (log.action === 'comment.reports.clear') {
+    return `${updatedCount || '1'} report flag${updatedCount === '1' ? '' : 's'} cleared.`;
+  }
+  if (log.action === 'comment.thread.update') {
+    return `Reply ${log.entityId} moved${targetType && targetId ? ` on ${targetType}:${targetId}` : ''}.`;
+  }
+  if (log.action === 'commentDelivery.retry') {
+    return `${channel || 'delivery'} retry ${deliveryStatus || 'queued'} for ${log.entityId}.`;
+  }
+  if (log.action === 'commentBlocklist.delete') {
+    return `${deletedCount || '0'} author blocklist entr${deletedCount === '1' ? 'y' : 'ies'} removed.`;
+  }
+
+  return `${log.entity}:${log.entityId}`;
+}
+
+function CommentAuditLogCard({ log }: { log: AdminAuditLog }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3" data-testid="comments-audit-event">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+              {log.action}
+            </span>
+            <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+              {log.entity}
+            </span>
+            <span className="text-xs text-muted-foreground">{formatDate(log.createdAt)}</span>
+          </div>
+          <div className="mt-2 text-sm font-semibold text-foreground">{commentAuditTitle(log)}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{commentAuditDescription(log)}</div>
+          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+            {log.requestId || 'no-request-id'}
+          </div>
+        </div>
+        <span className="rounded-md bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+          {log.actorId || 'admin'}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function CommentDeliveryEventCard({

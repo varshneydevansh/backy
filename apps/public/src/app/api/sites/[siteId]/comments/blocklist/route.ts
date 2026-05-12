@@ -5,6 +5,7 @@ import {
   listCommentBlocklist,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -129,6 +130,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const result = deleteCommentBlocklistEntries({ siteId: site.id, ids });
+    await recordAdminAudit({
+      repositories,
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'comment',
+      entityId: 'blocklist',
+      action: 'commentBlocklist.delete',
+      metadata: {
+        permission: 'comments.manage',
+        deletedCount: result.deleted.length,
+        missingCount: result.missingIds.length,
+        blocklistIds: result.deleted.map((entry) => entry.id),
+        types: Array.from(new Set(result.deleted.map((entry) => entry.type))),
+      },
+      requestId,
+    });
 
     return privateResponse({
       success: true,

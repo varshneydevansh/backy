@@ -927,6 +927,7 @@ const assertLayout = async (client) => {
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
     hasAnalytics: Boolean(document.querySelector('[data-testid="comments-analytics-panel"]')),
     hasDelivery: Boolean(document.querySelector('[data-testid="comments-delivery-panel"]')),
+    hasAudit: Boolean(document.querySelector('[data-testid="comments-audit-panel"]')),
     hasThreadPanel: Boolean(document.querySelector('[data-testid="comments-thread-panel"]')),
     hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
@@ -934,7 +935,7 @@ const assertLayout = async (client) => {
     hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasDelivery && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasDelivery && layout.hasAudit && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -990,6 +991,36 @@ const assertCommentDeliveryPanel = async (client) => {
 
     if (attempt === 79) {
       throw new Error(`Comments delivery panel did not render seeded comment events: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertCommentAuditPanel = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="comments-audit-panel"]');
+      const events = Array.from(document.querySelectorAll('[data-testid="comments-audit-event"]'));
+      const text = panel?.textContent || '';
+
+      return {
+        hasPanel: Boolean(panel),
+        eventCount: events.length,
+        hasPolicy: text.includes('commentPolicy.update') || text.includes('Policy updated'),
+        hasAuditCopy: text.includes('Admin audit API') && text.includes('Recent moderation audit'),
+        panelText: text.slice(0, 1200),
+      };
+    })()`);
+
+    if (state.hasPanel && state.eventCount > 0 && state.hasPolicy && state.hasAuditCopy) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Comments audit panel did not render seeded audit events: ${JSON.stringify(state)}`);
     }
 
     await sleep(250);
@@ -1380,6 +1411,7 @@ const main = async () => {
       'Comments Smoke Move Parent',
     ]);
     await assertCommentDeliveryPanel(client);
+    await assertCommentAuditPanel(client);
     await retryCommentDeliveryInUi(client, failedReportWebhookEvent.id);
     const retryDelivery = await waitForCommentWebhookRetry(webhookReceiver, {
       kind: 'comment-reported',

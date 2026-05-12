@@ -6,6 +6,7 @@ import {
   listComments,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   clearRepositoryCommentReports,
   resolveRepositorySite,
@@ -323,6 +324,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: payload.status || 'reports-cleared',
         actor: payload.actor || payload.reviewedBy,
       })));
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'comment',
+        entityId: updated.length === 1 ? updated[0].id : 'bulk',
+        action: payload.status ? 'comment.moderate' : 'comment.reports.clear',
+        metadata: {
+          permission: 'comments.manage',
+          status: payload.status || null,
+          clearReports: payload.clearReports,
+          updatedCount: updated.length,
+          missingCount: missingIds.length,
+          commentIds: updated.map((comment) => comment.id),
+          targetTypes: Array.from(new Set(updated.map((comment) => comment.targetType))),
+        },
+        requestId: responseRequestId,
+      });
 
       return privateResponse({
         success: true,
@@ -381,6 +400,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       reason: payload.status || 'reports-cleared',
       actor: payload.actor || payload.reviewedBy,
     })));
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'comment',
+      entityId: result.updated.length === 1 ? result.updated[0].id : 'bulk',
+      action: payload.status ? 'comment.moderate' : 'comment.reports.clear',
+      metadata: {
+        permission: 'comments.manage',
+        status: payload.status || null,
+        clearReports: payload.clearReports,
+        updatedCount: result.updated.length,
+        missingCount: result.missingIds.length,
+        commentIds: result.updated.map((comment) => comment.id),
+        targetTypes: Array.from(new Set(result.updated.map((comment) => comment.targetType))),
+      },
+      requestId: responseRequestId,
+    });
 
     return privateResponse({
       success: true,

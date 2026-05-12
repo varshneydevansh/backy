@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyAuditLogEntry, Comment } from '@backy-cms/core';
 import { getCommentById, getSiteByIdOrSlug, listAuditEvents } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import {
   retryCommentDelivery,
@@ -260,6 +261,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const retryError = result.error;
         return errorResponse(retryError.status, retryError.code, retryError.message, requestId);
       }
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'comment',
+        entityId: comment.id,
+        action: 'commentDelivery.retry',
+        metadata: {
+          permission: 'comments.manage',
+          retryOf: result.retryOf,
+          deliveryStatus: result.delivery.status,
+          channel: result.delivery.channel,
+          target: result.delivery.target,
+        },
+        requestId,
+      });
 
       return privateResponse({
         success: true,
@@ -297,6 +314,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const retryError = result.error;
       return errorResponse(retryError.status, retryError.code, retryError.message, requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'comment',
+      entityId: comment.id,
+      action: 'commentDelivery.retry',
+      metadata: {
+        permission: 'comments.manage',
+        retryOf: result.retryOf,
+        deliveryStatus: result.delivery.status,
+        channel: result.delivery.channel,
+        target: result.delivery.target,
+      },
+      requestId,
+    });
 
     return privateResponse({
       success: true,
