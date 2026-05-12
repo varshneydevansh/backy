@@ -17,6 +17,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  createComment,
   getAdminSite,
   getCommentAnalytics,
   deleteCommentBlocklistEntries,
@@ -176,6 +177,13 @@ interface CommentThreadSummary {
   latestAt?: string;
 }
 
+interface CommentReplyDraft {
+  authorName: string;
+  authorEmail: string;
+  content: string;
+  moderationMode: 'manual' | 'auto-approve';
+}
+
 type CommentPolicyDraft = Required<Omit<SiteCommentPolicy, 'blockedTerms'>> & {
   blockedTerms: string[];
 };
@@ -204,6 +212,13 @@ const normalizeCommentPolicyDraft = (policy?: SiteCommentPolicy | null): Comment
 
 const getCommentThreadKey = (comment: AdminComment) => comment.commentThreadId || comment.parentId || comment.id;
 
+const DEFAULT_REPLY_DRAFT: CommentReplyDraft = {
+  authorName: 'Backy Admin',
+  authorEmail: 'admin@backy.local',
+  content: '',
+  moderationMode: 'auto-approve',
+};
+
 function CommentsRoute() {
   const { sites } = useStore();
   const navigate = useNavigate();
@@ -224,15 +239,18 @@ function CommentsRoute() {
   const [sortFilter, setSortFilter] = useState<CommentSortFilter>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [moderationReason, setModerationReason] = useState('');
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState<CommentReplyDraft>(DEFAULT_REPLY_DRAFT);
   const [commentPolicyDraft, setCommentPolicyDraft] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [savedCommentPolicy, setSavedCommentPolicy] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [isLoading, setIsLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+  const [isReplyingId, setIsReplyingId] = useState<string | null>(null);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0;
+  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0 || Boolean(isReplyingId);
   const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
 
   const activeSite = useMemo(
@@ -677,6 +695,12 @@ function CommentsRoute() {
     return result;
   };
 
+  const refreshCommentAnalytics = async () => {
+    const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 });
+    setCommentAnalytics(analyticsResult);
+    return analyticsResult;
+  };
+
   const loadComments = async () => {
     if (isCommentsBusy) return;
 
@@ -739,6 +763,8 @@ function CommentsRoute() {
     setSelectedSiteId(nextSiteId);
     setSelectedIds([]);
     setModerationReason('');
+    setReplyingToId(null);
+    setReplyDraft(DEFAULT_REPLY_DRAFT);
     clearCommentFilters();
   }, [routerState.location.search, selectedSiteId, sites]);
 
@@ -881,6 +907,65 @@ function CommentsRoute() {
     }
   };
 
+  const openReplyComposer = (comment: AdminComment) => {
+    if (isCommentsBusy) return;
+    const defaultAuthorName = activeSite?.name ? `${activeSite.name} Team` : DEFAULT_REPLY_DRAFT.authorName;
+    setReplyingToId(comment.id);
+    setReplyDraft({
+      ...DEFAULT_REPLY_DRAFT,
+      authorName: replyDraft.authorName || defaultAuthorName,
+      authorEmail: replyDraft.authorEmail || DEFAULT_REPLY_DRAFT.authorEmail,
+      moderationMode: DEFAULT_REPLY_DRAFT.moderationMode,
+    });
+  };
+
+  const patchReplyDraft = (patch: Partial<CommentReplyDraft>) => {
+    setReplyDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const handleCreateReply = async (parentComment: AdminComment) => {
+    if (isCommentsBusy) return;
+    const content = replyDraft.content.trim();
+    if (!content) {
+      setError('Enter a reply before publishing.');
+      setNotice(null);
+      return;
+    }
+    if (!commentPolicyDraft.allowReplies) {
+      setError('Replies are disabled by the site comment policy.');
+      setNotice(null);
+      return;
+    }
+
+    setIsReplyingId(parentComment.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const created = await createComment(activeSiteId, {
+        targetType: parentComment.targetType,
+        targetId: parentComment.targetId,
+        content,
+        authorName: replyDraft.authorName.trim() || DEFAULT_REPLY_DRAFT.authorName,
+        authorEmail: replyDraft.authorEmail.trim() || DEFAULT_REPLY_DRAFT.authorEmail,
+        parentId: parentComment.id,
+        commentThreadId: getCommentThreadKey(parentComment),
+        moderationMode: replyDraft.moderationMode,
+        requestId: `comments-admin-reply-${Date.now().toString(36)}`,
+      });
+      setComments((current) => [created, ...current.filter((comment) => comment.id !== created.id)]);
+      setReplyingToId(null);
+      setReplyDraft((current) => ({ ...current, content: '' }));
+      setThreadFilter(getCommentThreadKey(parentComment));
+      await refreshCommentAnalytics().catch(() => null);
+      setNotice(`Reply added to ${parentComment.authorName || parentComment.authorEmail || 'the selected comment'}.`);
+    } catch (replyError) {
+      setError(replyError instanceof Error ? replyError.message : 'Unable to create reply');
+    } finally {
+      setIsReplyingId(null);
+    }
+  };
+
   const copyCommentApiText = async (value: string, label: string) => {
     if (isCommentsBusy) return;
 
@@ -924,6 +1009,8 @@ function CommentsRoute() {
     setSelectedSiteId(nextSiteId);
     setSelectedIds([]);
     setModerationReason('');
+    setReplyingToId(null);
+    setReplyDraft(DEFAULT_REPLY_DRAFT);
     clearCommentFilters();
     navigate({ to: '/comments', search: { siteId: nextSiteId }, replace: true });
   };
@@ -1869,6 +1956,10 @@ function CommentsRoute() {
                   parentComment={comment.parentId ? commentById.get(comment.parentId) : undefined}
                   replyCount={replyCountByParent.get(comment.id) || 0}
                   threadKey={getCommentThreadKey(comment)}
+                  canReply={commentPolicyDraft.allowReplies}
+                  isReplying={replyingToId === comment.id}
+                  isSubmittingReply={isReplyingId === comment.id}
+                  replyDraft={replyDraft}
                   selected={selectedSet.has(comment.id)}
                   disabled={isCommentsBusy}
                   onSelect={(checked) => {
@@ -1884,6 +1975,13 @@ function CommentsRoute() {
                   onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
                   onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
                   onClearReports={() => void handleClearReports([comment.id])}
+                  onOpenReply={() => openReplyComposer(comment)}
+                  onCancelReply={() => {
+                    setReplyingToId(null);
+                    setReplyDraft((current) => ({ ...current, content: '' }));
+                  }}
+                  onReplyDraftChange={patchReplyDraft}
+                  onSubmitReply={() => void handleCreateReply(comment)}
                 />
               ))}
             </div>
@@ -2053,6 +2151,10 @@ function CommentCard({
   parentComment,
   replyCount,
   threadKey,
+  canReply,
+  isReplying,
+  isSubmittingReply,
+  replyDraft,
   selected,
   disabled,
   onSelect,
@@ -2061,12 +2163,20 @@ function CommentCard({
   onSpam,
   onBlock,
   onClearReports,
+  onOpenReply,
+  onCancelReply,
+  onReplyDraftChange,
+  onSubmitReply,
 }: {
   comment: AdminComment;
   target?: CommentTargetSummary;
   parentComment?: AdminComment;
   replyCount: number;
   threadKey: string;
+  canReply: boolean;
+  isReplying: boolean;
+  isSubmittingReply: boolean;
+  replyDraft: CommentReplyDraft;
   selected: boolean;
   disabled: boolean;
   onSelect: (checked: boolean) => void;
@@ -2075,6 +2185,10 @@ function CommentCard({
   onSpam: () => void;
   onBlock: () => void;
   onClearReports: () => void;
+  onOpenReply: () => void;
+  onCancelReply: () => void;
+  onReplyDraftChange: (patch: Partial<CommentReplyDraft>) => void;
+  onSubmitReply: () => void;
 }) {
   const reports = comment.reportReasons?.length ? comment.reportReasons.join(', ') : null;
   const hasReports = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
@@ -2205,7 +2319,97 @@ function CommentCard({
             Resolve reports
           </Button>
         ) : null}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onOpenReply}
+          disabled={disabled || !canReply}
+          iconStart={<MessageSquare className="size-4" />}
+          aria-label={`Reply to comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          data-testid="comments-reply-open"
+        >
+          Reply
+        </Button>
       </div>
+      {isReplying ? (
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4" data-testid="comments-reply-composer">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Official reply</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Attached to thread {threadKey} and parent comment {comment.id}.
+              </div>
+            </div>
+            <StatusBadge status={replyDraft.moderationMode === 'auto-approve' ? 'approved' : 'pending'} type={replyDraft.moderationMode === 'auto-approve' ? 'success' : 'warning'} />
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(180px,0.4fr)]">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Reply author
+              <input
+                value={replyDraft.authorName}
+                disabled={disabled || isSubmittingReply}
+                onChange={(event) => onReplyDraftChange({ authorName: event.target.value })}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Comment reply author name"
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Reply email
+              <input
+                value={replyDraft.authorEmail}
+                disabled={disabled || isSubmittingReply}
+                onChange={(event) => onReplyDraftChange({ authorEmail: event.target.value })}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Comment reply author email"
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Publish state
+              <select
+                value={replyDraft.moderationMode}
+                disabled={disabled || isSubmittingReply}
+                onChange={(event) => onReplyDraftChange({ moderationMode: event.target.value as CommentReplyDraft['moderationMode'] })}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Comment reply moderation mode"
+              >
+                <option value="auto-approve">Publish now</option>
+                <option value="manual">Send to queue</option>
+              </select>
+            </label>
+          </div>
+          <label className="mt-3 grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Reply
+            <textarea
+              value={replyDraft.content}
+              disabled={disabled || isSubmittingReply}
+              onChange={(event) => onReplyDraftChange({ content: event.target.value })}
+              rows={3}
+              className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Write an official response..."
+              aria-label="Comment reply content"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={onSubmitReply}
+              disabled={disabled || isSubmittingReply || !replyDraft.content.trim()}
+              iconStart={<MessageSquare className="size-4" />}
+              data-testid="comments-reply-submit"
+            >
+              {isSubmittingReply ? 'Adding reply' : 'Add reply'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onCancelReply}
+              disabled={disabled || isSubmittingReply}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

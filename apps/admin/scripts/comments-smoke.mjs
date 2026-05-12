@@ -161,6 +161,17 @@ const listComments = async (requestId) => {
   return payload.data?.comments || payload.comments || [];
 };
 
+const listCommentReplies = async (parentId) => {
+  const query = new URLSearchParams({
+    status: 'all',
+    limit: '100',
+    sort: 'newest',
+    parentId,
+  });
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments?${query.toString()}`);
+  return payload.data?.comments || payload.comments || [];
+};
+
 const listBlocklist = async (q = '') => {
   const query = new URLSearchParams({
     limit: '100',
@@ -638,6 +649,84 @@ const assertThreadContext = async (client, parentAuthor, replyAuthor) => {
   return state;
 };
 
+const createReplyInUi = async (client, parentAuthor, replyContent) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => {
+        const text = candidate.textContent || '';
+        return text.includes(${JSON.stringify(parentAuthor)}) && !text.includes(${JSON.stringify(`Reply to ${parentAuthor}`)});
+      });
+      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      const open = card.querySelector('[data-testid="comments-reply-open"]');
+      if (!(open instanceof HTMLButtonElement)) return { ok: false, reason: 'reply-open-missing', text: card.textContent || '' };
+      if (open.disabled) return { ok: false, reason: 'reply-open-disabled' };
+      open.click();
+      const composer = card.querySelector('[data-testid="comments-reply-composer"]');
+      if (!composer) return { ok: false, reason: 'composer-missing-after-click' };
+      const textarea = composer.querySelector('textarea[aria-label="Comment reply content"]');
+      if (!(textarea instanceof HTMLTextAreaElement)) return { ok: false, reason: 'textarea-missing' };
+      setInputValue(textarea, ${JSON.stringify(replyContent)});
+      const submit = composer.querySelector('[data-testid="comments-reply-submit"]');
+      if (!(submit instanceof HTMLButtonElement)) return { ok: false, reason: 'submit-missing' };
+      if (submit.disabled) return { ok: false, reason: 'submit-disabled', content: textarea.value };
+      submit.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to create UI reply for ${parentAuthor}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const waitForReplyContent = async (parentId, content) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const replies = await listCommentReplies(parentId);
+    const reply = replies.find((item) => item.content === content);
+    if (reply) {
+      return reply;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Reply content did not appear for parent ${parentId}: ${content}`);
+};
+
+const clearThreadFilterInUi = async (client) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const filter = document.querySelector('[data-testid="comments-thread-filter"]');
+      if (!(filter instanceof HTMLSelectElement)) return { ok: false, reason: 'filter-missing' };
+      if (filter.value === 'all') return { ok: true };
+      filter.value = 'all';
+      filter.dispatchEvent(new Event('input', { bubbles: true }));
+      filter.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true };
+    })()`);
+
+    if (result.ok) return;
+
+    if (attempt === 39) {
+      throw new Error(`Unable to clear comments thread filter: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -790,6 +879,12 @@ const main = async () => {
       'Comments Smoke Thread Reply',
     ]);
     await assertThreadContext(client, 'Comments Smoke Thread Parent', 'Comments Smoke Thread Reply');
+    const adminReplyContent = `Official admin reply from comments smoke ${suffix}.`;
+    await createReplyInUi(client, 'Comments Smoke Thread Parent', adminReplyContent);
+    const adminReplyComment = await waitForReplyContent(threadParentComment.id, adminReplyContent);
+    assert(adminReplyComment.parentId === threadParentComment.id, `Admin reply did not preserve parent id: ${JSON.stringify(adminReplyComment)}`);
+    assert(adminReplyComment.status === 'approved', `Admin reply should publish immediately: ${JSON.stringify(adminReplyComment)}`);
+    await clearThreadFilterInUi(client);
     await savePolicyInUi(client, 'bannedphrase');
     for (let attempt = 0; attempt < 80; attempt += 1) {
       const site = await getAdminSite();
@@ -891,6 +986,7 @@ const main = async () => {
       blockedCommentId: blockedComment.id,
       threadParentCommentId: threadParentComment.id,
       threadReplyCommentId: threadReplyComment.id,
+      adminReplyCommentId: adminReplyComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
