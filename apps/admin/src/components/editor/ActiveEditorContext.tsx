@@ -68,6 +68,8 @@ interface ActiveEditorContextType {
   moveTableColumnRight: () => boolean;
   /** Toggle the current table row between body cells and header cells */
   toggleTableHeaderRow: () => boolean;
+  /** Toggle the current table column between body cells and header cells */
+  toggleTableHeaderColumn: () => boolean;
   /** Remove the current table */
   removeTable: () => boolean;
   /** Check if mark is active */
@@ -122,6 +124,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   moveTableColumnLeft: () => false,
   moveTableColumnRight: () => false,
   toggleTableHeaderRow: () => false,
+  toggleTableHeaderColumn: () => false,
   removeTable: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
@@ -552,6 +555,49 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after header-row toggle.
     }
     return true;
+  }, [getSelectedTableContext]);
+
+  const toggleSelectedTableHeaderColumn = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    if (rows.length === 0) {
+      return false;
+    }
+
+    const shouldApplyHeader = rows.some((row: any) => {
+      const rowChildren = Array.isArray(row?.children) ? row.children : [];
+      const cell = rowChildren[context.cellIndex];
+      return cell?.type === 'td';
+    });
+
+    let didToggleColumn = false;
+    for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...context.tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      if (context.cellIndex >= rowChildren.length) {
+        continue;
+      }
+
+      const cell = rowChildren[context.cellIndex];
+      if (cell?.type === 'td' || cell?.type === 'th') {
+        Transforms.setNodes(editor as any, { type: shouldApplyHeader ? 'th' : 'td' } as any, {
+          at: [...rowPath, context.cellIndex],
+        });
+        didToggleColumn = true;
+      }
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after header-column toggle.
+    }
+    return didToggleColumn;
   }, [getSelectedTableContext]);
 
   const removeSelectedTable = useCallback((editor: PlateEditor) => {
@@ -1675,6 +1721,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderRow]);
 
+  const toggleTableHeaderColumn = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('toggleTableHeaderColumn.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!toggleSelectedTableHeaderColumn(editor)) return false;
+
+      debug('toggleTableHeaderColumn.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('toggleTableHeaderColumn failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderColumn]);
+
   const removeTable = useCallback(() => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2006,6 +2077,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       moveTableColumnLeft,
       moveTableColumnRight,
       toggleTableHeaderRow,
+      toggleTableHeaderColumn,
       removeTable,
       isMarkActive,
       hasRangeSelection,

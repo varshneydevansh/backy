@@ -128,6 +128,7 @@ export function RichTextFormatting({
     moveTableColumnLeft,
     moveTableColumnRight,
     toggleTableHeaderRow,
+    toggleTableHeaderColumn,
     removeTable,
     storeSelection,
     syncActiveEditorContent,
@@ -1677,6 +1678,12 @@ export function RichTextFormatting({
     });
   }, [runOrActivateTextEditor, toggleTableHeaderRow]);
 
+  const toggleTableHeaderColumnAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-toggle-header-column', () => {
+      toggleTableHeaderColumn();
+    });
+  }, [runOrActivateTextEditor, toggleTableHeaderColumn]);
+
   const removeTableAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-remove', () => {
       removeTable();
@@ -2325,6 +2332,19 @@ export function RichTextFormatting({
             title="Toggle table header row"
           >
             <TableProperties className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-toggle-header-column', () => toggleTableHeaderColumnAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-toggle-header-column"
+            title="Toggle table header column"
+          >
+            <Columns3 className="w-4 h-4" />
           </button>
           <button
             type="button"

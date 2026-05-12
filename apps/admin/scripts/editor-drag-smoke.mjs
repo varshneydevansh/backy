@@ -3497,6 +3497,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table row move down did not reorder rows: ${JSON.stringify(movedRowDownState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedMovedRowCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedMovedRowCell?.ok, `Unable to reselect moved table row before move-up control: ${JSON.stringify(selectedMovedRowCell)}`);
+
   await mouseDownControlByTestId(client, 'rich-text-table-move-row-up');
   await sleep(300);
 
@@ -3563,6 +3573,60 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedHeaderColumnCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedHeaderColumnCell?.ok, `Unable to select first table cell before header-column toggle: ${JSON.stringify(selectedHeaderColumnCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-column');
+  await sleep(500);
+
+  const headerColumnState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => ({
+        tag: cell.tagName.toLowerCase(),
+        text: cell.textContent || '',
+      }))),
+      firstColumnHeaderCount: rows.filter((row) => row.querySelector('td, th')?.tagName.toLowerCase() === 'th').length,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    headerColumnState.rows[0]?.[0]?.tag === 'th' &&
+      headerColumnState.rows[1]?.[0]?.tag === 'th' &&
+      headerColumnState.rows[0]?.[1]?.tag === 'td' &&
+      headerColumnState.rows[1]?.[1]?.tag === 'td',
+    `Table header-column toggle did not produce a semantic first column: ${JSON.stringify(headerColumnState)}`,
+  );
+
+  await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-column');
+  await sleep(500);
+
+  const restoredHeaderColumnState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    return {
+      rows: rows.map((row) => Array.from(row.querySelectorAll('td, th')).map((cell) => ({
+        tag: cell.tagName.toLowerCase(),
+        text: cell.textContent || '',
+      }))),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    restoredHeaderColumnState.rows.every((row) => row.every((cell) => cell.tag === 'td')) &&
+      restoredHeaderColumnState.rows[0]?.[0]?.text === 'Column 1' &&
+      restoredHeaderColumnState.rows[1]?.[0]?.text === 'Value 1',
+    `Table header-column toggle did not restore body cells: ${JSON.stringify(restoredHeaderColumnState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedHeaderCell = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -3613,6 +3677,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Table header-row toggle lost header text: ${JSON.stringify(headerTableState)}`,
   );
 
+  await activateTextEditing(client, elementId);
   const selectedTableBeforeRemove = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-table-cell-helper' };
@@ -3711,10 +3776,14 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     trimmedTableState,
     selectedTableCellBeforeMove,
     movedRowDownState,
+    selectedMovedRowCell,
     restoredRowMoveState,
     selectedTableCellBeforeColumnMove,
     movedColumnRightState,
     restoredColumnMoveState,
+    selectedHeaderColumnCell,
+    headerColumnState,
+    restoredHeaderColumnState,
     selectedHeaderCell,
     headerTableState,
     deletedTableState,
