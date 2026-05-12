@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_BLOG_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_BLOG_EDITOR_CDP_PORT || 9378);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_EDITOR_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-editor-smoke.png');
+const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-editor-template';
+const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Editor Template';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -187,31 +189,72 @@ const createBlogPost = async (slug) => {
         description: 'Temporary SEO description long enough to validate the blog editor readiness and frontend handoff contract.',
         canonical: `/blog/${slug}`,
         noIndex: true,
+        frontendDesignTemplateId: FRONTEND_BLOG_TEMPLATE_ID,
+        frontendDesignTemplateName: FRONTEND_BLOG_TEMPLATE_NAME,
+        frontendDesignRoutePattern: '/blog/smoke-editor-template',
+        frontendDesignSource: {
+          type: 'custom-frontend',
+          label: 'Smoke blog editor frontend',
+        },
+        frontendDesignChrome: {
+          header: { component: 'SmokeHeader' },
+          footer: { component: 'SmokeFooter' },
+        },
+        frontendDesignTokens: {
+          colors: { primary: '#0f766e' },
+          fonts: { heading: 'Inter', body: 'Inter' },
+        },
+        frontendDesignBindingHints: [
+          { role: 'post.title', binding: 'post.title' },
+          { role: 'post.content', binding: 'post.content' },
+        ],
       },
       content: {
         elements: [
           {
-            id: `smoke-editor-heading-${slug}`,
-            type: 'heading',
-            x: 72,
-            y: 72,
-            width: 820,
-            height: 96,
-            content: {
-              text: 'Smoke Blog Editor',
-              level: 1,
+            id: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}`,
+            type: 'section',
+            x: 0,
+            y: 0,
+            width: 1200,
+            height: 760,
+            props: {
+              frontendTemplateId: FRONTEND_BLOG_TEMPLATE_ID,
+              frontendTemplateName: FRONTEND_BLOG_TEMPLATE_NAME,
+              routePattern: '/blog/smoke-editor-template',
+              backgroundColor: '#ffffff',
+              borderRadius: 0,
             },
-          },
-          {
-            id: `smoke-editor-text-${slug}`,
-            type: 'text',
-            x: 72,
-            y: 192,
-            width: 780,
-            height: 140,
-            content: {
-              text: 'This post verifies the editable blog canvas and focus workspace.',
-            },
+            dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'content'] }],
+            children: [
+              {
+                id: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}-title`,
+                type: 'heading',
+                x: 72,
+                y: 72,
+                width: 820,
+                height: 96,
+                props: {
+                  content: 'Smoke Blog Editor',
+                  level: 'h1',
+                  fontSize: 52,
+                  binding: 'post.title',
+                },
+              },
+              {
+                id: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}-body`,
+                type: 'paragraph',
+                x: 72,
+                y: 192,
+                width: 780,
+                height: 140,
+                props: {
+                  content: 'This template-backed post verifies the editable blog canvas and focus workspace.',
+                  fontSize: 18,
+                  binding: 'post.content',
+                },
+              },
+            ],
           },
         ],
         canvasSize: {
@@ -271,6 +314,15 @@ const waitForEditor = async (client, postId) => {
         handoff: Boolean(document.querySelector('#blog-editor-handoff')),
         taxonomy: Boolean(document.querySelector('#blog-editor-taxonomy')),
         revisions: Boolean(document.querySelector('#blog-editor-revisions')),
+        templatePanel: Boolean(document.querySelector('[data-testid="blog-editor-template-provenance"]')),
+        templateId: document.querySelector('[data-testid="blog-editor-template-provenance"]')?.getAttribute('data-template-id') || '',
+        handoffTemplateId: (() => {
+          try {
+            return JSON.parse(document.querySelector('[data-testid="blog-editor-handoff-json"]')?.textContent || '{}')?.template?.id || '';
+          } catch {
+            return '';
+          }
+        })(),
         focusButton: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Focus canvas'),
         width: rect?.width || 0,
         height: rect?.height || 0,
@@ -291,6 +343,9 @@ const waitForEditor = async (client, postId) => {
       state.handoff &&
       state.taxonomy &&
       state.revisions &&
+      state.templatePanel &&
+      state.templateId === FRONTEND_BLOG_TEMPLATE_ID &&
+      state.handoffTemplateId === FRONTEND_BLOG_TEMPLATE_ID &&
       state.focusButton &&
       state.width >= 900 &&
       state.height >= 760

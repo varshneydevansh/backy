@@ -373,7 +373,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - explicit mark clearing helper for font family/size/ color / background / decoration.
 
 ### ⚠️ Remaining
-- Finish blog post editor flow via dedicated template-backed page.
+- No known editor-completion blockers remain in this spec slice.
 
 ### ✅ Admin table status resilience
 - Shared admin status badges now normalize empty, whitespace, literal `null`/`undefined`, and unknown status strings to stable labels/types instead of rendering blank or misleading labels.
@@ -395,6 +395,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Public/admin media filters return global assets plus assets explicitly scoped or bound to the requested page/post, while `global=true` isolates reusable global assets.
 - Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
 - Covered by `npm run test:media-scope --workspace @backy/public` and `npm run typecheck --workspace @backy/public`.
+
+### ✅ Blog post editor flow
+- The dedicated blog edit route now exposes template provenance for frontend-design-backed posts, including template id/name, route pattern, binding count, canvas badge, and editor handoff JSON.
+- Template-backed blog posts render through the same `CanvasEditor` workspace, post-scoped media context, readiness/publish/taxonomy/comment/revision panels, and focus canvas mode as normal posts.
+- Covered by `npm run test:blog-editor --workspace @backy-cms/admin` and `npm run typecheck --workspace @backy-cms/admin`.
 
 ## Backend/API + Frontend topology (FOSS consumption)
 - Canonical deployment model:

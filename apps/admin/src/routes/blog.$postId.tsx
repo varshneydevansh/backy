@@ -129,6 +129,20 @@ const getMetaBoolean = (meta: Record<string, any> | undefined, key: string): boo
     return typeof value === 'boolean' ? value : false;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const getMetaRecord = (meta: Record<string, any> | undefined, key: string): Record<string, unknown> | null => {
+    const value = meta?.[key];
+    return isRecord(value) ? value : null;
+};
+
+const getMetaArray = (meta: Record<string, any> | undefined, key: string): unknown[] => {
+    const value = meta?.[key];
+    return Array.isArray(value) ? value : [];
+};
+
 function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
@@ -778,6 +792,17 @@ function EditBlogPostPage() {
     const selectedFeaturedImageUrl = selectedFeaturedImage
         ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
         : null;
+    const frontendDesignTemplate = {
+        id: getMetaString(post.meta, 'frontendDesignTemplateId'),
+        name: getMetaString(post.meta, 'frontendDesignTemplateName'),
+        routePattern: getMetaString(post.meta, 'frontendDesignRoutePattern'),
+        source: getMetaRecord(post.meta, 'frontendDesignSource'),
+        chrome: getMetaRecord(post.meta, 'frontendDesignChrome'),
+        tokens: getMetaRecord(post.meta, 'frontendDesignTokens'),
+        customCss: getMetaString(post.meta, 'frontendDesignCustomCss'),
+        bindingHints: getMetaArray(post.meta, 'frontendDesignBindingHints'),
+    };
+    const hasFrontendDesignTemplate = frontendDesignTemplate.id.length > 0;
     const isCommentMutationBusy = updatingCommentIds.length > 0;
     const commentsBusy = isCommentsLoading || isCommentMutationBusy;
     const commentMetrics = {
@@ -1001,6 +1026,24 @@ function EditBlogPostPage() {
                 targetId: postId,
             },
         },
+        template: hasFrontendDesignTemplate
+            ? {
+                id: frontendDesignTemplate.id,
+                name: frontendDesignTemplate.name || frontendDesignTemplate.id,
+                routePattern: frontendDesignTemplate.routePattern || publicPath,
+                source: frontendDesignTemplate.source,
+                chrome: frontendDesignTemplate.chrome,
+                tokens: frontendDesignTemplate.tokens,
+                customCss: frontendDesignTemplate.customCss || null,
+                bindingHints: frontendDesignTemplate.bindingHints,
+            }
+            : {
+                id: 'backy-blog-editor',
+                name: 'Backy blog editor canvas',
+                routePattern: '/blog/{slug}',
+                source: 'backy-managed',
+                bindingHints: [],
+            },
         editorCapabilities: [
             'Edit blog metadata, route, status, taxonomy, and SEO summary beside the public canvas.',
             'Drag, resize, select unlocked siblings with Cmd/Ctrl+A, group with Cmd/Ctrl+G, ungroup, layer, save reusable selections, and bind media-ready components.',
@@ -1255,6 +1298,29 @@ function EditBlogPostPage() {
                             <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
                             <BlogEditorMetaTile label="Status" value={status} />
                         </div>
+                        <div
+                            className="mt-4 rounded-lg border border-teal-200 bg-teal-50/60 p-4"
+                            data-testid="blog-editor-template-provenance"
+                            data-template-id={hasFrontendDesignTemplate ? frontendDesignTemplate.id : ''}
+                        >
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-teal-950">Template-backed article page</h3>
+                                    <p className="mt-1 text-sm leading-6 text-teal-900/80">
+                                        {hasFrontendDesignTemplate
+                                            ? 'This post keeps the frontend design template, route pattern, chrome, tokens, and editable binding hints in the editor handoff.'
+                                            : 'This post uses the Backy-managed article canvas and can still be captured into a frontend design template later.'}
+                                    </p>
+                                </div>
+                                <StatusBadge status={hasFrontendDesignTemplate ? 'template linked' : 'backy canvas'} />
+                            </div>
+                            <div className="mt-4 grid gap-3 md:grid-cols-4">
+                                <BlogEditorMetaTile label="Template" value={frontendDesignTemplate.name || frontendDesignTemplate.id || 'Backy blog editor'} />
+                                <BlogEditorMetaTile label="Template ID" value={frontendDesignTemplate.id || 'none'} />
+                                <BlogEditorMetaTile label="Route pattern" value={frontendDesignTemplate.routePattern || '/blog/{slug}'} />
+                                <BlogEditorMetaTile label="Bindings" value={`${frontendDesignTemplate.bindingHints.length} hint${frontendDesignTemplate.bindingHints.length === 1 ? '' : 's'}`} />
+                            </div>
+                        </div>
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                             <Button
                                 type="button"
@@ -1503,6 +1569,11 @@ function EditBlogPostPage() {
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+A siblings
                                         </span>
+                                        {hasFrontendDesignTemplate && (
+                                            <span className="rounded bg-teal-50 px-2 py-1 font-medium text-teal-700">
+                                                Template: {frontendDesignTemplate.name || frontendDesignTemplate.id}
+                                            </span>
+                                        )}
                                         {isWorkspaceFocus && (
                                             <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
                                                 Focused
@@ -1906,11 +1977,27 @@ function EditBlogPostPage() {
                                     <BlogEditorContractTile label="Route check" value={routeAvailability.status} />
                                     <BlogEditorContractTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}`} />
                                 </div>
-                                <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+                                <pre
+                                    className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground"
+                                    data-testid="blog-editor-handoff-json"
+                                >
 {JSON.stringify({
     postId: post.id,
     route: publicPath,
     status,
+    template: hasFrontendDesignTemplate
+        ? {
+            id: frontendDesignTemplate.id,
+            name: frontendDesignTemplate.name || frontendDesignTemplate.id,
+            routePattern: frontendDesignTemplate.routePattern || publicPath,
+            bindingHints: frontendDesignTemplate.bindingHints,
+        }
+        : {
+            id: 'backy-blog-editor',
+            name: 'Backy blog editor canvas',
+            routePattern: '/blog/{slug}',
+            bindingHints: [],
+        },
     authorId: selectedAuthorId,
     categoryIds: selectedCategoryIds,
     tagIds: selectedTagIds,
