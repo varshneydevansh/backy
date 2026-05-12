@@ -18,10 +18,12 @@ import {
   listBlogPosts,
   listPages,
   updateSettings as updateBackendSettings,
+  runSettingsStorageProvisioningProbe,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
+  type SettingsStorageProvisioningResult,
 } from '@/lib/adminContentApi';
 import {
   bindMediaToTarget,
@@ -624,7 +626,9 @@ function MediaPage() {
   const [settingsIntegrations, setSettingsIntegrations] = useState<MediaIntegrationSettings | undefined>();
   const [settingsInfrastructureInput, setSettingsInfrastructureInput] = useState<Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> | null>(null);
   const [storageDiagnostics, setStorageDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
+  const [storageProvisioningResult, setStorageProvisioningResult] = useState<SettingsStorageProvisioningResult | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
+  const [isRunningStorageProvisioningProbe, setIsRunningStorageProvisioningProbe] = useState(false);
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false);
   const [storageCheckError, setStorageCheckError] = useState<string | null>(null);
   const [storageSettingsNotice, setStorageSettingsNotice] = useState<string | null>(null);
@@ -1503,6 +1507,7 @@ function MediaPage() {
         integrations: updated.integrations,
       });
       setStorageDiagnostics(null);
+      setStorageProvisioningResult(null);
       setStorageSettingsNotice('Storage metadata saved. Run check to validate the current runtime.');
     } catch (saveError) {
       setStorageCheckError(saveError instanceof Error ? saveError.message : 'Unable to save storage settings.');
@@ -1538,6 +1543,26 @@ function MediaPage() {
       setIsCheckingStorage(false);
     }
   }, [canConfigureMediaStorage, isCheckingStorage, settingsInfrastructureInput, settingsIntegrations]);
+
+  const runStorageProvisioningProbe = useCallback(async () => {
+    if (isRunningStorageProvisioningProbe) return;
+    if (!canConfigureMediaStorage) {
+      setStorageCheckError('This admin account needs media.configure to run the storage provisioning probe.');
+      return;
+    }
+
+    setIsRunningStorageProvisioningProbe(true);
+    setStorageCheckError(null);
+    try {
+      const result = await runSettingsStorageProvisioningProbe();
+      setStorageProvisioningResult(result);
+    } catch (probeError) {
+      setStorageProvisioningResult(null);
+      setStorageCheckError(probeError instanceof Error ? probeError.message : 'Unable to run storage provisioning probe.');
+    } finally {
+      setIsRunningStorageProvisioningProbe(false);
+    }
+  }, [canConfigureMediaStorage, isRunningStorageProvisioningProbe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3148,6 +3173,16 @@ function MediaPage() {
               >
                 {isCheckingStorage ? 'Checking...' : 'Run check'}
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runStorageProvisioningProbe()}
+                disabled={isRunningStorageProvisioningProbe || !canConfigureMediaStorage}
+                iconStart={<KeyRound className={cn('size-3.5', isRunningStorageProvisioningProbe && 'animate-pulse')} />}
+              >
+                {isRunningStorageProvisioningProbe ? 'Probing...' : 'Provision probe'}
+              </Button>
               <Link
                 to="/settings"
                 search={{ tab: 'infrastructure' }}
@@ -3702,6 +3737,9 @@ function MediaPage() {
                 ))}
               </div>
             </div>
+          )}
+          {storageProvisioningResult && (
+            <MediaStorageProvisioningCard result={storageProvisioningResult} />
           )}
           </div>
         </PanelContent>
@@ -6397,6 +6435,76 @@ function MediaStorageDiagnosticCard({ diagnostic }: { diagnostic: SettingsInfras
         ))}
       </div>
     </article>
+  );
+}
+
+function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvisioningResult }) {
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-provisioning-results">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Provisioning and rotation probe</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{result.summary}</p>
+        </div>
+        <span
+          className={cn(
+            'rounded px-2.5 py-1 text-xs font-semibold capitalize',
+            result.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+          )}
+        >
+          {result.status}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+        <div>
+          <dt className="text-muted-foreground">Provider</dt>
+          <dd className="font-mono">{result.provider}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Probe path</dt>
+          <dd className="break-all font-mono">{result.probePath}</dd>
+        </div>
+      </dl>
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        {result.checks.map((check) => (
+          <div key={check.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold">{check.label}</span>
+              <span className={cn('text-[11px] font-semibold', check.ready ? 'text-success' : 'text-warning')}>
+                {check.ready ? 'Ready' : 'Needs attention'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Credential fields</h4>
+          <div className="mt-2 grid gap-2">
+            {result.rotation.fields.map((field) => (
+              <div key={field.name} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="break-all font-mono">{field.name}</span>
+                <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', field.detected ? 'bg-success/10 text-success' : field.required ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground')}>
+                  {field.secret ? 'secret ' : ''}{field.detected ? 'detected' : field.required ? 'required' : 'optional'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Rotation runbook</h4>
+          <ol className="mt-2 space-y-2">
+            {result.rotation.nextSteps.map((step, index) => (
+              <li key={`${index}:${step}`} className="flex gap-2 text-xs leading-5 text-muted-foreground">
+                <span className="font-mono text-foreground">{index + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </div>
   );
 }
 

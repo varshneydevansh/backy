@@ -243,6 +243,10 @@ const assertMediaConfigurePermissionIsEnforced = async () => {
 
     assert(response.status === 403, `Denied media.configure override should reject storage metadata save, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied media.configure override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+    await expectForbiddenPermission('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'media-storage-provisioning-probe' }),
+    }, 'Denied media.configure provisioning probe');
   } finally {
     await setAdminPermissionOverrides({
       'media.configure': null,
@@ -515,6 +519,7 @@ const assertMediaLayout = async (client, expectedText) => {
     hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
     hasStorageEnvContract: Boolean(document.querySelector('[data-testid="media-storage-env-contract"]')) &&
       document.body?.innerText?.includes('Provider env contract'),
+    hasStorageProvisioning: document.body?.innerText?.includes('Provision probe') || false,
     hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
       document.body?.innerText?.includes('Upload scanner'),
     hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
@@ -534,7 +539,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -602,6 +607,54 @@ const runMediaStorageCheck = async (client) => {
     }
     if (attempt === 79) {
       throw new Error(`Media storage check did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const runMediaStorageProvisioningProbe = async (client) => {
+  let clicked = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-storage-operations"]');
+      if (!(panel instanceof HTMLElement)) return { ok: false, reason: 'panel-not-found' };
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        /Provision probe|Probing/.test(candidate.textContent || '')
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'button-not-found', buttons: Array.from(document.querySelectorAll('button')).map((item) => item.textContent?.trim()).slice(0, 80) };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    await sleep(250);
+  }
+  assert(clicked.ok, `Unable to start media storage provisioning probe: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-storage-provisioning-results"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel) &&
+          text.includes('Provisioning and rotation probe') &&
+          text.includes('Probe upload') &&
+          text.includes('Readback') &&
+          text.includes('Probe cleanup') &&
+          text.includes('Credential fields') &&
+          text.includes('Rotation runbook'),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media storage provisioning probe did not render expected results: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -1515,6 +1568,7 @@ const main = async () => {
     assert(savedStorageSettings.integrations?.supabase?.projectRef === suffix, 'Media Supabase project ref was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.supabase?.storageEnabled === true, 'Media Supabase storage toggle was not persisted through the Media page.');
     await runMediaStorageCheck(client);
+    await runMediaStorageProvisioningProbe(client);
 
     await openMediaDetails(client, imageName);
     await replaceAssetThroughDetails(client, replacementPath, replacementName);

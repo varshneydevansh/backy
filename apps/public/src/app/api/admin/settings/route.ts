@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
-import { getMediaStorageConfigSummary } from '@/lib/mediaStorage';
+import { getMediaStorageAdapter, getMediaStorageConfigSummary } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import {
   getRequiredDatabaseRepositories,
@@ -368,6 +368,14 @@ interface InfrastructureCheckInput {
   runtimeVercel: ReturnType<typeof getVercelRuntimeSummary>;
 }
 
+type StorageProvisioningStatus = 'ready' | 'blocked';
+
+interface StorageProvisioningCheck {
+  label: string;
+  ready: boolean;
+  detail: string;
+}
+
 const makeInfrastructureDiagnostic = (
   area: 'database' | 'storage' | 'supabase' | 'vercel',
   label: string,
@@ -516,6 +524,153 @@ const buildInfrastructureDiagnostics = ({
       },
     ]),
   ];
+};
+
+const storageRotationFields = (provider: string) => {
+  if (provider === 's3') {
+    return [
+      { name: 'BACKY_S3_ACCESS_KEY_ID', secret: true, required: true, detected: Boolean(envValue(['BACKY_S3_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'])) },
+      { name: 'BACKY_S3_SECRET_ACCESS_KEY', secret: true, required: true, detected: Boolean(envValue(['BACKY_S3_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY'])) },
+      { name: 'BACKY_S3_BUCKET', secret: false, required: true, detected: Boolean(envValue(['BACKY_S3_BUCKET', 'BACKY_STORAGE_BUCKET'])) },
+      { name: 'BACKY_S3_REGION', secret: false, required: true, detected: Boolean(envValue(['BACKY_S3_REGION', 'AWS_REGION'])) },
+      { name: 'BACKY_S3_ENDPOINT', secret: false, required: false, detected: Boolean(envValue(['BACKY_S3_ENDPOINT', 'BACKY_STORAGE_ENDPOINT'])) },
+    ];
+  }
+
+  if (provider === 'supabase') {
+    return [
+      { name: 'BACKY_SUPABASE_SERVICE_ROLE_KEY', secret: true, required: true, detected: Boolean(envValue(['BACKY_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'])) },
+      { name: 'BACKY_SUPABASE_ANON_KEY', secret: true, required: false, detected: Boolean(envValue(['BACKY_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'])) },
+      { name: 'BACKY_SUPABASE_URL', secret: false, required: true, detected: Boolean(envValue(['BACKY_SUPABASE_URL', 'SUPABASE_URL'])) },
+      { name: 'BACKY_SUPABASE_STORAGE_BUCKET', secret: false, required: true, detected: Boolean(envValue(['BACKY_SUPABASE_STORAGE_BUCKET', 'BACKY_STORAGE_BUCKET'])) },
+    ];
+  }
+
+  return [
+    { name: 'BACKY_LOCAL_UPLOADS_DIR', secret: false, required: false, detected: Boolean(envValue(['BACKY_LOCAL_UPLOADS_DIR', 'BACKY_STORAGE_LOCAL_PATH'])) },
+    { name: 'BACKY_LOCAL_PUBLIC_URL', secret: false, required: false, detected: Boolean(envValue(['BACKY_LOCAL_PUBLIC_URL', 'BACKY_MEDIA_PUBLIC_URL'])) },
+  ];
+};
+
+const runMediaStorageProvisioningProbe = async (requestId: string) => {
+  const summary = getMediaStorageConfigSummary();
+  const checks: StorageProvisioningCheck[] = [
+    {
+      label: 'Runtime configuration',
+      ready: summary.configured,
+      detail: summary.configured
+        ? `${summary.provider} storage runtime is configured.`
+        : summary.error || `Missing ${summary.missing.join(', ') || 'storage configuration'}.`,
+    },
+  ];
+  const probePath = `sites/_backy/provisioning/${requestId}.txt`;
+  const probeBody = Buffer.from(`backy media storage probe ${requestId}\n`, 'utf8');
+
+  if (!summary.configured) {
+    return {
+      provider: summary.provider,
+      status: 'blocked' as StorageProvisioningStatus,
+      summary: 'Storage runtime is not configured enough to run a provisioning probe.',
+      runtimeStorage: summary,
+      probePath,
+      checks,
+      rotation: {
+        fields: storageRotationFields(summary.provider),
+        nextSteps: [
+          'Set the missing server environment variables.',
+          'Redeploy or restart the Backy runtime.',
+          'Run the provisioning probe again before accepting uploads.',
+        ],
+      },
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    const adapter = await getMediaStorageAdapter();
+    const upload = await adapter.upload(probeBody, {
+      path: probePath,
+      filename: `${requestId}.txt`,
+      mimeType: 'text/plain',
+      metadata: {
+        source: 'backy-media-storage-provisioning-probe',
+        requestId,
+      },
+    });
+    checks.push({
+      label: 'Probe upload',
+      ready: upload.path === probePath,
+      detail: upload.path === probePath
+        ? `Probe object uploaded to ${probePath}.`
+        : `Probe uploaded to ${upload.path}.`,
+    });
+
+    const readBuffer = await adapter.read(probePath);
+    checks.push({
+      label: 'Readback',
+      ready: readBuffer.equals(probeBody),
+      detail: readBuffer.equals(probeBody)
+        ? 'Probe object was read back with matching bytes.'
+        : 'Probe readback bytes did not match the uploaded content.',
+    });
+
+    const stat = await adapter.stat(probePath);
+    checks.push({
+      label: 'Object metadata',
+      ready: Boolean(stat && stat.size === probeBody.length),
+      detail: stat
+        ? `Provider returned object metadata (${stat.size} bytes).`
+        : 'Provider did not return object metadata for the probe.',
+    });
+
+    const prefix = probePath.split('/').slice(0, -1).join('/');
+    const listed = await adapter.list(prefix);
+    checks.push({
+      label: 'Bucket listing',
+      ready: listed.some((item) => item.path === probePath),
+      detail: listed.some((item) => item.path === probePath)
+        ? 'Provider list operation can see the probe object.'
+        : 'Provider list operation did not include the probe object.',
+    });
+
+    await adapter.delete(probePath);
+    const existsAfterDelete = await adapter.exists(probePath);
+    checks.push({
+      label: 'Probe cleanup',
+      ready: !existsAfterDelete,
+      detail: existsAfterDelete
+        ? 'Probe object still exists after delete.'
+        : 'Probe object cleaned up successfully.',
+    });
+  } catch (error) {
+    checks.push({
+      label: 'Provider operation',
+      ready: false,
+      detail: error instanceof Error ? error.message : 'Storage provider operation failed.',
+    });
+  }
+
+  const blocked = checks.some((check) => !check.ready);
+  return {
+    provider: summary.provider,
+    status: blocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
+    summary: blocked
+      ? 'Storage provisioning probe found an operation that needs attention.'
+      : 'Storage bucket/path accepts upload, readback, metadata, listing, and cleanup operations.',
+    runtimeStorage: summary,
+    probePath,
+    checks,
+    rotation: {
+      fields: storageRotationFields(summary.provider),
+      nextSteps: [
+        'Create the replacement provider credential with bucket read/write/delete scope.',
+        'Update server environment variables with the replacement credential.',
+        'Redeploy or restart Backy so the runtime picks up the new credential.',
+        'Run this provisioning probe, then revoke the old provider credential.',
+      ],
+    },
+    generatedAt: new Date().toISOString(),
+  };
 };
 
 const sanitizeSettingsAuditSnapshot = (settings: unknown): BackyJsonObject | undefined => {
@@ -691,11 +846,34 @@ export async function POST(request: NextRequest) {
   try {
     const body = await parseJsonBody(request);
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
+    const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
     const access = requireAdminAccess(request, requestId, {
-      permission: mediaStorageCheck ? 'media.configure' : 'settings.configure',
+      permission: mediaStorageCheck || mediaStorageProvisioningProbe ? 'media.configure' : 'settings.configure',
     });
     if (access instanceof NextResponse) {
       return access;
+    }
+
+    if (mediaStorageProvisioningProbe) {
+      const result = await runMediaStorageProvisioningProbe(requestId);
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'media-storage',
+        action: 'settings.media_storage.provisioning_probe',
+        metadata: {
+          provider: result.provider,
+          status: result.status,
+          probePath: result.probePath,
+          failedChecks: result.checks.filter((check) => !check.ready).map((check) => check.label),
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: result,
+      });
     }
 
     if (body.action === 'validate-infrastructure') {

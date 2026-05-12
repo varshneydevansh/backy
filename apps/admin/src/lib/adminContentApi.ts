@@ -1455,9 +1455,43 @@ export interface SettingsInfrastructureCheckResult {
   generatedAt: string;
 }
 
+export interface SettingsStorageProvisioningCheck {
+  label: string;
+  ready: boolean;
+  detail: string;
+}
+
+export interface SettingsStorageProvisioningField {
+  name: string;
+  secret: boolean;
+  required: boolean;
+  detected: boolean;
+}
+
+export interface SettingsStorageProvisioningResult {
+  provider: string;
+  status: 'ready' | 'blocked';
+  summary: string;
+  probePath: string;
+  checks: SettingsStorageProvisioningCheck[];
+  rotation: {
+    fields: SettingsStorageProvisioningField[];
+    nextSteps: string[];
+  };
+  generatedAt: string;
+}
+
 interface ApiSettingsInfrastructureCheckResponse {
   success: boolean;
   data?: SettingsInfrastructureCheckResult;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiSettingsStorageProvisioningResponse {
+  success: boolean;
+  data?: SettingsStorageProvisioningResult;
   error?: {
     message?: string;
   };
@@ -3099,6 +3133,23 @@ export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInp
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to validate infrastructure settings');
+  }
+
+  return payload.data;
+}
+
+export async function runSettingsStorageProvisioningProbe(): Promise<SettingsStorageProvisioningResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'media-storage-provisioning-probe' }),
+  });
+  const payload = await readJson<ApiSettingsStorageProvisioningResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to run media storage provisioning probe');
   }
 
   return payload.data;
