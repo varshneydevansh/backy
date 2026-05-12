@@ -40,8 +40,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown wrapper shortcuts now render marks; mixed multi-line selection transforms still pending | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown mark shortcuts covered; multi-line selection edge cases remain | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown and selected-range panel formatting covered; multi-block/table/blockquote transforms still pending | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown and selected-range mark/clear flows covered; multi-block edge cases remain | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same rich-text selection parity issues as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
@@ -233,6 +233,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - **Implemented in this pass:**
   - Markdown shortcuts now support `+` and both `1.`/`1)` list triggers.
   - Inline markdown shortcuts now convert wrapper syntax into Slate marks for bold, italic, strike, and code.
+  - Right-panel selected-text controls now preserve active Slate selections when focus moves into the panel, with focused smoke coverage for applying and clearing a mark on only the selected range.
   - Rich-text leaf rendering now merges multiple text-decoration marks (underline + strike) instead of overwrite behavior.
   - Editor context list actions now expose:
     - Toggle same-list off by unwrapping existing list wrappers.
@@ -351,6 +352,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
+- Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.
 - Added explicit keydown passthrough so editor consumers can layer additional shortcuts.
 - Unified canvas `list` rendering with `RichTextBlock` so list editing follows rich-text behavior.
 - Synced list textarea/list-type controls with rich-text list content so old and new list models stay compatible.
@@ -371,7 +373,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - explicit mark clearing helper for font family/size/ color / background / decoration.
 
 ### ⚠️ Remaining
-- Verify custom font and inline-style application in selected-text flows for text blocks (especially legacy list/content transitions).
+- Verify custom font/color/size application in selected-text flows for text blocks (especially legacy list/content transitions).
 - Improve status label resilience when status values are empty/null on media/user/blog tables.
 - Finalize media scope model and API contract (global vs page/blog-scoped assets).
 - Finish blog post editor flow via dedicated template-backed page.

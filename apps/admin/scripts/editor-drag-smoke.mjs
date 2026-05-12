@@ -1198,6 +1198,7 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 'ArrowRight',
     ArrowUp: 'ArrowUp',
     ArrowDown: 'ArrowDown',
+    Enter: 'Enter',
     Delete: 'Delete',
     Backspace: 'Backspace',
     Escape: 'Escape',
@@ -1215,6 +1216,7 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 39,
     ArrowUp: 38,
     ArrowDown: 40,
+    Enter: 13,
     Delete: 46,
     Backspace: 8,
     Escape: 27,
@@ -1262,6 +1264,11 @@ const getPrintableKeyCode = (character) => {
 
 const typeText = async (client, text) => {
   for (const character of Array.from(text)) {
+    if (character === '\n') {
+      await pressKey(client, 'Enter');
+      continue;
+    }
+
     const key = character;
     const code = getPrintableKeyCode(character);
     const virtualKey = character === ' ' ? 32 : character.toUpperCase?.().charCodeAt(0) || 0;
@@ -1284,6 +1291,45 @@ const typeText = async (client, text) => {
     });
   }
   await sleep(150);
+};
+
+const mouseDownControlByTestId = async (client, testId) => {
+  const state = await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="${testId}"]');
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-control',
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+
+    control.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      view: window,
+    }));
+    control.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      view: window,
+    }));
+    control.click();
+    return {
+      ok: true,
+      testId: ${JSON.stringify(testId)},
+      disabled: control instanceof HTMLButtonElement ? control.disabled : false,
+    };
+  })()`);
+
+  assert(state?.ok, `Unable to mouse down rich text control ${testId}: ${JSON.stringify(state)}`);
+  await sleep(350);
+  return state;
 };
 
 const clickButtonByAriaLabel = async (client, ariaLabel) => {
@@ -2733,6 +2779,181 @@ const testRichTextInlineMarkdownControls = async (client, elementId = 'smoke-hea
   assert(codeLeaf?.fontFamily.toLowerCase().includes('mono'), `Inline code leaf was not visually monospace: ${JSON.stringify(state)}`);
 
   return state;
+};
+
+const selectEditorTextRange = async (client, elementId, startNeedle, endNeedle) => {
+  const state = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorText === 'function') {
+      return window.__backySelectActiveEditorText(${JSON.stringify(startNeedle)}, ${JSON.stringify(endNeedle)});
+    }
+
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
+    if (!(editor instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-editor',
+        html: host?.innerHTML || '',
+      };
+    }
+
+    const textNodes = [];
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let next = walker.nextNode();
+    while (next) {
+      textNodes.push(next);
+      next = walker.nextNode();
+    }
+
+    const fullText = textNodes.map((node) => node.textContent || '').join('');
+    const startIndex = fullText.indexOf(${JSON.stringify(startNeedle)});
+    const endIndex = fullText.indexOf(${JSON.stringify(endNeedle)}, Math.max(0, startIndex));
+    if (startIndex < 0 || endIndex < 0) {
+      return {
+        ok: false,
+        reason: 'missing-needle',
+        fullText,
+        startNeedle: ${JSON.stringify(startNeedle)},
+        endNeedle: ${JSON.stringify(endNeedle)},
+      };
+    }
+
+    const absoluteStart = startIndex;
+    const absoluteEnd = endIndex + ${JSON.stringify(endNeedle)}.length;
+    const resolvePoint = (targetOffset) => {
+      let offset = 0;
+      for (const node of textNodes) {
+        const text = node.textContent || '';
+        const nextOffset = offset + text.length;
+        if (targetOffset <= nextOffset) {
+          return {
+            node,
+            offset: Math.max(0, Math.min(text.length, targetOffset - offset)),
+          };
+        }
+        offset = nextOffset;
+      }
+
+      const last = textNodes[textNodes.length - 1];
+      return last ? { node: last, offset: (last.textContent || '').length } : null;
+    };
+
+    const start = resolvePoint(absoluteStart);
+    const end = resolvePoint(absoluteEnd);
+    if (!start || !end) {
+      return {
+        ok: false,
+        reason: 'missing-range-point',
+        fullText,
+        textNodeCount: textNodes.length,
+      };
+    }
+
+    editor.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange', { bubbles: true }));
+    editor.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    editor.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Shift' }));
+
+    return {
+      ok: true,
+      fullText,
+      selectedText: selection?.toString() || '',
+      startIndex,
+      absoluteEnd,
+    };
+  })()`);
+
+  assert(state?.ok, `Unable to select editor text range ${startNeedle}..${endNeedle}: ${JSON.stringify(state)}`);
+  await sleep(250);
+  return state;
+};
+
+const readRichTextLeafState = async (client, elementId) => {
+  return evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
+    const leaves = Array.from(host?.querySelectorAll('[data-slate-string="true"]') || []);
+    const marked = leaves.map((node) => {
+      const element = node instanceof HTMLElement
+        ? node.closest('[data-slate-leaf="true"]') || node
+        : node.parentElement?.closest('[data-slate-leaf="true"]') || node.parentElement;
+      const style = element ? window.getComputedStyle(element) : null;
+      return {
+        text: node.textContent || '',
+        fontWeight: style?.fontWeight || '',
+        fontStyle: style?.fontStyle || '',
+        textDecoration: style?.textDecorationLine || '',
+        fontFamily: style?.fontFamily || '',
+      };
+    });
+    return {
+      text: editor?.textContent || host?.textContent || '',
+      html: editor?.innerHTML || host?.innerHTML || '',
+      marked,
+    };
+  })()`);
+};
+
+const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-heading') => {
+  await activateTextEditing(client, elementId);
+
+  const cleared = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
+    if (!(editor instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-editor',
+        html: host?.innerHTML || '',
+      };
+    }
+
+    editor.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange', { bubbles: true }));
+    return { ok: true, text: editor.textContent || '' };
+  })()`);
+  assert(cleared?.ok, `Unable to select all rich text before clear: ${JSON.stringify(cleared)}`);
+  await pressKey(client, 'Backspace');
+  await typeText(client, 'Alpha line Beta line');
+  await sleep(500);
+
+  const selected = await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  assert(selected.selectedText === 'Beta', `Slate selected range did not select Beta: ${JSON.stringify(selected)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-italic');
+  await sleep(500);
+
+  const state = await readRichTextLeafState(client, elementId);
+  const betaLeaf = state.marked.find((leaf) => leaf.text.includes('Beta'));
+  const unselectedLeaf = state.marked.find((leaf) => leaf.text.includes('Alpha line'));
+
+  assert(betaLeaf?.fontStyle === 'italic', `Selected range was not italic: ${JSON.stringify(state)}`);
+  assert(unselectedLeaf?.fontStyle !== 'italic', `Unselected leading range was unexpectedly italic: ${JSON.stringify(state)}`);
+
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await mouseDownControlByTestId(client, 'rich-text-clear-formatting');
+  await sleep(500);
+
+  const clearedState = await readRichTextLeafState(client, elementId);
+  const clearedBetaLeaf = clearedState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(clearedBetaLeaf?.fontStyle !== 'italic', `Clear formatting did not clear selected range: ${JSON.stringify(clearedState)}`);
+
+  return {
+    selected,
+    afterItalic: state,
+    afterClear: clearedState,
+  };
 };
 
 const clickSave = async (client) => {
@@ -7290,6 +7511,7 @@ const main = async () => {
     if (RICH_TEXT_SMOKE) {
       assert(!EDITOR_PATH, 'Rich text smoke currently requires an internally created smoke page');
       const richText = await testRichTextInlineMarkdownControls(client, 'smoke-heading');
+      const selectedRange = await testRichTextSelectedRangeControls(client, 'smoke-heading');
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, 'after rich text smoke save');
 
@@ -7298,6 +7520,7 @@ const main = async () => {
         mode: 'rich-text',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         richText,
+        selectedRange,
         savedStatus,
       }, null, 2));
       return;

@@ -5,7 +5,7 @@
  * between the Canvas and the PropertyPanel.
  */
 
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { PlateEditor } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range, BaseSelection, Node, Text } from 'slate';
 import { ReactEditor } from 'slate-react';
@@ -140,6 +140,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     setSelectionRevision((value) => value + 1);
   }, [cloneSelection]);
 
+  const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+      return null;
+    }
+
+    try {
+      const domRange = domSelection.getRangeAt(0);
+      const slateRange = ReactEditor.toSlateRange(editor as any, domRange, {
+        exactMatch: false,
+        suppressThrow: true,
+      } as any);
+      return slateRange && Range.isRange(slateRange) ? slateRange : null;
+    } catch (error) {
+      debug('readDomSelectionAsSlateRange.failed', {
+        error: (error as Error)?.message || String(error),
+      });
+      return null;
+    }
+  }, [debug]);
+
   const setActiveEditor = useCallback((editor: PlateEditor | null, elementId: string | null = null) => {
     const normalizedElementId = editor ? elementId || null : null;
     debug('setActiveEditor', {
@@ -181,7 +206,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return;
     }
 
-    const selection = editor.selection;
+    const domSelection = readDomSelectionAsSlateRange(editor);
+    const selection = domSelection || editor.selection;
     if (!selection || !Range.isRange(selection)) {
       return;
     }
@@ -194,10 +220,107 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     debug('storeSelection', {
-      selection: describeSelection(editor.selection),
+      selection: describeSelection(selection),
+      source: domSelection ? 'dom' : 'editor',
     });
     setStoredSelection(selection);
-  }, [debug, describeSelection, getActiveEditor, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, readDomSelectionAsSlateRange, setStoredSelection]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const isLocalEditorHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+    if (!isLocalEditorHost) {
+      return;
+    }
+
+    const targetWindow = window as typeof window & {
+      __backySelectActiveEditorText?: (startNeedle: string, endNeedle?: string) => unknown;
+    };
+
+    targetWindow.__backySelectActiveEditorText = (startNeedle: string, endNeedle?: string) => {
+      const editor = getActiveEditor();
+      if (!editor || !startNeedle) {
+        return { ok: false, reason: !editor ? 'missing-editor' : 'missing-start-needle' };
+      }
+
+      const fullText = Editor.string(editor as any, []);
+      const startIndex = fullText.indexOf(startNeedle);
+      const endText = endNeedle || startNeedle;
+      const endIndex = fullText.indexOf(endText, Math.max(0, startIndex));
+      if (startIndex < 0 || endIndex < 0) {
+        return {
+          ok: false,
+          reason: 'missing-needle',
+          fullText,
+          startNeedle,
+          endNeedle: endText,
+        };
+      }
+
+      try {
+        const resolvePoint = (targetOffset: number) => {
+          let offset = 0;
+          const textEntries = Array.from(
+            Editor.nodes(editor as any, {
+              at: [],
+              match: (node) => Text.isText(node),
+              mode: 'all',
+            })
+          );
+
+          for (const [node, path] of textEntries) {
+            const text = Text.isText(node) ? node.text : '';
+            const nextOffset = offset + text.length;
+            if (targetOffset <= nextOffset) {
+              return {
+                path,
+                offset: Math.max(0, Math.min(text.length, targetOffset - offset)),
+              };
+            }
+            offset = nextOffset;
+          }
+
+          const lastEntry = textEntries[textEntries.length - 1];
+          if (!lastEntry) {
+            return Editor.start(editor as any, []);
+          }
+
+          const [lastNode, lastPath] = lastEntry;
+          return {
+            path: lastPath,
+            offset: Text.isText(lastNode) ? lastNode.text.length : 0,
+          };
+        };
+        const start = resolvePoint(startIndex);
+        const end = resolvePoint(endIndex + endText.length);
+        const nextSelection = { anchor: start, focus: end };
+        Transforms.select(editor as any, nextSelection);
+        setStoredSelection(nextSelection);
+        return {
+          ok: true,
+          fullText,
+          selectedText: Editor.string(editor as any, nextSelection),
+          selection: describeSelection(nextSelection),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'select-failed',
+          error: (error as Error)?.message || String(error),
+          fullText,
+        };
+      }
+    };
+
+    return () => {
+      if (targetWindow.__backySelectActiveEditorText) {
+        delete targetWindow.__backySelectActiveEditorText;
+      }
+    };
+  }, [describeSelection, getActiveEditor, setStoredSelection]);
 
   const focusAndRestore = useCallback((options: RestoreSelectionOptions = {}) => {
     const editor = getActiveEditor();
@@ -217,7 +340,27 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     try {
       let didRestoreStoredSelection = false;
       const restored = storedSelection.current;
-      if (restored && Range.isRange(restored)
+      const domSelectionRange = readDomSelectionAsSlateRange(editor);
+      const shouldPreferDomRange = !!domSelectionRange && (
+        !restored ||
+        !Range.isRange(restored) ||
+        Range.isCollapsed(restored) ||
+        !Node.has(editor as any, restored.anchor.path) ||
+        !Node.has(editor as any, restored.focus.path)
+      );
+
+      if (shouldPreferDomRange && domSelectionRange) {
+        try {
+          Transforms.select(editor as any, domSelectionRange);
+          didRestoreStoredSelection = true;
+        } catch (restoreDomError) {
+          debug('focusAndRestore.select-dom-failed', {
+            restoreDomError: (restoreDomError as Error)?.message || String(restoreDomError),
+          });
+        }
+      }
+
+      if (!didRestoreStoredSelection && restored && Range.isRange(restored)
         && Node.has(editor as any, restored.anchor.path)
         && Node.has(editor as any, restored.focus.path)
       ) {
@@ -301,6 +444,15 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       !Editor.isEditor(node) &&
       SlateElement.isElement(node) &&
       (node as SlateElement & { type?: string }).type === 'li'
+    );
+  }, []);
+
+  const isValidRange = useCallback((editor: PlateEditor, selection: BaseSelection | null): selection is Range => {
+    return !!(
+      selection &&
+      Range.isRange(selection) &&
+      Node.has(editor as any, selection.anchor.path) &&
+      Node.has(editor as any, selection.focus.path)
     );
   }, []);
 
@@ -396,12 +548,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     if (!editor) return false;
     try {
       const selection = editor.selection;
-      if (
-        !selection ||
-        !Range.isRange(selection) ||
-        !Node.has(editor as any, selection.anchor.path) ||
-        !Node.has(editor as any, selection.focus.path)
-      ) {
+      if (!isValidRange(editor, selection)) {
         return false;
       }
 
@@ -441,7 +588,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       console.error('isMarkActive failed:', e);
       return false;
     }
-  }, [getActiveEditor]);
+  }, [getActiveEditor, isValidRange]);
 
   const hasRangeSelection = useCallback(() => {
     const editor = getActiveEditor();
@@ -450,14 +597,13 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const selection = editor.selection;
-    return !!(
-      selection &&
-      Range.isRange(selection) &&
-      !Range.isCollapsed(selection) &&
-      Node.has(editor as any, selection.anchor.path) &&
-      Node.has(editor as any, selection.focus.path)
-    );
-  }, [getActiveEditor]);
+    if (isValidRange(editor, selection) && !Range.isCollapsed(selection)) {
+      return true;
+    }
+
+    const stored = storedSelection.current;
+    return isValidRange(editor, stored) && !Range.isCollapsed(stored);
+  }, [getActiveEditor, isValidRange]);
 
   const hasSelection = useCallback(() => {
     const editor = getActiveEditor();
@@ -466,13 +612,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const selection = editor.selection;
-    return !!(
-      selection &&
-      Range.isRange(selection) &&
-      Node.has(editor as any, selection.anchor.path) &&
-      Node.has(editor as any, selection.focus.path)
-    );
-  }, [getActiveEditor]);
+    if (isValidRange(editor, selection)) {
+      return true;
+    }
+
+    return isValidRange(editor, storedSelection.current);
+  }, [getActiveEditor, isValidRange]);
 
   const insertText = useCallback((text: string) => {
     const editor = getActiveEditor();

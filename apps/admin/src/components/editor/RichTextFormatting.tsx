@@ -762,15 +762,18 @@ export function RichTextFormatting({
       return false;
     }
 
-    const hasExistingRange = SlateRange.isRange(editor.selection)
-      && Node.has(editor as any, editor.selection.anchor.path)
-      && Node.has(editor as any, editor.selection.focus.path);
+    const liveSelection = editor.selection;
+    const hasExistingRange = SlateRange.isRange(liveSelection)
+      && Node.has(editor as any, liveSelection.anchor.path)
+      && Node.has(editor as any, liveSelection.focus.path);
+    const liveSelectionIsCollapsed = hasExistingRange && SlateRange.isCollapsed(liveSelection);
+    const shouldRestoreBeforeAction = !hasExistingRange || liveSelectionIsCollapsed;
 
-    let hasRestored = hasExistingRange
-      ? true
-      : restoreSelection({
+    let hasRestored = shouldRestoreBeforeAction
+      ? restoreSelection({
           requireTextSelection: shouldRequireTextSelection,
-        });
+        })
+      : true;
 
     if (!hasRestored && shouldRequireTextSelection) {
       logTextAction('runForRangeSelection.restore-failed', {
@@ -1587,6 +1590,7 @@ export function RichTextFormatting({
             "w-8 h-8 rounded border border-border grid place-items-center",
             isTargetMarkActive('bold') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
+          data-testid="rich-text-bold"
           title="Bold"
         >
           <Bold className="w-4 h-4" />
@@ -1605,6 +1609,7 @@ export function RichTextFormatting({
             "w-8 h-8 rounded border border-border grid place-items-center",
             isTargetMarkActive('italic') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
+          data-testid="rich-text-italic"
           title="Italic"
         >
           <Italic className="w-4 h-4" />
@@ -1623,6 +1628,7 @@ export function RichTextFormatting({
             "w-8 h-8 rounded border border-border grid place-items-center",
             isTargetMarkActive('underline') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
+          data-testid="rich-text-underline"
           title="Underline"
         >
           <Underline className="w-4 h-4" />
@@ -1641,6 +1647,7 @@ export function RichTextFormatting({
             "w-8 h-8 rounded border border-border grid place-items-center",
             isTargetMarkActive('strikethrough') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
+          data-testid="rich-text-strikethrough"
           title="Strikethrough"
         >
           <Strikethrough className="w-4 h-4" />
@@ -1659,6 +1666,7 @@ export function RichTextFormatting({
             "w-8 h-8 rounded border border-border grid place-items-center",
             isTargetMarkActive('code') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
+          data-testid="rich-text-code"
           title="Inline code"
         >
           <Type className="w-4 h-4" />
@@ -1674,6 +1682,7 @@ export function RichTextFormatting({
             applyAlignmentToElementOrSelection('left');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-align-left"
           title="Align left"
         >
           <AlignLeft className="w-4 h-4" />
@@ -1686,6 +1695,7 @@ export function RichTextFormatting({
             applyAlignmentToElementOrSelection('center');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-align-center"
           title="Align center"
         >
           <AlignCenter className="w-4 h-4" />
@@ -1698,6 +1708,7 @@ export function RichTextFormatting({
             applyAlignmentToElementOrSelection('right');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-align-right"
           title="Align right"
         >
           <AlignRight className="w-4 h-4" />
@@ -1713,6 +1724,7 @@ export function RichTextFormatting({
             toggleElementListType('ul');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-ul"
           title="Bulleted list"
         >
           <List className="w-4 h-4" />
@@ -1725,6 +1737,7 @@ export function RichTextFormatting({
             toggleElementListType('ol');
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-ol"
           title="Numbered list"
         >
           <ListOrdered className="w-4 h-4" />
@@ -1737,6 +1750,7 @@ export function RichTextFormatting({
             adjustElementListIndent(-1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-outdent"
           title="Outdent list"
         >
           <span className="text-[10px]">◀</span>
@@ -1749,6 +1763,7 @@ export function RichTextFormatting({
             adjustElementListIndent(1);
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+          data-testid="rich-text-list-indent"
           title="Indent list"
         >
           <span className="text-[10px]">▶</span>
@@ -1764,6 +1779,7 @@ export function RichTextFormatting({
             value={selectedFontValue}
             onMouseDown={(event) => event.stopPropagation()}
               className={cn("w-full min-w-0 px-2 py-1.5 text-sm rounded-md border bg-background", "hover:bg-accent")}
+              data-testid="rich-text-font-family"
               title="Selected font family"
             >
             {quickFontFamilies.map((font) => (
@@ -1800,6 +1816,7 @@ export function RichTextFormatting({
               }
             }}
             className="w-full px-2 py-1.5 text-sm rounded-md border bg-background"
+            data-testid="rich-text-font-size"
           />
         </label>
       </div>
@@ -1815,6 +1832,7 @@ export function RichTextFormatting({
             }, { requireActiveEditor: false });
           }}
           className="w-full py-1.5 rounded border border-border hover:bg-accent text-[11px] text-muted-foreground"
+          data-testid="rich-text-clear-formatting"
           title="Clear selected text formatting"
         >
           <Eraser className="w-4 h-4 mr-2 inline" />
