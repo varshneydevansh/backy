@@ -5291,6 +5291,8 @@ function MediaPage() {
                         const mimeComparison = version.mimeType && version.mimeType !== currentMimeType
                           ? `${version.mimeType} -> ${currentMimeType}`
                           : currentMimeType;
+                        const retainedMimeType = version.mimeType || 'retained MIME not exposed';
+                        const retainedType = version.type || selectedAsset.type;
 
                         return (
                           <div key={comparisonKey} className="rounded-lg border border-border bg-background px-3 py-3">
@@ -5355,6 +5357,24 @@ function MediaPage() {
                             {isComparing && (
                               <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-3" data-testid="media-version-comparison">
                                 <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Version comparison</div>
+                                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                  <MediaVersionPreview
+                                    label="Current preview"
+                                    type={selectedAsset.type}
+                                    mimeType={currentMimeType}
+                                    url={selectedAsset.url}
+                                    name={selectedAsset.name}
+                                    sizeLabel={formatBytes(currentSizeBytes)}
+                                  />
+                                  <MediaVersionPreview
+                                    label="Retained preview"
+                                    type={retainedType}
+                                    mimeType={retainedMimeType}
+                                    url={version.url}
+                                    name={retainedName}
+                                    sizeLabel={formatReplacementSize(version.sizeBytes)}
+                                  />
+                                </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
                                   {[nameDelta, sizeDelta, checksumDelta, pathDelta].map((item) => (
                                     <span key={item} className="rounded bg-background px-2 py-1 font-mono text-muted-foreground">
@@ -7021,6 +7041,81 @@ const versionProviderLabel = (value: string | null | undefined) => (
 const assetMimeLabel = (asset: MediaAsset) => {
   const mimeType = asset.metadata?.mimeType;
   return typeof mimeType === 'string' && mimeType.trim().length > 0 ? mimeType.trim() : 'current MIME not exposed';
+};
+
+type MediaPreviewKind = 'image' | 'video' | 'audio' | 'font' | 'file';
+
+const mediaPreviewKind = (type: MediaAsset['type'] | undefined, mimeType: string | undefined): MediaPreviewKind => {
+  const mime = mimeType || '';
+  if (type === 'image' || mime.startsWith('image/')) return 'image';
+  if (type === 'video' || mime.startsWith('video/')) return 'video';
+  if (type === 'audio' || mime.startsWith('audio/')) return 'audio';
+  if (type === 'font' || mime.startsWith('font/') || mime.includes('font')) return 'font';
+  return 'file';
+};
+
+type MediaVersionPreviewProps = {
+  label: string;
+  type: MediaAsset['type'] | undefined;
+  mimeType: string | undefined;
+  url?: string;
+  name: string;
+  sizeLabel: string;
+};
+
+const MediaVersionPreview = ({
+  label,
+  type,
+  mimeType,
+  url,
+  name,
+  sizeLabel,
+}: MediaVersionPreviewProps) => {
+  const previewKind = mediaPreviewKind(type, mimeType);
+  const mimeLabel = mimeType && mimeType.trim().length > 0 ? mimeType : 'MIME not exposed';
+  const metadata = `${name} · ${sizeLabel} · ${mimeLabel}`;
+
+  return (
+    <div
+      className="min-w-0 rounded-lg border border-border bg-background p-2"
+      data-testid="media-version-preview"
+      data-preview-kind={previewKind}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-medium">{label}</div>
+          <div className="truncate font-mono text-[11px] text-muted-foreground">{metadata}</div>
+        </div>
+        <span className="rounded bg-muted px-2 py-1 text-[11px] uppercase text-muted-foreground">{previewKind}</span>
+      </div>
+      {previewKind === 'image' && url ? (
+        <div className="flex aspect-video items-center justify-center overflow-hidden rounded border border-border bg-muted/40">
+          <img src={url} alt={name} loading="lazy" className="max-h-full max-w-full object-contain" />
+        </div>
+      ) : previewKind === 'video' && url ? (
+        <video src={url} controls className="aspect-video w-full rounded border border-border bg-black" />
+      ) : previewKind === 'audio' && url ? (
+        <div className="rounded border border-border bg-muted/40 px-2 py-6">
+          <audio src={url} controls className="w-full" />
+        </div>
+      ) : previewKind === 'font' ? (
+        <div className="flex aspect-video items-center justify-center rounded border border-border bg-muted/40">
+          <div className="text-center">
+            <Type className="mx-auto size-5 text-muted-foreground" />
+            <div className="mt-2 text-2xl font-semibold">Aa</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">Font binary preview</div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex aspect-video items-center justify-center rounded border border-border bg-muted/40">
+          <div className="text-center text-xs text-muted-foreground">
+            <FileText className="mx-auto mb-2 size-5" />
+            {url ? 'Inline preview unavailable' : 'Preview URL not retained'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 type MediaPermissionKey = 'media.view' | 'media.create' | 'media.configure' | 'media.delete' | 'activity.export';

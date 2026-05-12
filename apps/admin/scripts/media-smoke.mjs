@@ -930,10 +930,16 @@ const compareAssetVersionThroughDetails = async (client) => {
     const state = await evaluate(client, `(() => ({
       hasComparison: Boolean(document.querySelector('[data-testid="media-version-comparison"]')),
       panelText: document.querySelector('[data-testid="media-version-comparison"]')?.textContent || '',
+      previewCount: document.querySelectorAll('[data-testid="media-version-preview"]').length,
+      imagePreviewCount: document.querySelectorAll('[data-testid="media-version-preview"][data-preview-kind="image"]').length,
       body: document.body?.innerText?.slice(0, 1600) || '',
     }))()`);
     if (
       state.hasComparison &&
+      state.previewCount === 2 &&
+      state.imagePreviewCount === 2 &&
+      state.panelText.includes('Current preview') &&
+      state.panelText.includes('Retained preview') &&
       state.panelText.includes('Current') &&
       state.panelText.includes('Retained') &&
       state.panelText.includes('Size delta') &&
