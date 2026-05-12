@@ -127,6 +127,9 @@ for (const needle of [
   "'application/javascript'",
   "'image/svg+xml'",
   'requiresAttachmentDelivery',
+  'scanMediaUploadWithProviders',
+  'BACKY_MEDIA_SCAN_ENDPOINT',
+  'provider-http-scan',
 ]) {
   assertIncludes(mediaSafety, needle, 'mediaSafety');
 }

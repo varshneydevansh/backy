@@ -11,7 +11,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
+import { MediaSafetyError, scanMediaUploadWithProviders } from '@/lib/mediaSafety';
 import {
   booleanQueryFlag,
   buildMediaScopeMetadataPatch,
@@ -417,7 +417,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
-    const safetyScan = scanMediaUpload({
+    const safetyScan = await scanMediaUploadWithProviders({
       buffer: uploadBuffer,
       originalName,
       mimeType,

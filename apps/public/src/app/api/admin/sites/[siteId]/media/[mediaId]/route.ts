@@ -12,7 +12,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getMediaSecurityPolicy, MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
+import { getMediaSecurityPolicy, MediaSafetyError, scanMediaUploadWithProviders } from '@/lib/mediaSafety';
 import {
   buildMediaScopeMetadataPatch,
   mediaScopeRequiresTarget,
@@ -552,7 +552,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       storedFilename,
     });
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
-    const safetyScan = scanMediaUpload({
+    const safetyScan = await scanMediaUploadWithProviders({
       buffer: uploadBuffer,
       originalName,
       mimeType,
