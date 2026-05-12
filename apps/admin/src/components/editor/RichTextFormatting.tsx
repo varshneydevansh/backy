@@ -105,10 +105,19 @@ export function RichTextFormatting({
     insertLink,
     insertImage,
     storeSelection,
+    syncActiveEditorContent,
   } = useActiveEditor();
 
   const pendingActionRef = useRef<number | null>(null);
   const activePropertyActionRef = useRef<string>('unknown');
+  const syncActiveEditorContentAfterCommand = useCallback(() => {
+    syncActiveEditorContent();
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        syncActiveEditorContent();
+      });
+    }
+  }, [syncActiveEditorContent]);
 
   const canInteractWithEditor = useCallback(() => !!getActiveEditor(), [getActiveEditor]);
   const getCurrentActiveEditorId = useCallback(() => getActiveEditorElementId(), [getActiveEditorElementId]);
@@ -836,6 +845,7 @@ export function RichTextFormatting({
             match: Text.isText,
           });
         }
+        syncActiveEditorContentAfterCommand();
         return true;
       }
 
@@ -845,6 +855,7 @@ export function RichTextFormatting({
         Editor.addMark(editor as any, format, value);
       }
 
+      syncActiveEditorContentAfterCommand();
       return true;
     } catch (error) {
       logTextAction('applyTextMarkToActiveEditor.failed', {
@@ -854,7 +865,7 @@ export function RichTextFormatting({
       });
       return false;
     }
-  }, [getActiveEditor, logTextAction]);
+  }, [getActiveEditor, logTextAction, syncActiveEditorContentAfterCommand]);
 
   const clearActiveTextMarks = useCallback((formats: string[]) => {
     const editor = getActiveEditor();
@@ -887,6 +898,7 @@ export function RichTextFormatting({
         });
       }
 
+      syncActiveEditorContentAfterCommand();
       return true;
     } catch (error) {
       logTextAction('clearActiveTextMarks.failed', {
@@ -894,7 +906,7 @@ export function RichTextFormatting({
       });
       return false;
     }
-  }, [getActiveEditor, logTextAction]);
+  }, [getActiveEditor, logTextAction, syncActiveEditorContentAfterCommand]);
 
   const applyAlignmentToElementOrSelection = useCallback((align: string) => {
     if (!isTargetEditorUsable()) {
@@ -1059,8 +1071,9 @@ export function RichTextFormatting({
       }
 
       Transforms.insertText(editor as any, text);
+      syncActiveEditorContentAfterCommand();
     });
-  }, [getActiveEditor, runForTextSelectionOrCaret]);
+  }, [getActiveEditor, runForTextSelectionOrCaret, syncActiveEditorContentAfterCommand]);
 
   const clearRichTextFormatting = useCallback(() => {
     const fallbackPayload = {

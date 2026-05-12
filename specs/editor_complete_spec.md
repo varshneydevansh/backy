@@ -26,7 +26,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
+| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, persisted selected-range leaf marks, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -125,7 +125,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
-    - Rich text list/selected-text behavior still needs parity cleanup
+    - Rich text multi-block/table/blockquote behavior still needs parity cleanup
     - No visual feedback when changes apply
     - Full list indent/empty-line parity is not complete
 - **Improvements landed:**
@@ -382,8 +382,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### ✅ Selected rich-text style controls
 - Selected text range controls now preserve Slate selection across inspector focus changes for italic, clear formatting, font size, font family, and text color.
+- Selected range font size, font family, underline, strikethrough, and text color now persist as Slate leaf marks through the canvas history/save path instead of being collapsed to plain text.
 - Native input/select/color controls avoid stale whole-element content fallback while an active rich-text editor is targeted.
-- Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`, including backend page API assertions for persisted selected-range marks.
 
 ### ✅ Rich-text list property parity
 - Extracted list content transforms into shared pure helpers so property-panel fallbacks preserve empty list rows and nested list item structure during list type changes.
@@ -420,8 +421,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Save page to database
 - ✅ Load existing page on edit
 - ✅ Undo/Redo functionality
-- ⚠️ Fix RichTextEditor reset
-- ⚠️ Finalize selected-text style persistence (font family/decoration on partially selected ranges)
+- ✅ RichTextEditor selected-range reset/persistence
+- ✅ Finalize selected-text style persistence (font family/decoration on partially selected ranges)
 
 **Important (Should Have)**
 - ✅ Page Settings modal
@@ -460,8 +461,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**
-- Fix RichTextEditor reset issue
-- Finalize selected-text style persistence in rich text
+- Fix RichTextEditor reset issue ✅
+- Finalize selected-text style persistence in rich text ✅
 - Add delete element functionality
 - Implement undo/redo
 

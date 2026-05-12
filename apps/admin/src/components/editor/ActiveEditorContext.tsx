@@ -58,6 +58,14 @@ interface ActiveEditorContextType {
   }) => boolean;
   /** Store current selection */
   storeSelection: () => void;
+  /** Register a content sync callback for an editor-owned canvas element */
+  registerContentSync: (
+    elementId: string | null,
+    editor: PlateEditor | null,
+    sync: (editor: PlateEditor) => void
+  ) => () => void;
+  /** Flush the active editor's current Slate tree into its owning element */
+  syncActiveEditorContent: () => void;
 }
 
 const ActiveEditorContext = createContext<ActiveEditorContextType>({
@@ -83,7 +91,11 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   hasSelection: () => false,
   restoreSelection: () => false,
   storeSelection: () => { },
+  registerContentSync: () => () => { },
+  syncActiveEditorContent: () => { },
 });
+
+export const ACTIVE_EDITOR_CONTENT_SYNC_EVENT = 'backy-active-editor-content-sync';
 
 interface RestoreSelectionOptions {
   requireTextSelection?: boolean;
@@ -96,6 +108,10 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
   const activeEditorRef = useRef<PlateEditor | null>(null);
   const activeEditorElementIdRef = useRef<string | null>(null);
   const storedSelection = useRef<BaseSelection | null>(null);
+  const contentSyncCallbacks = useRef(new Map<string, {
+    editor: PlateEditor;
+    sync: (editor: PlateEditor) => void;
+  }>());
   const debug = useCallback((..._args: unknown[]) => {
   }, []);
   const describeSelection = useCallback((selection: BaseSelection | null) => {
@@ -139,6 +155,58 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     storedSelection.current = cloneSelection(selection);
     setSelectionRevision((value) => value + 1);
   }, [cloneSelection]);
+
+  const registerContentSync = useCallback((
+    elementId: string | null,
+    editor: PlateEditor | null,
+    sync: (editor: PlateEditor) => void
+  ) => {
+    if (!elementId || !editor) {
+      return () => { };
+    }
+
+    const entry = { editor, sync };
+    contentSyncCallbacks.current.set(elementId, entry);
+
+    return () => {
+      const current = contentSyncCallbacks.current.get(elementId);
+      if (current === entry) {
+        contentSyncCallbacks.current.delete(elementId);
+      }
+    };
+  }, []);
+
+  const syncActiveEditorContent = useCallback(() => {
+    const elementId = activeEditorElementIdRef.current;
+    const editor = activeEditorRef.current;
+    if (!elementId || !editor) {
+      return;
+    }
+
+    const entry = contentSyncCallbacks.current.get(elementId);
+    if (entry) {
+      entry.sync(editor);
+    }
+
+    if (typeof window !== 'undefined') {
+      const content = JSON.parse(JSON.stringify((editor as any).children || []));
+      window.dispatchEvent(new CustomEvent(ACTIVE_EDITOR_CONTENT_SYNC_EVENT, {
+        detail: {
+          elementId,
+          content,
+        },
+      }));
+    }
+  }, []);
+
+  const syncActiveEditorContentSoon = useCallback(() => {
+    syncActiveEditorContent();
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        syncActiveEditorContent();
+      });
+    }
+  }, [syncActiveEditorContent]);
 
   const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
     if (typeof window === 'undefined') {
@@ -254,6 +322,51 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
     const targetWindow = window as typeof window & {
       __backySelectActiveEditorText?: (startNeedle: string, endNeedle?: string) => unknown;
+      __backyReplaceActiveEditorText?: (text: string) => unknown;
+    };
+
+    targetWindow.__backyReplaceActiveEditorText = (text: string) => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const start = Editor.start(editor as any, []);
+        const end = Editor.end(editor as any, []);
+        Transforms.select(editor as any, { anchor: start, focus: end });
+        Transforms.delete(editor as any);
+
+        for (const mark of [
+          'bold',
+          'italic',
+          'underline',
+          'strikethrough',
+          'code',
+          'fontSize',
+          'fontFamily',
+          'color',
+          'backgroundColor',
+        ]) {
+          Editor.removeMark(editor as any, mark);
+        }
+
+        Transforms.insertText(editor as any, text || '');
+        setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
+        return {
+          ok: true,
+          text: Editor.string(editor as any, []),
+          selection: describeSelection(editor.selection || null),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'replace-failed',
+          error: (error as Error)?.message || String(error),
+          text: Editor.string(editor as any, []),
+        };
+      }
     };
 
     targetWindow.__backySelectActiveEditorText = (startNeedle: string, endNeedle?: string) => {
@@ -335,8 +448,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       if (targetWindow.__backySelectActiveEditorText) {
         delete targetWindow.__backySelectActiveEditorText;
       }
+      if (targetWindow.__backyReplaceActiveEditorText) {
+        delete targetWindow.__backyReplaceActiveEditorText;
+      }
     };
-  }, [describeSelection, getActiveEditor, setStoredSelection]);
+  }, [describeSelection, getActiveEditor, setStoredSelection, syncActiveEditorContentSoon]);
 
   const focusAndRestore = useCallback((options: RestoreSelectionOptions = {}) => {
     const editor = getActiveEditor();
@@ -558,10 +674,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('applyListIndent failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, getIsListItemNode, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, getIsListItemNode, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const isMarkActive = useCallback((format: string): boolean => {
     const editor = getActiveEditor();
@@ -657,10 +774,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('insertText failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const insertImage = useCallback((url: string) => {
     const editor = getActiveEditor();
@@ -687,10 +805,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('insertImage failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
@@ -718,10 +837,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('insertLink failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const applyMark = useCallback((format: string, value: any = true) => {
     const editor = getActiveEditor();
@@ -742,10 +862,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('applyMark failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const toggleMark = useCallback((format: string) => {
     const editor = getActiveEditor();
@@ -771,10 +892,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('toggleMark failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, isMarkActive, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, isMarkActive, setStoredSelection, syncActiveEditorContentSoon]);
 
   const removeMark = useCallback((format: string) => {
     const editor = getActiveEditor();
@@ -794,10 +916,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('removeMark failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const setAlign = useCallback((align: string) => {
     const editor = getActiveEditor();
@@ -816,10 +939,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('setAlign failed:', e);
     }
-  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection]);
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
   const toggleList = useCallback((format: 'ul' | 'ol') => {
     const editor = getActiveEditor();
@@ -853,6 +977,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           selection: describeSelection(editor.selection || null),
         });
         setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
         return;
       }
 
@@ -873,6 +998,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         selection: describeSelection(editor.selection || null),
       });
       setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
     } catch (e) {
       console.warn('toggleList failed:', e);
     }
@@ -884,6 +1010,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     normalizeListTypeForSelection,
     restoreSelection,
     setStoredSelection,
+    syncActiveEditorContentSoon,
     debug,
     describeSelection,
   ]);
@@ -920,6 +1047,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       hasSelection,
       storeSelection,
       restoreSelection,
+      registerContentSync,
+      syncActiveEditorContent,
     }}>
       {children}
     </ActiveEditorContext.Provider>

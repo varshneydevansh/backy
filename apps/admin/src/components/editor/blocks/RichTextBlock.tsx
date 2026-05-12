@@ -54,9 +54,10 @@ export function RichTextBlock({
     elementId,
     style,
 }: RichTextBlockProps) {
-    const { setActiveEditor, clearActiveEditor, storeSelection } = useActiveEditor();
+    const { setActiveEditor, clearActiveEditor, storeSelection, registerContentSync } = useActiveEditor();
     const editorRef = useRef<PlateEditor | null>(null);
     const editorHostRef = useRef<HTMLDivElement>(null);
+    const unregisterContentSyncRef = useRef<(() => void) | null>(null);
     const resolveElementId = useCallback(() => {
         if (elementId) {
             return elementId;
@@ -76,6 +77,46 @@ export function RichTextBlock({
 
     const log = useCallback((..._args: unknown[]) => {
     }, []);
+
+    const unregisterContentSync = useCallback(() => {
+        unregisterContentSyncRef.current?.();
+        unregisterContentSyncRef.current = null;
+    }, []);
+
+    const syncContentFromEditor = useCallback((editor: PlateEditor) => {
+        const children = (editor as unknown as { children?: unknown }).children;
+        if (!Array.isArray(children)) {
+            return;
+        }
+
+        onChange(JSON.parse(JSON.stringify(children)));
+    }, [onChange]);
+
+    const handleContentChange = useCallback((value: any) => {
+        const children = (editorRef.current as unknown as { children?: unknown } | null)?.children;
+        if (isEditable && Array.isArray(children)) {
+            onChange(JSON.parse(JSON.stringify(children)));
+            return;
+        }
+
+        onChange(value);
+    }, [isEditable, onChange]);
+
+    const registerCurrentContentSync = useCallback((editor: PlateEditor | null) => {
+        unregisterContentSync();
+        if (!isEditable || !editor) {
+            return;
+        }
+
+        const activeElementId = resolveElementId();
+        unregisterContentSyncRef.current = registerContentSync(activeElementId, editor, syncContentFromEditor);
+    }, [
+        isEditable,
+        registerContentSync,
+        resolveElementId,
+        syncContentFromEditor,
+        unregisterContentSync,
+    ]);
 
     const storeSelectionAsync = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -123,13 +164,22 @@ export function RichTextBlock({
             focus: editor.selection.focus,
           } : null,
             });
+            registerCurrentContentSync(editor);
             setActiveEditor(editor, isEditable ? activeElementId : null);
             return;
         }
 
         log('editor-ready readOnly', {});
+        unregisterContentSync();
         clearActiveEditor(editor);
-    }, [isEditable, setActiveEditor, clearActiveEditor, resolveElementId]);
+    }, [
+        isEditable,
+        setActiveEditor,
+        clearActiveEditor,
+        resolveElementId,
+        registerCurrentContentSync,
+        unregisterContentSync,
+    ]);
 
     const handleFocus = useCallback(() => {
         if (!isEditable) {
@@ -147,8 +197,9 @@ export function RichTextBlock({
             focus: editor.selection.focus,
           } : null,
         });
+        registerCurrentContentSync(editor);
         setActiveEditor(editor, activeElementId);
-    }, [isEditable, resolveElementId, setActiveEditor]);
+    }, [isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
 
     const handleMouseUp = useCallback(() => {
         if (!isEditable) {
@@ -187,8 +238,9 @@ export function RichTextBlock({
           elementId: activeElementId,
           hasSelection: !!editor.selection,
         });
+        registerCurrentContentSync(editor);
         setActiveEditor(editor, activeElementId);
-    }, [isEditable, resolveElementId, setActiveEditor]);
+    }, [isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
 
     useEffect(() => {
         if (isEditable) {
@@ -198,19 +250,21 @@ export function RichTextBlock({
         const editor = editorRef.current;
         if (editor) {
             log('unregister-when-readOnly', {});
+            unregisterContentSync();
             clearActiveEditor(editor);
         }
-    }, [isEditable, clearActiveEditor]);
+    }, [isEditable, clearActiveEditor, unregisterContentSync]);
 
     useEffect(() => {
         return () => {
             const editor = editorRef.current;
             if (editor) {
                 log('unmount-cleanup', {});
+                unregisterContentSync();
                 clearActiveEditor(editor);
             }
         };
-    }, [clearActiveEditor]);
+    }, [clearActiveEditor, unregisterContentSync]);
 
   return (
     <div
@@ -227,7 +281,7 @@ export function RichTextBlock({
             <BackyEditor
                 key={`${editorReadMode}-${elementId || 'text'}-${editorRevision}`}
                 value={initialValue}
-                onChange={onChange}
+                onChange={handleContentChange}
                 readOnly={!isEditable}
                 placeholder={placeholder}
                 onBlur={handleBlur}

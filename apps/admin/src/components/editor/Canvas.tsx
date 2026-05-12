@@ -21,7 +21,7 @@ import {
   createCanvasElementsFromReusableContent,
 } from '@/components/editor/editorCatalog';
 import { RichTextBlock } from './blocks/RichTextBlock';
-import { useActiveEditor } from './ActiveEditorContext';
+import { ACTIVE_EDITOR_CONTENT_SYNC_EVENT, useActiveEditor } from './ActiveEditorContext';
 import {
   extractListItemsFromSlate,
   getListTypeFromSlate,
@@ -2012,7 +2012,7 @@ export function Canvas({
         return;
       }
 
-      const next = updateElementById(elements, elementId, (element) => ({
+      const next = updateElementById(elementsRef.current, elementId, (element) => ({
         ...element,
         props: { ...element.props, ...updates },
       }));
@@ -2021,8 +2021,30 @@ export function Canvas({
         onElementsChange(next.elements);
       }
     },
-    [disabled, elements, isPreview, onElementsChange]
+    [disabled, isPreview, onElementsChange]
   );
+
+  useEffect(() => {
+    if (disabled || isPreview || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleActiveEditorContentSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ elementId?: unknown; content?: unknown }>).detail;
+      const elementId = typeof detail?.elementId === 'string' ? detail.elementId : null;
+      const content = Array.isArray(detail?.content) ? detail.content : null;
+      if (!elementId || !content) {
+        return;
+      }
+
+      handleElementPropsUpdate(elementId, { content });
+    };
+
+    window.addEventListener(ACTIVE_EDITOR_CONTENT_SYNC_EVENT, handleActiveEditorContentSync);
+    return () => {
+      window.removeEventListener(ACTIVE_EDITOR_CONTENT_SYNC_EVENT, handleActiveEditorContentSync);
+    };
+  }, [disabled, handleElementPropsUpdate, isPreview]);
 
   /**
    * Handle canvas resize start

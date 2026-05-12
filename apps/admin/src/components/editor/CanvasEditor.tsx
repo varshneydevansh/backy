@@ -303,26 +303,25 @@ const stableComparableValue = (value: unknown): unknown => {
     }, {});
 };
 
-const extractRichTextPlainText = (value: unknown): string | null => {
-  if (typeof value === 'string') {
+const normalizeRichTextContentForHistory = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeRichTextContentForHistory);
+  }
+
+  if (!isPlainRecord(value)) {
     return value;
   }
 
-  if (Array.isArray(value)) {
-    const parts = value
-      .map(extractRichTextPlainText)
-      .filter((part): part is string => part !== null);
-    return parts.length > 0 ? parts.join('') : null;
-  }
-
-  if (isPlainRecord(value)) {
-    const ownText = typeof value.text === 'string' ? value.text : '';
-    const childrenText = extractRichTextPlainText(value.children);
-    const combined = `${ownText}${childrenText || ''}`;
-    return combined ? combined : null;
-  }
-
-  return null;
+  return Object.keys(value)
+    .filter((key) => key !== 'id')
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      const nextValue = normalizeRichTextContentForHistory(value[key]);
+      if (nextValue !== undefined) {
+        acc[key] = nextValue;
+      }
+      return acc;
+    }, {});
 };
 
 const normalizeHistoryProps = (props: Record<string, unknown>): Record<string, unknown> => (
@@ -330,8 +329,7 @@ const normalizeHistoryProps = (props: Record<string, unknown>): Record<string, u
     .sort()
     .reduce<Record<string, unknown>>((acc, key) => {
       if (key === 'content') {
-        const plainText = extractRichTextPlainText(props[key]);
-        acc[key] = plainText ?? stableComparableValue(props[key]);
+        acc[key] = normalizeRichTextContentForHistory(props[key]);
         return acc;
       }
 

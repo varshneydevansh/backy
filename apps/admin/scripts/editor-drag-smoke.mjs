@@ -1089,6 +1089,31 @@ const findCanvasElement = (elements, elementId) => {
   return null;
 };
 
+const collectSlateLeaves = (value, leaves = []) => {
+  if (!value) {
+    return leaves;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSlateLeaves(item, leaves));
+    return leaves;
+  }
+
+  if (typeof value !== 'object') {
+    return leaves;
+  }
+
+  if (typeof value.text === 'string') {
+    leaves.push(value);
+  }
+
+  if (Array.isArray(value.children)) {
+    collectSlateLeaves(value.children, leaves);
+  }
+
+  return leaves;
+};
+
 const readEditorElementState = async (client, elementIds) => {
   const entries = await Promise.all(elementIds.map(async (elementId) => {
     const box = await getElementBox(client, elementId);
@@ -2943,6 +2968,10 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   await activateTextEditing(client, elementId);
 
   const cleared = await evaluate(client, `(() => {
+    if (typeof window.__backyReplaceActiveEditorText === 'function') {
+      return window.__backyReplaceActiveEditorText('Alpha line Beta line');
+    }
+
     const host = document.querySelector('[data-element-id="${elementId}"]');
     const editor = host?.querySelector('[contenteditable="true"], [role="textbox"]');
     if (!(editor instanceof HTMLElement)) {
@@ -2963,9 +2992,12 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     return { ok: true, text: editor.textContent || '' };
   })()`);
   assert(cleared?.ok, `Unable to select all rich text before clear: ${JSON.stringify(cleared)}`);
-  await pressKey(client, 'Backspace');
-  await typeText(client, 'Alpha line Beta line');
+  if (cleared.text !== 'Alpha line Beta line') {
+    await pressKey(client, 'Backspace');
+    await typeText(client, 'Alpha line Beta line');
+  }
   await sleep(500);
+  await activateTextEditing(client, elementId);
 
   const selected = await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   assert(selected.selectedText === 'Beta', `Slate selected range did not select Beta: ${JSON.stringify(selected)}`);
@@ -3011,6 +3043,26 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(familyBetaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Selected range font family was not applied: ${JSON.stringify(fontFamilyState)}`);
   assert(!familyAlphaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Unselected range unexpectedly received font family: ${JSON.stringify(fontFamilyState)}`);
 
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await mouseDownControlByTestId(client, 'rich-text-underline');
+  await sleep(500);
+
+  const underlineState = await readRichTextLeafState(client, elementId);
+  const underlineBetaLeaf = underlineState.marked.find((leaf) => leaf.text.includes('Beta'));
+  const underlineAlphaLeaf = underlineState.marked.find((leaf) => leaf.text.includes('Alpha'));
+  assert(underlineBetaLeaf?.textDecoration.includes('underline'), `Selected range underline was not applied: ${JSON.stringify(underlineState)}`);
+  assert(!underlineAlphaLeaf?.textDecoration.includes('underline'), `Unselected range unexpectedly received underline: ${JSON.stringify(underlineState)}`);
+
+  await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
+  await mouseDownControlByTestId(client, 'rich-text-strikethrough');
+  await sleep(500);
+
+  const strikethroughState = await readRichTextLeafState(client, elementId);
+  const strikeAlphaLeaf = strikethroughState.marked.find((leaf) => leaf.text.includes('Alpha'));
+  const strikeBetaLeaf = strikethroughState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(strikeAlphaLeaf?.textDecoration.includes('line-through'), `Selected range strikethrough was not applied: ${JSON.stringify(strikethroughState)}`);
+  assert(!strikeBetaLeaf?.textDecoration.includes('line-through'), `Unselected range unexpectedly received strikethrough: ${JSON.stringify(strikethroughState)}`);
+
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
   await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
   await sleep(500);
@@ -3027,7 +3079,34 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     afterClear: clearedState,
     afterFontSize: sizedState,
     afterFontFamily: fontFamilyState,
+    afterUnderline: underlineState,
+    afterStrikethrough: strikethroughState,
     afterColor: colorState,
+  };
+};
+
+const assertPersistedSelectedRichTextMarks = async (pageId, elementId = 'smoke-heading') => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const element = findCanvasElement(payload.data?.page?.content?.elements || [], elementId);
+  assert(element, `Persisted rich text element ${elementId} was not found`);
+
+  const leaves = collectSlateLeaves(element.props?.content);
+  const alphaLeaf = leaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Alpha'));
+  const betaLeaf = leaves.find((leaf) => typeof leaf.text === 'string' && leaf.text.includes('Beta'));
+  assert(alphaLeaf, `Persisted Alpha rich text leaf missing: ${JSON.stringify(leaves)}`);
+  assert(betaLeaf, `Persisted Beta rich text leaf missing: ${JSON.stringify(leaves)}`);
+  assert(alphaLeaf.fontSize === '32px', `Persisted selected font size missing from Alpha leaf: ${JSON.stringify(leaves)}`);
+  assert(alphaLeaf.color === '#ff0000', `Persisted selected color missing from Alpha leaf: ${JSON.stringify(leaves)}`);
+  assert(alphaLeaf.strikethrough === true, `Persisted selected strikethrough missing from Alpha leaf: ${JSON.stringify(leaves)}`);
+  assert(betaLeaf.fontFamily === 'Georgia, serif', `Persisted selected font family missing from Beta leaf: ${JSON.stringify(leaves)}`);
+  assert(betaLeaf.underline === true, `Persisted selected underline missing from Beta leaf: ${JSON.stringify(leaves)}`);
+  assert(!alphaLeaf.fontFamily, `Unselected Alpha leaf unexpectedly received Beta font family: ${JSON.stringify(leaves)}`);
+  assert(betaLeaf.color !== '#ff0000', `Unselected Beta leaf unexpectedly received Alpha color: ${JSON.stringify(leaves)}`);
+  assert(betaLeaf.strikethrough !== true, `Unselected Beta leaf unexpectedly received Alpha strikethrough: ${JSON.stringify(leaves)}`);
+
+  return {
+    alphaLeaf,
+    betaLeaf,
   };
 };
 
@@ -7717,6 +7796,7 @@ const main = async () => {
       const selectedRange = await testRichTextSelectedRangeControls(client, 'smoke-heading');
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, 'after rich text smoke save');
+      const persistedSelectedRange = await assertPersistedSelectedRichTextMarks(tempPageId, 'smoke-heading');
 
       console.log(JSON.stringify({
         ok: true,
@@ -7724,6 +7804,7 @@ const main = async () => {
         url: `${ADMIN_BASE_URL}${editorPath}`,
         richText,
         selectedRange,
+        persistedSelectedRange,
         savedStatus,
       }, null, 2));
       return;
