@@ -212,6 +212,9 @@ const DEFAULT_SITE_COMMENT_POLICY: SiteCommentPolicyDraft = {
   requireEmail: false,
   allowReplies: true,
   enableReports: true,
+  enableCaptcha: false,
+  captchaProvider: 'mock',
+  captchaSiteKey: '',
   blockedTerms: [],
   closedMessage: 'Comments are closed for this site.',
   sort: 'newest',
@@ -223,6 +226,10 @@ const normalizeSiteCommentPolicyDraft = (policy?: SiteCommentPolicy | null): Sit
   blockedTerms: Array.isArray(policy?.blockedTerms) ? policy.blockedTerms.filter(Boolean) : [],
   moderationMode: policy?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
   sort: policy?.sort === 'oldest' ? 'oldest' : 'newest',
+  captchaProvider: policy?.captchaProvider && ['turnstile', 'hcaptcha', 'recaptcha', 'mock'].includes(policy.captchaProvider)
+    ? policy.captchaProvider
+    : DEFAULT_SITE_COMMENT_POLICY.captchaProvider,
+  captchaSiteKey: policy?.captchaSiteKey?.trim() || '',
   closedMessage: policy?.closedMessage?.trim() || DEFAULT_SITE_COMMENT_POLICY.closedMessage,
 });
 
@@ -3680,6 +3687,7 @@ function EditSitePage() {
                         ['Require email', 'requireEmail'],
                         ['Allow replies', 'allowReplies'],
                         ['Enable reports', 'enableReports'],
+                        ['Require captcha', 'enableCaptcha'],
                       ].map(([label, key]) => (
                         <label key={key} className="flex items-start gap-3 rounded-lg border border-border bg-background p-3 text-sm">
                           <input
@@ -3695,6 +3703,8 @@ function EditSitePage() {
                                 ? 'Controls whether new public comments are accepted.'
                                 : key === 'enableReports'
                                   ? 'Allows visitors to report published comments.'
+                                  : key === 'enableCaptcha'
+                                    ? 'Requires provider-token verification before public comment persistence.'
                                   : 'Applied before page or blog comment block overrides.'}
                             </span>
                           </span>
@@ -3727,6 +3737,34 @@ function EditSitePage() {
                             <option value="newest">Newest first</option>
                             <option value="oldest">Oldest first</option>
                           </select>
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-sm font-medium">
+                          <span className="mb-1 block">Captcha provider</span>
+                          <select
+                            value={commentPolicyDraft.captchaProvider}
+                            onChange={(event) => patchCommentPolicyDraft({ captchaProvider: event.target.value as SiteCommentPolicyDraft['captchaProvider'] })}
+                            aria-label="Site comment captcha provider"
+                            disabled={!commentPolicyDraft.enableCaptcha}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                          >
+                            <option value="mock">Mock</option>
+                            <option value="turnstile">Turnstile</option>
+                            <option value="hcaptcha">hCaptcha</option>
+                            <option value="recaptcha">reCAPTCHA</option>
+                          </select>
+                        </label>
+                        <label className="text-sm font-medium">
+                          <span className="mb-1 block">Captcha site key</span>
+                          <input
+                            value={commentPolicyDraft.captchaSiteKey}
+                            onChange={(event) => patchCommentPolicyDraft({ captchaSiteKey: event.target.value })}
+                            aria-label="Site comment captcha site key"
+                            disabled={!commentPolicyDraft.enableCaptcha}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                            placeholder="Public site key"
+                          />
                         </label>
                       </div>
                       <label className="text-sm font-medium">

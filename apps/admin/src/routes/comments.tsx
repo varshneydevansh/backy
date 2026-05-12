@@ -202,6 +202,9 @@ const DEFAULT_COMMENT_POLICY: CommentPolicyDraft = {
   requireEmail: false,
   allowReplies: true,
   enableReports: true,
+  enableCaptcha: false,
+  captchaProvider: 'mock',
+  captchaSiteKey: '',
   blockedTerms: [],
   closedMessage: 'Comments are closed for this site.',
   sort: 'newest',
@@ -213,6 +216,10 @@ const normalizeCommentPolicyDraft = (policy?: SiteCommentPolicy | null): Comment
   blockedTerms: Array.isArray(policy?.blockedTerms) ? policy.blockedTerms.filter(Boolean) : [],
   moderationMode: policy?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
   sort: policy?.sort === 'oldest' ? 'oldest' : 'newest',
+  captchaProvider: policy?.captchaProvider && ['turnstile', 'hcaptcha', 'recaptcha', 'mock'].includes(policy.captchaProvider)
+    ? policy.captchaProvider
+    : DEFAULT_COMMENT_POLICY.captchaProvider,
+  captchaSiteKey: policy?.captchaSiteKey?.trim() || '',
   closedMessage: policy?.closedMessage?.trim() || DEFAULT_COMMENT_POLICY.closedMessage,
 });
 
@@ -1515,6 +1522,14 @@ function CommentsRoute() {
               />
               Enable reports
             </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.enableCaptcha}
+                onChange={(event) => patchCommentPolicyDraft({ enableCaptcha: event.target.checked })}
+              />
+              Require captcha
+            </label>
           </div>
 
           <div className="grid gap-3">
@@ -1542,6 +1557,34 @@ function CommentsRoute() {
                 <option value="oldest">Oldest first</option>
               </select>
             </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Captcha provider
+                <select
+                  value={commentPolicyDraft.captchaProvider}
+                  onChange={(event) => patchCommentPolicyDraft({ captchaProvider: event.target.value as CommentPolicyDraft['captchaProvider'] })}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                  aria-label="Comment captcha provider"
+                  disabled={!commentPolicyDraft.enableCaptcha}
+                >
+                  <option value="mock">Mock</option>
+                  <option value="turnstile">Turnstile</option>
+                  <option value="hcaptcha">hCaptcha</option>
+                  <option value="recaptcha">reCAPTCHA</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                Captcha site key
+                <input
+                  value={commentPolicyDraft.captchaSiteKey}
+                  onChange={(event) => patchCommentPolicyDraft({ captchaSiteKey: event.target.value })}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:opacity-60"
+                  aria-label="Comment captcha site key"
+                  disabled={!commentPolicyDraft.enableCaptcha}
+                  placeholder="Public site key"
+                />
+              </label>
+            </div>
           </div>
         </div>
 

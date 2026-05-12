@@ -15,6 +15,7 @@ const SCREENSHOT_PATH = process.env.BACKY_COMMENTS_SCREENSHOT || path.join(os.tm
 const COMMENT_NOTIFICATION_EMAIL = 'comments-smoke-moderation@example.com';
 const EXPECTED_EMAIL_PROVIDER = process.env.BACKY_COMMENTS_SMOKE_EXPECT_EMAIL_PROVIDER || 'local-outbox';
 const EXPECTED_EMAIL_STATUS_CODE = Number(process.env.BACKY_COMMENTS_SMOKE_EXPECT_EMAIL_STATUS_CODE || (EXPECTED_EMAIL_PROVIDER === 'local-outbox' ? 202 : 200));
+const COMMENT_CAPTCHA_MOCK_TOKEN = process.env.BACKY_FORM_CAPTCHA_MOCK_TOKEN || 'backy-captcha-pass';
 let apiAdminSessionToken = '';
 let apiAdminSessionData = null;
 
@@ -152,7 +153,7 @@ const deletePage = async (pageId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
 };
 
-const submitComment = async ({ pageId, authorName, authorEmail, content, requestId, parentId, commentThreadId }) => {
+const submitComment = async ({ pageId, authorName, authorEmail, content, requestId, parentId, commentThreadId, captchaToken }) => {
   const payload = await requestApi(`/api/sites/${SITE_ID}/pages/${pageId}/comments`, {
     method: 'POST',
     body: JSON.stringify({
@@ -167,6 +168,7 @@ const submitComment = async ({ pageId, authorName, authorEmail, content, request
       startedAt: Date.now() - 3000,
       moderationMode: 'manual',
       commentRequireEmail: true,
+      ...(captchaToken ? { captchaToken } : {}),
     }),
   });
   const comment = payload.data?.comment || payload.comment;
@@ -175,7 +177,7 @@ const submitComment = async ({ pageId, authorName, authorEmail, content, request
   return comment;
 };
 
-const submitCommentExpectFailure = async ({ pageId, authorName, authorEmail, content, requestId }) => {
+const submitCommentExpectFailure = async ({ pageId, authorName, authorEmail, content, requestId, captchaToken }) => {
   const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/pages/${pageId}/comments`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -187,6 +189,7 @@ const submitCommentExpectFailure = async ({ pageId, authorName, authorEmail, con
       honeypot: '',
       rateLimitBypass: true,
       startedAt: Date.now() - 3000,
+      ...(captchaToken ? { captchaToken } : {}),
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -1135,7 +1138,59 @@ const main = async () => {
     const threadParentRequestId = `comments-smoke-thread-parent-${suffix}`;
     const threadReplyRequestId = `comments-smoke-thread-reply-${suffix}`;
     const moveParentRequestId = `comments-smoke-move-parent-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId, moveParentRequestId);
+    const captchaPassRequestId = `comments-smoke-captcha-pass-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId, moveParentRequestId, captchaPassRequestId);
+
+    await patchSiteCommentPolicy({
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: true,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: true,
+      captchaProvider: 'mock',
+      captchaSiteKey: 'comments-smoke-mock-site-key',
+      blockedTerms: [],
+      closedMessage: 'Comments are closed for this site.',
+      sort: 'newest',
+    });
+    const captchaRejected = await submitCommentExpectFailure({
+      pageId: page.id,
+      authorName: 'Comments Smoke Captcha Missing',
+      authorEmail: 'comments-captcha-missing@example.com',
+      content: 'This temporary comment should fail because captcha is required.',
+      requestId: `comments-smoke-captcha-missing-${suffix}`,
+    });
+    assert(
+      captchaRejected.status === 422 && captchaRejected.payload?.captcha?.errorCode === 'CAPTCHA_REQUIRED',
+      `Missing comment captcha should reject with CAPTCHA_REQUIRED: ${JSON.stringify(captchaRejected)}`,
+    );
+    const captchaAcceptedComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Captcha Pass',
+      authorEmail: 'comments-captcha-pass@example.com',
+      content: 'This temporary comment includes the mock captcha token.',
+      requestId: captchaPassRequestId,
+      captchaToken: COMMENT_CAPTCHA_MOCK_TOKEN,
+    });
+    assert(captchaAcceptedComment.status === 'pending', `Captcha-backed comment should enter moderation: ${JSON.stringify(captchaAcceptedComment)}`);
+    await patchSiteCommentPolicy({
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: false,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: false,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
+      blockedTerms: [],
+      closedMessage: 'Comments are closed for this site.',
+      sort: 'newest',
+    });
 
     const approveComment = await submitComment({
       pageId: page.id,
@@ -1345,6 +1400,9 @@ const main = async () => {
       requireEmail: false,
       allowReplies: true,
       enableReports: true,
+      enableCaptcha: false,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
       blockedTerms: [],
       closedMessage: 'Comments are closed for this site.',
       sort: 'newest',
@@ -1366,8 +1424,10 @@ const main = async () => {
         requireEmail: true,
         reportsDisabled: true,
         reportsDisabledStatus: 403,
+        captchaRequiredStatus: 422,
         blockedTerms: ['bannedphrase'],
       },
+      captchaCommentId: captchaAcceptedComment.id,
       approvedCommentId: approveComment.id,
       rejectedCommentId: rejectComment.id,
       resolvedReportCommentId: reportedComment.id,
@@ -1399,6 +1459,9 @@ const main = async () => {
         requireEmail: false,
         allowReplies: true,
         enableReports: true,
+        enableCaptcha: false,
+        captchaProvider: 'mock',
+        captchaSiteKey: '',
         blockedTerms: [],
         closedMessage: 'Comments are closed for this site.',
         sort: 'newest',

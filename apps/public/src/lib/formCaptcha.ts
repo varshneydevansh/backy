@@ -6,6 +6,7 @@ export interface FormCaptchaVerificationInput {
   requestId?: string | null;
   siteId: string;
   formId: string;
+  provider?: FormCaptchaProvider | null;
 }
 
 export interface FormCaptchaVerificationResult {
@@ -37,7 +38,11 @@ const readTimeout = (): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
 };
 
-const readProvider = (): FormCaptchaProvider | null => {
+const readProvider = (override?: FormCaptchaProvider | null): FormCaptchaProvider | null => {
+  if (override && PROVIDERS.has(override)) {
+    return override;
+  }
+
   const raw = (readEnv('BACKY_FORM_CAPTCHA_PROVIDER') || readEnv('BACKY_CAPTCHA_PROVIDER')).toLowerCase();
   if (PROVIDERS.has(raw as FormCaptchaProvider)) {
     return raw as FormCaptchaProvider;
@@ -64,8 +69,8 @@ const readProviderSecret = (provider: FormCaptchaProvider | null): string => {
   return readEnv(providerSecretKey) || readEnv('BACKY_FORM_CAPTCHA_SECRET_KEY') || readEnv('BACKY_CAPTCHA_SECRET_KEY');
 };
 
-const getCaptchaConfig = (): FormCaptchaProviderConfig => {
-  const provider = readProvider();
+const getCaptchaConfig = (override?: FormCaptchaProvider | null): FormCaptchaProviderConfig => {
+  const provider = readProvider(override);
   return {
     provider,
     secretKey: readProviderSecret(provider),
@@ -101,7 +106,7 @@ const readNumber = (value: unknown): number | null => (
 
 export async function verifyFormCaptcha(input: FormCaptchaVerificationInput): Promise<FormCaptchaVerificationResult> {
   const token = input.token?.trim();
-  const config = getCaptchaConfig();
+  const config = getCaptchaConfig(input.provider);
 
   if (!token) {
     return {

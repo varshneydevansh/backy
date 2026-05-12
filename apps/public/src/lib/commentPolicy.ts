@@ -8,6 +8,9 @@ export interface ResolvedCommentPolicy {
   requireEmail: boolean;
   allowReplies: boolean;
   enableReports: boolean;
+  enableCaptcha: boolean;
+  captchaProvider: 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock';
+  captchaSiteKey: string;
   blockedTerms: string[];
   closedMessage: string;
   sort: 'newest' | 'oldest';
@@ -26,6 +29,10 @@ const parseBoolean = (raw: unknown): boolean | undefined => {
 
 const parseModerationMode = (raw: unknown): 'manual' | 'auto-approve' | undefined => (
   raw === 'auto-approve' ? 'auto-approve' : raw === 'manual' ? 'manual' : undefined
+);
+
+const parseCaptchaProvider = (raw: unknown): 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock' | undefined => (
+  raw === 'turnstile' || raw === 'hcaptcha' || raw === 'recaptcha' || raw === 'mock' ? raw : undefined
 );
 
 const parseString = (raw: unknown): string => (
@@ -53,6 +60,9 @@ export const normalizeSiteCommentPolicy = (raw: unknown): ResolvedCommentPolicy 
     requireEmail: policy.requireEmail === true,
     allowReplies: policy.allowReplies !== false,
     enableReports: policy.enableReports !== false,
+    enableCaptcha: policy.enableCaptcha === true,
+    captchaProvider: parseCaptchaProvider(policy.captchaProvider) || 'mock',
+    captchaSiteKey: parseString(policy.captchaSiteKey),
     blockedTerms: parseBlockedTerms(policy.blockedTerms),
     closedMessage: parseString(policy.closedMessage) || 'Comments are closed for this site.',
     sort,
@@ -71,6 +81,7 @@ export const resolveCommentSubmissionPolicy = (
   const allowRepliesOverride = parseBoolean(body.commentAllowReplies);
   const requireNameOverride = parseBoolean(body.commentRequireName);
   const requireEmailOverride = parseBoolean(body.commentRequireEmail);
+  const enableCaptchaOverride = parseBoolean(body.commentEnableCaptcha);
 
   return {
     ...policy,
@@ -79,5 +90,6 @@ export const resolveCommentSubmissionPolicy = (
     allowReplies: policy.allowReplies && allowRepliesOverride !== false,
     requireName: policy.requireName || requireNameOverride === true,
     requireEmail: policy.requireEmail || requireEmailOverride === true,
+    enableCaptcha: policy.enableCaptcha || enableCaptchaOverride === true,
   };
 };

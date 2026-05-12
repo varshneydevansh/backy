@@ -13,6 +13,7 @@ import {
   recordRepositoryInteractionEvent,
   resolveRepositorySite,
 } from '@/lib/commentRepositorySupport';
+import { commentCaptchaFailurePayload, verifyCommentCaptcha } from '@/lib/commentCaptcha';
 import { notifyCommentDelivery } from '@/lib/commentDelivery';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -335,6 +336,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const captchaFailure = await verifyCommentCaptcha({
+        policy,
+        body,
+        requestId,
+        siteId: site.id,
+        targetType: 'page',
+        targetId: pageId,
+      });
+      if (captchaFailure) {
+        const failure = commentCaptchaFailurePayload(captchaFailure, requestId);
+        return contractResponse(failure.body, requestId, failure.status);
+      }
+
       let parent: Comment | null = null;
       if (parentId) {
         parent = await repositories.comments.getById(site.id, parentId);
@@ -570,6 +584,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         responseRequestId,
         422,
       );
+    }
+
+    const captchaFailure = await verifyCommentCaptcha({
+      policy,
+      body,
+      requestId,
+      siteId: site.id,
+      targetType: 'page',
+      targetId: pageId,
+    });
+    if (captchaFailure) {
+      const failure = commentCaptchaFailurePayload(captchaFailure, requestId);
+      return contractResponse(failure.body, requestId, failure.status);
     }
 
     let parent: ReturnType<typeof getCommentById> | undefined;

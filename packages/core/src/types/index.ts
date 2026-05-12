@@ -424,6 +424,15 @@ export interface SiteCommentPolicy {
   /** Whether public report endpoints are enabled */
   enableReports?: boolean;
 
+  /** Whether public comment submissions must include a captcha verification token */
+  enableCaptcha?: boolean;
+
+  /** Public captcha provider hint for custom frontends rendering comment forms */
+  captchaProvider?: 'turnstile' | 'hcaptcha' | 'recaptcha' | 'mock';
+
+  /** Public captcha site key for custom frontends rendering comment forms */
+  captchaSiteKey?: string;
+
   /** Lowercase-insensitive content terms that are rejected as spam */
   blockedTerms?: string[];
 

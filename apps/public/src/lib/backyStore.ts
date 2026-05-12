@@ -399,6 +399,11 @@ const normalizeCommentPolicy = (value: unknown, current?: SiteCommentPolicy): Si
     requireEmail: input.requireEmail === undefined ? base.requireEmail === true : parseBooleanInput(input.requireEmail, false),
     allowReplies: input.allowReplies === undefined ? base.allowReplies !== false : parseBooleanInput(input.allowReplies, true),
     enableReports: input.enableReports === undefined ? base.enableReports !== false : parseBooleanInput(input.enableReports, true),
+    enableCaptcha: input.enableCaptcha === undefined ? base.enableCaptcha === true : parseBooleanInput(input.enableCaptcha, false),
+    captchaProvider: ['turnstile', 'hcaptcha', 'recaptcha', 'mock'].includes(sanitizeString(input.captchaProvider))
+      ? sanitizeString(input.captchaProvider) as SiteCommentPolicy['captchaProvider']
+      : base.captchaProvider || 'mock',
+    captchaSiteKey: input.captchaSiteKey === undefined ? base.captchaSiteKey || '' : sanitizeString(input.captchaSiteKey),
     blockedTerms,
     closedMessage: input.closedMessage === undefined
       ? base.closedMessage || 'Comments are closed for this site.'
