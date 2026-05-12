@@ -1,6 +1,6 @@
 import type { BackyRepositoryEntity, Comment, CommentReportReason, CommentStatus } from '@backy-cms/core';
 import type { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
-import { blockCommentIdentity, getCommentReportReasons } from '@/lib/backyStore';
+import { getCommentReportReasons } from '@/lib/backyStore';
 
 export type PublicCommentRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
 
@@ -111,10 +111,10 @@ export async function updateRepositoryCommentStatus(
     update.blockedBy = reviewedBy;
     update.blockedAt = reviewedAt;
 
-    blockCommentIdentity({
+    await repositories.comments.blockIdentity({
       siteId,
       reason: update.blockReason,
-      actor: reviewedBy || undefined,
+      actor: reviewedBy || null,
       requestId: resolvedRequestId,
       email: comment.authorEmail,
       ipHash: comment.ipHash,

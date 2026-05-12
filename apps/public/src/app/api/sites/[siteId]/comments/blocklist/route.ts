@@ -78,25 +78,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const limit = Number.parseInt(searchParams.get('limit') || '50', 10);
     const offset = Number.parseInt(searchParams.get('offset') || '0', 10);
-    const result = listCommentBlocklist(site.id, {
-      type: parseType(searchParams.get('type')),
+    const type = parseType(searchParams.get('type'));
+    const result = repositories ? await repositories.comments.listBlocklist({
+      siteId: site.id,
+      type,
+      q: searchParams.get('q') || undefined,
+      limit: Number.isFinite(limit) ? limit : 50,
+      offset: Number.isFinite(offset) ? offset : 0,
+    }) : listCommentBlocklist(site.id, {
+      type,
       q: searchParams.get('q') || undefined,
       limit: Number.isFinite(limit) ? limit : 50,
       offset: Number.isFinite(offset) ? offset : 0,
     });
+    const blocklist = 'items' in result ? result.items : result.blocklist;
+    const count = 'items' in result ? result.pagination.total : result.count;
 
     return privateResponse({
       success: true,
       requestId,
       data: {
         siteId: site.id,
-        blocklist: result.blocklist,
-        count: result.count,
+        blocklist,
+        count,
         pagination: result.pagination,
       },
       siteId: site.id,
-      blocklist: result.blocklist,
-      count: result.count,
+      blocklist,
+      count,
       pagination: result.pagination,
     }, requestId);
   } catch (error) {
@@ -129,7 +138,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'ids or blocklistIds are required', requestId);
     }
 
-    const result = deleteCommentBlocklistEntries({ siteId: site.id, ids });
+    const result = repositories
+      ? await repositories.comments.deleteBlocklistEntries(site.id, ids)
+      : deleteCommentBlocklistEntries({ siteId: site.id, ids });
     await recordAdminAudit({
       repositories,
       siteId: site.id,

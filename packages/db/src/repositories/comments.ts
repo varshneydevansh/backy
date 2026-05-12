@@ -1,17 +1,21 @@
 import {
     type BackyCommentCreateInput,
+    type BackyCommentBlockIdentityInput,
+    type BackyCommentBlocklistDeleteResult,
+    type BackyCommentBlocklistListInput,
     type BackyCommentListInput,
     type BackyCommentRepository,
     type BackyCommentUpdateInput,
     type BackyListResult,
     type BackyRepositoryMutationResult,
     type Comment,
+    type CommentBlocklistEntry,
     type CommentReportReason,
     type CommentStatus,
     type CommentTargetType,
 } from '@backy-cms/core';
 import { and, desc, eq } from 'drizzle-orm';
-import { comments } from '../schema';
+import { commentBlocklist, comments } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
 type QueryDatabase = {
@@ -44,6 +48,7 @@ type ReturningQuery = {
 };
 
 type CommentRow = typeof comments.$inferSelect;
+type CommentBlocklistRow = typeof commentBlocklist.$inferSelect;
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -164,6 +169,47 @@ const toComment = (row: CommentRow): Comment => ({
     updatedAt: toIso(row.updatedAt),
 });
 
+const normalizeIdentifier = (value: string): string => value.trim().toLowerCase();
+
+const commentBlocklistId = (
+    siteId: string,
+    type: CommentBlocklistEntry['type'],
+    value: string,
+): string => `${siteId}:${type}:${normalizeIdentifier(value)}`;
+
+const normalizeBlocklistType = (value: unknown): CommentBlocklistEntry['type'] => (
+    value === 'ip' ? 'ip' : 'email'
+);
+
+const toCommentBlocklistEntry = (row: CommentBlocklistRow): CommentBlocklistEntry => ({
+    id: row.id,
+    siteId: row.siteId,
+    type: normalizeBlocklistType(row.type),
+    value: row.value,
+    reason: row.reason,
+    actor: row.actor,
+    requestId: row.requestId,
+    createdAt: toIso(row.createdAt),
+});
+
+const searchBlocklistEntry = (entry: CommentBlocklistEntry, search: string): boolean => {
+    const needle = search.toLowerCase();
+    return [
+        entry.value,
+        entry.reason,
+        entry.actor,
+        entry.requestId,
+    ]
+        .filter(Boolean)
+        .map((value) => (value || '').toLowerCase())
+        .join(' ')
+        .includes(needle);
+};
+
+const sortBlocklist = (items: CommentBlocklistEntry[]): CommentBlocklistEntry[] => (
+    [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+);
+
 const sortComments = (items: Comment[], sort: BackyCommentListInput['sort'] = 'newest'): Comment[] => (
     [...items].sort((a, b) => {
         const left = new Date(a.createdAt).getTime();
@@ -256,6 +302,88 @@ export function createCommentRepository(db: DatabaseInstance): BackyCommentRepos
 
             await database.delete(comments).where(and(eq(comments.siteId, siteId), eq(comments.id, commentId)));
             return true;
+        },
+
+        async deleteForTarget(siteId: string, targetType: Comment['targetType'], targetId: string): Promise<number> {
+            const existing = await this.list({ siteId, targetType, targetId, status: 'all', limit: MAX_LIMIT });
+            await database.delete(comments).where(and(
+                eq(comments.siteId, siteId),
+                eq(comments.targetType, targetType),
+                eq(comments.targetId, targetId),
+            ));
+            return existing.pagination.total;
+        },
+
+        async listBlocklist(input: BackyCommentBlocklistListInput): Promise<BackyListResult<CommentBlocklistEntry>> {
+            const rows = await database.select().from(commentBlocklist).where(eq(commentBlocklist.siteId, input.siteId)).orderBy(desc(commentBlocklist.createdAt)) as CommentBlocklistRow[];
+            const type = input.type === 'email' || input.type === 'ip' ? input.type : 'all';
+            const filtered = rows
+                .map(toCommentBlocklistEntry)
+                .filter((entry) => type === 'all' ? true : entry.type === type)
+                .filter((entry) => input.q ? searchBlocklistEntry(entry, input.q) : true);
+            return paginate(sortBlocklist(filtered), input.limit, input.offset);
+        },
+
+        async blockIdentity(input: BackyCommentBlockIdentityInput): Promise<CommentBlocklistEntry[]> {
+            const now = new Date();
+            const values = [
+                input.email ? { type: 'email' as const, value: normalizeIdentifier(input.email) } : null,
+                input.ipHash ? { type: 'ip' as const, value: normalizeIdentifier(input.ipHash) } : null,
+            ].filter((entry): entry is { type: CommentBlocklistEntry['type']; value: string } => Boolean(entry));
+            const blocked: CommentBlocklistEntry[] = [];
+
+            for (const entry of values) {
+                const id = commentBlocklistId(input.siteId, entry.type, entry.value);
+                const existing = await firstOrNull<CommentBlocklistRow>(
+                    database.select().from(commentBlocklist).where(and(eq(commentBlocklist.siteId, input.siteId), eq(commentBlocklist.id, id))).limit(1),
+                );
+                const payload = {
+                    siteId: input.siteId,
+                    type: entry.type,
+                    value: entry.value,
+                    reason: input.reason,
+                    actor: input.actor || null,
+                    requestId: input.requestId || null,
+                    createdAt: now,
+                };
+
+                if (existing) {
+                    const [row] = await database.update(commentBlocklist).set(payload).where(and(eq(commentBlocklist.siteId, input.siteId), eq(commentBlocklist.id, id))).returning() as CommentBlocklistRow[];
+                    blocked.push(toCommentBlocklistEntry(row));
+                } else {
+                    const [row] = await database.insert(commentBlocklist).values({
+                        id,
+                        ...payload,
+                    }).returning() as CommentBlocklistRow[];
+                    blocked.push(toCommentBlocklistEntry(row));
+                }
+            }
+
+            return blocked;
+        },
+
+        async deleteBlocklistEntries(siteId: string, ids: string[]): Promise<BackyCommentBlocklistDeleteResult> {
+            const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+            const deleted: CommentBlocklistEntry[] = [];
+            const missingIds = new Set(normalizedIds);
+
+            for (const id of normalizedIds) {
+                const row = await firstOrNull<CommentBlocklistRow>(
+                    database.select().from(commentBlocklist).where(and(eq(commentBlocklist.siteId, siteId), eq(commentBlocklist.id, id))).limit(1),
+                );
+                if (!row) {
+                    continue;
+                }
+
+                await database.delete(commentBlocklist).where(and(eq(commentBlocklist.siteId, siteId), eq(commentBlocklist.id, id)));
+                deleted.push(toCommentBlocklistEntry(row));
+                missingIds.delete(id);
+            }
+
+            return {
+                deleted,
+                missingIds: Array.from(missingIds),
+            };
         },
     };
 }

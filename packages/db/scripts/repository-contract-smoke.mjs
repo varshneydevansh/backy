@@ -26,6 +26,7 @@ import {
   cacheInvalidationEvents,
   activityLogs,
   comments,
+  commentBlocklist,
   contentCollectionRecords,
   contentCollections,
   contentRevisions,
@@ -62,6 +63,7 @@ const tableName = (table) => {
   if (table === blogCategories) return 'blogCategories';
   if (table === blogTags) return 'blogTags';
   if (table === comments) return 'comments';
+  if (table === commentBlocklist) return 'commentBlocklist';
   if (table === contentCollections) return 'contentCollections';
   if (table === contentCollectionRecords) return 'contentCollectionRecords';
   if (table === contentRevisions) return 'contentRevisions';
@@ -88,6 +90,7 @@ const createFakeDb = () => {
     blogCategories: [],
     blogTags: [],
     comments: [],
+    commentBlocklist: [],
     contentCollections: [],
     contentCollectionRecords: [],
     contentRevisions: [],
@@ -111,6 +114,7 @@ const createFakeDb = () => {
     blogCategories: 0,
     blogTags: 0,
     comments: 0,
+    commentBlocklist: 0,
     contentCollections: 0,
     contentCollectionRecords: 0,
     contentRevisions: 0,
@@ -452,6 +456,19 @@ const createFakeDb = () => {
         ipHash: null,
         createdAt: timestamp,
         updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'commentBlocklist') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        type: 'email',
+        value: 'reader@example.com',
+        reason: 'manual-block',
+        actor: null,
+        requestId: null,
+        createdAt: timestamp,
         ...values,
       };
     }
@@ -1219,8 +1236,35 @@ const updatedComment = (await commentRepository.update(site.id, rootComment.id, 
 })).item;
 assert(updatedComment.status === 'blocked' && updatedComment.reportCount === 3, 'Expected comment moderation update');
 assert((await commentRepository.getById(site.id, rootComment.id))?.blockReason === 'spam', 'Expected comment getById');
-assert(await commentRepository.delete(site.id, replyComment.id), 'Expected comment delete');
-assert(await commentRepository.delete(site.id, rootComment.id), 'Expected root comment delete');
+const blockedIdentities = await commentRepository.blockIdentity({
+  siteId: site.id,
+  reason: updatedComment.blockReason,
+  actor: updatedComment.blockedBy,
+  requestId: updatedComment.requestId,
+  email: updatedComment.authorEmail,
+  ipHash: updatedComment.ipHash,
+});
+assert(blockedIdentities.length === 2, 'Expected durable comment blocklist entries');
+assert((await commentRepository.listBlocklist({
+  siteId: site.id,
+  type: 'email',
+  q: 'reader@example.com',
+})).items.length === 1, 'Expected comment blocklist email filter');
+const deletedBlocklist = await commentRepository.deleteBlocklistEntries(site.id, [
+  `${site.id}:email:reader@example.com`,
+  `${site.id}:ip:127.0.0.1`,
+  `${site.id}:email:missing@example.com`,
+]);
+assert(deletedBlocklist.deleted.length === 2 && deletedBlocklist.missingIds.length === 1, 'Expected comment blocklist delete result');
+const postComment = (await commentRepository.create({
+  siteId: site.id,
+  targetType: 'post',
+  targetId: archivedPost.id,
+  content: 'Post comment cleanup',
+  authorName: 'Reader',
+  status: 'pending',
+})).item;
+assert(await commentRepository.getById(site.id, postComment.id), 'Expected post comment before cleanup');
 
 const auditEntry = await auditLogRepository.record({
   siteId: site.id,
@@ -1439,7 +1483,19 @@ assert(await contentWorkflowRepository.deletePreviewTokensForTarget(site.id, 'pa
 assert(!(await contentWorkflowRepository.validatePreviewToken(site.id, 'page', publishedPage.id, preview.token)), 'Expected preview token invalid after cleanup');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
+assert((await commentRepository.list({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  status: 'all',
+})).pagination.total === 0, 'Expected page delete to clean comments');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');
+assert((await commentRepository.list({
+  siteId: site.id,
+  targetType: 'post',
+  targetId: archivedPost.id,
+  status: 'all',
+})).pagination.total === 0, 'Expected post delete to clean comments');
 assert(await siteRepository.delete(site.id), 'Expected site delete');
 
 let unimplementedBlocked = false;

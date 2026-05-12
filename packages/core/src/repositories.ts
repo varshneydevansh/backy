@@ -4,6 +4,7 @@ import type {
   BlogCategory,
   BlogTag,
   Comment,
+  CommentBlocklistEntry,
   CommentStatus,
   Contact,
   FormDefinition,
@@ -530,6 +531,26 @@ export interface BackyCommentListInput extends BackyPaginationInput {
   includeReplies?: boolean;
 }
 
+export interface BackyCommentBlocklistListInput extends BackyPaginationInput {
+  siteId: string;
+  type?: CommentBlocklistEntry['type'] | 'all';
+  q?: string;
+}
+
+export interface BackyCommentBlockIdentityInput {
+  siteId: string;
+  reason: string;
+  actor?: string | null;
+  requestId?: string | null;
+  email?: string | null;
+  ipHash?: string | null;
+}
+
+export interface BackyCommentBlocklistDeleteResult {
+  deleted: CommentBlocklistEntry[];
+  missingIds: string[];
+}
+
 export type BackyReusableSectionStatus = 'active' | 'archived';
 
 export interface BackyReusableSection {
@@ -855,6 +876,10 @@ export interface BackyCommentRepository {
   create(input: BackyCommentCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Comment>>;
   update(siteId: string, commentId: string, input: BackyCommentUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Comment>>;
   delete(siteId: string, commentId: string, context?: BackyRepositoryContext): Promise<boolean>;
+  deleteForTarget(siteId: string, targetType: Comment['targetType'], targetId: string, context?: BackyRepositoryContext): Promise<number>;
+  listBlocklist(input: BackyCommentBlocklistListInput, context?: BackyRepositoryContext): Promise<BackyListResult<CommentBlocklistEntry>>;
+  blockIdentity(input: BackyCommentBlockIdentityInput, context?: BackyRepositoryContext): Promise<CommentBlocklistEntry[]>;
+  deleteBlocklistEntries(siteId: string, ids: string[], context?: BackyRepositoryContext): Promise<BackyCommentBlocklistDeleteResult>;
 }
 
 export interface BackyReusableSectionRepository {

@@ -30,6 +30,7 @@ import {
 import { and, desc, eq, ne } from 'drizzle-orm';
 import {
     blogPosts,
+    comments,
     pages,
     sites,
 } from '../schema';
@@ -566,6 +567,11 @@ export function createPageRepository(db: DatabaseInstance): BackyPageRepository 
         },
 
         async delete(siteId: string, pageId: string): Promise<boolean> {
+            await database.delete(comments).where(and(
+                eq(comments.siteId, siteId),
+                eq(comments.targetType, 'page'),
+                eq(comments.targetId, pageId),
+            ));
             await database.delete(pages).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId)));
             return true;
         },
@@ -674,6 +680,11 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
         },
 
         async delete(siteId: string, postId: string): Promise<boolean> {
+            await database.delete(comments).where(and(
+                eq(comments.siteId, siteId),
+                eq(comments.targetType, 'post'),
+                eq(comments.targetId, postId),
+            ));
             await database.delete(blogPosts).where(and(eq(blogPosts.siteId, siteId), eq(blogPosts.id, postId)));
             return true;
         },

@@ -613,6 +613,22 @@ export const comments = pgTable('comments', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/**
+ * Comment blocklist entries - durable moderation blocks by email/IP hash.
+ */
+export const commentBlocklist = pgTable('comment_blocklist', {
+    id: text('id').primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    type: text('type').notNull(),
+    value: text('value').notNull(),
+    reason: text('reason').notNull(),
+    actor: text('actor'),
+    requestId: text('request_id'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // ==========================================================================
 // DOMAINS - Custom domain mapping
 // ==========================================================================
@@ -845,6 +861,13 @@ export const formContactsRelations = relations(formContacts, ({ one }) => ({
 export const commentsRelations = relations(comments, ({ one }) => ({
     site: one(sites, {
         fields: [comments.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const commentBlocklistRelations = relations(commentBlocklist, ({ one }) => ({
+    site: one(sites, {
+        fields: [commentBlocklist.siteId],
         references: [sites.id],
     }),
 }));

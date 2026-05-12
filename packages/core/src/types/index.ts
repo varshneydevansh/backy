@@ -1391,6 +1391,18 @@ export interface Comment {
   updatedAt: string;
 }
 
+/** Stored moderation block for repeat comment authors. */
+export interface CommentBlocklistEntry {
+  id: string;
+  siteId: string;
+  type: 'email' | 'ip';
+  value: string;
+  reason: string;
+  actor?: string | null;
+  requestId?: string | null;
+  createdAt: string;
+}
+
 /** Contact/lead capture entry for form -> CRM handoff flows. */
 export interface Contact {
   /** Unique identifier */
