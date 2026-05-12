@@ -6,6 +6,7 @@
  * POST   /api/admin/sites/[siteId]/media/[mediaId] (multipart replacement)
  */
 
+import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -39,6 +40,16 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 const MAX_REPLACEMENT_BYTES = 50 * 1024 * 1024;
 const DEFAULT_SITE_MEDIA_QUOTA_BYTES = 500 * 1024 * 1024;
 const MAX_REPLACEMENT_VERSIONS = 20;
+
+const buildMediaBinaryFingerprint = (buffer: Buffer) => {
+  const value = createHash('sha256').update(buffer).digest('hex');
+  return {
+    algorithm: 'sha256',
+    value,
+    shortValue: value.slice(0, 12),
+    sizeBytes: buffer.length,
+  };
+};
 
 const MIME_TYPE_TO_MEDIA_TYPE: Array<{
   test: (mimeType: string, extension: string) => boolean;
@@ -207,6 +218,7 @@ const buildPreviousVersion = (
   thumbnailUrl: media.thumbnailUrl,
   storagePath: typeof media.metadata?.storagePath === 'string' ? media.metadata.storagePath : null,
   storageProvider: typeof media.metadata?.storageProvider === 'string' ? media.metadata.storageProvider : null,
+  binaryFingerprint: media.metadata?.binaryFingerprint || null,
   createdAt: media.updatedAt || media.createdAt,
   replacedAt: input.replacedAt,
   replacedBy: input.replacedBy,
@@ -552,6 +564,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       storedFilename,
     });
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
+    const binaryFingerprint = buildMediaBinaryFingerprint(uploadBuffer);
     const safetyScan = await scanMediaUploadWithProviders({
       buffer: uploadBuffer,
       originalName,
@@ -590,6 +603,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       extension: extension.replace(/^\./, ''),
       storagePath: upload.path,
       storageProvider: storage.provider,
+      binaryFingerprint,
       safetyScan,
       thumbnailUrl: mediaType === 'image' ? upload.url : null,
       replacementVersions,
@@ -651,6 +665,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           metadata: {
             source: 'media.replace',
             retainedMetadataVersionId: previousVersion.id,
+            binaryFingerprint: previousVersion.binaryFingerprint,
           },
         })).item
       : null;

@@ -36,6 +36,7 @@ type RestorableVersion = {
   thumbnailUrl: string | null;
   storagePath: string | null;
   storageProvider: string | null;
+  binaryFingerprint?: unknown;
 };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -156,6 +157,16 @@ const stringFromVersion = (version: RetainedVersion | MediaVersion, key: keyof R
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 };
 
+const versionBinaryFingerprint = (version: RetainedVersion | MediaVersion): unknown => {
+  if (isRecord(version) && version.binaryFingerprint) {
+    return version.binaryFingerprint;
+  }
+  if ('metadata' in version && isRecord(version.metadata) && version.metadata.binaryFingerprint) {
+    return version.metadata.binaryFingerprint;
+  }
+  return null;
+};
+
 const restorableVersionFromRecord = (
   siteId: string,
   media: MediaItem,
@@ -182,6 +193,7 @@ const restorableVersionFromRecord = (
     thumbnailUrl: stringFromVersion(version, 'thumbnailUrl'),
     storagePath: versionStoragePath(siteId, version),
     storageProvider: stringFromVersion(version, 'storageProvider'),
+    binaryFingerprint: versionBinaryFingerprint(version),
   };
 };
 
@@ -205,6 +217,7 @@ const buildCurrentVersion = (
   thumbnailUrl: media.thumbnailUrl,
   storagePath: storagePathFromMedia(siteId, media),
   storageProvider: storageProviderFromMetadata(media.metadata),
+  binaryFingerprint: isRecord(media.metadata) ? media.metadata.binaryFingerprint || null : null,
   createdAt: media.updatedAt || media.createdAt,
   replacedAt: input.restoredAt,
   replacedBy: input.restoredBy,
@@ -304,6 +317,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           source: 'media.version.restore',
           restoredFromVersionId: version.id,
           retainedMetadataVersionId: typeof retainedCurrentVersion.id === 'string' ? retainedCurrentVersion.id : null,
+          binaryFingerprint: retainedCurrentVersion.binaryFingerprint,
         },
       });
       await repositories.media.deleteVersion({
@@ -328,6 +342,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ...metadata,
           storagePath: restoredVersion.storagePath,
           storageProvider: restoredVersion.storageProvider,
+          binaryFingerprint: restoredVersion.binaryFingerprint || null,
           thumbnailUrl: restoredVersion.thumbnailUrl,
           lastRestoredAt: restoredAt,
           lastRestoredBy: restoredBy,
@@ -420,6 +435,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ...metadata,
         storagePath: restoredVersion.storagePath,
         storageProvider: restoredVersion.storageProvider,
+        binaryFingerprint: restoredVersion.binaryFingerprint || null,
         thumbnailUrl: restoredVersion.thumbnailUrl,
         lastRestoredAt: restoredAt,
         lastRestoredBy: restoredBy,

@@ -5,6 +5,7 @@
  * POST /api/admin/sites/[siteId]/media
  */
 
+import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -63,6 +64,16 @@ const MIME_TYPE_TO_MEDIA_TYPE: Array<{
 ];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const buildMediaBinaryFingerprint = (buffer: Buffer) => {
+  const value = createHash('sha256').update(buffer).digest('hex');
+  return {
+    algorithm: 'sha256',
+    value,
+    shortValue: value.slice(0, 12),
+    sizeBytes: buffer.length,
+  };
+};
 
 const safePathSegment = (value: string) => (
   value
@@ -417,6 +428,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
+    const binaryFingerprint = buildMediaBinaryFingerprint(uploadBuffer);
     const safetyScan = await scanMediaUploadWithProviders({
       buffer: uploadBuffer,
       originalName,
@@ -451,6 +463,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         extension: extension.replace(/^\./, ''),
         storagePath: upload.path,
         storageProvider: storage.provider,
+        binaryFingerprint,
         safetyScan,
         thumbnailUrl: mediaType === 'image' ? upload.url : null,
         tags: toStringList(formData.get('tags')),

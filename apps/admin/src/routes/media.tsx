@@ -5196,6 +5196,14 @@ function MediaPage() {
                         const currentSizeBytes = assetSizeBytes(selectedAsset);
                         const retainedSizeBytes = Number.isFinite(Number(version.sizeBytes)) ? Math.max(0, Number(version.sizeBytes)) : undefined;
                         const sizeDelta = formatSizeDelta(currentSizeBytes, retainedSizeBytes);
+                        const currentStoragePath = mediaMetadataText(selectedAsset.metadata, 'storagePath');
+                        const currentStorageProvider = mediaMetadataText(selectedAsset.metadata, 'storageProvider');
+                        const currentFingerprint = assetBinaryFingerprint(selectedAsset.metadata);
+                        const retainedFingerprint = versionBinaryFingerprint(version);
+                        const retainedName = version.originalName || version.filename || 'Previous file';
+                        const nameDelta = formatTextDelta(selectedAsset.name, retainedName, 'Name');
+                        const pathDelta = formatTextDelta(currentStoragePath, version.storagePath || '', 'Path');
+                        const checksumDelta = formatFingerprintDelta(currentFingerprint, retainedFingerprint);
                         const typeComparison = version.type && version.type !== selectedAsset.type
                           ? `${version.type} -> ${selectedAsset.type}`
                           : selectedAsset.type;
@@ -5267,6 +5275,13 @@ function MediaPage() {
                             {isComparing && (
                               <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-3" data-testid="media-version-comparison">
                                 <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Version comparison</div>
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                  {[nameDelta, sizeDelta, checksumDelta, pathDelta].map((item) => (
+                                    <span key={item} className="rounded bg-background px-2 py-1 font-mono text-muted-foreground">
+                                      {item}
+                                    </span>
+                                  ))}
+                                </div>
                                 <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
                                   <div className="rounded bg-background px-2 py-1.5">
                                     <dt className="text-muted-foreground">Current</dt>
@@ -5274,7 +5289,7 @@ function MediaPage() {
                                   </div>
                                   <div className="rounded bg-background px-2 py-1.5">
                                     <dt className="text-muted-foreground">Retained</dt>
-                                    <dd className="mt-1 break-all font-mono">{version.originalName || version.filename || 'Previous file'} · {formatReplacementSize(version.sizeBytes)}</dd>
+                                    <dd className="mt-1 break-all font-mono">{retainedName} · {formatReplacementSize(version.sizeBytes)}</dd>
                                   </div>
                                   <div className="rounded bg-background px-2 py-1.5">
                                     <dt className="text-muted-foreground">Size delta</dt>
@@ -5286,11 +5301,21 @@ function MediaPage() {
                                   </div>
                                   <div className="rounded bg-background px-2 py-1.5">
                                     <dt className="text-muted-foreground">Provider</dt>
-                                    <dd className="mt-1 font-mono">{versionProviderLabel(version.storageProvider)}</dd>
+                                    <dd className="mt-1 font-mono">{`${versionProviderLabel(version.storageProvider)} -> ${versionProviderLabel(currentStorageProvider)}`}</dd>
                                   </div>
                                   <div className="rounded bg-background px-2 py-1.5">
                                     <dt className="text-muted-foreground">Storage path</dt>
-                                    <dd className="mt-1 break-all font-mono">{versionProviderLabel(version.storagePath)}</dd>
+                                    <dd className="mt-1 break-all font-mono">{`${versionProviderLabel(version.storagePath)} -> ${versionProviderLabel(currentStoragePath)}`}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Binary fingerprint</dt>
+                                    <dd className="mt-1 break-all font-mono">{`${formatFingerprintLabel(retainedFingerprint)} -> ${formatFingerprintLabel(currentFingerprint)}`}</dd>
+                                  </div>
+                                  <div className="rounded bg-background px-2 py-1.5">
+                                    <dt className="text-muted-foreground">Timeline</dt>
+                                    <dd className="mt-1 font-mono">
+                                      retained {formatAuditDate(version.createdAt || '')} · replaced {formatAuditDate(version.replacedAt || '')}
+                                    </dd>
                                   </div>
                                   {version.reason && (
                                     <div className="rounded bg-background px-2 py-1.5 sm:col-span-2">
@@ -6737,6 +6762,8 @@ type ReplacementVersion = {
   url?: string;
   storagePath?: string | null;
   storageProvider?: string | null;
+  binaryFingerprint?: unknown;
+  metadata?: Record<string, unknown>;
   reason?: string | null;
   createdAt?: string;
   replacedAt?: string;
@@ -6753,6 +6780,8 @@ const getReplacementVersionsFromRecords = (records: MediaVersionRecord[]): Repla
     url: record.url,
     storagePath: record.storagePath,
     storageProvider: record.storageProvider,
+    binaryFingerprint: record.metadata?.binaryFingerprint,
+    metadata: record.metadata,
     reason: record.reason,
     createdAt: record.createdAt,
     replacedAt: record.replacedAt,
@@ -6783,6 +6812,10 @@ const getReplacementVersions = (metadata: Record<string, unknown> | undefined): 
       url: typeof version.url === 'string' ? version.url : undefined,
       storagePath: typeof version.storagePath === 'string' ? version.storagePath : null,
       storageProvider: typeof version.storageProvider === 'string' ? version.storageProvider : null,
+      binaryFingerprint: version.binaryFingerprint,
+      metadata: version.metadata && typeof version.metadata === 'object' && !Array.isArray(version.metadata)
+        ? version.metadata as Record<string, unknown>
+        : undefined,
       reason: typeof version.reason === 'string' ? version.reason : null,
       createdAt: typeof version.createdAt === 'string' ? version.createdAt : undefined,
       replacedAt: typeof version.replacedAt === 'string' ? version.replacedAt : undefined,
@@ -6813,6 +6846,68 @@ const formatSizeDelta = (currentSizeBytes: number, versionSizeBytes: number | un
   }
 
   return `${delta > 0 ? '+' : '-'}${formatBytes(Math.abs(delta))} vs retained`;
+};
+
+type MediaBinaryFingerprint = {
+  algorithm: string;
+  value: string;
+  shortValue: string;
+  sizeBytes?: number;
+};
+
+const binaryFingerprintFromUnknown = (value: unknown): MediaBinaryFingerprint | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const valueText = typeof record.value === 'string' && record.value.trim().length > 0
+    ? record.value.trim()
+    : undefined;
+  if (!valueText) {
+    return undefined;
+  }
+
+  const algorithm = typeof record.algorithm === 'string' && record.algorithm.trim().length > 0
+    ? record.algorithm.trim()
+    : 'sha256';
+
+  return {
+    algorithm,
+    value: valueText,
+    shortValue: typeof record.shortValue === 'string' && record.shortValue.trim().length > 0
+      ? record.shortValue.trim()
+      : valueText.slice(0, 12),
+    sizeBytes: Number.isFinite(Number(record.sizeBytes)) ? Math.max(0, Number(record.sizeBytes)) : undefined,
+  };
+};
+
+const assetBinaryFingerprint = (metadata: Record<string, unknown> | undefined): MediaBinaryFingerprint | undefined => (
+  binaryFingerprintFromUnknown(metadata?.binaryFingerprint)
+);
+
+const versionBinaryFingerprint = (version: ReplacementVersion): MediaBinaryFingerprint | undefined => (
+  binaryFingerprintFromUnknown(version.binaryFingerprint)
+  || binaryFingerprintFromUnknown(version.metadata?.binaryFingerprint)
+);
+
+const formatFingerprintLabel = (fingerprint: MediaBinaryFingerprint | undefined) => (
+  fingerprint ? `${fingerprint.algorithm}:${fingerprint.shortValue}` : 'not recorded'
+);
+
+const formatFingerprintDelta = (
+  current: MediaBinaryFingerprint | undefined,
+  retained: MediaBinaryFingerprint | undefined,
+) => {
+  if (!current || !retained) return 'Checksum unavailable';
+  return current.value === retained.value ? 'Checksum unchanged' : 'Checksum changed';
+};
+
+const formatTextDelta = (current: string, retained: string, label: string) => {
+  const normalizedCurrent = current.trim();
+  const normalizedRetained = retained.trim();
+  if (!normalizedCurrent || !normalizedRetained) return `${label} unavailable`;
+  return normalizedCurrent === normalizedRetained ? `${label} unchanged` : `${label} changed`;
 };
 
 const versionProviderLabel = (value: string | null | undefined) => (

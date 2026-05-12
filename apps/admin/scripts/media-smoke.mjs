@@ -887,7 +887,16 @@ const compareAssetVersionThroughDetails = async (client) => {
       panelText: document.querySelector('[data-testid="media-version-comparison"]')?.textContent || '',
       body: document.body?.innerText?.slice(0, 1600) || '',
     }))()`);
-    if (state.hasComparison && state.panelText.includes('Current') && state.panelText.includes('Retained') && state.panelText.includes('Size delta')) {
+    if (
+      state.hasComparison &&
+      state.panelText.includes('Current') &&
+      state.panelText.includes('Retained') &&
+      state.panelText.includes('Size delta') &&
+      state.panelText.includes('Binary fingerprint') &&
+      state.panelText.includes('sha256:') &&
+      state.panelText.includes('Path changed') &&
+      state.panelText.includes('Name changed')
+    ) {
       return state;
     }
     if (attempt === 79) {
