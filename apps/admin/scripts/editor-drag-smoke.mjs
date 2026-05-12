@@ -3275,6 +3275,36 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(tableState.cellTexts.includes('Column 1') && tableState.cellTexts.includes('Value 2'), `Inserted table cell defaults missing: ${JSON.stringify(tableState)}`);
   assert(tableState.tableBorderCollapse === 'collapse', `Inserted table did not use stable table styling: ${JSON.stringify(tableState)}`);
 
+  await mouseDownControlByTestId(client, 'rich-text-table-add-row');
+  await sleep(250);
+  await mouseDownControlByTestId(client, 'rich-text-table-add-column');
+  await sleep(500);
+
+  const editedTableState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    return {
+      text: host?.textContent || '',
+      rowCount: rows.length,
+      cellCount: cells.length,
+      cellsPerRow: rows.map((row) => row.querySelectorAll('td, th').length),
+      cellTexts: cells.map((node) => node.textContent || ''),
+      html: host?.innerHTML || '',
+    };
+  })()`);
+
+  assert(
+    editedTableState.rowCount >= 3 &&
+      editedTableState.cellCount >= 9 &&
+      editedTableState.cellsPerRow.every((count) => count >= 3),
+    `Table row/column controls did not expand the table: ${JSON.stringify(editedTableState)}`,
+  );
+  assert(
+    editedTableState.cellTexts.includes('Column 1') && editedTableState.cellTexts.includes('Value 2'),
+    `Table row/column controls lost existing cell content: ${JSON.stringify(editedTableState)}`,
+  );
+
   return {
     seeded,
     selected,
@@ -3282,6 +3312,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     collapsed,
     directInsert,
     tableState,
+    editedTableState,
   };
 };
 
@@ -3325,7 +3356,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   const text = leaves.map((leaf) => leaf.text || '').join(' ');
 
   assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
-  assert(tableCount >= 1 && rowCount >= 2 && cellCount >= 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
+  assert(tableCount >= 1 && rowCount >= 3 && cellCount >= 9, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
   assert(text.includes('Column 1') && text.includes('Value 2'), `Persisted table text missing: ${JSON.stringify(leaves)}`);
 

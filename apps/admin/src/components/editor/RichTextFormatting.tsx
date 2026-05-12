@@ -40,6 +40,8 @@ import {
   X,
   Quote,
   Table,
+  Rows3,
+  Columns3,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
 import {
@@ -108,6 +110,8 @@ export function RichTextFormatting({
     insertLink,
     insertImage,
     insertTable,
+    addTableRow,
+    addTableColumn,
     storeSelection,
     syncActiveEditorContent,
   } = useActiveEditor();
@@ -1441,6 +1445,18 @@ export function RichTextFormatting({
     });
   }, [insertTable, runOrActivateTextEditor]);
 
+  const addTableRowAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-add-row', () => {
+      addTableRow();
+    });
+  }, [addTableRow, runOrActivateTextEditor]);
+
+  const addTableColumnAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-add-column', () => {
+      addTableColumn();
+    });
+  }, [addTableColumn, runOrActivateTextEditor]);
+
   const onFontSizeBlur = (event: FocusEvent<HTMLInputElement>) => {
     logTextAction('content-property.font-size-blur', {
       actionName: 'font-size-blur',
@@ -1946,6 +1962,32 @@ export function RichTextFormatting({
             title="Insert table"
           >
             <Table className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-add-row', () => addTableRowAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-add-row"
+            title="Add table row"
+          >
+            <Rows3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-add-column', () => addTableColumnAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-add-column"
+            title="Add table column"
+          >
+            <Columns3 className="w-4 h-4" />
           </button>
           <button
             type="button"

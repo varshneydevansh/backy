@@ -49,6 +49,10 @@ interface ActiveEditorContextType {
   insertImage: (url: string) => void;
   /** Insert a basic table at current selection */
   insertTable: () => boolean;
+  /** Insert a table row below the current table row */
+  addTableRow: () => boolean;
+  /** Insert a table column to the right of the current table cell */
+  addTableColumn: () => boolean;
   /** Check if mark is active */
   isMarkActive: (format: string) => boolean;
   /** Whether a range selection is currently available for formatting */
@@ -92,6 +96,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   insertLink: () => { },
   insertImage: () => { },
   insertTable: () => false,
+  addTableRow: () => false,
+  addTableColumn: () => false,
   isMarkActive: () => false,
   hasRangeSelection: () => false,
   hasSelection: () => false,
@@ -237,6 +243,18 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     } as any;
   }, []);
 
+  const createEmptyTableCellNode = useCallback(() => {
+    return {
+      type: 'td',
+      children: [
+        {
+          type: 'p',
+          children: [{ text: '' }],
+        },
+      ],
+    } as any;
+  }, []);
+
   const insertDefaultTableNode = useCallback((editor: PlateEditor) => {
     const tableNode = createDefaultTableNode();
     Transforms.insertNodes(editor as any, tableNode, { select: true });
@@ -259,6 +277,103 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
 
     return !!tableEntry;
   }, [createDefaultTableNode]);
+
+  const getSelectedTableContext = useCallback((editor: PlateEditor) => {
+    const selection = (editor as any).selection;
+    if (!selection || !Range.isRange(selection)) {
+      return null;
+    }
+
+    const cellEntry = Editor.above(editor as any, {
+      at: selection,
+      match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+    });
+
+    if (!cellEntry) {
+      return null;
+    }
+
+    const [, cellPath] = cellEntry as [unknown, number[]];
+    const rowEntry = Editor.above(editor as any, {
+      at: cellPath,
+      match: (node) => SlateElement.isElement(node) && (node as any).type === 'tr',
+    });
+    const tableEntry = Editor.above(editor as any, {
+      at: cellPath,
+      match: (node) => SlateElement.isElement(node) && (node as any).type === 'table',
+    });
+
+    if (!rowEntry || !tableEntry) {
+      return null;
+    }
+
+    const [rowNode, rowPath] = rowEntry as [SlateElement, number[]];
+    const [tableNode, tablePath] = tableEntry as [SlateElement, number[]];
+    const cellIndex = cellPath[cellPath.length - 1] || 0;
+    const rowIndex = rowPath[rowPath.length - 1] || 0;
+    const columnCount = Math.max(1, Array.isArray((rowNode as any).children) ? (rowNode as any).children.length : 1);
+
+    return {
+      cellPath,
+      cellIndex,
+      rowNode,
+      rowPath,
+      rowIndex,
+      tableNode,
+      tablePath,
+      columnCount,
+    };
+  }, []);
+
+  const insertTableRowBelow = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const nextRowPath = [
+      ...context.rowPath.slice(0, -1),
+      context.rowPath[context.rowPath.length - 1] + 1,
+    ];
+    const rowNode = {
+      type: 'tr',
+      children: Array.from({ length: context.columnCount }, () => createEmptyTableCellNode()),
+    } as any;
+
+    Transforms.insertNodes(editor as any, rowNode, { at: nextRowPath, select: true });
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...nextRowPath, 0]));
+    } catch {
+      // Selection is best-effort after row insertion.
+    }
+    return true;
+  }, [createEmptyTableCellNode, getSelectedTableContext]);
+
+  const insertTableColumnRight = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const insertIndex = context.cellIndex + 1;
+    const rowCount = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children.length : 0;
+    for (let rowIndex = rowCount - 1; rowIndex >= 0; rowIndex -= 1) {
+      const rowPath = [...context.tablePath, rowIndex];
+      const rowNode = Node.get(editor as any, rowPath) as any;
+      const rowChildren = Array.isArray(rowNode?.children) ? rowNode.children : [];
+      const boundedInsertIndex = Math.max(0, Math.min(insertIndex, rowChildren.length));
+      Transforms.insertNodes(editor as any, createEmptyTableCellNode(), {
+        at: [...rowPath, boundedInsertIndex],
+      });
+    }
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, [...context.rowPath, insertIndex]));
+    } catch {
+      // Selection is best-effort after column insertion.
+    }
+    return rowCount > 0;
+  }, [createEmptyTableCellNode, getSelectedTableContext]);
 
   const readDomSelectionAsSlateRange = useCallback((editor: PlateEditor) => {
     if (typeof window === 'undefined') {
@@ -992,6 +1107,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, insertDefaultTableNode, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const addTableRow = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('addTableRow.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!insertTableRowBelow(editor)) return false;
+
+      debug('addTableRow.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('addTableRow failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, insertTableRowBelow, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const addTableColumn = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('addTableColumn.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!insertTableColumnRight(editor)) return false;
+
+      debug('addTableColumn.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('addTableColumn failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, insertTableColumnRight, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const insertLink = useCallback((url: string) => {
     const editor = getActiveEditor();
     if (!editor || !url) {
@@ -1289,6 +1454,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       insertLink,
       insertImage,
       insertTable,
+      addTableRow,
+      addTableColumn,
       isMarkActive,
       hasRangeSelection,
       hasSelection,
