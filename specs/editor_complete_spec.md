@@ -103,22 +103,22 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **File:** `Canvas.tsx` (handleMouseDown, handleMouseMove, handleMouseUp)
 **Current State:** ✅ Working
 - Click and drag to move
-- Snaps to 10px grid
+- Snaps to configurable grid when snap is enabled
+- Shift/Cmd/Ctrl-click multi-select is wired and smoke-covered
+- Arrow-key nudge supports 1px movement and 10px with Shift
 - **Issues:** None
-- **Improvements Needed:**
-    - Multi-select (Shift-click)
-    - Arrow keys nudge (1px, 10px with Shift)
+- **Improvements Needed:** None currently tracked for this interaction
 
 ### 4. Element Resize
 **File:** `Canvas.tsx` (ResizeHandle, handleResizeStart)
 **Current State:** ✅ Working
 - Corner handles (nw, ne, sw, se)
+- Edge handles (n, s, e, w) for single-axis resize
 - Minimum size 50x30
+- Shift preserves aspect ratio during resize
+- Alt resizes from center
 - **Issues:** None
-- **Improvements Needed:**
-    - Edge handles (n, s, e, w) for single-axis resize
-    - Shift to maintain aspect ratio
-    - Alt to resize from center
+- **Improvements Needed:** None currently tracked for this interaction
 
 ### 5. Property Panel (Right Panel)
 **File:** `PropertyPanel.tsx`
@@ -355,6 +355,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Added full resize handle coverage for eight handles, single-axis edge resizing, Shift aspect-ratio resize, and Alt center resize via `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.

@@ -25,6 +25,7 @@ const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
 const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
+const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -7960,7 +7961,7 @@ const dragEditingMoveHandle = async (client, elementId, deltaX, deltaY) => {
   return { editing, drag };
 };
 
-const resizeElement = async (client, elementId, deltaX, deltaY) => {
+const resizeElement = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   const selectionBox = await getElementBox(client, elementId);
   assert(selectionBox, `Missing element ${elementId}`);
@@ -7992,13 +7993,23 @@ const resizeElement = async (client, elementId, deltaX, deltaY) => {
   const handle = await evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return null;
-    const handles = Array.from(node.children).filter((child) => child.getAttribute('data-role') === 'canvas-resize-handle').map((handle) => {
+    const requestedPosition = ${JSON.stringify(options.handle || 'se')};
+    const handles = Array.from(node.children).filter((child) => (
+      child.getAttribute('data-role') === 'canvas-resize-handle' &&
+      (!requestedPosition || child.getAttribute('data-resize-handle') === requestedPosition)
+    )).map((handle) => {
       const rect = handle.getBoundingClientRect();
-      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        position: handle.getAttribute('data-resize-handle'),
+      };
     });
-    return handles.sort((a, b) => (b.x + b.y) - (a.x + a.y))[0] || null;
+    return handles[0] || null;
   })()`);
-  assert(before && handle, `Missing resize handle for ${elementId}`);
+  assert(before && handle, `Missing ${options.handle || 'se'} resize handle for ${elementId}`);
 
   const startX = Math.round(handle.x + handle.width / 2);
   const startY = Math.round(handle.y + handle.height / 2);
@@ -8018,6 +8029,7 @@ const resizeElement = async (client, elementId, deltaX, deltaY) => {
     button: 'left',
     buttons: 1,
     clickCount: 1,
+    modifiers: (options.shiftKey ? 8 : 0) | (options.altKey ? 1 : 0),
   });
   await sleep(50);
   await client.send('Input.dispatchMouseEvent', {
@@ -8026,6 +8038,7 @@ const resizeElement = async (client, elementId, deltaX, deltaY) => {
     y: endY,
     button: 'left',
     buttons: 1,
+    modifiers: (options.shiftKey ? 8 : 0) | (options.altKey ? 1 : 0),
   });
   await client.send('Input.dispatchMouseEvent', {
     type: 'mouseReleased',
@@ -8039,15 +8052,98 @@ const resizeElement = async (client, elementId, deltaX, deltaY) => {
 
   const after = await getElementBox(client, elementId);
   assert(after, `Element ${elementId} disappeared after resize`);
-  assert(
-    after.width > before.width && after.height > before.height,
-    `${elementId} did not resize larger: before ${Math.round(before.width)}x${Math.round(before.height)}, after ${Math.round(after.width)}x${Math.round(after.height)}`,
-  );
+  if (options.assert) {
+    options.assert({ before, after, handle });
+  } else {
+    assert(
+      after.width > before.width && after.height > before.height,
+      `${elementId} did not resize larger: before ${Math.round(before.width)}x${Math.round(before.height)}, after ${Math.round(after.width)}x${Math.round(after.height)}`,
+    );
+  }
 
   return {
     elementId,
-    before: { width: Math.round(before.width), height: Math.round(before.height) },
-    after: { width: Math.round(after.width), height: Math.round(after.height) },
+    handle,
+    before: {
+      x: Math.round(before.x),
+      y: Math.round(before.y),
+      width: Math.round(before.width),
+      height: Math.round(before.height),
+    },
+    after: {
+      x: Math.round(after.x),
+      y: Math.round(after.y),
+      width: Math.round(after.width),
+      height: Math.round(after.height),
+    },
+  };
+};
+
+const testResizeControls = async (client) => {
+  await selectElement(client, 'smoke-image');
+  const edgeHandleInventory = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="smoke-image"]');
+    if (!(node instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-smoke-image' };
+    }
+    return {
+      ok: true,
+      handles: Array.from(node.querySelectorAll('[data-role="canvas-resize-handle"]')).map((handle) => (
+        handle.getAttribute('data-resize-handle')
+      )).sort(),
+    };
+  })()`);
+  assert(
+    edgeHandleInventory?.ok && ['e', 'n', 'ne', 'nw', 's', 'se', 'sw', 'w'].every((handle) => edgeHandleInventory.handles.includes(handle)),
+    `Resize handle inventory missing expected edge/corner handles: ${JSON.stringify(edgeHandleInventory)}`,
+  );
+
+  const eastResize = await resizeElement(client, 'smoke-image', 70, 0, {
+    handle: 'e',
+    assert: ({ before, after }) => {
+      assert(after.width > before.width, `East resize did not increase width: before ${before.width}, after ${after.width}`);
+      assert(Math.abs(after.height - before.height) < 3, `East resize should not change height: before ${before.height}, after ${after.height}`);
+    },
+  });
+
+  const southResize = await resizeElement(client, 'smoke-image', 0, 50, {
+    handle: 's',
+    assert: ({ before, after }) => {
+      assert(after.height > before.height, `South resize did not increase height: before ${before.height}, after ${after.height}`);
+      assert(Math.abs(after.width - before.width) < 3, `South resize should not change width: before ${before.width}, after ${after.width}`);
+    },
+  });
+
+  const shiftAspectResize = await resizeElement(client, 'smoke-video', 90, 12, {
+    handle: 'se',
+    shiftKey: true,
+    assert: ({ before, after }) => {
+      const beforeRatio = before.width / before.height;
+      const afterRatio = after.width / after.height;
+      assert(after.width > before.width && after.height > before.height, `Shift resize did not expand both axes: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
+      assert(Math.abs(beforeRatio - afterRatio) < 0.08, `Shift resize did not preserve aspect ratio: before ${beforeRatio}, after ${afterRatio}`);
+    },
+  });
+
+  const altCenterResize = await resizeElement(client, 'smoke-image', 60, 40, {
+    handle: 'se',
+    altKey: true,
+    assert: ({ before, after }) => {
+      const beforeCenterX = before.x + before.width / 2;
+      const beforeCenterY = before.y + before.height / 2;
+      const afterCenterX = after.x + after.width / 2;
+      const afterCenterY = after.y + after.height / 2;
+      assert(after.width > before.width && after.height > before.height, `Alt resize did not expand both axes: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
+      assert(Math.abs(beforeCenterX - afterCenterX) < 4 && Math.abs(beforeCenterY - afterCenterY) < 4, `Alt resize did not preserve center: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
+    },
+  });
+
+  return {
+    edgeHandleInventory,
+    eastResize,
+    southResize,
+    shiftAspectResize,
+    altCenterResize,
   };
 };
 
@@ -8094,7 +8190,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -8255,6 +8351,19 @@ const main = async () => {
         mode: 'zoom',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         zoomControls,
+      }, null, 2));
+      return;
+    }
+
+    if (RESIZE_SMOKE) {
+      assert(!EDITOR_PATH, 'Resize smoke currently requires an internally created smoke page');
+      const resizeControls = await testResizeControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'resize',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        resizeControls,
       }, null, 2));
       return;
     }

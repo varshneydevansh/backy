@@ -426,37 +426,67 @@ const resizeBoundsFromHandle = (
   deltaY: number,
   gridSize: number,
   snapEnabled: boolean,
+  options: {
+    preserveAspectRatio?: boolean;
+    resizeFromCenter?: boolean;
+  } = {},
 ) => {
+  const affectsLeft = handle.includes('w');
+  const affectsRight = handle.includes('e');
+  const affectsTop = handle.includes('n');
+  const affectsBottom = handle.includes('s');
+  const affectsWidth = affectsLeft || affectsRight;
+  const affectsHeight = affectsTop || affectsBottom;
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
   let nextX = bounds.x;
   let nextY = bounds.y;
   let nextWidth = bounds.width;
   let nextHeight = bounds.height;
   const minWidth = 50;
   const minHeight = 30;
+  const aspectRatio = bounds.width / Math.max(1, bounds.height);
+  const widthDelta = affectsRight ? deltaX : affectsLeft ? -deltaX : 0;
+  const heightDelta = affectsBottom ? deltaY : affectsTop ? -deltaY : 0;
+  const multiplier = options.resizeFromCenter ? 2 : 1;
 
-  switch (handle) {
-    case 'se':
-      nextWidth = Math.max(minWidth, bounds.width + deltaX);
-      nextHeight = Math.max(minHeight, bounds.height + deltaY);
-      break;
-    case 'sw':
-      nextWidth = Math.max(minWidth, bounds.width - deltaX);
+  if (affectsWidth) {
+    nextWidth = Math.max(minWidth, bounds.width + widthDelta * multiplier);
+  }
+
+  if (affectsHeight) {
+    nextHeight = Math.max(minHeight, bounds.height + heightDelta * multiplier);
+  }
+
+  if (options.preserveAspectRatio && affectsWidth && affectsHeight) {
+    const widthChange = Math.abs(nextWidth - bounds.width) / Math.max(1, bounds.width);
+    const heightChange = Math.abs(nextHeight - bounds.height) / Math.max(1, bounds.height);
+    if (widthChange >= heightChange) {
+      nextHeight = Math.max(minHeight, nextWidth / aspectRatio);
+    } else {
+      nextWidth = Math.max(minWidth, nextHeight * aspectRatio);
+    }
+  } else if (options.preserveAspectRatio && affectsWidth) {
+    nextHeight = Math.max(minHeight, nextWidth / aspectRatio);
+  } else if (options.preserveAspectRatio && affectsHeight) {
+    nextWidth = Math.max(minWidth, nextHeight * aspectRatio);
+  }
+
+  if (options.resizeFromCenter) {
+    nextX = centerX - nextWidth / 2;
+    nextY = centerY - nextHeight / 2;
+  } else {
+    if (affectsLeft) {
       nextX = bounds.x + bounds.width - nextWidth;
-      nextHeight = Math.max(minHeight, bounds.height + deltaY);
-      break;
-    case 'ne':
-      nextWidth = Math.max(minWidth, bounds.width + deltaX);
-      nextHeight = Math.max(minHeight, bounds.height - deltaY);
+    } else if (options.preserveAspectRatio && !affectsLeft && !affectsRight && affectsHeight) {
+      nextX = centerX - nextWidth / 2;
+    }
+
+    if (affectsTop) {
       nextY = bounds.y + bounds.height - nextHeight;
-      break;
-    case 'nw':
-      nextWidth = Math.max(minWidth, bounds.width - deltaX);
-      nextX = bounds.x + bounds.width - nextWidth;
-      nextHeight = Math.max(minHeight, bounds.height - deltaY);
-      nextY = bounds.y + bounds.height - nextHeight;
-      break;
-    default:
-      break;
+    } else if (options.preserveAspectRatio && !affectsTop && !affectsBottom && affectsWidth) {
+      nextY = centerY - nextHeight / 2;
+    }
   }
 
   nextWidth = Math.min(nextWidth, bounds.boundsWidth);
@@ -1679,7 +1709,7 @@ export function Canvas({
    * Handle resize start from resize handles
    */
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => {
+    (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: ResizeHandlePosition) => {
       if (isPreview || disabled) return;
       if ('button' in e && e.button !== 0) return;
 
@@ -1770,6 +1800,10 @@ export function Canvas({
           deltaY,
           safeGridSize,
           snapEnabled,
+          {
+            preserveAspectRatio: event.shiftKey,
+            resizeFromCenter: event.altKey,
+          },
         );
         const scaleX = nextBounds.width / Math.max(1, activeResizeState.bounds.width);
         const scaleY = nextBounds.height / Math.max(1, activeResizeState.bounds.height);
@@ -1807,6 +1841,10 @@ export function Canvas({
           deltaY,
           safeGridSize,
           snapEnabled,
+          {
+            preserveAspectRatio: event.shiftKey,
+            resizeFromCenter: event.altKey,
+          },
         );
 
         const result = updateElementById(nextElements, activeResizeState.elementId, (element) => ({
@@ -2369,7 +2407,7 @@ interface CanvasElementComponentProps {
   isPreview: boolean;
   disabled?: boolean;
   onDragStart: (e: React.PointerEvent | React.MouseEvent, elementId: string) => void;
-  onResizeStart: (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
+  onResizeStart: (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: ResizeHandlePosition) => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
   onToggleSelectElement?: (elementId: string) => void;
@@ -4245,8 +4283,12 @@ function CanvasElementComponent({
           {!isLocked && (
             <>
               <ResizeHandle position="nw" onResizeStart={(e) => onResizeStart(e, element.id, 'nw')} />
+              <ResizeHandle position="n" onResizeStart={(e) => onResizeStart(e, element.id, 'n')} />
               <ResizeHandle position="ne" onResizeStart={(e) => onResizeStart(e, element.id, 'ne')} />
+              <ResizeHandle position="e" onResizeStart={(e) => onResizeStart(e, element.id, 'e')} />
+              <ResizeHandle position="w" onResizeStart={(e) => onResizeStart(e, element.id, 'w')} />
               <ResizeHandle position="sw" onResizeStart={(e) => onResizeStart(e, element.id, 'sw')} />
+              <ResizeHandle position="s" onResizeStart={(e) => onResizeStart(e, element.id, 's')} />
               <ResizeHandle position="se" onResizeStart={(e) => onResizeStart(e, element.id, 'se')} />
             </>
           )}
@@ -4261,21 +4303,32 @@ function CanvasElementComponent({
 // ============================================
 
 interface ResizeHandleProps {
-  position: 'nw' | 'ne' | 'sw' | 'se';
+  position: ResizeHandlePosition;
   onResizeStart: (e: React.MouseEvent | React.PointerEvent) => void;
 }
 
 function ResizeHandle({ position, onResizeStart }: ResizeHandleProps) {
   const positionStyles: Record<string, React.CSSProperties> = {
     nw: { top: -4, left: -4, cursor: 'nw-resize' },
+    n: { top: -4, left: '50%', marginLeft: -16, cursor: 'n-resize' },
     ne: { top: -4, right: -4, cursor: 'ne-resize' },
+    e: { top: '50%', right: -4, marginTop: -16, cursor: 'e-resize' },
+    w: { top: '50%', left: -4, marginTop: -16, cursor: 'w-resize' },
     sw: { bottom: -4, left: -4, cursor: 'sw-resize' },
+    s: { bottom: -4, left: '50%', marginLeft: -16, cursor: 's-resize' },
     se: { bottom: -4, right: -4, cursor: 'se-resize' },
   };
+  const isHorizontalEdge = position === 'n' || position === 's';
+  const isVerticalEdge = position === 'e' || position === 'w';
 
   return (
     <div
-      className="absolute z-[80] h-3 w-3 rounded-[3px] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110"
+      className={cn(
+        'absolute z-[80] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110',
+        isHorizontalEdge && 'h-2 w-8 rounded-full',
+        isVerticalEdge && 'h-8 w-2 rounded-full',
+        !isHorizontalEdge && !isVerticalEdge && 'h-3 w-3 rounded-[3px]',
+      )}
       style={positionStyles[position]}
       data-role="canvas-resize-handle"
       data-resize-handle={position}
