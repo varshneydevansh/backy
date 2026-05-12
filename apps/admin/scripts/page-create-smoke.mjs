@@ -105,6 +105,31 @@ const STARTER_TEMPLATE_BACKEND_CASES = [
     ],
   },
   {
+    template: 'about',
+    title: 'Smoke About Template',
+    slugBase: 'smoke-about-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'about',
+    navigationItem: 'About',
+    headingId: 'about-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 18,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'about-site-header',
+      'about-site-navigation',
+      'about-site-footer',
+      'about-heading',
+      'about-story-copy',
+      'about-values-section',
+      'about-value-0',
+      'about-value-1',
+      'about-value-2',
+      'about-value-heading-0',
+      'about-value-copy-0',
+    ],
+  },
+  {
     template: 'contact',
     title: 'Smoke Contact Template',
     slugBase: 'smoke-contact-template',
@@ -176,6 +201,12 @@ const assert = (condition, message) => {
     throw new Error(message);
   }
 };
+
+const isIgnorableBrowserLogError = (event) => (
+  event.method === 'Log.entryAdded' &&
+  event.params?.entry?.source === 'intervention' &&
+  /beforeunload.*confirmation panel/i.test(event.params?.entry?.text || '')
+);
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
@@ -1699,7 +1730,7 @@ const main = async () => {
     const browserErrors = client.events
       .filter((event) => (
         event.method === 'Runtime.exceptionThrown'
-        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error' && !isIgnorableBrowserLogError(event))
       ))
       .map((event) => event.params);
 
