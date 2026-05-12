@@ -896,6 +896,7 @@ function MediaPage() {
     () => getMediaAccessRows(currentAdmin?.role),
     [currentAdmin?.role],
   );
+  const canConfigureMediaStorage = Boolean(mediaAccessRows.find((row) => row.permission === 'media.configure')?.allowed);
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
   const displayedFiles = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -1288,6 +1289,7 @@ function MediaPage() {
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
   const storageSettings = settingsIntegrations?.storage || {};
   const supabaseSettings = settingsIntegrations?.supabase || {};
+  const storageSettingsControlsDisabled = isSavingStorageSettings || !settingsIntegrations || !canConfigureMediaStorage;
   const selectedStorageProvider: MediaStorageProvider = (
     storageSettings.provider === 'supabase' ||
     storageSettings.provider === 's3' ||
@@ -1450,6 +1452,10 @@ function MediaPage() {
 
   const saveMediaStorageSettings = useCallback(async () => {
     if (!settingsIntegrations || isSavingStorageSettings) return;
+    if (!canConfigureMediaStorage) {
+      setStorageCheckError('This admin account needs media.configure to change storage metadata.');
+      return;
+    }
 
     setIsSavingStorageSettings(true);
     setStorageCheckError(null);
@@ -1457,7 +1463,10 @@ function MediaPage() {
     try {
       const updated = await updateBackendSettings({
         ...(settingsDeliveryMode ? { deliveryMode: settingsDeliveryMode } : {}),
-        integrations: settingsIntegrations,
+        integrations: {
+          storage: settingsIntegrations.storage,
+          supabase: settingsIntegrations.supabase,
+        },
       });
       setRuntimeStorage(updated.runtimeStorage);
       setRuntimeSupabase(updated.runtimeSupabase);
@@ -1475,15 +1484,25 @@ function MediaPage() {
     } finally {
       setIsSavingStorageSettings(false);
     }
-  }, [isSavingStorageSettings, settingsDeliveryMode, settingsIntegrations]);
+  }, [canConfigureMediaStorage, isSavingStorageSettings, settingsDeliveryMode, settingsIntegrations]);
 
   const runStorageInfrastructureCheck = useCallback(async () => {
-    if (isCheckingStorage || !settingsInfrastructureInput) return;
+    if (isCheckingStorage || !settingsInfrastructureInput || !settingsIntegrations) return;
+    if (!canConfigureMediaStorage) {
+      setStorageCheckError('This admin account needs media.configure to validate storage metadata.');
+      return;
+    }
 
     setIsCheckingStorage(true);
     setStorageCheckError(null);
     try {
-      const result = await validateSettingsInfrastructure(settingsInfrastructureInput);
+      const result = await validateSettingsInfrastructure({
+        deliveryMode: settingsInfrastructureInput.deliveryMode,
+        integrations: {
+          storage: settingsIntegrations.storage,
+          supabase: settingsIntegrations.supabase,
+        },
+      });
       setStorageDiagnostics(result.diagnostics.filter((diagnostic) => (
         diagnostic.area === 'storage' || diagnostic.area === 'supabase'
       )));
@@ -1493,7 +1512,7 @@ function MediaPage() {
     } finally {
       setIsCheckingStorage(false);
     }
-  }, [isCheckingStorage, settingsInfrastructureInput]);
+  }, [canConfigureMediaStorage, isCheckingStorage, settingsInfrastructureInput, settingsIntegrations]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3099,7 +3118,7 @@ function MediaPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => void runStorageInfrastructureCheck()}
-                disabled={isCheckingStorage || !settingsInfrastructureInput}
+                disabled={isCheckingStorage || !settingsInfrastructureInput || !settingsIntegrations || !canConfigureMediaStorage}
                 iconStart={<RefreshCw className={cn('size-3.5', isCheckingStorage && 'animate-spin')} />}
               >
                 {isCheckingStorage ? 'Checking...' : 'Run check'}
@@ -3308,6 +3327,11 @@ function MediaPage() {
                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                   Save non-secret provider intent from the media workspace. Runtime credentials still stay in environment variables.
                 </p>
+                {!canConfigureMediaStorage && (
+                  <p className="mt-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    Storage metadata changes require media.configure permission.
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -3315,7 +3339,7 @@ function MediaPage() {
                   size="sm"
                   variant="outline"
                   onClick={handleUseRuntimeStorageSettings}
-                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                  disabled={storageSettingsControlsDisabled}
                 >
                   Use detected storage
                 </Button>
@@ -3324,7 +3348,7 @@ function MediaPage() {
                   size="sm"
                   variant="outline"
                   onClick={handleUseRuntimeSupabaseSettings}
-                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                  disabled={storageSettingsControlsDisabled}
                 >
                   Use Supabase
                 </Button>
@@ -3333,7 +3357,7 @@ function MediaPage() {
                   size="sm"
                   variant="primary"
                   onClick={() => void saveMediaStorageSettings()}
-                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                  disabled={storageSettingsControlsDisabled}
                   iconStart={<Save className="size-3.5" />}
                 >
                   {isSavingStorageSettings ? 'Saving...' : 'Save storage'}
@@ -3348,7 +3372,7 @@ function MediaPage() {
                   <select
                     aria-label="Storage provider"
                     value={storageSettings.provider || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaStorageSettingsDraft({ provider: event.target.value })}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -3363,7 +3387,7 @@ function MediaPage() {
                   <input
                     aria-label="Storage bucket"
                     value={storageSettings.bucket || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaStorageSettingsDraft({ bucket: event.target.value })}
                     placeholder="media"
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -3374,7 +3398,7 @@ function MediaPage() {
                   <input
                     aria-label="Public media base URL"
                     value={storageSettings.publicBaseUrl || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaStorageSettingsDraft({ publicBaseUrl: event.target.value })}
                     placeholder="https://project-ref.supabase.co/storage/v1/object/public/media"
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -3385,7 +3409,7 @@ function MediaPage() {
                   <input
                     aria-label="Storage path prefix"
                     value={storageSettings.pathPrefix || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaStorageSettingsDraft({ pathPrefix: event.target.value })}
                     placeholder="sites/site-demo"
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -3396,7 +3420,7 @@ function MediaPage() {
                   <input
                     aria-label="Supabase project URL"
                     value={supabaseSettings.projectUrl || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaSupabaseSettingsDraft({ projectUrl: event.target.value })}
                     placeholder="https://project-ref.supabase.co"
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -3407,7 +3431,7 @@ function MediaPage() {
                   <input
                     aria-label="Supabase project ref"
                     value={supabaseSettings.projectRef || ''}
-                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    disabled={storageSettingsControlsDisabled}
                     onChange={(event) => updateMediaSupabaseSettingsDraft({ projectRef: event.target.value })}
                     placeholder="project-ref"
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -3419,7 +3443,7 @@ function MediaPage() {
                       type="checkbox"
                       aria-label="Enable private media files"
                       checked={Boolean(storageSettings.privateFilesEnabled)}
-                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      disabled={storageSettingsControlsDisabled}
                       onChange={(event) => updateMediaStorageSettingsDraft({ privateFilesEnabled: event.target.checked })}
                       className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -3430,7 +3454,7 @@ function MediaPage() {
                       type="checkbox"
                       aria-label="Enable image transforms"
                       checked={storageSettings.imageTransformsEnabled !== false}
-                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      disabled={storageSettingsControlsDisabled}
                       onChange={(event) => updateMediaStorageSettingsDraft({ imageTransformsEnabled: event.target.checked })}
                       className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -3441,7 +3465,7 @@ function MediaPage() {
                       type="checkbox"
                       aria-label="Enable Supabase storage"
                       checked={Boolean(supabaseSettings.storageEnabled)}
-                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      disabled={storageSettingsControlsDisabled}
                       onChange={(event) => updateMediaSupabaseSettingsDraft({ storageEnabled: event.target.checked })}
                       className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                     />

@@ -301,6 +301,62 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   };
 };
 
+const isMediaStorageSettingsPatch = (body: Record<string, unknown>): boolean => {
+  const bodyKeys = Object.keys(body);
+  if (bodyKeys.length === 0 || bodyKeys.some((key) => key !== 'deliveryMode' && key !== 'integrations')) {
+    return false;
+  }
+
+  const integrations = parseJsonObject(body.integrations);
+  if (!integrations) {
+    return false;
+  }
+
+  const integrationKeys = Object.keys(integrations);
+  return integrationKeys.length > 0 && integrationKeys.every((key) => key === 'storage' || key === 'supabase');
+};
+
+const isMediaStorageInfrastructureCheck = (body: Record<string, unknown>): boolean => {
+  if (body.action !== 'validate-infrastructure') {
+    return false;
+  }
+
+  const bodyKeys = Object.keys(body);
+  if (bodyKeys.some((key) => key !== 'action' && key !== 'deliveryMode' && key !== 'integrations')) {
+    return false;
+  }
+
+  return isMediaStorageSettingsPatch({
+    ...(body.deliveryMode !== undefined ? { deliveryMode: body.deliveryMode } : {}),
+    integrations: body.integrations,
+  });
+};
+
+const mergeMediaStorageIntegrations = (
+  current: unknown,
+  patch: unknown,
+): BackyJsonObject | undefined => {
+  const currentIntegrations = parseJsonObject(current) || {};
+  const patchIntegrations = parseJsonObject(patch);
+  if (!patchIntegrations) {
+    return undefined;
+  }
+
+  const normalized = normalizeInfrastructureIntegrations({
+    ...currentIntegrations,
+    ...patchIntegrations,
+  });
+  if (!normalized) {
+    return undefined;
+  }
+
+  return {
+    ...currentIntegrations,
+    ...(parseJsonObject(normalized.storage) ? { storage: normalized.storage } : {}),
+    ...(parseJsonObject(normalized.supabase) ? { supabase: normalized.supabase } : {}),
+  };
+};
+
 type InfrastructureDiagnosticStatus = 'ready' | 'warning' | 'blocked';
 
 interface InfrastructureCheckInput {
@@ -521,13 +577,16 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'settings.configure' });
+  const body = await parseJsonBody(request);
+  const mediaStoragePatch = isMediaStorageSettingsPatch(body);
+  const access = requireAdminAccess(request, requestId, {
+    permission: mediaStoragePatch ? 'media.configure' : 'settings.configure',
+  });
   if (access instanceof NextResponse) {
     return access;
   }
 
   try {
-    const body = await parseJsonBody(request);
     const deliveryMode = body.deliveryMode === undefined
       ? undefined
       : normalizeDeliveryMode(body.deliveryMode);
@@ -549,7 +608,9 @@ export async function PATCH(request: NextRequest) {
         : {};
       const storage = parseJsonObject(body.storage);
       const auth = parseJsonObject(body.auth);
-      const integrations = normalizeInfrastructureIntegrations(body.integrations) || parseJsonObject(body.integrations);
+      const integrations = mediaStoragePatch
+        ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
+        : normalizeInfrastructureIntegrations(body.integrations) || parseJsonObject(body.integrations);
       const settings = (await repositories.settings.update({
         ...(deliveryMode ? { deliveryMode } : {}),
         apiKeys: {
@@ -584,7 +645,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const beforeSettings = getAdminSettings();
-    const integrations = normalizeInfrastructureIntegrations(body.integrations);
+    const integrations = mediaStoragePatch
+      ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
+      : normalizeInfrastructureIntegrations(body.integrations);
     const settings = updateAdminSettings({
       ...body,
       ...(deliveryMode ? { deliveryMode } : {}),
@@ -612,6 +675,7 @@ export async function PATCH(request: NextRequest) {
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
+          runtimeMediaScanner: getMediaScannerRuntimeSummary(),
           runtimeVercel: getVercelRuntimeSummary(),
         },
       },
@@ -624,25 +688,30 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'settings.configure' });
-  if (access instanceof NextResponse) {
-    return access;
-  }
-
   try {
     const body = await parseJsonBody(request);
+    const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
+    const access = requireAdminAccess(request, requestId, {
+      permission: mediaStorageCheck ? 'media.configure' : 'settings.configure',
+    });
+    if (access instanceof NextResponse) {
+      return access;
+    }
 
     if (body.action === 'validate-infrastructure') {
       const currentSettings = !shouldUseDemoStoreFallback()
         ? toAdminSettings(await (await getRequiredDatabaseRepositories()).settings.get())
         : {
-            ...getAdminSettings(),
-            runtimeStorage: getMediaStorageConfigSummary(),
-            runtimeDatabase: getDatabaseRuntimeSummary(),
-            runtimeSupabase: getSupabaseRuntimeSummary(),
-            runtimeVercel: getVercelRuntimeSummary(),
-          };
-      const normalizedIntegrations = normalizeInfrastructureIntegrations(body.integrations);
+          ...getAdminSettings(),
+          runtimeStorage: getMediaStorageConfigSummary(),
+          runtimeDatabase: getDatabaseRuntimeSummary(),
+          runtimeSupabase: getSupabaseRuntimeSummary(),
+          runtimeMediaScanner: getMediaScannerRuntimeSummary(),
+          runtimeVercel: getVercelRuntimeSummary(),
+        };
+      const normalizedIntegrations = mediaStorageCheck
+        ? mergeMediaStorageIntegrations(currentSettings.integrations, body.integrations)
+        : normalizeInfrastructureIntegrations(body.integrations);
       const integrations = normalizedIntegrations || parseJsonObject(body.integrations) || currentSettings.integrations || {};
       const deliveryMode = body.deliveryMode === undefined
         ? normalizeDeliveryMode(currentSettings.deliveryMode)
@@ -732,6 +801,7 @@ export async function POST(request: NextRequest) {
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
+          runtimeMediaScanner: getMediaScannerRuntimeSummary(),
           runtimeVercel: getVercelRuntimeSummary(),
         },
       },

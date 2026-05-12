@@ -107,6 +107,55 @@ const restoreSettings = async (settings) => {
   });
 };
 
+const setAdminPermissionOverrides = async (overrides) => {
+  await requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({ overrides }),
+  });
+};
+
+const assertMediaConfigurePermissionIsEnforced = async () => {
+  await setAdminPermissionOverrides({
+    'media.configure': 'deny',
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        deliveryMode: 'custom-frontend',
+        integrations: {
+          storage: {
+            provider: 'local',
+            bucket: 'denied-media-config',
+            publicBaseUrl: '',
+            pathPrefix: '',
+            privateFilesEnabled: true,
+            imageTransformsEnabled: true,
+          },
+          supabase: {
+            projectUrl: '',
+            projectRef: '',
+            storageEnabled: false,
+          },
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 403, `Denied media.configure override should reject storage metadata save, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied media.configure override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+  } finally {
+    await setAdminPermissionOverrides({
+      'media.configure': null,
+    });
+  }
+};
+
 const createFolder = async (name, input = {}) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/folders`, {
     method: 'POST',
@@ -1274,6 +1323,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await assertMediaConfigurePermissionIsEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     const existing = await listMedia(marker);
