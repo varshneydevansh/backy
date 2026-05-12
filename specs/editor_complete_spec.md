@@ -93,10 +93,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Grid background in edit mode
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface and covered by focused smoke.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
+- Rulers render along the canvas edge with major/minor ticks.
+- Pan navigation works through the hand toggle and temporary Space-hold mode.
 - **Issues:** None major
 - **Improvements Needed:**
-    - Pan/scroll navigation
-    - Rulers
+    - None currently tracked for this panel
 
 ### 3. Element Drag
 **File:** `Canvas.tsx` (handleMouseDown, handleMouseMove, handleMouseUp)
@@ -351,6 +352,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.

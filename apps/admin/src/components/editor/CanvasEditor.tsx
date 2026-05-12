@@ -12,6 +12,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
@@ -32,6 +33,7 @@ import {
   Eye,
   EyeOff,
   Group,
+  Hand,
   Layers,
   Magnet,
   SlidersHorizontal,
@@ -978,11 +980,21 @@ export function CanvasEditor({
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
+  const [isCanvasPanMode, setIsCanvasPanMode] = useState(false);
+  const [isCanvasSpacePanning, setIsCanvasSpacePanning] = useState(false);
+  const [isCanvasPanning, setIsCanvasPanning] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [gridSize, setGridSize] = useState(10);
   const [showGrid, setShowGrid] = useState(true);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const canvasPanRef = useRef<{
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
+  const isCanvasPanActive = !isPreview && (isCanvasPanMode || isCanvasSpacePanning);
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
   const scaledCanvasHeight = Math.max(1, Math.round(size.height * activeCanvasScale));
   const zoomPercent = Math.round(activeCanvasScale * 100);
@@ -1077,9 +1089,42 @@ export function CanvasEditor({
     setShowGrid((current) => !current);
   }, []);
 
+  const handleToggleCanvasPanMode = useCallback(() => {
+    setIsCanvasPanMode((current) => !current);
+  }, []);
+
   const handleGridSizeChange = useCallback((value: string) => {
     setGridSize(normalizeEditorGridSize(Number(value)));
   }, []);
+
+  const handleCanvasViewportMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!isCanvasPanActive || event.button !== 0) {
+      return;
+    }
+
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.closest('button, input, select, textarea, [contenteditable="true"], [role="button"], [role="textbox"], [data-editor-shortcuts="disabled"]')
+    ) {
+      return;
+    }
+
+    const viewport = canvasViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    canvasPanRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    setIsCanvasPanning(true);
+  }, [isCanvasPanActive]);
 
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
@@ -3774,6 +3819,77 @@ export function CanvasEditor({
     return () => window.cancelAnimationFrame(frame);
   }, [handleFitCanvas, isCanvasFocusMode, showComponentPanel, showInspectorPanel]);
 
+  useEffect(() => {
+    if (isPreview) {
+      setIsCanvasPanMode(false);
+      setIsCanvasSpacePanning(false);
+      setIsCanvasPanning(false);
+      canvasPanRef.current = null;
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== ' ' || event.repeat || shouldIgnoreEditorShortcut(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      setIsCanvasSpacePanning(true);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== ' ') {
+        return;
+      }
+
+      event.preventDefault();
+      setIsCanvasSpacePanning(false);
+      setIsCanvasPanning(false);
+      canvasPanRef.current = null;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isPreview]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const panState = canvasPanRef.current;
+      const viewport = canvasViewportRef.current;
+      if (!panState || !viewport) {
+        return;
+      }
+
+      event.preventDefault();
+      viewport.scrollLeft = panState.scrollLeft - (event.clientX - panState.startX);
+      viewport.scrollTop = panState.scrollTop - (event.clientY - panState.startY);
+    };
+
+    const stopPanning = () => {
+      if (!canvasPanRef.current) {
+        return;
+      }
+
+      canvasPanRef.current = null;
+      setIsCanvasPanning(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopPanning);
+    window.addEventListener('blur', stopPanning);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopPanning);
+      window.removeEventListener('blur', stopPanning);
+    };
+  }, []);
+
   return (
     <ActiveEditorProvider>
       <div className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950", className || "fixed inset-0")}>
@@ -4372,13 +4488,20 @@ export function CanvasEditor({
             ref={canvasViewportRef}
             className={cn(
               'relative flex-1 overflow-auto overscroll-contain pb-20',
-              isCanvasFocusMode ? 'p-6 lg:p-10 2xl:p-12' : 'p-4 lg:p-6 2xl:p-8'
+              isCanvasFocusMode ? 'p-6 lg:p-10 2xl:p-12' : 'p-4 lg:p-6 2xl:p-8',
+              isCanvasPanActive && (isCanvasPanning ? 'cursor-grabbing select-none' : 'cursor-grab')
             )}
+            data-testid="editor-canvas-viewport"
+            data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
+            data-pan-active={isCanvasPanActive ? 'true' : 'false'}
+            data-space-pan-active={isCanvasSpacePanning ? 'true' : 'false'}
+            data-panning={isCanvasPanning ? 'true' : 'false'}
             style={{
               backgroundColor: '#eef2f7',
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.18) 1px, transparent 0)',
               backgroundSize: '20px 20px',
             }}
+            onMouseDown={handleCanvasViewportMouseDown}
             onDragOver={(e) => {
               if (!isCanvasMutationDisabled) {
                 e.preventDefault();
@@ -4451,12 +4574,18 @@ export function CanvasEditor({
                       gridTemplateRows: `${RULER_SIZE}px ${scaledCanvasHeight}px`,
                     }}
                   >
-                    <div className="border-b border-r border-slate-300 bg-slate-200" />
-                    <div className="relative overflow-hidden border-b border-slate-300 bg-slate-50">
+                    <div className="border-b border-r border-slate-300 bg-slate-200" data-testid="editor-canvas-ruler-corner" />
+                    <div
+                      className="relative overflow-hidden border-b border-slate-300 bg-slate-50"
+                      data-testid="editor-canvas-ruler-horizontal"
+                    >
                       {horizontalRulerTicks.map((tick) => (
                         <div
                           key={`x-${tick.value}`}
                           className="absolute top-0 h-full border-l border-slate-300"
+                          data-ruler-tick="horizontal"
+                          data-ruler-tick-major={tick.major ? 'true' : 'false'}
+                          data-ruler-tick-value={tick.value}
                           style={{ left: tick.position }}
                         >
                           {tick.major && (
@@ -4467,11 +4596,17 @@ export function CanvasEditor({
                         </div>
                       ))}
                     </div>
-                    <div className="relative overflow-hidden border-r border-slate-300 bg-slate-50">
+                    <div
+                      className="relative overflow-hidden border-r border-slate-300 bg-slate-50"
+                      data-testid="editor-canvas-ruler-vertical"
+                    >
                       {verticalRulerTicks.map((tick) => (
                         <div
                           key={`y-${tick.value}`}
                           className="absolute left-0 w-full border-t border-slate-300"
+                          data-ruler-tick="vertical"
+                          data-ruler-tick-major={tick.major ? 'true' : 'false'}
+                          data-ruler-tick-value={tick.value}
                           style={{ top: tick.position }}
                         >
                           {tick.major && tick.value > 0 && (
@@ -4591,7 +4726,26 @@ export function CanvasEditor({
                 data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
                 data-canvas-scale={activeCanvasScale}
                 data-zoom-percent={zoomPercent}
+                data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
+                data-pan-active={isCanvasPanActive ? 'true' : 'false'}
               >
+                <button
+                  type="button"
+                  onClick={handleToggleCanvasPanMode}
+                  className={cn(
+                    'rounded-md p-1.5 transition-colors',
+                    isCanvasPanMode
+                      ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                  )}
+                  title={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
+                  aria-label={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
+                  aria-pressed={isCanvasPanMode}
+                  data-testid="editor-pan-toggle"
+                >
+                  <Hand className="h-4 w-4" />
+                </button>
+                <div className="mx-1 h-5 w-px bg-slate-200" />
                 <button
                   type="button"
                   onClick={handleZoomOut}

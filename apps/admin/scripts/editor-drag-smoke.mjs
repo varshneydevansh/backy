@@ -3653,8 +3653,121 @@ const readZoomControlState = async (client, label) => {
   return state;
 };
 
+const readCanvasNavigationState = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    const horizontalRuler = document.querySelector('[data-testid="editor-canvas-ruler-horizontal"]');
+    const verticalRuler = document.querySelector('[data-testid="editor-canvas-ruler-vertical"]');
+    const horizontalTicks = Array.from(document.querySelectorAll('[data-ruler-tick="horizontal"]')).map((tick) => ({
+      value: Number(tick.getAttribute('data-ruler-tick-value') || 0),
+      major: tick.getAttribute('data-ruler-tick-major') === 'true',
+    }));
+    const verticalTicks = Array.from(document.querySelectorAll('[data-ruler-tick="vertical"]')).map((tick) => ({
+      value: Number(tick.getAttribute('data-ruler-tick-value') || 0),
+      major: tick.getAttribute('data-ruler-tick-major') === 'true',
+    }));
+
+    return {
+      label: ${JSON.stringify(label)},
+      hasViewport: Boolean(viewport),
+      panMode: viewport?.getAttribute('data-pan-mode') === 'true',
+      panActive: viewport?.getAttribute('data-pan-active') === 'true',
+      spacePanActive: viewport?.getAttribute('data-space-pan-active') === 'true',
+      panning: viewport?.getAttribute('data-panning') === 'true',
+      scrollLeft: viewport instanceof HTMLElement ? viewport.scrollLeft : 0,
+      scrollTop: viewport instanceof HTMLElement ? viewport.scrollTop : 0,
+      hasHorizontalRuler: Boolean(horizontalRuler),
+      hasVerticalRuler: Boolean(verticalRuler),
+      horizontalMajorTicks: horizontalTicks.filter((tick) => tick.major).map((tick) => tick.value),
+      verticalMajorTicks: verticalTicks.filter((tick) => tick.major).map((tick) => tick.value),
+    };
+  })()`);
+
+  assert(state.hasViewport, `Canvas viewport missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.hasHorizontalRuler && state.hasVerticalRuler, `Canvas rulers missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.horizontalMajorTicks.includes(0) && state.horizontalMajorTicks.includes(100), `Horizontal ruler major ticks missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.verticalMajorTicks.includes(100), `Vertical ruler major ticks missing during ${label}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const dragCanvasViewportPan = async (client, deltaX, deltaY) => {
+  const start = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    if (!(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport' };
+    }
+    viewport.scrollLeft = 120;
+    viewport.scrollTop = 140;
+    const rect = viewport.getBoundingClientRect();
+    const x = rect.left + Math.max(24, Math.min(rect.width - 24, rect.width / 2));
+    const y = rect.top + Math.max(24, Math.min(rect.height - 24, rect.height / 2));
+    return {
+      ok: true,
+      x,
+      y,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+  })()`);
+
+  assert(start?.ok, `Unable to prepare canvas viewport pan: ${JSON.stringify(start)}`);
+
+  const dispatched = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    if (!(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport' };
+    }
+    const startX = 240;
+    const startY = 220;
+    viewport.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+    }));
+    window.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 1,
+      clientX: startX + ${JSON.stringify(deltaX)},
+      clientY: startY + ${JSON.stringify(deltaY)},
+    }));
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      button: 0,
+      buttons: 0,
+      clientX: startX + ${JSON.stringify(deltaX)},
+      clientY: startY + ${JSON.stringify(deltaY)},
+    }));
+    return {
+      ok: true,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+      panMode: viewport.getAttribute('data-pan-mode'),
+      panning: viewport.getAttribute('data-panning'),
+    };
+  })()`);
+
+  assert(dispatched?.ok, `Unable to dispatch canvas viewport pan: ${JSON.stringify(dispatched)}`);
+  await sleep(250);
+
+  return {
+    start,
+    dispatched,
+    end: await readCanvasNavigationState(client, 'after viewport pan'),
+  };
+};
+
 const testZoomControls = async (client) => {
   const initial = await readZoomControlState(client, 'initial');
+  const initialNavigation = await readCanvasNavigationState(client, 'initial navigation');
 
   await clickControlByTestId(client, 'editor-zoom-out');
   const afterZoomOut = await readZoomControlState(client, 'after zoom out');
@@ -3671,11 +3784,40 @@ const testZoomControls = async (client) => {
   assert(afterFit.autoFit === true, `Fit canvas did not enable auto-fit: ${JSON.stringify(afterFit)}`);
   assert(afterFit.scale > 0 && afterFit.scale <= 2, `Fit canvas produced out-of-range scale: ${JSON.stringify(afterFit)}`);
 
+  await clickControlByTestId(client, 'editor-pan-toggle');
+  const panEnabled = await readCanvasNavigationState(client, 'pan enabled');
+  assert(panEnabled.panMode === true && panEnabled.panActive === true, `Pan toggle did not enable pan mode: ${JSON.stringify(panEnabled)}`);
+
+  const panDrag = await dragCanvasViewportPan(client, 72, 58);
+  assert(
+    panDrag.end.scrollLeft < panDrag.start.scrollLeft && panDrag.end.scrollTop < panDrag.start.scrollTop,
+    `Canvas pan drag did not update viewport scroll offsets: ${JSON.stringify(panDrag)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-pan-toggle');
+  const panDisabled = await readCanvasNavigationState(client, 'pan disabled');
+  assert(panDisabled.panMode === false && panDisabled.panActive === false, `Pan toggle did not disable pan mode: ${JSON.stringify(panDisabled)}`);
+
+  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+  await sleep(150);
+  const spacePanActive = await readCanvasNavigationState(client, 'space pan active');
+  assert(spacePanActive.spacePanActive === true && spacePanActive.panActive === true, `Spacebar did not temporarily enable pan mode: ${JSON.stringify(spacePanActive)}`);
+  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+  await sleep(150);
+  const spacePanReleased = await readCanvasNavigationState(client, 'space pan released');
+  assert(spacePanReleased.spacePanActive === false && spacePanReleased.panActive === false, `Spacebar release did not clear temporary pan mode: ${JSON.stringify(spacePanReleased)}`);
+
   return {
     initial,
+    initialNavigation,
     afterZoomOut,
     afterZoomIn,
     afterFit,
+    panEnabled,
+    panDrag,
+    panDisabled,
+    spacePanActive,
+    spacePanReleased,
   };
 };
 
