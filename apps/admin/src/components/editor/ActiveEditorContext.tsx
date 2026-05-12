@@ -954,6 +954,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           })
         ).map(([node, path]) => ({
           type: (node as { type?: string }).type || '',
+          align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
           text: Editor.string(editor as any, path as any),

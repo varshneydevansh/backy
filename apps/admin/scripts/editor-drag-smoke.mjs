@@ -1142,6 +1142,31 @@ const collectSlateTypes = (value, types = []) => {
   return types;
 };
 
+const collectSlateElements = (value, elements = []) => {
+  if (!value) {
+    return elements;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSlateElements(item, elements));
+    return elements;
+  }
+
+  if (typeof value !== 'object') {
+    return elements;
+  }
+
+  if (typeof value.type === 'string') {
+    elements.push(value);
+  }
+
+  if (Array.isArray(value.children)) {
+    collectSlateElements(value.children, elements);
+  }
+
+  return elements;
+};
+
 const readEditorElementState = async (client, elementIds) => {
   const entries = await Promise.all(elementIds.map(async (elementId) => {
     const box = await getElementBox(client, elementId);
@@ -4174,6 +4199,39 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   })()`);
   assert(restoredHeaderCell?.ok, `Unable to select restored table cell before header-row toggle: ${JSON.stringify(restoredHeaderCell)}`);
 
+  await mouseDownControlByTestId(client, 'rich-text-align-center');
+  await sleep(500);
+
+  const tableCellAlignmentState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 1'));
+    const block = targetCell?.querySelector('[data-slate-node="element"]');
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      cellText: targetCell?.textContent || '',
+      blockTextAlign: block ? window.getComputedStyle(block).textAlign : '',
+      slateState,
+      html: targetCell?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    tableCellAlignmentState.blockTextAlign === 'center',
+    `Rich-text table cell alignment did not render in the selected cell: ${JSON.stringify(tableCellAlignmentState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const reselectedHeaderCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(reselectedHeaderCell?.ok, `Unable to reselect restored table cell before header-row toggle: ${JSON.stringify(reselectedHeaderCell)}`);
+
   await mouseDownControlByTestId(client, 'rich-text-table-toggle-header-row');
   await sleep(500);
 
@@ -4239,6 +4297,8 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     deletedTableState,
     restoredDirectInsert,
     restoredHeaderCell,
+    tableCellAlignmentState,
+    reselectedHeaderCell,
     restoredHeaderTableState,
   };
 };
@@ -4290,6 +4350,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
 
   const content = element.props?.content;
   const types = collectSlateTypes(content);
+  const elements = collectSlateElements(content);
   const leaves = collectSlateLeaves(content);
   const blockquoteCount = types.filter((type) => type === 'blockquote').length;
   const tableCount = types.filter((type) => type === 'table').length;
@@ -4321,6 +4382,11 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   assert(blockquoteCount >= 2, `Persisted multi-block blockquote nodes missing: ${JSON.stringify({ types, content })}`);
   assert(tableCount >= 1 && rowCount === 2 && cellCount === 4, `Persisted table structure missing: ${JSON.stringify({ types, content })}`);
   assert(headerCellCount === 2, `Persisted table header-row cells missing: ${JSON.stringify({ types, content })}`);
+  const alignedColumnOneBlock = elements.find((node) => (
+    node.type === 'p' &&
+    collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Column 1'))
+  ));
+  assert(alignedColumnOneBlock?.align === 'center', `Persisted table cell text alignment missing: ${JSON.stringify({ alignedColumnOneBlock, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
   assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
@@ -4333,6 +4399,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     rowCount,
     cellCount,
     headerCellCount,
+    alignedColumnOneBlock,
     listItems,
     text,
   };

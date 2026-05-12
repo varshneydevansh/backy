@@ -1340,6 +1340,17 @@ export function RichTextFormatting({
   }, [adjustElementListIndent]);
 
   const moveListItemAtSelection = useCallback((direction: -1 | 1) => {
+    const activeEditorElementId = getCurrentActiveEditorId();
+    const canUseActiveEditor = canInteractWithEditor()
+      && (!elementId || !activeEditorElementId || activeEditorElementId === elementId);
+
+    if (canUseActiveEditor) {
+      const didApplyToActiveEditor = direction < 0 ? moveListItemUp() : moveListItemDown();
+      if (didApplyToActiveEditor) {
+        return;
+      }
+    }
+
     if (moveListItemInElementSelection(direction)) {
       return;
     }
@@ -1351,7 +1362,15 @@ export function RichTextFormatting({
         moveListItemDown();
       }
     });
-  }, [moveListItemDown, moveListItemInElementSelection, moveListItemUp, runOrActivateTextEditor]);
+  }, [
+    canInteractWithEditor,
+    elementId,
+    getCurrentActiveEditorId,
+    moveListItemDown,
+    moveListItemInElementSelection,
+    moveListItemUp,
+    runOrActivateTextEditor,
+  ]);
 
   const toggleBlockquoteForElementOrSelection = useCallback(() => {
     if (!isTargetEditorUsable()) {

@@ -26,7 +26,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/button-reorder/drag-reorder tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
+| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/button-reorder/drag-reorder tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell text alignment, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -40,8 +40,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell alignment, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell alignment, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same deeper rich-text table/list editing gaps as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
@@ -248,6 +248,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can toggle the active table row between body cells and semantic header cells with persisted `th` Slate nodes.
   - Right-panel rich-text controls can toggle the active table column between body cells and semantic header cells.
   - Right-panel rich-text controls can toggle the active table cell between body and semantic header cell without changing sibling cells.
+  - Right-panel rich-text alignment controls render and persist paragraph alignment inside selected table cells.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
   - Shared editor block markdown shortcuts now support `>` for blockquote.
@@ -381,6 +382,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel table header-row toggle controls, with browser smoke coverage proving selected rows render and persist as semantic `th` cells.
 - Added Property Panel table header-column toggle controls, with browser smoke coverage proving selected columns render as semantic `th` cells and can be restored to body cells.
 - Added Property Panel table header-cell toggle controls, with browser smoke coverage proving one selected cell can render as semantic `th` and be restored without affecting sibling cells.
+- Added Property Panel table-cell alignment coverage, proving selected cell paragraphs render centered and persist `align: "center"` in Slate content.
 - Added Property Panel whole-table removal controls, with browser smoke coverage proving the active table can be removed without deleting surrounding blockquote content.
 - Added Tab and Shift+Tab canvas selection cycling through visible elements, with keyboard shortcut smoke coverage and focused-control guard coverage.
 - Added right-panel rich-text list indent max-depth clamping with browser persistence coverage for selected list items.
