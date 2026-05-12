@@ -3616,6 +3616,7 @@ const readGridSnapControlState = async (client, label) => {
   const state = await evaluate(client, `(() => {
     const controls = document.querySelector('[data-testid="editor-grid-snap-controls"]');
     const toggle = document.querySelector('[data-testid="editor-snap-toggle"]');
+    const gridToggle = document.querySelector('[data-testid="editor-grid-visibility-toggle"]');
     const input = document.querySelector('[data-testid="editor-grid-size"]');
     const grid = document.querySelector('[data-testid="editor-canvas-grid"]');
     const gridStyle = grid instanceof HTMLElement ? window.getComputedStyle(grid) : null;
@@ -3623,9 +3624,12 @@ const readGridSnapControlState = async (client, label) => {
       label: ${JSON.stringify(label)},
       hasControls: Boolean(controls),
       snapEnabled: controls?.getAttribute('data-snap-enabled') === 'true',
+      gridVisible: controls?.getAttribute('data-grid-visible') === 'true',
       togglePressed: toggle?.getAttribute('aria-pressed') === 'true',
+      gridTogglePressed: gridToggle?.getAttribute('aria-pressed') === 'true',
       gridSize: Number(controls?.getAttribute('data-grid-size') || 0),
       inputValue: input instanceof HTMLInputElement ? input.value : '',
+      hasGrid: Boolean(grid),
       gridDataSize: Number(grid?.getAttribute('data-grid-size') || 0),
       backgroundSize: gridStyle?.backgroundSize || '',
     };
@@ -3633,9 +3637,15 @@ const readGridSnapControlState = async (client, label) => {
 
   assert(state.hasControls, `Grid/snap controls are missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.snapEnabled === state.togglePressed, `Snap toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.gridVisible === state.gridTogglePressed, `Grid visibility toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.gridSize === Number(state.inputValue), `Grid input does not match control state during ${label}: ${JSON.stringify(state)}`);
-  assert(state.gridSize === state.gridDataSize, `Canvas grid data size does not match control state during ${label}: ${JSON.stringify(state)}`);
-  assert(state.backgroundSize.includes(`${state.gridSize}px`), `Canvas grid background size does not reflect grid size during ${label}: ${JSON.stringify(state)}`);
+  if (state.gridVisible) {
+    assert(state.hasGrid, `Canvas grid should be visible during ${label}: ${JSON.stringify(state)}`);
+    assert(state.gridSize === state.gridDataSize, `Canvas grid data size does not match control state during ${label}: ${JSON.stringify(state)}`);
+    assert(state.backgroundSize.includes(`${state.gridSize}px`), `Canvas grid background size does not reflect grid size during ${label}: ${JSON.stringify(state)}`);
+  } else {
+    assert(!state.hasGrid, `Canvas grid should be hidden during ${label}: ${JSON.stringify(state)}`);
+  }
   return state;
 };
 
@@ -3710,6 +3720,17 @@ const distanceToGridLine = (value, gridSize) => {
 const testGridSnapControls = async (client) => {
   const initial = await readGridSnapControlState(client, 'initial');
   assert(initial.snapEnabled === true, `Snap should default to enabled: ${JSON.stringify(initial)}`);
+  assert(initial.gridVisible === true, `Grid should default to visible: ${JSON.stringify(initial)}`);
+
+  await clickControlByTestId(client, 'editor-grid-visibility-toggle');
+  await sleep(150);
+  const gridHidden = await readGridSnapControlState(client, 'grid hidden');
+  assert(gridHidden.gridVisible === false, `Grid visibility toggle did not hide the grid: ${JSON.stringify(gridHidden)}`);
+
+  await clickControlByTestId(client, 'editor-grid-visibility-toggle');
+  await sleep(150);
+  const gridRestored = await readGridSnapControlState(client, 'grid restored');
+  assert(gridRestored.gridVisible === true, `Grid visibility toggle did not restore the grid: ${JSON.stringify(gridRestored)}`);
 
   await setFormControlByTestId(client, 'editor-grid-size', '20');
   await sleep(150);
@@ -3748,6 +3769,8 @@ const testGridSnapControls = async (client) => {
 
   return {
     initial,
+    gridHidden,
+    gridRestored,
     grid20,
     snapOnDrag,
     snapOff,

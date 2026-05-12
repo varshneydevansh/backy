@@ -30,7 +30,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
-| 19 | Grid/Snap | ✅ | Configurable grid size and snap toggle with focused smoke coverage |
+| 19 | Grid/Snap | ✅ | Configurable grid size, grid visibility, and snap toggle with focused smoke coverage |
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
 | 22 | Keyboard Shortcuts | ✅ | Core canvas shortcuts for save, selection, clipboard, duplicate, delete, nudge, undo/redo, grouping, and guarded focus are covered by focused smoke |
@@ -273,14 +273,14 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### 18. Grid/Snap
 **Current State:** ✅ Working
 - Configurable grid size defaults to 10px and updates the visible canvas grid.
+- The visual grid can be shown/hidden independently from snap behavior.
 - Snap can be toggled on/off from the bottom canvas controls.
 - Drag/drop/resize paths share the active grid size, and disabling snap allows freeform sub-grid movement.
 - Smart alignment guides appear during drag when element edges/centers approach sibling or canvas targets.
 - Guide-assisted snapping aligns dragged elements to peer/canvas edges and clears the guide overlay after release.
 - Focused smoke coverage: `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Focused smoke coverage: `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
-- **Improvements Needed:**
-    - Optional grid visibility toggle
+- **Improvements Needed:** None currently known for grid/snap controls.
 
 ### 19. Layers Panel
 **Current State:** ✅ Working
@@ -351,7 +351,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
-- Added configurable grid size plus snap on/off controls, with focused browser coverage proving snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added shared markdown-like block conversions in `BackyEditor`.
 - Added inline markdown mark shortcuts in `BackyEditor` with direct editor coverage and focused browser smoke coverage.
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.

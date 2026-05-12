@@ -1297,6 +1297,8 @@ interface CanvasProps {
   snapEnabled?: boolean;
   /** Canvas grid spacing in CSS pixels */
   gridSize?: number;
+  /** Whether the visual canvas grid is rendered */
+  showGrid?: boolean;
 }
 
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
@@ -1395,6 +1397,7 @@ export function Canvas({
   viewportScale = 1,
   snapEnabled = true,
   gridSize = DEFAULT_GRID_SIZE,
+  showGrid = true,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -2254,7 +2257,7 @@ export function Canvas({
       data-testid="editor-canvas"
     >
       {/* Grid Background */}
-      {!isPreview && (
+      {!isPreview && showGrid && (
         <div
           className="absolute inset-0 pointer-events-none opacity-20"
           data-testid="editor-canvas-grid"

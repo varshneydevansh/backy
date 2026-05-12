@@ -30,6 +30,7 @@ import {
   Copy,
   Save,
   Eye,
+  EyeOff,
   Group,
   Layers,
   Magnet,
@@ -979,6 +980,7 @@ export function CanvasEditor({
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [gridSize, setGridSize] = useState(10);
+  const [showGrid, setShowGrid] = useState(true);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
@@ -1069,6 +1071,10 @@ export function CanvasEditor({
 
   const handleToggleSnap = useCallback(() => {
     setSnapEnabled((current) => !current);
+  }, []);
+
+  const handleToggleGridVisibility = useCallback(() => {
+    setShowGrid((current) => !current);
   }, []);
 
   const handleGridSizeChange = useCallback((value: string) => {
@@ -4434,6 +4440,7 @@ export function CanvasEditor({
                       viewportScale={activeCanvasScale}
                       snapEnabled={snapEnabled}
                       gridSize={gridSize}
+                      showGrid={showGrid}
                     />
                   </div>
                 ) : (
@@ -4510,6 +4517,7 @@ export function CanvasEditor({
                           viewportScale={activeCanvasScale}
                           snapEnabled={snapEnabled}
                           gridSize={gridSize}
+                          showGrid={showGrid}
                         />
                       </div>
                     </div>
@@ -4523,8 +4531,25 @@ export function CanvasEditor({
                 className="absolute bottom-4 left-4 z-30 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-grid-snap-controls"
                 data-snap-enabled={snapEnabled ? 'true' : 'false'}
+                data-grid-visible={showGrid ? 'true' : 'false'}
                 data-grid-size={gridSize}
               >
+                <button
+                  type="button"
+                  onClick={handleToggleGridVisibility}
+                  className={cn(
+                    'flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
+                    showGrid
+                      ? 'bg-slate-100 text-slate-800 ring-1 ring-slate-200'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
+                  )}
+                  title={showGrid ? 'Hide grid' : 'Show grid'}
+                  aria-label={showGrid ? 'Hide grid' : 'Show grid'}
+                  aria-pressed={showGrid}
+                  data-testid="editor-grid-visibility-toggle"
+                >
+                  {showGrid ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </button>
                 <button
                   type="button"
                   onClick={handleToggleSnap}
