@@ -1510,9 +1510,27 @@ const main = async () => {
 
     const folder = await createFolder(folderName);
     folderId = folder.id;
+    await expectApiError(
+      `/api/admin/sites/${SITE_ID}/media/folders`,
+      { method: 'POST', body: JSON.stringify({ name: folderName, parentId: null }) },
+      409,
+      'FOLDER_NAME_CONFLICT',
+    );
     const childFolder = await createFolder(`${folderName} Child`, { parentId: folderId });
     childFolderId = childFolder.id;
     assert(childFolder.parentId === folderId, 'Nested media folder did not preserve its parent id.');
+    await expectApiError(
+      `/api/admin/sites/${SITE_ID}/media/folders`,
+      { method: 'POST', body: JSON.stringify({ name: `${folderName} Child`, parentId: folderId }) },
+      409,
+      'FOLDER_NAME_CONFLICT',
+    );
+    await expectApiError(
+      `/api/admin/sites/${SITE_ID}/media/folders/${childFolderId}`,
+      { method: 'PATCH', body: JSON.stringify({ name: folderName, parentId: null }) },
+      409,
+      'FOLDER_NAME_CONFLICT',
+    );
     const movedChildFolder = await updateFolder(childFolderId, { name: `${folderName} Child Root`, parentId: null });
     assert(movedChildFolder.parentId === null, 'Media folder parent update did not move the child folder to Root.');
     const nestedAgainFolder = await updateFolder(childFolderId, { parentId: folderId });

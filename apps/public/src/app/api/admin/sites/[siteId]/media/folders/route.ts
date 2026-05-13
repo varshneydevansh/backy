@@ -43,6 +43,19 @@ const numberFromInput = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const folderNameKey = (name: string) => name.trim().toLowerCase();
+
+const hasSiblingFolderNameConflict = (
+  folders: Array<{ name: string; parentId?: string | null }>,
+  name: string,
+  parentId: string | null | undefined,
+) => (
+  folders.some((folder) => (
+    (folder.parentId || null) === (parentId || null) &&
+    folderNameKey(folder.name) === folderNameKey(name)
+  ))
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'media.view' });
@@ -104,14 +117,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const parentId = nullableString(body.parentId);
+    const folders = repositories
+      ? await repositories.media.listFolders(site.id)
+      : listMediaFolders(site.id);
     if (parentId) {
-      const parentFolder = repositories
-        ? await repositories.media.getFolderById(site.id, parentId)
-        : listMediaFolders(site.id).find((folder) => folder.id === parentId);
-
-      if (!parentFolder) {
+      if (!folders.some((folder) => folder.id === parentId)) {
         return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
       }
+    }
+    if (hasSiblingFolderNameConflict(folders, name, parentId)) {
+      return errorResponse(409, 'FOLDER_NAME_CONFLICT', 'A media folder with this name already exists in the selected parent folder.', requestId);
     }
     const sortOrder = numberFromInput(body.sortOrder);
 

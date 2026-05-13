@@ -45,6 +45,21 @@ const numberFromInput = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const folderNameKey = (name: string) => name.trim().toLowerCase();
+
+const hasSiblingFolderNameConflict = (
+  folders: Array<{ id: string; name: string; parentId?: string | null }>,
+  folderId: string,
+  name: string,
+  parentId: string | null | undefined,
+) => (
+  folders.some((folder) => (
+    folder.id !== folderId &&
+    (folder.parentId || null) === (parentId || null) &&
+    folderNameKey(folder.name) === folderNameKey(name)
+  ))
+);
+
 const listDemoMediaFolder = (siteId: string, folderId: string) => (
   listMediaFolders(siteId).find((folder) => folder.id === folderId)
 );
@@ -99,8 +114,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be its own parent', requestId);
       }
 
+      const folders = await repositories.media.listFolders(site.id);
       if (parentId) {
-        const folders = await repositories.media.listFolders(site.id);
         if (!folders.some((folder) => folder.id === parentId)) {
           return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
         }
@@ -109,9 +124,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be moved inside one of its descendants', requestId);
         }
       }
+      const nextName = typeof body.name === 'string' && body.name.trim().length > 0 ? body.name.trim() : beforeFolder.name;
+      const nextParentId = parentId === undefined ? beforeFolder.parentId : parentId;
+      if (hasSiblingFolderNameConflict(folders, folderId, nextName, nextParentId)) {
+        return errorResponse(409, 'FOLDER_NAME_CONFLICT', 'A media folder with this name already exists in the selected parent folder.', requestId);
+      }
 
       const folder = (await repositories.media.updateFolder(site.id, folderId, {
-        name: typeof body.name === 'string' && body.name.trim().length > 0 ? body.name.trim() : undefined,
+        name: typeof body.name === 'string' && body.name.trim().length > 0 ? nextName : undefined,
         parentId,
         sortOrder: numberFromInput(body.sortOrder),
       })).item;
@@ -149,8 +169,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be its own parent', requestId);
     }
 
+    const folders = listMediaFolders(site.id);
     if (parentId) {
-      const folders = listMediaFolders(site.id);
       if (!folders.some((item) => item.id === parentId)) {
         return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
       }
@@ -158,6 +178,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (wouldCreateFolderCycle(folders, folderId, parentId)) {
         return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be moved inside one of its descendants', requestId);
       }
+    }
+    const nextName = typeof body.name === 'string' && body.name.trim().length > 0 ? body.name.trim() : beforeFolder.name;
+    const nextParentId = parentId === undefined ? beforeFolder.parentId : parentId;
+    if (hasSiblingFolderNameConflict(folders, folderId, nextName, nextParentId)) {
+      return errorResponse(409, 'FOLDER_NAME_CONFLICT', 'A media folder with this name already exists in the selected parent folder.', requestId);
     }
 
     const folder = updateMediaFolder(site.id, folderId, body);

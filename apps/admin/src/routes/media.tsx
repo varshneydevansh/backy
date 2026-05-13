@@ -2482,6 +2482,15 @@ function MediaPage() {
 
     try {
       const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
+      const duplicateFolder = folders.find((folder) => (
+        folder.parentId === parentId &&
+        folder.name.trim().toLowerCase() === name.toLowerCase()
+      ));
+      if (duplicateFolder) {
+        setError(`A sibling folder named ${name} already exists.`);
+        return;
+      }
+
       const folder = await createMediaFolder(name, siteId, { parentId });
       setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
       setSelectedFolderId(folder.id);
