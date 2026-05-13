@@ -7756,13 +7756,18 @@ const testMultiSelectionResize = async (client, elementIds) => {
       };
     }
     const rect = handle.getBoundingClientRect();
+    const centerX = rect.x + rect.width / 2;
+    const centerY = rect.y + rect.height / 2;
     return {
       ok: true,
-      x: Math.round(rect.x + rect.width / 2),
-      y: Math.round(rect.y + rect.height / 2),
+      x: centerX,
+      y: centerY,
+      roundedX: Math.round(centerX),
+      roundedY: Math.round(centerY),
+      rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height },
       elementId: handle.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
       hit: (() => {
-        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        const hit = document.elementFromPoint(centerX, centerY);
         const element = hit instanceof Element ? hit : hit?.parentElement;
         return {
           tag: element?.tagName || null,
@@ -7778,53 +7783,80 @@ const testMultiSelectionResize = async (client, elementIds) => {
 
   assert(handle?.ok, `Unable to find multi-selection resize handle: ${JSON.stringify(handle)}`);
 
-  const directStarted = await evaluate(client, `(() => {
-    const handle = document.elementFromPoint(${handle.x}, ${handle.y});
+  const deltaX = 70;
+  const deltaY = 50;
+  const resizeSequence = await evaluate(client, `(() => {
+    const deltaX = ${deltaX};
+    const deltaY = ${deltaY};
+    const handles = Array.from(document.querySelectorAll('[data-role="canvas-resize-handle"][data-resize-handle="se"]'));
+    const handle = handles.find((candidate) => {
+      const elementId = candidate.closest('[data-element-id]')?.getAttribute('data-element-id');
+      return ${JSON.stringify(elementIds)}.includes(elementId || '');
+    });
     if (!(handle instanceof HTMLElement)) {
-      return { ok: false, reason: 'handle-hit-missing' };
+      return { ok: false, reason: 'missing-se-handle' };
     }
-    handle.dispatchEvent(new MouseEvent('mousedown', {
-      bubbles: true,
-      cancelable: true,
-      clientX: ${handle.x},
-      clientY: ${handle.y},
-      button: 0,
-      buttons: 1,
-    }));
+    const rect = handle.getBoundingClientRect();
+    const startX = rect.x + rect.width / 2;
+    const startY = rect.y + rect.height / 2;
+    const role = handle.getAttribute('data-role');
+    const resizeHandle = handle.getAttribute('data-resize-handle');
+    if (role !== 'canvas-resize-handle' || resizeHandle !== 'se') {
+      return {
+        ok: false,
+        reason: 'wrong-handle-hit',
+        role,
+        resizeHandle,
+        elementId: handle.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+      };
+    }
+
+    const dispatchPointer = (target, type, x, y, buttons) => {
+      if (typeof PointerEvent !== 'function') {
+        return;
+      }
+      target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+      }));
+    };
+    const dispatchMouse = (target, type, x, y, buttons) => {
+      target.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons,
+      }));
+    };
+
+    dispatchPointer(handle, 'pointerdown', startX, startY, 1);
+    dispatchMouse(handle, 'mousedown', startX, startY, 1);
+    for (let step = 1; step <= 8; step += 1) {
+      const x = startX + (deltaX * step) / 8;
+      const y = startY + (deltaY * step) / 8;
+      dispatchPointer(window, 'pointermove', x, y, 1);
+      dispatchMouse(window, 'mousemove', x, y, 1);
+    }
+    dispatchPointer(window, 'pointerup', startX + deltaX, startY + deltaY, 0);
+    dispatchMouse(window, 'mouseup', startX + deltaX, startY + deltaY, 0);
+
     return {
       ok: true,
-      role: handle.getAttribute('data-role'),
-      handle: handle.getAttribute('data-resize-handle'),
+      role,
+      resizeHandle,
       elementId: handle.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
     };
   })()`);
-  assert(directStarted?.ok, `Unable to dispatch direct resize start: ${JSON.stringify(directStarted)}`);
-
-  const deltaX = 70;
-  const deltaY = 50;
-  await sleep(50);
-
-  for (let step = 1; step <= 8; step += 1) {
-    await client.send('Input.dispatchMouseEvent', {
-      type: 'mouseMoved',
-      x: Math.round(handle.x + (deltaX * step) / 8),
-      y: Math.round(handle.y + (deltaY * step) / 8),
-      button: 'left',
-      buttons: 1,
-      pointerType: 'mouse',
-    });
-    await sleep(30);
-  }
-
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x: handle.x + deltaX,
-    y: handle.y + deltaY,
-    button: 'left',
-    buttons: 0,
-    clickCount: 1,
-    pointerType: 'mouse',
-  });
+  assert(resizeSequence?.ok, `Unable to run multi-selection resize sequence: ${JSON.stringify(resizeSequence)}`);
   await sleep(300);
 
   const after = await readEditorElementState(client, elementIds);
@@ -7846,6 +7878,7 @@ const testMultiSelectionResize = async (client, elementIds) => {
   return {
     selected: elementIds,
     handleElementId: handle.elementId,
+    resizeSequence,
     canvasSelectionReady,
     before,
     after,
