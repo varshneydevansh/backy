@@ -4657,10 +4657,12 @@ function CollectionFilterValueControl({
   ) : null;
 
   if (options.length > 0) {
+    const showCurrentRecordOption = allowCurrentRecordValue && value === CURRENT_RECORD_FILTER_VALUE;
+
     return (
       <div className="flex gap-2">
         <select
-          value={options.some((option) => option.value === value) ? value : ''}
+          value={showCurrentRecordOption || options.some((option) => option.value === value) ? value : ''}
           onChange={(event) => onChange(event.target.value)}
           data-testid={testId}
           className={cn(
@@ -4669,6 +4671,9 @@ function CollectionFilterValueControl({
           )}
         >
           <option value="">Any value</option>
+          {showCurrentRecordOption ? (
+            <option value={CURRENT_RECORD_FILTER_VALUE}>Current record</option>
+          ) : null}
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

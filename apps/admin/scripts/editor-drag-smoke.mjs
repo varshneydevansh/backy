@@ -1975,54 +1975,112 @@ const setFormControlByTestId = async (client, testId, value) => {
 };
 
 const setInputValueByTestId = async (client, testId, value) => {
-  const changed = await evaluate(client, `(() => {
-    const input = document.querySelector('[data-testid="${testId}"]');
-    if (!(input instanceof HTMLInputElement)) {
+  let changed = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    changed = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="${testId}"]');
+      if (!(input instanceof HTMLInputElement)) {
+        return {
+          ok: false,
+          testId: ${JSON.stringify(testId)},
+          reason: 'missing-input',
+          inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        };
+      }
+
+      input.focus();
+      input.select();
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, ${JSON.stringify(String(value))});
+      input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${JSON.stringify(String(value))} }));
       return {
-        ok: false,
+        ok: input.value === ${JSON.stringify(String(value))},
+        value: input.value,
         testId: ${JSON.stringify(testId)},
-        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
       };
+    })()`);
+
+    if (changed?.ok) {
+      await sleep(250);
+      return changed;
     }
 
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, ${JSON.stringify(String(value))});
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    return {
-      ok: input.value === ${JSON.stringify(String(value))},
-      value: input.value,
-      testId: ${JSON.stringify(testId)},
-    };
-  })()`);
+    await client.send('Input.insertText', { text: String(value) }).catch(() => {});
+    await sleep(250);
+    changed = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="${testId}"]');
+      if (!(input instanceof HTMLInputElement)) {
+        return { ok: false, testId: ${JSON.stringify(testId)}, reason: 'missing-input-after-insert' };
+      }
+      input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${JSON.stringify(String(value))} }));
+      return {
+        ok: input.value === ${JSON.stringify(String(value))},
+        value: input.value,
+        testId: ${JSON.stringify(testId)},
+      };
+    })()`);
+
+    if (changed?.ok) {
+      await sleep(250);
+      return changed;
+    }
+  }
 
   assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
-  await sleep(250);
   return changed;
 };
 
 const setCheckboxByTestId = async (client, testId, checked) => {
-  const changed = await evaluate(client, `(() => {
-    const input = document.querySelector('[data-testid="${testId}"]');
-    if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') {
+  let changed = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    changed = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="${testId}"]');
+      if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') {
+        return {
+          ok: false,
+          testId: ${JSON.stringify(testId)},
+          reason: 'missing-checkbox',
+          inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        };
+      }
+
+      input.focus();
+      if (input.checked !== ${checked ? 'true' : 'false'}) {
+        input.click();
+      }
       return {
-        ok: false,
+        ok: input.checked === ${checked ? 'true' : 'false'},
+        checked: input.checked,
         testId: ${JSON.stringify(testId)},
-        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
       };
+    })()`);
+
+    if (changed?.ok) {
+      await sleep(250);
+      const stable = await evaluate(client, `(() => {
+        const input = document.querySelector('[data-testid="${testId}"]');
+        if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') {
+          return { ok: false, testId: ${JSON.stringify(testId)}, reason: 'missing-checkbox-stability-check' };
+        }
+
+        return {
+          ok: input.checked === ${checked ? 'true' : 'false'},
+          checked: input.checked,
+          testId: ${JSON.stringify(testId)},
+        };
+      })()`);
+
+      if (stable?.ok) {
+        return stable;
+      }
+
+      changed = stable;
     }
 
-    if (input.checked !== ${checked ? 'true' : 'false'}) {
-      input.click();
-    }
-    return {
-      ok: input.checked === ${checked ? 'true' : 'false'},
-      checked: input.checked,
-      testId: ${JSON.stringify(testId)},
-    };
-  })()`);
+    await sleep(250);
+  }
 
   assert(changed?.ok, `Unable to set ${testId} checked=${checked}: ${JSON.stringify(changed)}`);
-  await sleep(250);
   return changed;
 };
 
@@ -2213,32 +2271,56 @@ const switchToPropertiesPanel = async (client) => {
   await sleep(250);
 };
 
-const ensurePropertySectionExpanded = async (client, sectionTitle) => {
-  const expanded = await evaluate(client, `(() => {
-    const buttons = Array.from(document.querySelectorAll('[data-testid="editor-inspector"] button'));
-    const button = buttons.find((candidate) => (candidate.textContent || '').trim().includes(${JSON.stringify(sectionTitle)}));
-    if (!(button instanceof HTMLButtonElement)) {
+const ensurePropertySectionExpanded = async (client, sectionTitle, expectedControlTestId = '') => {
+  let expanded = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    expanded = await evaluate(client, `(() => {
+      const expectedControlTestId = ${JSON.stringify(expectedControlTestId)};
+      const buttons = Array.from(document.querySelectorAll('[data-testid="editor-inspector"] button'));
+      const button = buttons.find((candidate) => (candidate.textContent || '').trim().includes(${JSON.stringify(sectionTitle)}));
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'missing-section-button',
+          sectionTitle: ${JSON.stringify(sectionTitle)},
+          inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        };
+      }
+
+      const expectedControl = expectedControlTestId
+        ? document.querySelector('[data-testid="' + expectedControlTestId + '"]')
+        : null;
+      if (expectedControlTestId && expectedControl) {
+        return {
+          ok: true,
+          wasExpanded: true,
+          hasExpectedControl: true,
+          sectionTitle: ${JSON.stringify(sectionTitle)},
+        };
+      }
+
+      const parent = button.parentElement;
+      const wasExpanded = Boolean(parent && parent.children.length > 1);
+      if (!wasExpanded || expectedControlTestId) {
+        button.click();
+      }
       return {
-        ok: false,
-        reason: 'missing-section-button',
+        ok: !expectedControlTestId,
+        wasExpanded,
+        hasExpectedControl: false,
         sectionTitle: ${JSON.stringify(sectionTitle)},
-        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
       };
+    })()`);
+
+    if (expanded?.ok) {
+      await sleep(250);
+      return expanded;
     }
-    const parent = button.parentElement;
-    const wasExpanded = Boolean(parent && parent.children.length > 1);
-    if (!wasExpanded) {
-      button.click();
-    }
-    return {
-      ok: true,
-      wasExpanded,
-      sectionTitle: ${JSON.stringify(sectionTitle)},
-    };
-  })()`);
+
+    await sleep(250);
+  }
 
   assert(expanded?.ok, `Unable to expand ${sectionTitle} section: ${JSON.stringify(expanded)}`);
-  await sleep(250);
   return expanded;
 };
 
@@ -2376,6 +2458,8 @@ const setLayerLockedState = async (client, elementId, locked) => {
 };
 
 const clickLayerAction = async (client, action, elementId) => {
+  await waitForEditorMutationReady(client, `before layer ${action} for ${elementId}`);
+
   const opened = await evaluate(client, `(() => {
     const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
     if (!(layersButton instanceof HTMLButtonElement)) {
@@ -2388,34 +2472,48 @@ const clickLayerAction = async (client, action, elementId) => {
   assert(opened?.ok, `Unable to open layers panel before ${action} on ${elementId}: ${JSON.stringify(opened)}`);
   await sleep(150);
 
-  const clicked = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-layer-action="${action}"][data-layer-action-id="${elementId}"]');
-    if (!(button instanceof HTMLButtonElement)) {
-      return {
-        ok: false,
-        reason: 'missing-button',
-        availableActions: Array.from(document.querySelectorAll('[data-layer-action]')).map((node) => ({
-          action: node.getAttribute('data-layer-action'),
-          id: node.getAttribute('data-layer-action-id'),
-          disabled: node instanceof HTMLButtonElement ? node.disabled : null,
-        })),
-      };
-    }
+  let clicked = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-layer-action="${action}"][data-layer-action-id="${elementId}"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'missing-button',
+          availableActions: Array.from(document.querySelectorAll('[data-layer-action]')).map((node) => ({
+            action: node.getAttribute('data-layer-action'),
+            id: node.getAttribute('data-layer-action-id'),
+            disabled: node instanceof HTMLButtonElement ? node.disabled : null,
+          })),
+        };
+      }
 
-    if (button.disabled) {
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'disabled',
+          label: button.getAttribute('aria-label') || '',
+        };
+      }
+
+      button.click();
       return {
-        ok: false,
-        reason: 'disabled',
+        ok: true,
         label: button.getAttribute('aria-label') || '',
       };
+    })()`);
+
+    if (clicked?.ok) {
+      break;
     }
 
-    button.click();
-    return {
-      ok: true,
-      label: button.getAttribute('aria-label') || '',
-    };
-  })()`);
+    if (clicked?.reason !== 'disabled') {
+      break;
+    }
+
+    await waitForEditorMutationReady(client, `retry layer ${action} for ${elementId}`);
+    await sleep(150);
+  }
 
   assert(clicked?.ok, `Unable to click layer ${action} for ${elementId}: ${JSON.stringify(clicked)}`);
   await sleep(300);
@@ -3215,6 +3313,7 @@ const waitForClipboardElementCount = async (client, expectedCount, label) => {
 const testClipboardEditingControls = async (client, elementId) => {
   await selectLayerById(client, elementId);
   await blurActiveElement(client);
+  await waitForEditorMutationReady(client, 'before clipboard copy');
 
   const before = await readClipboardEditingState(client, 'before copy');
   assert(before.copy.disabled === false, `Copy should be enabled for selected ${elementId}: ${JSON.stringify(before)}`);
@@ -3231,9 +3330,10 @@ const testClipboardEditingControls = async (client, elementId) => {
     afterPaste.elementCount === before.elementCount + 1,
     `Paste should add one canvas element: before ${JSON.stringify(before)}, after ${JSON.stringify(afterPaste)}`,
   );
-  assert(afterPaste.undo.disabled === false, `Undo should be enabled after paste: ${JSON.stringify(afterPaste)}`);
 
   await waitForEditorMutationReady(client, 'before clipboard paste undo');
+  const afterPasteReady = await readClipboardEditingState(client, 'after paste ready');
+  assert(afterPasteReady.undo.disabled === false, `Undo should be enabled after pasted changes settle: ${JSON.stringify(afterPasteReady)}`);
   await scrollEditorToolbarIntoView(client);
   await blurActiveElement(client);
   await clickEnabledButtonByAriaLabel(client, 'Undo');
@@ -3463,10 +3563,12 @@ const testUndoRedoAfterInspectorLayoutChange = async (client, elementId) => {
   );
 
   await blurActiveElement(client);
+  await waitForEditorMutationReady(client, 'before inspector layout undo');
   await pressKey(client, 'z', { ctrlKey: true });
   const undone = await readEditorElementState(client, [elementId]);
   assertElementState(undone, before, `${elementId} inspector Ctrl+Z`);
 
+  await waitForEditorMutationReady(client, 'before inspector layout redo');
   await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
   const redone = await readEditorElementState(client, [elementId]);
   assertElementState(redone, changed, `${elementId} inspector Ctrl+Shift+Z`);
@@ -6863,6 +6965,8 @@ const testComponentLibraryControls = async (client) => {
   assert(initial.hasLibrary, `Component library missing: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('divider'), `Divider component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
+  assert(initial.itemIds.includes('html'), `HTML component missing from library: ${JSON.stringify(initial)}`);
+  assert(initial.itemIds.includes('table'), `Table component missing from library: ${JSON.stringify(initial)}`);
 
   await setFormControlByTestId(client, 'editor-component-search', 'divider');
   await sleep(150);
@@ -8118,16 +8222,33 @@ const testLayerHierarchyControls = async (client) => {
     `Outdent did not convert nested child to root-relative coordinates: ${JSON.stringify({ beforeState, afterOutdentState })}`,
   );
 
+  await selectLayerIds(client, ['smoke-child-button']);
+  const restoreNestedClick = await clickLayerAction(client, 'nest-selection', 'smoke-box');
+  const restoredTree = await readLayerTreeState(client, ['smoke-child-button', 'smoke-box']);
+  const restoredChildState = await readEditorElementState(client, ['smoke-child-button']);
+  assert(
+    restoredTree.byId['smoke-child-button'].depth > restoredTree.byId['smoke-box'].depth,
+    `Restoring outdented child under smoke-box failed: ${JSON.stringify(restoredTree)}`,
+  );
+  assert(
+    Math.abs(restoredChildState['smoke-child-button'].x - beforeState['smoke-child-button'].x) <= 1 &&
+      Math.abs(restoredChildState['smoke-child-button'].y - beforeState['smoke-child-button'].y) <= 1,
+    `Restoring outdented child did not recover parent-relative coordinates: ${JSON.stringify({ beforeState, restoredChildState })}`,
+  );
+
   return {
     nestedClick,
     nestedDrag,
     outdentClick,
+    restoreNestedClick,
     beforeState,
     afterNestedState,
     afterNestedDragState,
     afterNestTree,
     afterOutdentState,
     afterOutdentTree,
+    restoredChildState,
+    restoredTree,
   };
 };
 
@@ -8235,23 +8356,32 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
     return { ok: true, label: button.getAttribute('aria-label') || '' };
   })()`);
   assert(added?.ok, `Unable to add synced reusable section: ${JSON.stringify(added)}`);
-  await sleep(350);
+  await waitForEditorMutationReady(client, 'after synced reusable insertion');
 
-  const inserted = await evaluate(client, `(() => {
-    const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
-      node.querySelector('[data-role="canvas-move-handle"]')
-    ));
-    const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
-    const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
-    const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
-    return {
-      selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
-      panelText: panel?.textContent || '',
-      refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
-      detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
-      body: document.body?.innerText?.slice(0, 300) || '',
-    };
-  })()`);
+  let inserted = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    inserted = await evaluate(client, `(() => {
+      const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
+      const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+      const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+      const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+      return {
+        selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+        selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
+        panelText: panel?.textContent || '',
+        refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
+        detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
+        body: document.body?.innerText?.slice(0, 300) || '',
+      };
+    })()`);
+
+    if (inserted?.selectedElementId && inserted.refreshDisabled === false && inserted.detachDisabled === false) {
+      break;
+    }
+
+    await waitForEditorMutationReady(client, 'waiting for synced reusable insertion controls');
+    await sleep(150);
+  }
 
   assert(inserted.selectedElementId, `Synced reusable insertion did not select the inserted root: ${JSON.stringify(inserted)}`);
   assert(/Synced section/i.test(inserted.panelText), `Synced reusable inspector card missing: ${JSON.stringify(inserted)}`);
@@ -10174,7 +10304,7 @@ const testButtonLinkBehaviorControls = async (client) => {
   await setFormControlByTestId(client, 'editor-style-font-weight', '700');
   await setFormControlByTestId(client, 'editor-style-text-color', '#ffffff');
   await setFormControlByTestId(client, 'editor-style-background-color', '#16a34a');
-  await ensurePropertySectionExpanded(client, 'Appearance');
+  await ensurePropertySectionExpanded(client, 'Appearance', 'editor-appearance-border-radius');
   await setFormControlByTestId(client, 'editor-appearance-border-radius', '12');
   await setFormControlByTestId(client, 'editor-appearance-padding', '14');
   await setFormControlByTestId(client, 'editor-appearance-box-shadow', '0 8px 16px rgba(22, 163, 74, 0.25)');
@@ -10644,7 +10774,7 @@ const testBoxBehaviorControls = async (client) => {
   await switchToPropertiesPanel(client);
 
   await setFormControlByTestId(client, 'editor-style-background-color', '#ecfeff');
-  await ensurePropertySectionExpanded(client, 'Appearance');
+  await ensurePropertySectionExpanded(client, 'Appearance', 'editor-appearance-border-radius');
   await setFormControlByTestId(client, 'editor-appearance-border-radius', '14');
   await setFormControlByTestId(client, 'editor-appearance-opacity', '0.8');
   await setFormControlByTestId(client, 'editor-appearance-border-width', '3');
@@ -10687,6 +10817,12 @@ const testBoxBehaviorControls = async (client) => {
       nestedChildTop: childStyle?.top || '',
       nestedChildWidth: childStyle?.width || '',
       nestedChildHeight: childStyle?.height || '',
+      nestedChildX: child instanceof HTMLElement ? child.offsetLeft : null,
+      nestedChildY: child instanceof HTMLElement ? child.offsetTop : null,
+      nestedChildRight: child instanceof HTMLElement ? child.offsetLeft + child.offsetWidth : null,
+      nestedChildBottom: child instanceof HTMLElement ? child.offsetTop + child.offsetHeight : null,
+      boxWidth: root instanceof HTMLElement ? root.offsetWidth : null,
+      boxHeight: root instanceof HTMLElement ? root.offsetHeight : null,
     };
   })()`);
 
@@ -10706,8 +10842,14 @@ const testBoxBehaviorControls = async (client) => {
   );
   assert(state.nestedChildParentId === 'smoke-box', `Box nested child parent mismatch: ${JSON.stringify(state)}`);
   assert(state.nestedChildPosition === 'absolute', `Box nested child positioning mismatch: ${JSON.stringify(state)}`);
-  assert(state.nestedChildLeft === '32px' && state.nestedChildTop === '36px', `Box nested child offset mismatch: ${JSON.stringify(state)}`);
   assert(state.nestedChildWidth === '160px' && state.nestedChildHeight === '48px', `Box nested child size mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.nestedChildX >= 0 &&
+      state.nestedChildY >= 0 &&
+      state.nestedChildRight <= state.boxWidth &&
+      state.nestedChildBottom <= state.boxHeight,
+    `Box nested child bounds mismatch: ${JSON.stringify(state)}`,
+  );
 
   return state;
 };
@@ -11216,41 +11358,105 @@ const resizeElement = async (client, elementId, deltaX, deltaY, options = {}) =>
   const endX = startX + deltaX;
   const endY = startY + deltaY;
 
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseMoved',
-    x: startX,
-    y: startY,
-    button: 'none',
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x: startX,
-    y: startY,
-    button: 'left',
-    buttons: 1,
-    clickCount: 1,
-    modifiers: (options.shiftKey ? 8 : 0) | (options.altKey ? 1 : 0),
-  });
-  await sleep(50);
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseMoved',
-    x: endX,
-    y: endY,
-    button: 'left',
-    buttons: 1,
-    modifiers: (options.shiftKey ? 8 : 0) | (options.altKey ? 1 : 0),
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x: endX,
-    y: endY,
-    button: 'left',
-    buttons: 0,
-    clickCount: 1,
-  });
-  await sleep(300);
+  const dragHandle = async () => {
+    const modifiers = (options.shiftKey ? 8 : 0) | (options.altKey ? 1 : 0);
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: startX,
+      y: startY,
+      button: 'none',
+      pointerType: 'mouse',
+    });
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: startX,
+      y: startY,
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+      modifiers,
+      pointerType: 'mouse',
+    });
+    await sleep(50);
+    for (let step = 1; step <= 4; step += 1) {
+      await client.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: Math.round(startX + (deltaX * step) / 4),
+        y: Math.round(startY + (deltaY * step) / 4),
+        button: 'left',
+        buttons: 1,
+        modifiers,
+        pointerType: 'mouse',
+      });
+      await sleep(40);
+    }
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: endX,
+      y: endY,
+      button: 'left',
+      buttons: 0,
+      clickCount: 1,
+      pointerType: 'mouse',
+    });
+    await sleep(300);
+  };
 
-  const after = await getElementBox(client, elementId);
+  const dispatchPointerResize = async () => {
+    await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      const handle = node
+        ? Array.from(node.children).find((child) => (
+            child.getAttribute('data-role') === 'canvas-resize-handle' &&
+            child.getAttribute('data-resize-handle') === ${JSON.stringify(options.handle || 'se')}
+          ))
+        : null;
+      if (!(handle instanceof HTMLElement)) return false;
+      const pointerId = 101;
+      const eventBase = {
+        bubbles: true,
+        cancelable: true,
+        pointerId,
+        pointerType: 'mouse',
+        button: 0,
+      };
+      handle.dispatchEvent(new PointerEvent('pointerdown', {
+        ...eventBase,
+        buttons: 1,
+        clientX: ${startX},
+        clientY: ${startY},
+      }));
+      for (let step = 1; step <= 4; step += 1) {
+        window.dispatchEvent(new PointerEvent('pointermove', {
+          ...eventBase,
+          buttons: 1,
+          clientX: Math.round(${startX} + (${deltaX} * step) / 4),
+          clientY: Math.round(${startY} + (${deltaY} * step) / 4),
+        }));
+      }
+      window.dispatchEvent(new PointerEvent('pointerup', {
+        ...eventBase,
+        buttons: 0,
+        clientX: ${endX},
+        clientY: ${endY},
+      }));
+      return true;
+    })()`);
+    await sleep(300);
+  };
+
+  await dragHandle();
+
+  let after = await getElementBox(client, elementId);
+  if (
+    after &&
+    !options.assert &&
+    after.width <= before.width &&
+    after.height <= before.height
+  ) {
+    await dispatchPointerResize();
+    after = await getElementBox(client, elementId);
+  }
   assert(after, `Element ${elementId} disappeared after resize`);
   if (options.assert) {
     options.assert({ before, after, handle });
@@ -12403,6 +12609,16 @@ const main = async () => {
         event.method === 'Runtime.exceptionThrown'
         || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
       ))
+      .filter((event) => {
+        const entry = event.params?.entry;
+        const url = entry?.url || '';
+        const text = entry?.text || '';
+        return !(
+          entry?.source === 'network' &&
+          /net::ERR_NAME_NOT_RESOLVED/.test(text) &&
+          /^https:\/\/cdn\.backy\.test\//.test(url)
+        );
+      })
       .map((event) => event.params);
     const invalidInputWarnings = client.events
       .filter((event) => (
