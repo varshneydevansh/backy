@@ -34,6 +34,7 @@ import {
   listAdminAuditLogs,
   listBlogPosts,
   listCollections,
+  listCollectionRecords,
   listComments,
   listFormContacts,
   listForms,
@@ -43,6 +44,7 @@ import {
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type Collection,
+  type CollectionRecord,
   type FormDefinition,
   type SettingsInfrastructureDiagnostic,
   type SiteReadiness,
@@ -76,10 +78,20 @@ interface DashboardData {
   contacts: number;
   comments: number;
   pendingComments: number;
+  commerce: DashboardCommerceMetrics;
   settings?: SiteSettingsInput;
   auditLogs: AdminAuditLog[];
   readiness: SiteReadiness[];
   source: DashboardSource;
+}
+
+interface DashboardCommerceMetrics {
+  productCount: number;
+  orderCount: number;
+  openOrderCount: number;
+  paidOrderCount: number;
+  loadedOrderValue: number;
+  currency: string;
 }
 
 interface DashboardIssue {
@@ -87,8 +99,17 @@ interface DashboardIssue {
   label: string;
   detail: string;
   severity: 'error' | 'warning' | 'info';
-  to: '/sites' | '/pages' | '/settings' | '/media' | '/collections' | '/comments' | '/forms';
+  to: '/sites' | '/pages' | '/settings' | '/media' | '/collections' | '/comments' | '/forms' | '/products' | '/orders';
 }
+
+const emptyCommerceMetrics = (): DashboardCommerceMetrics => ({
+  productCount: 0,
+  orderCount: 0,
+  openOrderCount: 0,
+  paidOrderCount: 0,
+  loadedOrderValue: 0,
+  currency: 'USD',
+});
 
 const emptyDashboardData = (): DashboardData => ({
   sites: [],
@@ -101,6 +122,7 @@ const emptyDashboardData = (): DashboardData => ({
   contacts: 0,
   comments: 0,
   pendingComments: 0,
+  commerce: emptyCommerceMetrics(),
   auditLogs: [],
   readiness: [],
   source: 'backend',
@@ -291,6 +313,54 @@ const listContactCountForDashboard = async (siteId: string, formId: string): Pro
   }
 };
 
+const orderStatusValue = (record: CollectionRecord, key: string) => {
+  const value = record.values[key];
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+};
+
+const isOpenOrderRecord = (record: CollectionRecord) => {
+  const orderStatus = orderStatusValue(record, 'orderstatus');
+  const fulfillmentStatus = orderStatusValue(record, 'fulfillmentstatus');
+  const closedStatuses = new Set(['completed', 'fulfilled', 'cancelled', 'canceled', 'refunded', 'archived']);
+
+  return !closedStatuses.has(orderStatus) && !closedStatuses.has(fulfillmentStatus);
+};
+
+const orderRecordTotal = (record: CollectionRecord) => {
+  const value = record.values.total;
+  const total = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(total) ? total : 0;
+};
+
+const orderRecordCurrency = (record: CollectionRecord) => {
+  const value = record.values.currency;
+  return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : '';
+};
+
+const loadCommerceMetricsForDashboard = async (
+  collections: Collection[],
+): Promise<DashboardCommerceMetrics> => {
+  const productCollections = collections.filter((collection) => collection.slug === 'products');
+  const orderCollections = collections.filter((collection) => collection.slug === 'orders');
+  const productResults = await Promise.all(productCollections.map((collection) => (
+    listCollectionRecords(collection.siteId, collection.id, { limit: 1 }).catch(() => null)
+  )));
+  const orderResults = await Promise.all(orderCollections.map((collection) => (
+    listCollectionRecords(collection.siteId, collection.id, { limit: 100 }).catch(() => null)
+  )));
+  const orderRecords = orderResults.flatMap((result) => result?.records || []);
+  const currency = orderRecords.map(orderRecordCurrency).find(Boolean) || 'USD';
+
+  return {
+    productCount: productResults.reduce((total, result) => total + (result?.pagination.total ?? 0), 0),
+    orderCount: orderResults.reduce((total, result) => total + (result?.pagination.total ?? 0), 0),
+    openOrderCount: orderRecords.filter(isOpenOrderRecord).length,
+    paidOrderCount: orderRecords.filter((record) => orderStatusValue(record, 'paymentstatus') === 'paid').length,
+    loadedOrderValue: orderRecords.reduce((total, record) => total + orderRecordTotal(record), 0),
+    currency,
+  };
+};
+
 function buildDashboardIssues(data: DashboardData, error: string | null): DashboardIssue[] {
   const readinessErrors = data.readiness.reduce((total, item) => total + item.summary.errors, 0);
   const readinessWarnings = data.readiness.reduce((total, item) => total + item.summary.warnings, 0);
@@ -344,6 +414,26 @@ function buildDashboardIssues(data: DashboardData, error: string | null): Dashbo
       detail: 'Approve, reject, or archive visitor discussion before it appears on public frontends.',
       severity: 'warning',
       to: '/comments',
+    });
+  }
+
+  if (data.commerce.openOrderCount > 0) {
+    issues.push({
+      id: 'open-orders',
+      label: `${data.commerce.openOrderCount} open commerce order${data.commerce.openOrderCount === 1 ? '' : 's'}`,
+      detail: 'Review payment, fulfillment, refund, or support state before storefront handoff.',
+      severity: 'warning',
+      to: '/orders',
+    });
+  }
+
+  if (data.collections.some((collection) => collection.slug === 'products') && data.commerce.productCount === 0) {
+    issues.push({
+      id: 'empty-products',
+      label: 'Product catalog has no records',
+      detail: 'Add products so the public commerce catalog can return sellable items.',
+      severity: 'info',
+      to: '/products',
     });
   }
 
@@ -404,6 +494,15 @@ function StatCard({
         </span>
       </div>
     </Link>
+  );
+}
+
+function SignalMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/30 px-2 py-2">
+      <div className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{value}</div>
+    </div>
   );
 }
 
@@ -609,10 +708,12 @@ function Index() {
         Promise.all(sites.map((site) => listForms(site.id).catch(() => [] as FormDefinition[]))),
         Promise.all(sites.map((site) => listComments(site.id, { limit: 100 }).catch(() => null))),
       ]);
+      const collections = collectionsBySite.flat();
       const forms = formsBySite.flat();
       const contactCounts = await Promise.all(
         forms.map((form) => listContactCountForDashboard(form.siteId, form.id)),
       );
+      const commerce = await loadCommerceMetricsForDashboard(collections);
 
       const media = mediaBySite.flat();
       const defaultMediaSiteId = getDefaultMediaSiteId();
@@ -627,13 +728,14 @@ function Index() {
         posts: postsBySite.flat(),
         users,
         media: [...media, ...defaultSiteMedia],
-        collections: collectionsBySite.flat(),
+        collections,
         forms,
         contacts: contactCounts.reduce((total, count) => total + count, 0),
         comments: commentsBySite.reduce((total, result) => total + (result?.count ?? 0), 0),
         pendingComments: commentsBySite.reduce((total, result) => (
           total + (result?.comments.filter((comment) => comment.status === 'pending').length ?? 0)
         ), 0),
+        commerce,
         settings,
         auditLogs: auditResult.logs,
         readiness: readinessBySite.filter((item): item is SiteReadiness => Boolean(item)),
@@ -655,6 +757,7 @@ function Index() {
         contacts: 0,
         comments: 0,
         pendingComments: 0,
+        commerce: emptyCommerceMetrics(),
         auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
         source: 'fallback',
       });
@@ -687,6 +790,12 @@ function Index() {
   const publishedCollections = dashboard.collections.filter((collection) => collection.status === 'published').length;
   const productsCollection = dashboard.collections.find((collection) => collection.slug === 'products');
   const ordersCollection = dashboard.collections.find((collection) => collection.slug === 'orders');
+  const workflowFailureCount = dashboard.auditLogs.filter((log) => {
+    const action = log.action.toLowerCase();
+    const status = typeof log.metadata?.status === 'string' ? log.metadata.status.toLowerCase() : '';
+    const outcome = typeof log.metadata?.outcome === 'string' ? log.metadata.outcome.toLowerCase() : '';
+    return action.includes('fail') || action.includes('error') || status === 'failed' || outcome === 'failed';
+  }).length;
   const readinessErrors = dashboard.readiness.reduce((total, item) => total + item.summary.errors, 0);
   const readinessWarnings = dashboard.readiness.reduce((total, item) => total + item.summary.warnings, 0);
   const backendHealthy = dashboard.source === 'backend' && !error;
@@ -783,6 +892,12 @@ function Index() {
     commerce: {
       catalogEndpoint: frontendContractUrls.products,
       orderIntakeEndpoint: frontendContractUrls.orderIntake,
+      productCount: dashboard.commerce.productCount,
+      orderCount: dashboard.commerce.orderCount,
+      openOrderCount: dashboard.commerce.openOrderCount,
+      paidOrderCount: dashboard.commerce.paidOrderCount,
+      loadedOrderValue: dashboard.commerce.loadedOrderValue,
+      currency: dashboard.commerce.currency,
       productsCollection: productsCollection
         ? { id: productsCollection.id, status: productsCollection.status, publicRead: productsCollection.permissions.publicRead }
         : null,
@@ -804,7 +919,10 @@ function Index() {
       forms: dashboard.forms.length,
       media: dashboard.media.length,
       comments: dashboard.comments,
+      pendingComments: dashboard.pendingComments,
       contacts: dashboard.contacts,
+      products: dashboard.commerce.productCount,
+      orders: dashboard.commerce.orderCount,
     },
   }), [
     activeSite,
@@ -814,9 +932,11 @@ function Index() {
     dashboard.collections.length,
     dashboard.comments,
     dashboard.contacts,
+    dashboard.commerce,
     dashboard.forms.length,
     dashboard.media.length,
     dashboard.pages.length,
+    dashboard.pendingComments,
     dashboard.posts.length,
     dashboard.settings?.deliveryMode,
     dashboard.sites.length,
@@ -1009,6 +1129,12 @@ function Index() {
     }
   };
 
+  const commerceValueLabel = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: dashboard.commerce.currency || 'USD',
+    maximumFractionDigits: 0,
+  }).format(dashboard.commerce.loadedOrderValue);
+
   const stats = [
     {
       label: 'Sites',
@@ -1068,8 +1194,8 @@ function Index() {
     },
     {
       label: 'Commerce',
-      value: [productsCollection, ordersCollection].filter(Boolean).length,
-      detail: `${productsCollection ? 'Products' : 'No products'} · ${ordersCollection ? 'Orders' : 'No orders'}`,
+      value: dashboard.commerce.productCount,
+      detail: `${dashboard.commerce.orderCount} orders · ${dashboard.commerce.openOrderCount} open`,
       icon: ShoppingCart,
       to: productsCollection ? '/products' as const : '/collections' as const,
       tone: 'bg-primary/10 text-primary',
@@ -1316,6 +1442,115 @@ function Index() {
             <StatCard key={stat.label} {...stat} search={getDashboardRouteSearch(stat.to)} />
           ))}
         </div>
+
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          data-testid="dashboard-operations-signal-board"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="size-4 text-primary" />
+                <h2 className="font-semibold">Operations signal board</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Live operational signals for commerce, moderation, and failed workflows from the same backend APIs used by the control pages.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {activeSite?.name || activeSiteId}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <Link
+              to={productsCollection ? '/products' : '/collections'}
+              search={getDashboardRouteSearch(productsCollection ? '/products' : '/collections')}
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Commerce catalog</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Products, orders, open fulfillment, and loaded order value.
+                  </div>
+                </div>
+                <ShoppingCart className="size-4 text-primary" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Products" value={`${dashboard.commerce.productCount}`} />
+                <SignalMetric label="Orders" value={`${dashboard.commerce.orderCount}`} />
+                <SignalMetric label="Open" value={`${dashboard.commerce.openOrderCount}`} />
+                <SignalMetric label="Paid" value={`${dashboard.commerce.paidOrderCount}`} />
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Loaded order value</span>
+                <span className="ml-2 font-semibold text-foreground">{commerceValueLabel}</span>
+              </div>
+            </Link>
+
+            <Link
+              to="/comments"
+              search={getDashboardRouteSearch('/comments')}
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Moderation queue</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Visitor comments and forms that affect public trust and lead response.
+                  </div>
+                </div>
+                <MessageSquare className="size-4 text-warning" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Comments" value={`${dashboard.comments}`} />
+                <SignalMetric label="Pending" value={`${dashboard.pendingComments}`} />
+                <SignalMetric label="Forms" value={`${dashboard.forms.length}`} />
+                <SignalMetric label="Contacts" value={`${dashboard.contacts}`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                dashboard.pendingComments > 0 ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {dashboard.pendingComments > 0
+                  ? 'Moderation needs review before public display.'
+                  : 'No pending comments in the loaded queue.'}
+              </div>
+            </Link>
+
+            <Link
+              to="/settings"
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Workflow alerts</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Failed audit events and infrastructure blockers that can affect automations.
+                  </div>
+                </div>
+                <AlertTriangle className="size-4 text-warning" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Failures" value={`${workflowFailureCount}`} />
+                <SignalMetric label="Readiness errors" value={`${readinessErrors}`} />
+                <SignalMetric label="Warnings" value={`${readinessWarnings}`} />
+                <SignalMetric label="Infra blocked" value={`${infrastructureDiagnosticSummary.blocked}`} />
+              </div>
+              <div className={cn(
+                'mt-3 rounded-md border px-3 py-2 text-xs',
+                workflowFailureCount || readinessErrors || infrastructureDiagnosticSummary.blocked
+                  ? 'border-warning/25 bg-warning/10 text-warning'
+                  : 'border-success/25 bg-success/10 text-success',
+              )}>
+                {workflowFailureCount || readinessErrors || infrastructureDiagnosticSummary.blocked
+                  ? 'Review workflow failures, readiness blockers, or infrastructure diagnostics.'
+                  : 'No failed workflow signals in loaded activity.'}
+              </div>
+            </Link>
+          </div>
+        </section>
 
         <section id="dashboard-readiness" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex flex-wrap items-start justify-between gap-4">

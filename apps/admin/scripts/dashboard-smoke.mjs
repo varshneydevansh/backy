@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_DASHBOARD_CDP_PORT || 9385);
 const SCREENSHOT_PATH = process.env.BACKY_DASHBOARD_SCREENSHOT || path.join(os.tmpdir(), 'backy-dashboard-smoke.png');
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -39,12 +40,17 @@ const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) =>
 });
 
 const requestApi = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
   });
   const payload = await response.json().catch(() => ({}));
 
@@ -53,6 +59,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const createSite = async ({ name, slug }) => {
@@ -137,8 +164,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -339,6 +377,11 @@ const assertDashboardLayout = async (client, siteName) => {
     hasSiteSelector: Boolean(document.querySelector('#dashboard-active-site')),
     hasSite: Array.from(document.querySelectorAll('#dashboard-active-site option')).some((option) => option.textContent?.includes(${JSON.stringify(siteName)})),
     hasStats: Boolean(document.querySelector('#dashboard-stats')),
+    hasOperationsSignals: Boolean(document.querySelector('[data-testid="dashboard-operations-signal-board"]')) &&
+      document.body?.innerText?.includes('Operations signal board') &&
+      document.body?.innerText?.includes('Commerce catalog') &&
+      document.body?.innerText?.includes('Moderation queue') &&
+      document.body?.innerText?.includes('Workflow alerts'),
     hasReadiness: Boolean(document.querySelector('#dashboard-readiness')) && document.body?.innerText?.includes('Backy platform readiness'),
     hasInfrastructureDiagnostics: Boolean(document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]') && document.body?.innerText?.includes('Infrastructure diagnostics')),
     hasWorkflows: Boolean(document.querySelector('#dashboard-workflows')) && document.body?.innerText?.includes('Build and manage'),
@@ -356,6 +399,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSiteSelector &&
       layout.hasSite &&
       layout.hasStats &&
+      layout.hasOperationsSignals &&
       layout.hasReadiness &&
       layout.hasInfrastructureDiagnostics &&
       layout.hasWorkflows &&
@@ -454,6 +498,7 @@ const main = async () => {
   const slug = `dashboard-smoke-${suffix}`;
 
   try {
+    await loginAdminApi();
     const created = await createSite({ name: siteName, slug });
     siteId = created.publicSiteId || created.id;
 
@@ -469,7 +514,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToDashboard(client);
     await waitForDashboardSite(client, siteName);
