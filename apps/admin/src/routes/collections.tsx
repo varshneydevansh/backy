@@ -10,6 +10,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  History,
   Plus,
   RefreshCw,
   Save,
@@ -28,6 +29,7 @@ import {
   exportCollectionRecordsCsv,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
+  listAdminAuditLogs,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -37,6 +39,7 @@ import {
   type CollectionFieldType,
   type CollectionPermissions,
   type CollectionRecord,
+  type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -158,6 +161,18 @@ const COLLECTION_CONTROL_AREAS = [
     detail: 'Create, filter, import, export, publish, archive, and delete collection records.',
     href: '#collections-records',
   },
+  {
+    title: 'Access and activity',
+    detail: 'Permission keys plus recent schema audit events for this site.',
+    href: '#collections-audit',
+  },
+] as const;
+
+const COLLECTION_PERMISSION_CONTRACT = [
+  { key: 'collections.view', label: 'View schemas and records', detail: 'Required for list/detail reads and non-CSV record browsing.' },
+  { key: 'collections.edit', label: 'Edit schemas and records', detail: 'Required for collection saves, record writes, imports, and bulk status updates.' },
+  { key: 'collections.export', label: 'Export records', detail: 'Required for backend CSV exports from filtered record lists.' },
+  { key: 'collections.delete', label: 'Delete schemas or records', detail: 'Required for destructive schema, record, and selected-record deletes.' },
 ] as const;
 
 interface CollectionTemplate {
@@ -794,6 +809,9 @@ function CollectionsPage() {
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
+  const [collectionAuditLogs, setCollectionAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -803,7 +821,7 @@ function CollectionsPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
-  const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
+  const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending || isAuditLoading;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1617,8 +1635,28 @@ function CollectionsPage() {
     }
   };
 
+  const loadCollectionAuditLogs = async () => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+    try {
+      const result = await listAdminAuditLogs({
+        siteId: activeSiteId,
+        entity: 'collection',
+        limit: 8,
+        offset: 0,
+      });
+      setCollectionAuditLogs(result.logs);
+    } catch (loadError) {
+      setCollectionAuditLogs([]);
+      setAuditError(loadError instanceof Error ? loadError.message : 'Unable to load collection activity');
+    } finally {
+      setIsAuditLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadCollections();
+    void loadCollectionAuditLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
 
@@ -1706,6 +1744,7 @@ function CollectionsPage() {
           : [saved, ...prev];
       });
       selectCollection(saved);
+      void loadCollectionAuditLogs();
     } catch (saveError) {
       showApiError(saveError, 'Unable to save collection');
     } finally {
@@ -1734,6 +1773,7 @@ function CollectionsPage() {
       }
       setPendingCollectionDelete(null);
       setNotice('Collection deleted.');
+      void loadCollectionAuditLogs();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection');
     } finally {
@@ -2128,6 +2168,78 @@ function CollectionsPage() {
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
               </button>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="collections-audit" className="mb-5 rounded-lg border border-border bg-card p-4 scroll-mt-24" data-testid="collections-audit-panel">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <History className="size-4" />
+              Collections access and activity
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Permission keys for collection operations plus request-id-backed schema create, update, and delete audit events.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadCollectionAuditLogs()}
+            disabled={isAuditLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${isAuditLoading ? 'animate-spin' : ''}`} />
+            Refresh activity
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="rounded-lg border border-border bg-background p-4" data-testid="collections-permission-contract">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Permission contract</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {COLLECTION_PERMISSION_CONTRACT.map((permission) => (
+                <div key={permission.key} className="rounded-lg border border-border bg-card px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{permission.label}</span>
+                    <code className="rounded bg-muted px-2 py-1 text-xs">{permission.key}</code>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{permission.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Recent collection activity</h3>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {collectionAuditLogs.length} shown
+              </span>
+            </div>
+            {auditError && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {auditError}
+              </div>
+            )}
+            <div className="mt-3 grid gap-2" data-testid="collections-audit-list">
+              {isAuditLoading ? (
+                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                  Loading collection activity...
+                </div>
+              ) : collectionAuditLogs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                  No collection audit events recorded yet.
+                </div>
+              ) : (
+                collectionAuditLogs.map((log) => (
+                  <CollectionAuditLogCard key={log.id} log={log} />
+                ))
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -3500,6 +3612,62 @@ function CollectionReadinessCheck({ label, detail, ready }: { label: string; det
       <div className="min-w-0">
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+const collectionAuditMetadataText = (log: AdminAuditLog, key: string): string => {
+  const value = log.metadata?.[key];
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+};
+
+const collectionAuditTitle = (log: AdminAuditLog): string => {
+  if (log.action === 'create') return 'Collection created';
+  if (log.action === 'update') return 'Collection updated';
+  if (log.action === 'delete') return 'Collection deleted';
+  return log.action.replace(/[._-]+/g, ' ');
+};
+
+const collectionAuditPermission = (action: string): string => (
+  action === 'delete' ? 'collections.delete' : 'collections.edit'
+);
+
+const collectionAuditDescription = (log: AdminAuditLog): string => {
+  const name = collectionAuditMetadataText(log, 'name') || log.entityId;
+  const slug = collectionAuditMetadataText(log, 'slug');
+  const status = collectionAuditMetadataText(log, 'status');
+  const fieldCount = collectionAuditMetadataText(log, 'fieldCount');
+  const changedFields = Array.isArray(log.metadata?.changedFields)
+    ? log.metadata.changedFields.filter((field): field is string => typeof field === 'string').join(', ')
+    : '';
+
+  return [
+    name,
+    slug ? `/${slug}` : null,
+    status || null,
+    fieldCount ? `${fieldCount} fields` : null,
+    changedFields ? `changed ${changedFields}` : null,
+  ].filter(Boolean).join(' · ');
+};
+
+function CollectionAuditLogCard({ log }: { log: AdminAuditLog }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{collectionAuditTitle(log)}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{collectionAuditDescription(log)}</div>
+        </div>
+        <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+          {collectionAuditPermission(log.action)}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span>{formatDate(log.createdAt)}</span>
+        {log.requestId ? <code className="rounded bg-muted px-1.5 py-0.5">{log.requestId}</code> : null}
       </div>
     </div>
   );

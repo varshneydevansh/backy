@@ -354,8 +354,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -402,7 +413,12 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
     `(() => ({
       ready: Boolean(document.querySelector('[data-testid="collections-command-center"]')) &&
         Boolean(document.querySelector('[data-testid="collections-templates"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
+        Boolean(document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)})) &&
         document.body?.innerText?.includes('Collections command center') &&
+        document.body?.innerText?.includes('Collections access and activity') &&
+        document.body?.innerText?.includes('Collection created') &&
+        document.body?.innerText?.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}) &&
         document.body?.innerText?.includes(${JSON.stringify(recordSlug)}),
       body: document.body?.innerText?.slice(0, 1200) || '',
       path: window.location.pathname,
@@ -431,6 +447,13 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         body.includes('Editor data-binding contract') &&
         body.includes('Repeater/list sections') &&
         body.includes('Public write flows'),
+      hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-permission-contract"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-audit-list"]')) &&
+        body.includes('Collections access and activity') &&
+        body.includes('collections.view') &&
+        body.includes('collections.edit') &&
+        body.includes('Collection created'),
       hasBuilder: body.includes('Schema builder') && body.includes('Public read') && body.includes('Visitor create'),
       hasRecords: body.includes('Records') && body.includes('Import CSV') && body.includes('Export CSV') && body.includes('New record'),
       hasCollection: body.includes(${JSON.stringify(collectionName)}) && body.includes(${JSON.stringify(`/${collectionSlug}`)}),
@@ -449,9 +472,10 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     layout.hasTemplates &&
     layout.hasFrontendTemplates &&
     layout.hasApiContract &&
-    layout.hasFrontendContract &&
-    layout.hasBindingContract &&
-    layout.hasBuilder &&
+      layout.hasFrontendContract &&
+      layout.hasBindingContract &&
+      layout.hasAuditPanel &&
+      layout.hasBuilder &&
       layout.hasRecords &&
       layout.hasCollection &&
       layout.hasRecord &&
@@ -649,7 +673,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug });
