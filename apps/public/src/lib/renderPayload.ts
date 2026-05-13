@@ -532,6 +532,72 @@ const getBoundCollectionRecord = (
   }).records[0];
 };
 
+const MAX_COLLECTION_REFERENCE_DEPTH = 5;
+
+const joinedReferenceValue = (values: unknown[]): string => values
+  .filter((value) => value !== undefined && value !== null)
+  .map((value) => (Array.isArray(value) ? value.join(', ') : String(value)))
+  .filter((value) => value.length > 0)
+  .join(', ');
+
+const resolveCollectionRecordFieldPath = (
+  siteId: string,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  pathParts: string[],
+  depth = 0,
+): unknown => {
+  if (depth > MAX_COLLECTION_REFERENCE_DEPTH || pathParts.length === 0) {
+    return undefined;
+  }
+
+  const [fieldKey, ...remainingPath] = pathParts;
+  if (!fieldKey) {
+    return undefined;
+  }
+
+  const value = record.values[fieldKey];
+  if (remainingPath.length === 0) {
+    return value;
+  }
+
+  const field = collection.fields.find((candidate) => candidate.key === fieldKey);
+  const referenceCollectionId = typeof field?.referenceCollectionId === 'string'
+    ? field.referenceCollectionId
+    : '';
+  if (!referenceCollectionId) {
+    return undefined;
+  }
+
+  const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
+  if (!referenceCollection) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return joinedReferenceValue(
+      value.map((entry) => {
+        if (typeof entry !== 'string' || entry.length === 0) {
+          return undefined;
+        }
+        const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry);
+        return referenceRecord
+          ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, depth + 1)
+          : undefined;
+      }),
+    );
+  }
+
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+
+  const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, value);
+  return referenceRecord
+    ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, depth + 1)
+    : undefined;
+};
+
 const valueForBinding = (
   siteId: string,
   binding: JsonObject,
@@ -563,40 +629,8 @@ const valueForBinding = (
 
   const sourcePath = typeof source.path === 'string' ? source.path : '';
   if (sourcePath.startsWith(`${field}.`)) {
-    const joinedField = sourcePath.slice(field.length + 1);
-    if (!joinedField) {
-      return record.values[field];
-    }
-
-    const referenceField = collection.fields.find((candidate) => candidate.key === field);
-    const referenceCollectionId = typeof referenceField?.referenceCollectionId === 'string'
-      ? referenceField.referenceCollectionId
-      : '';
-    if (!referenceCollectionId) {
-      return record.values[field];
-    }
-
-    const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
-    if (!referenceCollection) {
-      return record.values[field];
-    }
-
-    const referenceValue = record.values[field];
-    if (Array.isArray(referenceValue)) {
-      return referenceValue
-        .map((entry) => (typeof entry === 'string' ? getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry) : null))
-        .filter((entry): entry is StoreCollectionRecord => Boolean(entry))
-        .map((entry) => entry.values[joinedField])
-        .filter((entry) => entry !== undefined && entry !== null)
-        .join(', ');
-    }
-
-    if (typeof referenceValue === 'string' && referenceValue.length > 0) {
-      const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, referenceValue);
-      if (referenceRecord) {
-        return referenceRecord.values[joinedField];
-      }
-    }
+    const joinedValue = resolveCollectionRecordFieldPath(siteId, collection, record, sourcePath.split('.'));
+    return joinedValue === undefined ? record.values[field] : joinedValue;
   }
 
   return record.values[field];
@@ -849,39 +883,10 @@ const repeaterRecordValueForFieldPath = (
   fieldPath: unknown,
 ): unknown => {
   const path = typeof fieldPath === 'string' ? fieldPath : '';
-  const [referenceKey, joinedKey] = path.split('.');
-  if (!referenceKey || !joinedKey) {
+  if (!path.includes('.')) {
     return undefined;
   }
-
-  const referenceField = collection.fields.find((field) => field.key === referenceKey);
-  const referenceCollectionId = typeof referenceField?.referenceCollectionId === 'string'
-    ? referenceField.referenceCollectionId
-    : '';
-  if (!referenceCollectionId) {
-    return undefined;
-  }
-
-  const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
-  if (!referenceCollection) {
-    return undefined;
-  }
-
-  const referenceValue = record.values[referenceKey];
-  if (Array.isArray(referenceValue)) {
-    return referenceValue
-      .map((entry) => (typeof entry === 'string' ? getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry) : null))
-      .filter((entry): entry is StoreCollectionRecord => Boolean(entry))
-      .map((entry) => entry.values[joinedKey])
-      .filter((entry) => entry !== undefined && entry !== null)
-      .join(', ');
-  }
-
-  if (typeof referenceValue !== 'string' || referenceValue.length === 0) {
-    return undefined;
-  }
-
-  return getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, referenceValue)?.values[joinedKey];
+  return resolveCollectionRecordFieldPath(siteId, collection, record, path.split('.'));
 };
 
 const hydrateRepeaterJoinedRecordValues = (

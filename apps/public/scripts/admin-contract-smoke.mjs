@@ -18,6 +18,8 @@ let createdCollectionId = null;
 let createdCollectionRecordId = null;
 let createdReferenceCollectionId = null;
 let createdReferenceRecordId = null;
+let createdNestedReferenceCollectionId = null;
+let createdNestedReferenceRecordId = null;
 let commerceProductsCollectionId = null;
 let commerceFutureProductRecordId = null;
 let commercePastProductRecordId = null;
@@ -234,6 +236,14 @@ async function cleanup() {
     await request(`/api/admin/sites/${createdSiteId}/collections/${createdReferenceCollectionId}`, { method: 'DELETE' }).catch(() => {});
   }
 
+  if (createdSiteId && createdNestedReferenceCollectionId && createdNestedReferenceRecordId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdNestedReferenceCollectionId}/records/${createdNestedReferenceRecordId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdNestedReferenceCollectionId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdNestedReferenceCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdSiteId && commerceProductsCollectionId && commerceFutureProductRecordId) {
     await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commerceFutureProductRecordId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -319,6 +329,8 @@ try {
   const collectionRecordSlug = `admin-contract-record-${unique}`;
   const referenceCollectionSlug = `admin-contract-authors-${unique}`;
   const referenceRecordSlug = `admin-contract-author-${unique}`;
+  const nestedReferenceCollectionSlug = `admin-contract-companies-${unique}`;
+  const nestedReferenceRecordSlug = `admin-contract-company-${unique}`;
   const dynamicTemplateCollectionSlug = `admin-contract-template-${unique}`;
   const dynamicTemplateRecordSlug = `admin-contract-template-record-${unique}`;
   const futureProductSlug = `admin-contract-future-product-${unique}`;
@@ -3110,6 +3122,49 @@ try {
     assert(unauthCollections.status === 401, `Collections admin API should reject missing auth, got ${unauthCollections.status}`);
     assert(unauthCollectionsJson?.success === false && unauthCollectionsJson?.error?.code === 'UNAUTHORIZED', `Collections admin API missing auth envelope: ${JSON.stringify(unauthCollectionsJson).slice(0, 500)}`);
 
+    const createNestedReferenceCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Companies',
+        slug: nestedReferenceCollectionSlug,
+        status: 'published',
+        fields: [
+          { key: 'name', label: 'Name', type: 'text', required: true, unique: true },
+          { key: 'domain', label: 'Domain', type: 'text' },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(createNestedReferenceCollection.response.status === 201, `${createNestedReferenceCollection.url} expected 201, got ${createNestedReferenceCollection.response.status}`);
+    createdNestedReferenceCollectionId = createNestedReferenceCollection.json?.data?.collection?.id;
+    assert(createdNestedReferenceCollectionId, `${createNestedReferenceCollection.url} missing nested reference collection id`);
+
+    const createNestedReferenceRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdNestedReferenceCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: nestedReferenceRecordSlug,
+        status: 'published',
+        values: {
+          name: 'Contract Company',
+          domain: 'contract.example.test',
+        },
+      }),
+    });
+    assert(createNestedReferenceRecord.response.status === 201, `${createNestedReferenceRecord.url} expected 201, got ${createNestedReferenceRecord.response.status}`);
+    createdNestedReferenceRecordId = createNestedReferenceRecord.json?.data?.record?.id;
+    assert(createdNestedReferenceRecordId, `${createNestedReferenceRecord.url} missing nested reference record id`);
+
     const createReferenceCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {
@@ -3122,6 +3177,7 @@ try {
         fields: [
           { key: 'name', label: 'Name', type: 'text', required: true, unique: true },
           { key: 'bio', label: 'Bio', type: 'richText' },
+          { key: 'company', label: 'Company', type: 'reference', referenceCollectionId: createdNestedReferenceCollectionId },
         ],
         permissions: {
           publicRead: true,
@@ -3146,6 +3202,7 @@ try {
         values: {
           name: 'Contract Author',
           bio: 'Author referenced by collection-bound render payloads.',
+          company: createdNestedReferenceRecordId,
         },
       }),
     });
@@ -5020,7 +5077,7 @@ try {
                     kind: 'collection',
                     collectionId: createdCollectionId,
                     field: 'author',
-                    path: 'author.name',
+                    path: 'author.company.name',
                     recordId: createdCollectionRecordId,
                   },
                   mode: 'text',
@@ -5037,7 +5094,7 @@ try {
               props: {
                 collectionId: createdCollectionId,
                 datasetId: 'dataset_contract_repeater',
-                titleField: 'author.name',
+                titleField: 'author.company.name',
                 descriptionField: 'summary',
                 columns: 2,
                 limit: 6,
@@ -5092,7 +5149,7 @@ try {
         && binding.elementId === 'bound_author'
         && binding.source?.collectionId === createdCollectionId
         && binding.source?.field === 'author'
-        && binding.source?.path === 'author.name'
+        && binding.source?.path === 'author.company.name'
       )),
       `${boundRender.url} missing joined collection binding manifest`,
     );
@@ -5106,7 +5163,7 @@ try {
     assert(
       boundRender.json?.data?.content?.elements?.some((element) => (
         element.id === 'bound_author'
-        && element.props?.content === 'Contract Author'
+        && element.props?.content === 'Contract Company'
       )),
       `${boundRender.url} did not resolve joined collection value into element props`,
     );
@@ -5115,11 +5172,11 @@ try {
         element.id === 'bound_repeater'
         && element.type === 'repeater'
         && element.props?.datasetId === 'dataset_contract_repeater'
-        && element.props?.titleField === 'author.name'
+        && element.props?.titleField === 'author.company.name'
         && element.props?.records?.some((record) => (
           record.id === createdCollectionRecordId
           && record.href === dynamicItemPath
-          && record.values?.['author.name'] === 'Contract Author'
+          && record.values?.['author.company.name'] === 'Contract Company'
         ))
       )),
       `${boundRender.url} did not hydrate joined repeater records into element props`,
@@ -5132,7 +5189,7 @@ try {
     const hostedBoundPage = await request(`/sites/${siteSlug}/${boundPageSlug}`);
     assert(hostedBoundPage.response.status === 200, `${hostedBoundPage.url} expected hosted bound page`);
     assert(hostedBoundPage.text.includes('Collection Record'), `${hostedBoundPage.url} missing hosted repeater record`);
-    assert(hostedBoundPage.text.includes('Contract Author'), `${hostedBoundPage.url} missing hosted joined collection value`);
+    assert(hostedBoundPage.text.includes('Contract Company'), `${hostedBoundPage.url} missing hosted joined collection value`);
 
     const removeBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(removeBoundPage.response.status === 200, `${removeBoundPage.url} expected 200, got ${removeBoundPage.response.status}`);

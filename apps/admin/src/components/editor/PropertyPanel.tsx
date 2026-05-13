@@ -4275,17 +4275,28 @@ const fieldExists = (collection: Collection | null, key: string): boolean => (
   Boolean(collection?.fields.some((field) => field.key === key))
 );
 
-const fieldPathExists = (collection: Collection | null, collections: Collection[], key: string): boolean => {
-  if (!collection || !key) return false;
-  if (fieldExists(collection, key)) return true;
-  const [referenceKey, joinedKey] = key.split('.');
-  if (!referenceKey || !joinedKey) return false;
-  const referenceField = collection.fields.find((field) => field.key === referenceKey);
-  const referenceCollection = referenceField?.referenceCollectionId
-    ? collections.find((candidate) => candidate.id === referenceField.referenceCollectionId)
+const MAX_COLLECTION_FIELD_PATH_DEPTH = 4;
+
+const fieldForFieldPath = (
+  collection: Collection | null,
+  collections: Collection[],
+  key: string,
+  depth = 0,
+): CollectionField | null => {
+  if (!collection || !key || depth > MAX_COLLECTION_FIELD_PATH_DEPTH) return null;
+  const [fieldKey, ...remainingKeys] = key.split('.').filter(Boolean);
+  if (!fieldKey) return null;
+  const field = collection.fields.find((candidate) => candidate.key === fieldKey) || null;
+  if (!field || remainingKeys.length === 0) return field;
+  const referenceCollection = field.referenceCollectionId
+    ? collections.find((candidate) => candidate.id === field.referenceCollectionId) || null
     : null;
-  return Boolean(referenceCollection?.fields.some((field) => field.key === joinedKey));
+  return fieldForFieldPath(referenceCollection, collections, remainingKeys.join('.'), depth + 1);
 };
+
+const fieldPathExists = (collection: Collection | null, collections: Collection[], key: string): boolean => (
+  Boolean(fieldForFieldPath(collection, collections, key))
+);
 
 const collectionFieldPathOptions = (
   collection: Collection | null,
@@ -4293,24 +4304,40 @@ const collectionFieldPathOptions = (
   options: { includeNone?: boolean } = {},
 ): Array<{ value: string; label: string }> => {
   if (!collection) return options.includeNone ? [{ value: '', label: 'None' }] : [];
-  const directOptions = collection.fields.map((field) => ({
-    value: field.key,
-    label: field.label,
-  }));
-  const joinOptions = collection.fields.flatMap((field) => {
-    if (!field.referenceCollectionId) return [];
+  const buildOptions = (
+    currentCollection: Collection,
+    prefix = '',
+    labelPrefix = '',
+    depth = 0,
+    visitedCollectionIds = new Set<string>([currentCollection.id]),
+  ): Array<{ value: string; label: string }> => currentCollection.fields.flatMap((field) => {
+    const value = prefix ? `${prefix}.${field.key}` : field.key;
+    const label = prefix ? `${labelPrefix}${field.label}` : field.label;
+    const directOption = { value, label };
+    if (!field.referenceCollectionId || depth >= MAX_COLLECTION_FIELD_PATH_DEPTH) {
+      return [directOption];
+    }
     const referenceCollection = collections.find((candidate) => candidate.id === field.referenceCollectionId);
-    if (!referenceCollection) return [];
-    return referenceCollection.fields.map((referenceField) => ({
-      value: `${field.key}.${referenceField.key}`,
-      label: `${field.label} -> ${referenceCollection.name}: ${referenceField.label}`,
-    }));
+    if (!referenceCollection || visitedCollectionIds.has(referenceCollection.id)) {
+      return [directOption];
+    }
+    const nextVisited = new Set(visitedCollectionIds);
+    nextVisited.add(referenceCollection.id);
+    return [
+      directOption,
+      ...buildOptions(
+        referenceCollection,
+        value,
+        `${label} -> ${referenceCollection.name}: `,
+        depth + 1,
+        nextVisited,
+      ),
+    ];
   });
 
   return [
     ...(options.includeNone ? [{ value: '', label: 'None' }] : []),
-    ...directOptions,
-    ...joinOptions,
+    ...buildOptions(collection),
   ];
 };
 
@@ -5050,7 +5077,9 @@ function DataBindingProperties({
   const selectedReferenceFieldKey = selectedSourcePath.startsWith(`${selectedFieldKey}.`)
     ? selectedSourcePath.slice(selectedFieldKey.length + 1)
     : '';
-  const selectedReferenceField = selectedReferenceCollection?.fields.find((field) => field.key === selectedReferenceFieldKey) || null;
+  const selectedReferenceFieldOptions = collectionFieldPathOptions(selectedReferenceCollection, collections);
+  const selectedReferenceField = fieldForFieldPath(selectedReferenceCollection, collections, selectedReferenceFieldKey);
+  const selectedReferenceFieldLabel = selectedReferenceFieldOptions.find((option) => option.value === selectedReferenceFieldKey)?.label || selectedReferenceFieldKey;
   const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
   const targetPathOptions = getTargetPathOptions(element.type);
   const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
@@ -5146,7 +5175,7 @@ function DataBindingProperties({
   const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
   const selectedRecordPreviewMedia = selectedRecordPreviewImage(selectedRecordPreview, selectedCollection, siteId);
   const selectedRecordJoinedValue = selectedRecordPreview && selectedField && selectedReferenceField
-    ? `Joins ${selectedField.label} to ${selectedReferenceCollection?.name || 'referenced collection'} ${selectedReferenceField.label}`
+    ? `Joins ${selectedField.label} to ${selectedReferenceFieldLabel}`
     : '';
   const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
   const savedPresetsForCollection = savedBindingPresets.filter((preset) => (
@@ -5193,11 +5222,14 @@ function DataBindingProperties({
       ? collections.find((item) => item.id === field.referenceCollectionId) || null
       : null;
     const rawSourcePath = updates.sourcePath ?? (fieldKey === selectedFieldKey ? selectedSourcePath : '');
-    const referenceFieldKey = rawSourcePath.startsWith(`${fieldKey}.`) ? rawSourcePath.slice(fieldKey.length + 1) : rawSourcePath;
+    const rawReferenceFieldKey = rawSourcePath.startsWith(`${fieldKey}.`) ? rawSourcePath.slice(fieldKey.length + 1) : rawSourcePath;
+    const referenceFieldKey = referenceCollection && fieldPathExists(referenceCollection, collections, rawReferenceFieldKey)
+      ? rawReferenceFieldKey
+      : '';
     const sourcePath = referenceCollection && referenceFieldKey
       ? `${fieldKey}.${referenceFieldKey}`
       : '';
-    const sourcePathField = referenceCollection?.fields.find((item) => item.key === referenceFieldKey) || null;
+    const sourcePathField = fieldForFieldPath(referenceCollection, collections, referenceFieldKey);
     const recordId = updates.recordId ?? selectedRecordId;
     const search = updates.search ?? selectedSearch;
     const filterField = updates.filterField ?? selectedFilterField;
@@ -5550,15 +5582,15 @@ function DataBindingProperties({
                 )}
               >
                 <option value="">Reference ID</option>
-                {selectedReferenceCollection.fields.map((field) => (
-                  <option key={field.key} value={field.key}>
-                    {selectedReferenceCollection.name}: {field.label} ({field.type})
+                {selectedReferenceFieldOptions.map((field) => (
+                  <option key={field.value} value={field.value}>
+                    {field.label}
                   </option>
                 ))}
               </select>
               <div className="mt-2 text-xs text-muted-foreground">
                 {selectedReferenceField
-                  ? `${selectedField?.label || selectedFieldKey} -> ${selectedReferenceCollection.name}.${selectedReferenceField.label}`
+                  ? `${selectedField?.label || selectedFieldKey} -> ${selectedReferenceFieldLabel}`
                   : `${selectedField?.label || selectedFieldKey} resolves to the referenced record id.`}
               </div>
             </div>
