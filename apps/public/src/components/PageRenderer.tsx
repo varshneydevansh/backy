@@ -1439,6 +1439,10 @@ const normalizeEmbedUrl = (raw: unknown, allowedHostsInput?: unknown): string =>
   const src = iframeMatch ? iframeMatch[2] : source;
   const normalizedSrc = src.startsWith('//') ? `https:${src}` : src;
 
+  if (normalizedSrc.startsWith('/uploads/') || normalizedSrc.startsWith('/api/sites/')) {
+    return normalizedSrc;
+  }
+
   const parsed = (() => {
     try {
       return new URL(normalizedSrc);

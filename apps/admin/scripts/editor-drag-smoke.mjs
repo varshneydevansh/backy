@@ -111,6 +111,29 @@ const createSmokeUploadVideoFile = () => {
 
   return { filename, filePath };
 };
+const createSmokeUploadEmbedFile = () => {
+  const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.txt`;
+  const filePath = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(filePath, 'Backy editor embed media upload smoke fixture.\n', 'utf8');
+
+  return { filename, filePath };
+};
+const createSmokeUploadFontFile = () => {
+  const familySeed = `Backy Smoke Sans ${Date.now().toString(36)}`;
+  const filename = `${familySeed.replace(/\s+/g, '-')}.woff2`;
+  const filePath = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(
+    filePath,
+    Buffer.from([
+      0x77, 0x4f, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x30, 0x00, 0x01, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x10, 0x4f, 0x54, 0x54, 0x4f,
+      0x00, 0x00, 0x00, 0x00,
+    ]),
+  );
+
+  return { filename, filePath, fontFamily: familySeed };
+};
 const CHECKBOX_BEHAVIOR_SPEC = {
   label: 'Smoke checkbox label',
   name: 'smoke_channels',
@@ -8200,6 +8223,60 @@ const waitForVideoSourceValue = async (client, expectedUrl) => {
   throw new Error(`Uploaded media did not update video source: ${JSON.stringify(lastState)}`);
 };
 
+const waitForEmbedSourceValue = async (client, expectedUrl) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="editor-embed-src"]');
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const node = document.querySelector('[data-element-id="smoke-embed"]');
+      const iframe = node?.querySelector('iframe');
+      return {
+        value: input instanceof HTMLInputElement ? input.value : '',
+        modalOpen: Boolean(modal),
+        previewSrc: iframe?.getAttribute('src') || '',
+      };
+    })()`);
+
+    if (!lastState.modalOpen && lastState.value === expectedUrl && lastState.previewSrc === expectedUrl) {
+      return lastState;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Uploaded media did not update embed source: ${JSON.stringify(lastState)}`);
+};
+
+const waitForFontFamilyValue = async (client, expectedFontFamily) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const select = document.querySelector('[data-testid="editor-style-font-family"]');
+      const customInput = document.querySelector('[data-testid="editor-style-font-family-custom"]');
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const node = document.querySelector('[data-element-id="smoke-heading"]');
+      const canvasText = node?.textContent || '';
+      return {
+        selectValue: select instanceof HTMLSelectElement ? select.value : '',
+        customValue: customInput instanceof HTMLInputElement ? customInput.value : '',
+        modalOpen: Boolean(modal),
+        canvasText,
+      };
+    })()`);
+
+    if (!lastState.modalOpen && (lastState.selectValue === expectedFontFamily || lastState.customValue === expectedFontFamily)) {
+      return lastState;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Uploaded font did not update font family: ${JSON.stringify({ expectedFontFamily, lastState })}`);
+};
+
 const waitForPersistedImageMediaSelection = async (pageId, selectedMedia) => {
   let lastProps = null;
 
@@ -8248,9 +8325,54 @@ const waitForPersistedVideoMediaSelection = async (pageId, selectedMedia) => {
   throw new Error(`Persisted uploaded video media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
 };
 
+const waitForPersistedEmbedMediaSelection = async (pageId, selectedMedia) => {
+  let lastProps = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-embed');
+    const props = element?.props || {};
+    lastProps = props;
+
+    if (
+      props.src === selectedMedia.url &&
+      props.mediaId === selectedMedia.id &&
+      props.mediaScope === selectedMedia.scope &&
+      (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
+    ) {
+      return props;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted uploaded embed media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+};
+
+const waitForPersistedHeadingFontFamily = async (pageId, expectedFontFamily) => {
+  let lastProps = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-heading');
+    const props = element?.props || {};
+    lastProps = props;
+
+    if (props.fontFamily === expectedFontFamily) {
+      return props;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted uploaded font family mismatch: ${JSON.stringify({ expectedFontFamily, lastProps })}`);
+};
+
 const testMediaUploadModalControls = async (client, pageId) => {
   const imageUploadFile = createSmokeUploadImageFile();
   const videoUploadFile = createSmokeUploadVideoFile();
+  const embedUploadFile = createSmokeUploadEmbedFile();
+  const fontUploadFile = createSmokeUploadFontFile();
 
   try {
     await selectLayerById(client, 'smoke-image');
@@ -8325,6 +8447,79 @@ const testMediaUploadModalControls = async (client, pageId) => {
     const videoSavedStatus = await waitForEditorMutationReady(client, 'after video media upload smoke save');
     const videoPersisted = await waitForPersistedVideoMediaSelection(pageId, videoSelected);
 
+    await selectLayerById(client, 'smoke-embed');
+    await switchToPropertiesPanel(client);
+    await clickControlByTestId(client, 'editor-embed-upload-media');
+
+    const embedOpened = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
+        hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+        uploadFilters: Array.from(document.querySelectorAll('[data-testid^="media-upload-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
+      };
+    })()`);
+
+    assert(
+      embedOpened.hasModal &&
+        embedOpened.activeTab === 'upload' &&
+        embedOpened.allowedTypes === 'any' &&
+        embedOpened.uploadFilter === 'all' &&
+        embedOpened.fileAccept === '' &&
+        embedOpened.hasVisibility &&
+        embedOpened.hasFolder &&
+        embedOpened.uploadFilters.includes('media-upload-filter-file') &&
+        embedOpened.uploadFilters.includes('media-upload-filter-font'),
+      `Embed upload modal opened with unexpected state: ${JSON.stringify(embedOpened)}`,
+    );
+
+    await setFileInputByTestId(client, 'media-upload-input', [embedUploadFile.filePath]);
+    const embedUploaded = await waitForUploadedMediaItem(client, embedUploadFile.filename);
+    const embedSelected = await clickMediaLibraryItemByName(client, embedUploadFile.filename);
+    const embedSource = await waitForEmbedSourceValue(client, embedSelected.url);
+    await clickSave(client);
+    const embedSavedStatus = await waitForEditorMutationReady(client, 'after embed media upload smoke save');
+    const embedPersisted = await waitForPersistedEmbedMediaSelection(pageId, embedSelected);
+
+    await selectLayerById(client, 'smoke-heading');
+    await switchToPropertiesPanel(client);
+    await clickControlByTestId(client, 'editor-font-media-picker');
+
+    const fontOpened = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        hasScopeSwitcher: Boolean(document.querySelector('[data-testid="media-library-scope-all"]')),
+      };
+    })()`);
+
+    assert(
+      fontOpened.hasModal &&
+        fontOpened.activeTab === 'upload' &&
+        fontOpened.allowedTypes === 'font' &&
+        fontOpened.uploadFilter === 'font' &&
+        fontOpened.fileAccept === '.woff,.woff2,.ttf,.otf,.eot,font/*' &&
+        !fontOpened.hasScopeSwitcher,
+      `Font upload modal opened with unexpected state: ${JSON.stringify(fontOpened)}`,
+    );
+
+    await setFileInputByTestId(client, 'media-upload-input', [fontUploadFile.filePath]);
+    const fontUploaded = await waitForUploadedMediaItem(client, fontUploadFile.filename);
+    const fontSelected = await clickMediaLibraryItemByName(client, fontUploadFile.filename);
+    const fontFamily = await waitForFontFamilyValue(client, fontUploadFile.fontFamily);
+    await clickSave(client);
+    const fontSavedStatus = await waitForEditorMutationReady(client, 'after font media upload smoke save');
+    const fontPersisted = await waitForPersistedHeadingFontFamily(pageId, fontUploadFile.fontFamily);
+
     return {
       image: {
         opened,
@@ -8342,11 +8537,29 @@ const testMediaUploadModalControls = async (client, pageId) => {
         savedStatus: videoSavedStatus,
         persisted: videoPersisted,
       },
+      embed: {
+        opened: embedOpened,
+        uploaded: embedUploaded,
+        selected: embedSelected,
+        embedSource,
+        savedStatus: embedSavedStatus,
+        persisted: embedPersisted,
+      },
+      font: {
+        opened: fontOpened,
+        uploaded: fontUploaded,
+        selected: fontSelected,
+        fontFamily,
+        savedStatus: fontSavedStatus,
+        persisted: fontPersisted,
+      },
     };
   } finally {
     try {
       fs.rmSync(imageUploadFile.filePath, { force: true });
       fs.rmSync(videoUploadFile.filePath, { force: true });
+      fs.rmSync(embedUploadFile.filePath, { force: true });
+      fs.rmSync(fontUploadFile.filePath, { force: true });
     } catch {
       // Temp smoke upload file cleanup is best-effort.
     }

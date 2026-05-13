@@ -495,6 +495,10 @@ const normalizeTextElementContent = (rawContent: unknown, normalizedType: string
 // TYPES
 // ============================================
 
+type EditorMediaField = 'src' | 'video' | 'embed';
+type EditorMediaAllowedTypes = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
+type EditorMediaUploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
+
 interface PropertyPanelProps {
   /** Currently selected element */
   element: CanvasElement | null;
@@ -534,9 +538,10 @@ export function PropertyPanel({
   ]);
 
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
-  const [mediaField, setMediaField] = useState<'src' | 'video'>('src');
+  const [mediaField, setMediaField] = useState<EditorMediaField>('src');
   const [mediaOpenTab, setMediaOpenTab] = useState<'library' | 'upload'>('library');
-  const [mediaUploadFilter, setMediaUploadFilter] = useState<'all' | 'image' | 'video' | 'file'>('all');
+  const [mediaAllowedTypes, setMediaAllowedTypes] = useState<EditorMediaAllowedTypes>('image');
+  const [mediaUploadFilter, setMediaUploadFilter] = useState<EditorMediaUploadFilter>('all');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
@@ -704,7 +709,16 @@ export function PropertyPanel({
             onOpenMedia={(field, mode = 'library') => {
               setMediaField(field);
               setMediaOpenTab(mode);
-              setMediaUploadFilter(field === 'video' ? 'video' : 'image');
+              if (field === 'video') {
+                setMediaAllowedTypes('video');
+                setMediaUploadFilter('video');
+              } else if (field === 'embed') {
+                setMediaAllowedTypes('any');
+                setMediaUploadFilter('all');
+              } else {
+                setMediaAllowedTypes('image');
+                setMediaUploadFilter('image');
+              }
               setIsMediaLibraryOpen(true);
             }}
             onOpenEmoji={() => setIsEmojiPickerOpen(true)}
@@ -802,7 +816,7 @@ export function PropertyPanel({
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media) => {
-          const mediaPropKey = mediaField === 'video' ? 'src' : mediaField;
+          const mediaPropKey = mediaField === 'video' || mediaField === 'embed' ? 'src' : mediaField;
           const nextProps = {
             ...element.props,
             [mediaPropKey]: media.url,
@@ -833,7 +847,7 @@ export function PropertyPanel({
         initialTab={mediaOpenTab}
         initialUploadFilter={mediaUploadFilter}
         mediaContext={mediaContext}
-        allowedTypes={mediaField === 'src' ? 'image' : 'video'}
+        allowedTypes={mediaAllowedTypes}
       />
 
       <EmojiPickerModal
@@ -895,7 +909,7 @@ function PropertySection({
 interface ContentPropertiesProps {
   element: CanvasElement;
   onChange: (updates: Partial<ElementProps>) => void;
-  onOpenMedia: (field: 'src' | 'video', mode?: 'library' | 'upload') => void;
+  onOpenMedia: (field: EditorMediaField, mode?: 'library' | 'upload') => void;
   onOpenEmoji: () => void;
   collections: Collection[];
   collectionsError: string | null;
@@ -2922,14 +2936,16 @@ function ContentProperties({
               <button
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Use current media item"
-                onClick={() => onOpenMedia('src')}
+                onClick={() => onOpenMedia('embed')}
+                data-testid="editor-embed-select-media"
               >
                 Select
               </button>
               <button
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Upload media"
-                onClick={() => onOpenMedia('src', 'upload')}
+                onClick={() => onOpenMedia('embed', 'upload')}
+                data-testid="editor-embed-upload-media"
               >
                 Upload
               </button>
@@ -3754,6 +3770,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                     onChange({ fontFamily: val });
                   }
                 }}
+                data-testid="editor-style-font-family"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -3777,6 +3794,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                   value={element.props.fontFamily === 'inherit' ? '' : element.props.fontFamily}
                   onChange={(e) => onChange({ fontFamily: e.target.value })}
                   placeholder="Enter Google Font Name (e.g. 'Roboto')"
+                  data-testid="editor-style-font-family-custom"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'
