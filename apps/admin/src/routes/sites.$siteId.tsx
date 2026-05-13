@@ -39,6 +39,7 @@ import {
   getSiteReadiness,
   getSiteSeoSettings,
   getAdminApiBase,
+  getUserPermissions,
   getFormWithSubmissions,
   listPages,
   listForms as listFormsFromApi,
@@ -53,6 +54,7 @@ import {
   updateSite as updateSiteFromApi,
   captureSiteFrontendDesignDefaults,
   adminFetch,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import type {
   AdminFrontendDesignResponse,
@@ -65,6 +67,7 @@ import type {
   SiteReadiness,
 } from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 import type {
   Comment,
   CommentReportReason,
@@ -103,6 +106,62 @@ type SiteStatusFilter = 'published' | 'draft' | 'archived';
 type CommentTargetFilter = 'all' | 'page' | 'post';
 type NavigationMenuKey = 'primary' | 'footer';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteDetailPermissionKey =
+  | 'sites.view'
+  | 'sites.configure'
+  | 'sites.delete'
+  | 'forms.view'
+  | 'forms.manage'
+  | 'forms.export'
+  | 'comments.view'
+  | 'comments.manage'
+  | 'comments.configure'
+  | 'activity.export';
+
+const SITE_DETAIL_PERMISSION_ROLE_DEFAULTS: Record<SiteDetailPermissionKey, Array<User['role']>> = {
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.configure': ['owner', 'admin'],
+  'sites.delete': ['owner'],
+  'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.manage': ['owner', 'admin', 'editor'],
+  'forms.export': ['owner', 'admin'],
+  'comments.view': ['owner', 'admin', 'editor', 'viewer'],
+  'comments.manage': ['owner', 'admin', 'editor'],
+  'comments.configure': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+};
+
+const siteDetailPermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: SiteDetailPermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isSiteDetailPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SiteDetailPermissionKey,
+): boolean => {
+  const matrixRule = siteDetailPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.allowed;
+
+  return Boolean(currentAdmin && SITE_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const siteDetailPermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SiteDetailPermissionKey,
+): string => {
+  const matrixRule = siteDetailPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.reason;
+  if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+
+  return SITE_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
 
 const SITE_WORKSPACE_AREAS = [
   {
@@ -607,6 +666,7 @@ function EditSitePage() {
   const navigate = useNavigate();
   const { siteId } = Route.useParams();
   const { sites, updateSite, deleteSite } = useStore();
+  const currentAdmin = useAuthStore((store) => store.user);
 
   const site = sites.find((s) => s.id === siteId);
   const siteApiId = site?.publicSiteId || site?.slug || site?.id;
@@ -693,7 +753,45 @@ function EditSitePage() {
   const [contactNoteDrafts, setContactNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const isSiteSettingsBusy = isLoading || commentPolicySaving;
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewSite = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view');
+  const canConfigureSite = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure');
+  const canDeleteSite = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'sites.delete');
+  const canViewForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view');
+  const canManageForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage');
+  const canExportForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export');
+  const canViewComments = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view');
+  const canManageComments = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage');
+  const canConfigureComments = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'comments.configure');
+  const canExportActivity = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
+  const viewSitePermissionTitle = canViewSite ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.view');
+  const configureSitePermissionTitle = canConfigureSite ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.configure');
+  const deleteSitePermissionTitle = canDeleteSite ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.delete');
+  const formsViewPermissionTitle = canViewForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.view');
+  const formsManagePermissionTitle = canManageForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.manage');
+  const formsExportPermissionTitle = canExportForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.export');
+  const commentsViewPermissionTitle = canViewComments ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'comments.view');
+  const commentsManagePermissionTitle = canManageComments ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'comments.manage');
+  const commentsConfigurePermissionTitle = canConfigureComments ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'comments.configure');
+  const activityExportPermissionTitle = canExportActivity ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'activity.export');
+  const siteConfigureDeniedMessage = `Your account needs sites.configure to change this site. ${configureSitePermissionTitle}`;
+  const siteDeleteDeniedMessage = `Your account needs sites.delete to delete this site. ${deleteSitePermissionTitle}`;
+  const formsManageDeniedMessage = `Your account needs forms.manage to update submissions or contacts. ${formsManagePermissionTitle}`;
+  const commentsManageDeniedMessage = `Your account needs comments.manage to moderate comments. ${commentsManagePermissionTitle}`;
+  const commentsConfigureDeniedMessage = `Your account needs comments.configure to change comment policy. ${commentsConfigurePermissionTitle}`;
+  const isSiteSettingsBusy = isLoading || commentPolicySaving || isPermissionMatrixPending;
+  const isSiteConfigurationDisabled = isSiteSettingsBusy || !canConfigureSite;
+  const isSiteDeletionDisabled = isSiteSettingsBusy || !canDeleteSite;
+  const areRedirectEditsDisabled = redirectState.loading || redirectState.saving || redirectState.previewing || !canConfigureSite;
+  const areSeoEditsDisabled = seoState.loading || seoState.saving || !canConfigureSite;
+  const isWorkflowRefreshDisabled = state.workflowLoading || (!canViewForms && !canViewComments);
+  const isFormViewDisabled = state.workflowLoading || !canViewForms;
+  const isFormManagementDisabled = state.workflowLoading || !canManageForms;
+  const isCommentPolicyDisabled = commentPolicyLoading || commentPolicySaving || !canConfigureComments;
+  const isCommentViewDisabled = state.commentsLoading || !canViewComments;
 
   useEffect(() => {
     if (site) {
@@ -706,6 +804,43 @@ function EditSitePage() {
       });
     }
   }, [site]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load site permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    setPermissionError(null);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load site permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   const setWorkflowLoading = (value: boolean) =>
     setState((prev) => ({ ...prev, workflowLoading: value }));
@@ -730,6 +865,10 @@ function EditSitePage() {
 
   const loadNavigationEditor = async () => {
     if (!siteApiId) return;
+    if (!canViewSite) {
+      setNavigationState((prev) => ({ ...prev, errorMessage: siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.view') }));
+      return;
+    }
     setNavigationState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
@@ -762,6 +901,7 @@ function EditSitePage() {
     menu: NavigationMenuKey,
     updater: (items: SiteNavigationConfigItem[]) => SiteNavigationConfigItem[],
   ) => {
+    if (!canConfigureSite) return;
     setNavigationState((prev) => ({
       ...prev,
       notice: null,
@@ -776,6 +916,7 @@ function EditSitePage() {
     section: keyof SiteNavigationLayoutConfig,
     updates: Partial<NonNullable<SiteNavigationLayoutConfig[typeof section]>>,
   ) => {
+    if (!canConfigureSite) return;
     setNavigationState((prev) => ({
       ...prev,
       notice: null,
@@ -830,6 +971,10 @@ function EditSitePage() {
 
   const handleSaveNavigation = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setNavigationState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setNavigationState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
 
     try {
@@ -877,6 +1022,10 @@ function EditSitePage() {
   };
 
   const handleAddRedirectRule = () => {
+    if (!canConfigureSite) {
+      setRedirectState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
@@ -886,6 +1035,7 @@ function EditSitePage() {
   };
 
   const handleUpdateRedirectRule = (ruleId: string, updates: Partial<SiteRedirectRule>) => {
+    if (!canConfigureSite) return;
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
@@ -899,6 +1049,7 @@ function EditSitePage() {
   };
 
   const handleRemoveRedirectRule = (ruleId: string) => {
+    if (!canConfigureSite) return;
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
@@ -909,6 +1060,10 @@ function EditSitePage() {
 
   const handlePreviewRedirects = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setRedirectState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setRedirectState((prev) => ({ ...prev, previewing: true, errorMessage: null, notice: null }));
 
     try {
@@ -932,6 +1087,10 @@ function EditSitePage() {
 
   const handleSaveRedirects = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setRedirectState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setRedirectState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
 
     try {
@@ -957,6 +1116,10 @@ function EditSitePage() {
 
   const loadSeoEditor = async () => {
     if (!siteApiId) return;
+    if (!canViewSite) {
+      setSeoState((prev) => ({ ...prev, errorMessage: siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.view') }));
+      return;
+    }
     setSeoState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
@@ -992,6 +1155,10 @@ function EditSitePage() {
 
   const loadFrontendDesignEditor = async () => {
     if (!siteApiId) return;
+    if (!canViewSite) {
+      setFrontendDesignState((prev) => ({ ...prev, errorMessage: siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.view') }));
+      return;
+    }
     setFrontendDesignState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
@@ -1007,6 +1174,7 @@ function EditSitePage() {
   };
 
   const patchFrontendDesign = (updates: Partial<SiteFrontendDesignContract>) => {
+    if (!canConfigureSite) return;
     setFrontendDesignState((prev) => ({
       ...prev,
       notice: null,
@@ -1019,6 +1187,7 @@ function EditSitePage() {
   };
 
   const patchFrontendDesignSource = (updates: Partial<SiteFrontendDesignContract['source']>) => {
+    if (!canConfigureSite) return;
     setFrontendDesignState((prev) => ({
       ...prev,
       notice: null,
@@ -1035,6 +1204,10 @@ function EditSitePage() {
 
   const handleSaveFrontendDesign = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setFrontendDesignState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setFrontendDesignState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
 
     try {
@@ -1058,6 +1231,10 @@ function EditSitePage() {
 
   const handleCaptureFrontendDesignDefaults = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setFrontendDesignState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setFrontendDesignState((prev) => ({ ...prev, capturing: true, errorMessage: null, notice: null }));
 
     try {
@@ -1088,6 +1265,7 @@ function EditSitePage() {
   };
 
   const patchCommentPolicyDraft = (updates: Partial<SiteCommentPolicyDraft>) => {
+    if (!canConfigureComments) return;
     setCommentPolicyDraft((current) => ({
       ...current,
       ...updates,
@@ -1106,6 +1284,10 @@ function EditSitePage() {
 
   const saveSiteCommentPolicy = async () => {
     if (!siteApiId || commentPolicySaving) return;
+    if (!canConfigureComments) {
+      setSiteSettingsError(commentsConfigureDeniedMessage);
+      return;
+    }
     setCommentPolicySaving(true);
     setSiteSettingsError(null);
     setSiteWorkspaceNotice(null);
@@ -1131,6 +1313,7 @@ function EditSitePage() {
   };
 
   const handleUpdateSeo = (updates: Partial<AdminSiteSeoSettings>) => {
+    if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
       notice: null,
@@ -1142,6 +1325,7 @@ function EditSitePage() {
   };
 
   const handleUpdateJsonLdText = (value: string) => {
+    if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
       jsonLdText: value,
@@ -1152,6 +1336,10 @@ function EditSitePage() {
 
   const handleSaveSeo = async () => {
     if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setSeoState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
     setSeoState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
 
     try {
@@ -1182,6 +1370,10 @@ function EditSitePage() {
 
   const loadForms = async () => {
     if (!site || !siteApiId) return;
+    if (!canViewForms) {
+      setWorkflowError(formsViewPermissionTitle || 'Your account cannot view site forms.');
+      return;
+    }
     setState((prev) => ({ ...prev, workflowLoading: true, errorMessage: null }));
     try {
       const forms = await listFormsFromApi(siteApiId);
@@ -1202,6 +1394,10 @@ function EditSitePage() {
 
   const loadSubmissions = async (formId: string) => {
     if (!siteApiId || !formId) return;
+    if (!canViewForms) {
+      setWorkflowError(formsViewPermissionTitle || 'Your account cannot view form submissions.');
+      return;
+    }
     setState((prev) => ({ ...prev, submissionLoading: true, errorMessage: null }));
     try {
       const requestId = normalizeRequestIdInput(commentRequestId);
@@ -1230,6 +1426,10 @@ function EditSitePage() {
 
   const loadContacts = async (formId: string) => {
     if (!siteApiId || !formId) return;
+    if (!canViewForms) {
+      setWorkflowError(formsViewPermissionTitle || 'Your account cannot view form contacts.');
+      return;
+    }
     setState((prev) => ({ ...prev, contactLoading: true, errorMessage: null }));
     try {
       const requestId = normalizeRequestIdInput(commentRequestId);
@@ -1259,6 +1459,10 @@ function EditSitePage() {
 
   const loadComments = async () => {
     if (!siteApiId) return;
+    if (!canViewComments) {
+      setWorkflowError(commentsViewPermissionTitle || 'Your account cannot view comments.');
+      return;
+    }
     setState((prev) => ({ ...prev, commentsLoading: true, errorMessage: null }));
     try {
       const query = buildCommentFilterQuery();
@@ -1337,6 +1541,10 @@ function EditSitePage() {
 
   const refreshWorkflow = async (formId?: string) => {
     if (!site || !siteApiId) return;
+    if (!canViewForms && !canViewComments) {
+      setWorkflowError('Your account cannot view forms or comments for this site.');
+      return;
+    }
     const activeFormId = formId || state.selectedFormId;
     setWorkflowLoading(true);
 
@@ -1356,6 +1564,10 @@ function EditSitePage() {
     status: FormSubmission['status'],
   ) => {
     if (!siteApiId || !state.selectedFormId) return;
+    if (!canManageForms) {
+      setWorkflowError(formsManageDeniedMessage);
+      return;
+    }
     setActionBusyId(submission.id);
     try {
       await updateFormSubmission(siteApiId, state.selectedFormId, submission.id, {
@@ -1374,6 +1586,10 @@ function EditSitePage() {
 
   const updateContactStatus = async (contact: Contact, status: Contact['status']) => {
     if (!siteApiId || !state.selectedFormId) return;
+    if (!canManageForms) {
+      setWorkflowError(formsManageDeniedMessage);
+      return;
+    }
     setActionBusyId(contact.id);
     try {
       await updateContact(siteApiId, state.selectedFormId, contact.id, { status });
@@ -1388,6 +1604,10 @@ function EditSitePage() {
 
   const updateContactNotes = async (contact: Contact) => {
     if (!siteApiId || !state.selectedFormId) return;
+    if (!canManageForms) {
+      setWorkflowError(formsManageDeniedMessage);
+      return;
+    }
     const notes = contactNoteDrafts[contact.id] ?? '';
     setActionBusyId(`contact-notes:${contact.id}`);
     try {
@@ -1421,6 +1641,10 @@ function EditSitePage() {
     requestId?: string,
   ) => {
     if (!siteApiId) return;
+    if (!canManageComments) {
+      setWorkflowError(commentsManageDeniedMessage);
+      return;
+    }
     setActionBusyId(comment.id);
     try {
       const effectiveRequestId = requestId?.trim() || comment.requestId || undefined;
@@ -1450,6 +1674,10 @@ function EditSitePage() {
 
   const exportSubmissions = async () => {
     if (!state.selectedFormId || !siteApiId) return;
+    if (!canExportForms) {
+      setWorkflowError(formsExportPermissionTitle || 'Your account cannot export form submissions.');
+      return;
+    }
 
     const allSubmissions: FormSubmission[] = [];
     const limit = 200;
@@ -1508,6 +1736,10 @@ function EditSitePage() {
 
   const exportContacts = async () => {
     if (!state.selectedFormId || !siteApiId) return;
+    if (!canExportForms) {
+      setWorkflowError(formsExportPermissionTitle || 'Your account cannot export contacts.');
+      return;
+    }
 
     const allContacts: Contact[] = [];
     const limit = 200;
@@ -1576,6 +1808,10 @@ function EditSitePage() {
 
   const exportComments = async () => {
     if (!siteApiId) return;
+    if (!canExportActivity) {
+      setWorkflowError(activityExportPermissionTitle || 'Your account cannot export comment activity.');
+      return;
+    }
     const allComments: Comment[] = [];
     const limit = 200;
     let offset = 0;
@@ -1641,6 +1877,10 @@ function EditSitePage() {
 
   const applyBulkCommentAction = async (status: Comment['status']) => {
     if (!siteApiId || state.selectedCommentIds.length === 0) return;
+    if (!canManageComments) {
+      setWorkflowError(commentsManageDeniedMessage);
+      return;
+    }
     setActionBusyId('bulk-comment');
     try {
       const response = await adminFetch(buildApiUrl(`/api/sites/${siteApiId}/comments`), {
@@ -1672,6 +1912,10 @@ function EditSitePage() {
 
   const exportCommentEvents = async () => {
     if (!siteApiId || !commentRequestId) return;
+    if (!canExportActivity) {
+      setWorkflowError(activityExportPermissionTitle || 'Your account cannot export activity events.');
+      return;
+    }
     try {
       const requestId = commentRequestId.trim();
       const allEvents: Array<{
@@ -2134,6 +2378,10 @@ function EditSitePage() {
     e.preventDefault();
 
     if (isSiteSettingsBusy) return;
+    if (!canConfigureSite) {
+      setSiteSettingsError(siteConfigureDeniedMessage);
+      return;
+    }
 
     setIsLoading(true);
     setSiteSettingsError(null);
@@ -2164,6 +2412,11 @@ function EditSitePage() {
 
   const handleDelete = async () => {
     if (isSiteSettingsBusy) return;
+    if (!canDeleteSite) {
+      setSiteSettingsError(siteDeleteDeniedMessage);
+      setShowDeleteConfirm(false);
+      return;
+    }
 
     setIsLoading(true);
     setSiteSettingsError(null);
@@ -2211,6 +2464,16 @@ function EditSitePage() {
       className="w-full"
     >
       <div className="w-full space-y-8">
+        {permissionError && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {permissionError}
+          </div>
+        )}
+        {isPermissionMatrixPending && (
+          <div className="rounded-lg border border-info/25 bg-info/10 px-4 py-3 text-sm text-info">
+            Loading site permissions before enabling workspace actions.
+          </div>
+        )}
         <div className="bg-card border border-border rounded-xl p-6 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -2646,7 +2909,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveNavigation()}
-                disabled={!siteApiId || navigationState.loading || navigationState.saving}
+                disabled={!siteApiId || !canConfigureSite || navigationState.loading || navigationState.saving}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
@@ -2669,7 +2933,7 @@ function EditSitePage() {
           <div className="mt-5">
             <NavigationLayoutEditor
               layout={normalizeNavigationLayoutState(navigationState.navigation.layout)}
-              loading={navigationState.loading}
+              loading={navigationState.loading || !canConfigureSite}
               onUpdate={updateNavigationLayout}
             />
           </div>
@@ -2681,7 +2945,7 @@ function EditSitePage() {
               menu="primary"
               items={navigationState.navigation.primary}
               pages={navigationState.pages}
-              loading={navigationState.loading}
+              loading={navigationState.loading || !canConfigureSite}
               onAddItem={handleAddNavigationItem}
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
@@ -2694,7 +2958,7 @@ function EditSitePage() {
               menu="footer"
               items={navigationState.navigation.footer || []}
               pages={navigationState.pages}
-              loading={navigationState.loading}
+              loading={navigationState.loading || !canConfigureSite}
               onAddItem={handleAddNavigationItem}
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
@@ -2728,7 +2992,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleCaptureFrontendDesignDefaults()}
-                disabled={!siteApiId || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                disabled={!siteApiId || !canConfigureSite || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
@@ -2737,7 +3002,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveFrontendDesign()}
-                disabled={!siteApiId || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                disabled={!siteApiId || !canConfigureSite || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
@@ -2779,8 +3045,9 @@ function EditSitePage() {
                   <select
                     value={frontendDesignState.frontendDesign.status}
                     onChange={(event) => patchFrontendDesign({ status: event.target.value as SiteFrontendDesignContract['status'] })}
-                    disabled={frontendDesignState.loading}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="unconfigured">Unconfigured</option>
                     <option value="captured">Captured</option>
@@ -2793,8 +3060,9 @@ function EditSitePage() {
                   <select
                     value={frontendDesignState.frontendDesign.source.type}
                     onChange={(event) => patchFrontendDesignSource({ type: event.target.value as SiteFrontendDesignContract['source']['type'] })}
-                    disabled={frontendDesignState.loading}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="manual">Manual import</option>
                     <option value="managed-site">Backy managed site</option>
@@ -2808,9 +3076,10 @@ function EditSitePage() {
                 <input
                   value={frontendDesignState.frontendDesign.source.label || ''}
                   onChange={(event) => patchFrontendDesignSource({ label: event.target.value })}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   placeholder="Marketing frontend, storefront, portfolio..."
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
 
@@ -2820,9 +3089,10 @@ function EditSitePage() {
                   <input
                     value={frontendDesignState.frontendDesign.source.url || ''}
                     onChange={(event) => patchFrontendDesignSource({ url: event.target.value })}
-                    disabled={frontendDesignState.loading}
+                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     placeholder="https://example.com"
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
                 <label className="space-y-1 text-sm">
@@ -2830,9 +3100,10 @@ function EditSitePage() {
                   <input
                     value={frontendDesignState.frontendDesign.source.branch || ''}
                     onChange={(event) => patchFrontendDesignSource({ branch: event.target.value })}
-                    disabled={frontendDesignState.loading}
+                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     placeholder="main"
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
               </div>
@@ -2842,9 +3113,10 @@ function EditSitePage() {
                 <input
                   value={frontendDesignState.frontendDesign.source.repository || ''}
                   onChange={(event) => patchFrontendDesignSource({ repository: event.target.value })}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   placeholder="owner/frontend"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
 
@@ -2853,10 +3125,11 @@ function EditSitePage() {
                 <textarea
                   value={frontendDesignState.frontendDesign.notes || ''}
                   onChange={(event) => patchFrontendDesign({ notes: event.target.value })}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={4}
                   placeholder="Extraction notes, manual setup decisions, unsupported components..."
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
             </div>
@@ -2867,10 +3140,11 @@ function EditSitePage() {
                 <textarea
                   value={frontendDesignState.tokensJson}
                   onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, tokensJson: event.target.value, notice: null, errorMessage: null }))}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={9}
                   spellCheck={false}
-                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
               <label className="space-y-1 text-sm">
@@ -2878,10 +3152,11 @@ function EditSitePage() {
                 <textarea
                   value={frontendDesignState.chromeJson}
                   onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, chromeJson: event.target.value, notice: null, errorMessage: null }))}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={9}
                   spellCheck={false}
-                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
               <label className="space-y-1 text-sm">
@@ -2889,10 +3164,11 @@ function EditSitePage() {
                 <textarea
                   value={frontendDesignState.templatesJson}
                   onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, templatesJson: event.target.value, notice: null, errorMessage: null }))}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={9}
                   spellCheck={false}
-                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
               <label className="space-y-1 text-sm">
@@ -2900,10 +3176,11 @@ function EditSitePage() {
                 <textarea
                   value={frontendDesignState.editableMapJson}
                   onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, editableMapJson: event.target.value, notice: null, errorMessage: null }))}
-                  disabled={frontendDesignState.loading}
+                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={9}
                   spellCheck={false}
-                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
             </div>
@@ -2925,7 +3202,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void loadRedirectEditor()}
-                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
+                disabled={!siteApiId || !canViewSite || redirectState.loading || redirectState.saving || redirectState.previewing}
+                title={canViewSite ? undefined : viewSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={cn('h-4 w-4', redirectState.loading && 'animate-spin')} />
@@ -2934,7 +3212,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={handleAddRedirectRule}
-                disabled={redirectState.loading || redirectState.saving || redirectState.previewing}
+                disabled={areRedirectEditsDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
@@ -2943,7 +3222,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handlePreviewRedirects()}
-                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
+                disabled={!siteApiId || areRedirectEditsDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <AlertTriangle className="h-4 w-4" />
@@ -2952,7 +3232,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveRedirects()}
-                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
+                disabled={!siteApiId || areRedirectEditsDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
@@ -3028,13 +3309,16 @@ function EditSitePage() {
                         <input
                           value={rule.from || ''}
                           onChange={(event) => handleUpdateRedirectRule(ruleId, { from: event.target.value })}
-                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          disabled={!canConfigureSite}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                          className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                           placeholder="/old-path"
                         />
                         <input
                           value={isGone ? '' : rule.to || ''}
                           onChange={(event) => handleUpdateRedirectRule(ruleId, { to: event.target.value })}
-                          disabled={isGone}
+                          disabled={isGone || !canConfigureSite}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
                           className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                           placeholder={isGone ? 'Not needed for 410' : '/new-path or https://...'}
                         />
@@ -3043,7 +3327,9 @@ function EditSitePage() {
                           onChange={(event) => handleUpdateRedirectRule(ruleId, {
                             statusCode: Number(event.target.value) as SiteRedirectRule['statusCode'],
                           })}
-                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          disabled={!canConfigureSite}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                          className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                         >
                           <option value={301}>301 permanent</option>
                           <option value={302}>302 temporary</option>
@@ -3054,8 +3340,10 @@ function EditSitePage() {
                         <button
                           type="button"
                           onClick={() => handleUpdateRedirectRule(ruleId, { enabled: rule.enabled === false ? true : false })}
+                          disabled={!canConfigureSite}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
                           className={cn(
-                            'inline-flex h-9 items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium',
+                            'inline-flex h-9 items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60',
                             rule.enabled === false
                               ? 'text-muted-foreground hover:bg-accent'
                               : 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -3067,8 +3355,9 @@ function EditSitePage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveRedirectRule(ruleId)}
-                          className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                          title="Remove redirect rule"
+                          disabled={!canConfigureSite}
+                          className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          title={canConfigureSite ? 'Remove redirect rule' : configureSitePermissionTitle}
                           aria-label="Remove redirect rule"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -3097,7 +3386,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void loadSeoEditor()}
-                disabled={!siteApiId || seoState.loading || seoState.saving}
+                disabled={!siteApiId || !canViewSite || seoState.loading || seoState.saving}
+                title={canViewSite ? undefined : viewSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={cn('h-4 w-4', seoState.loading && 'animate-spin')} />
@@ -3106,7 +3396,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveSeo()}
-                disabled={!siteApiId || seoState.loading || seoState.saving}
+                disabled={!siteApiId || areSeoEditsDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
@@ -3133,7 +3424,8 @@ function EditSitePage() {
                 <input
                   value={seoState.seo.titleTemplate || ''}
                   onChange={(event) => handleUpdateSeo({ titleTemplate: event.target.value })}
-                  disabled={seoState.loading}
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="%s | {siteName}"
                 />
@@ -3146,7 +3438,8 @@ function EditSitePage() {
                 <textarea
                   value={seoState.seo.defaultDescription || ''}
                   onChange={(event) => handleUpdateSeo({ defaultDescription: event.target.value })}
-                  disabled={seoState.loading}
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={3}
                   className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Used when a page, post, or dynamic record does not provide its own description."
@@ -3159,7 +3452,8 @@ function EditSitePage() {
                 <input
                   value={seoState.seo.defaultOgImage || ''}
                   onChange={(event) => handleUpdateSeo({ defaultOgImage: event.target.value })}
-                  disabled={seoState.loading}
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="/uploads/sites/site-id/social-card.jpg"
                 />
@@ -3169,7 +3463,8 @@ function EditSitePage() {
                 <input
                   value={seoState.seo.favicon || ''}
                   onChange={(event) => handleUpdateSeo({ favicon: event.target.value })}
-                  disabled={seoState.loading}
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="/favicon.ico"
                 />
@@ -3187,6 +3482,8 @@ function EditSitePage() {
                           enabled: event.target.checked,
                         },
                       })}
+                      disabled={areSeoEditsDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     />
                     Emit sitemap routes
                   </label>
@@ -3200,6 +3497,8 @@ function EditSitePage() {
                           includeDynamicRoutes: event.target.checked,
                         },
                       })}
+                      disabled={areSeoEditsDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     />
                     Include dynamic routes
                   </label>
@@ -3211,7 +3510,9 @@ function EditSitePage() {
                         defaultChangeFrequency: event.target.value as NonNullable<AdminSiteSeoSettings['sitemap']>['defaultChangeFrequency'],
                       },
                     })}
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    disabled={areSeoEditsDisabled}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                   >
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
@@ -3229,7 +3530,9 @@ function EditSitePage() {
                         defaultPriority: Number(event.target.value),
                       },
                     })}
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    disabled={areSeoEditsDisabled}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                     aria-label="Default sitemap priority"
                   />
                 </div>
@@ -3247,6 +3550,8 @@ function EditSitePage() {
                           index: event.target.checked,
                         },
                       })}
+                      disabled={areSeoEditsDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     />
                     Allow indexing
                   </label>
@@ -3260,6 +3565,8 @@ function EditSitePage() {
                           follow: event.target.checked,
                         },
                       })}
+                      disabled={areSeoEditsDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
                     />
                     Allow following
                   </label>
@@ -3273,7 +3580,9 @@ function EditSitePage() {
                     },
                   })}
                   rows={3}
-                  className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                  className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Disallow: /private"
                 />
               </div>
@@ -3285,7 +3594,8 @@ function EditSitePage() {
                   id="site-json-ld"
                   value={seoState.jsonLdText}
                   onChange={(event) => handleUpdateJsonLdText(event.target.value)}
-                  disabled={seoState.loading}
+                  disabled={areSeoEditsDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   rows={7}
                   className="mt-3 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs leading-5 focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder='[{"@context":"https://schema.org","@type":"Organization","name":"Example"}]'
@@ -3362,9 +3672,10 @@ function EditSitePage() {
               <input
                 type="text"
                 value={formData.name}
-                disabled={isSiteSettingsBusy}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 onChange={(e) => {
-                  if (isSiteSettingsBusy) return;
+                  if (isSiteConfigurationDisabled) return;
 
                   setFormData({ ...formData, name: e.target.value });
                 }}
@@ -3378,9 +3689,10 @@ function EditSitePage() {
                 <input
                   type="text"
                   value={formData.slug}
-                  disabled={isSiteSettingsBusy}
+                  disabled={isSiteConfigurationDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   onChange={(e) => {
-                    if (isSiteSettingsBusy) return;
+                    if (isSiteConfigurationDisabled) return;
 
                     setFormData({ ...formData, slug: e.target.value });
                   }}
@@ -3392,9 +3704,10 @@ function EditSitePage() {
                 <input
                   type="text"
                   value={formData.customDomain}
-                  disabled={isSiteSettingsBusy}
+                  disabled={isSiteConfigurationDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
                   onChange={(e) => {
-                    if (isSiteSettingsBusy) return;
+                    if (isSiteConfigurationDisabled) return;
 
                     setFormData({ ...formData, customDomain: e.target.value });
                   }}
@@ -3407,9 +3720,10 @@ function EditSitePage() {
               <label className="block text-sm font-medium mb-2">Description</label>
               <textarea
                 value={formData.description}
-                disabled={isSiteSettingsBusy}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 onChange={(e) => {
-                  if (isSiteSettingsBusy) return;
+                  if (isSiteConfigurationDisabled) return;
 
                   setFormData({ ...formData, description: e.target.value });
                 }}
@@ -3421,9 +3735,10 @@ function EditSitePage() {
               <label className="block text-sm font-medium mb-2">Visibility</label>
               <select
                 value={formData.status}
-                disabled={isSiteSettingsBusy}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 onChange={(e) => {
-                  if (isSiteSettingsBusy) return;
+                  if (isSiteConfigurationDisabled) return;
 
                   setFormData({ ...formData, status: e.target.value as SiteStatusFilter });
                 }}
@@ -3440,11 +3755,12 @@ function EditSitePage() {
             <button
               type="button"
               onClick={() => {
-                if (!isSiteSettingsBusy) {
+                if (!isSiteDeletionDisabled) {
                   setShowDeleteConfirm(true);
                 }
               }}
-              disabled={isSiteSettingsBusy}
+              disabled={isSiteDeletionDisabled}
+              title={canDeleteSite ? undefined : deleteSitePermissionTitle}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
@@ -3465,7 +3781,8 @@ function EditSitePage() {
               </button>
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
                 className={cn(
                   'flex items-center gap-2 px-6 py-2.5 rounded-lg',
                   'bg-primary text-primary-foreground font-medium',
@@ -3491,8 +3808,9 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => siteApiId ? void refreshWorkflow(state.selectedFormId) : undefined}
-                className="px-3 py-2 rounded-lg border hover:bg-accent flex items-center gap-2"
-                disabled={state.workflowLoading}
+                className="px-3 py-2 rounded-lg border hover:bg-accent flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isWorkflowRefreshDisabled}
+                title={!canViewForms && !canViewComments ? 'Your account needs forms.view or comments.view to refresh site queues.' : undefined}
               >
                 <RefreshCw className="w-4 h-4" />
                 {state.workflowLoading ? 'Refreshing...' : 'Refresh'}
@@ -3528,7 +3846,9 @@ function EditSitePage() {
                       onChange={(e) => {
                         setState((prev) => ({ ...prev, selectedFormId: e.target.value }));
                       }}
-                      className="w-full px-3 py-2 rounded-lg border bg-background"
+                      disabled={isFormViewDisabled}
+                      title={canViewForms ? undefined : formsViewPermissionTitle}
+                      className="w-full px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {state.forms.length === 0 ? (
                         <option value="">No forms available</option>
@@ -3568,7 +3888,9 @@ function EditSitePage() {
                         onChange={(e) =>
                           setSubmissionStatus(e.target.value as SubmissionStatusFilter)
                         }
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={!canViewForms}
+                        title={canViewForms ? undefined : formsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="all">All</option>
                         <option value="pending">Pending</option>
@@ -3584,8 +3906,9 @@ function EditSitePage() {
                     </span>
                     <button
                       onClick={exportSubmissions}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1"
-                      disabled={!state.submissions.length}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!state.submissions.length || !canExportForms}
+                      title={canExportForms ? undefined : formsExportPermissionTitle}
                     >
                       <Download className="w-3 h-3" />
                       Export CSV
@@ -3604,7 +3927,9 @@ function EditSitePage() {
                       <select
                         value={contactStatus}
                         onChange={(e) => setContactStatus(e.target.value as ContactStatusFilter)}
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={!canViewForms}
+                        title={canViewForms ? undefined : formsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="all">All</option>
                         <option value="new">New</option>
@@ -3620,8 +3945,9 @@ function EditSitePage() {
                     </span>
                     <button
                       onClick={exportContacts}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1"
-                      disabled={!state.contacts.length}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!state.contacts.length || !canExportForms}
+                      title={canExportForms ? undefined : formsExportPermissionTitle}
                     >
                       <Download className="w-3 h-3" />
                       Export CSV
@@ -3656,7 +3982,8 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
-                      disabled={commentPolicyLoading || commentPolicySaving || !commentPolicyDirty}
+                      disabled={isCommentPolicyDisabled || !commentPolicyDirty}
+                      title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
                       className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Reset
@@ -3664,7 +3991,8 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={saveSiteCommentPolicy}
-                      disabled={commentPolicyLoading || commentPolicySaving || !commentPolicyDirty}
+                      disabled={isCommentPolicyDisabled || !commentPolicyDirty}
+                      title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
                       className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Save className="h-4 w-4" />
@@ -3694,6 +4022,8 @@ function EditSitePage() {
                             type="checkbox"
                             checked={Boolean(commentPolicyDraft[key as keyof SiteCommentPolicyDraft])}
                             onChange={(event) => patchCommentPolicyDraft({ [key]: event.target.checked } as Partial<SiteCommentPolicyDraft>)}
+                            disabled={isCommentPolicyDisabled}
+                            title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
                             className="mt-0.5"
                           />
                           <span>
@@ -3720,7 +4050,9 @@ function EditSitePage() {
                             value={commentPolicyDraft.moderationMode}
                             onChange={(event) => patchCommentPolicyDraft({ moderationMode: event.target.value as SiteCommentPolicyDraft['moderationMode'] })}
                             aria-label="Site default comment moderation"
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            disabled={isCommentPolicyDisabled}
+                            title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="manual">Manual review</option>
                             <option value="auto-approve">Auto approve</option>
@@ -3732,7 +4064,9 @@ function EditSitePage() {
                             value={commentPolicyDraft.sort}
                             onChange={(event) => patchCommentPolicyDraft({ sort: event.target.value as SiteCommentPolicyDraft['sort'] })}
                             aria-label="Site default comment sort"
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            disabled={isCommentPolicyDisabled}
+                            title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="newest">Newest first</option>
                             <option value="oldest">Oldest first</option>
@@ -3746,8 +4080,9 @@ function EditSitePage() {
                             value={commentPolicyDraft.captchaProvider}
                             onChange={(event) => patchCommentPolicyDraft({ captchaProvider: event.target.value as SiteCommentPolicyDraft['captchaProvider'] })}
                             aria-label="Site comment captcha provider"
-                            disabled={!commentPolicyDraft.enableCaptcha}
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                            disabled={!commentPolicyDraft.enableCaptcha || isCommentPolicyDisabled}
+                            title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="mock">Mock</option>
                             <option value="turnstile">Turnstile</option>
@@ -3761,8 +4096,9 @@ function EditSitePage() {
                             value={commentPolicyDraft.captchaSiteKey}
                             onChange={(event) => patchCommentPolicyDraft({ captchaSiteKey: event.target.value })}
                             aria-label="Site comment captcha site key"
-                            disabled={!commentPolicyDraft.enableCaptcha}
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                            disabled={!commentPolicyDraft.enableCaptcha || isCommentPolicyDisabled}
+                            title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="Public site key"
                           />
                         </label>
@@ -3773,7 +4109,9 @@ function EditSitePage() {
                           value={commentPolicyDraft.closedMessage}
                           onChange={(event) => patchCommentPolicyDraft({ closedMessage: event.target.value })}
                           aria-label="Site comment closed message"
-                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                          disabled={isCommentPolicyDisabled}
+                          title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </label>
                       <label className="text-sm font-medium">
@@ -3783,7 +4121,9 @@ function EditSitePage() {
                           onChange={(event) => updateCommentPolicyBlockedTerms(event.target.value)}
                           aria-label="Site comment blocked terms"
                           rows={4}
-                          className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm"
+                          disabled={isCommentPolicyDisabled}
+                          title={canConfigureComments ? undefined : commentsConfigurePermissionTitle}
+                          className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           placeholder="One term per line or comma separated"
                         />
                       </label>
@@ -3799,7 +4139,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => state.selectedFormId && loadSubmissions(state.selectedFormId)}
-                      className="text-sm px-3 py-1.5 rounded-md border hover:bg-accent flex items-center gap-2"
+                      disabled={!state.selectedFormId || !canViewForms}
+                      title={canViewForms ? undefined : formsViewPermissionTitle}
+                      className="text-sm px-3 py-1.5 rounded-md border hover:bg-accent flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Send className="w-3.5 h-3.5" />
                       Reload
@@ -3865,24 +4207,27 @@ function EditSitePage() {
                                   <div className="flex gap-2">
                                     <button
                                       onClick={() => updateSubmissionStatus(submission, 'approved')}
-                                      disabled={actionBusyId === submission.id}
-                                      className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
+                                      disabled={actionBusyId === submission.id || isFormManagementDisabled}
+                                      title={canManageForms ? undefined : formsManagePermissionTitle}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                       <CheckCircle className="w-3.5 h-3.5" />
                                       Approve
                                     </button>
                                     <button
                                       onClick={() => updateSubmissionStatus(submission, 'rejected')}
-                                      disabled={actionBusyId === submission.id}
-                                      className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
+                                      disabled={actionBusyId === submission.id || isFormManagementDisabled}
+                                      title={canManageForms ? undefined : formsManagePermissionTitle}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                       <MinusCircle className="w-3.5 h-3.5" />
                                       Reject
                                     </button>
                                     <button
                                       onClick={() => updateSubmissionStatus(submission, 'spam')}
-                                      disabled={actionBusyId === submission.id}
-                                      className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1"
+                                      disabled={actionBusyId === submission.id || isFormManagementDisabled}
+                                      title={canManageForms ? undefined : formsManagePermissionTitle}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                       <CircleSlash className="w-3.5 h-3.5" />
                                       Mark spam
@@ -3904,7 +4249,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => state.selectedFormId && loadContacts(state.selectedFormId)}
-                      className="text-sm px-3 py-1.5 rounded-md border hover:bg-accent flex items-center gap-2"
+                      disabled={!state.selectedFormId || !canViewForms}
+                      title={canViewForms ? undefined : formsViewPermissionTitle}
+                      className="text-sm px-3 py-1.5 rounded-md border hover:bg-accent flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Send className="w-3.5 h-3.5" />
                       Reload
@@ -3954,8 +4301,10 @@ function EditSitePage() {
                                     ...current,
                                     [contact.id]: event.target.value,
                                   }))}
+                                  disabled={!canManageForms}
+                                  title={canManageForms ? undefined : formsManagePermissionTitle}
                                   rows={2}
-                                  className="w-full resize-none rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                  className="w-full resize-none rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                   placeholder="Internal follow-up notes"
                                   aria-label={`Notes for ${contact.name || contact.email || contact.id}`}
                                 />
@@ -3964,30 +4313,34 @@ function EditSitePage() {
                                 <div className="flex gap-2 flex-wrap">
                                   <button
                                     onClick={() => updateContactNotes(contact)}
-                                    disabled={actionBusyId === `contact-notes:${contact.id}` || (contactNoteDrafts[contact.id] ?? contact.notes ?? '').trim() === (contact.notes || '').trim()}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-teal-50 hover:text-teal-700 flex items-center gap-1 disabled:opacity-50"
+                                    disabled={actionBusyId === `contact-notes:${contact.id}` || !canManageForms || (contactNoteDrafts[contact.id] ?? contact.notes ?? '').trim() === (contact.notes || '').trim()}
+                                    title={canManageForms ? undefined : formsManagePermissionTitle}
+                                    className="text-xs px-2 py-1 rounded-md border hover:bg-teal-50 hover:text-teal-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     <Save className="w-3.5 h-3.5" />
                                     Save notes
                                   </button>
                                   <button
                                     onClick={() => updateContactStatus(contact, 'contacted')}
-                                    disabled={actionBusyId === contact.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700"
+                                    disabled={actionBusyId === contact.id || isFormManagementDisabled}
+                                    title={canManageForms ? undefined : formsManagePermissionTitle}
+                                    className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     Mark contacted
                                   </button>
                                   <button
                                     onClick={() => updateContactStatus(contact, 'qualified')}
-                                    disabled={actionBusyId === contact.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-blue-50 hover:text-blue-700"
+                                    disabled={actionBusyId === contact.id || isFormManagementDisabled}
+                                    title={canManageForms ? undefined : formsManagePermissionTitle}
+                                    className="text-xs px-2 py-1 rounded-md border hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     Mark qualified
                                   </button>
                                   <button
                                     onClick={() => updateContactStatus(contact, 'archived')}
-                                    disabled={actionBusyId === contact.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50 hover:text-gray-700"
+                                    disabled={actionBusyId === contact.id || isFormManagementDisabled}
+                                    title={canManageForms ? undefined : formsManagePermissionTitle}
+                                    className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     Archive
                                   </button>
@@ -4013,8 +4366,9 @@ function EditSitePage() {
                       <button
                         type="button"
                         onClick={() => void exportComments()}
-                        className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1"
-                        disabled={!state.comments.length}
+                        className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!state.comments.length || !canExportActivity}
+                        title={canExportActivity ? undefined : activityExportPermissionTitle}
                       >
                         <Download className="w-3 h-3" />
                         Export comments (filtered)
@@ -4022,8 +4376,9 @@ function EditSitePage() {
                       <button
                         type="button"
                         onClick={() => void exportCommentEvents()}
-                        className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1"
-                        disabled={!commentRequestId}
+                        className="text-xs px-2 py-1 rounded-md border hover:bg-accent flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!commentRequestId || !canExportActivity}
+                        title={canExportActivity ? undefined : activityExportPermissionTitle}
                       >
                         <Download className="w-3 h-3" />
                         Export events (requestId)
@@ -4036,7 +4391,9 @@ function EditSitePage() {
                       <select
                         value={commentStatus}
                         onChange={(e) => setCommentStatus(e.target.value as CommentStatusFilter)}
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={isCommentViewDisabled}
+                        title={canViewComments ? undefined : commentsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="all">All</option>
                         <option value="pending">Pending</option>
@@ -4051,7 +4408,9 @@ function EditSitePage() {
                       <select
                         value={commentTargetType}
                         onChange={(e) => setCommentTargetType(e.target.value as CommentTargetFilter)}
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={isCommentViewDisabled}
+                        title={canViewComments ? undefined : commentsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="all">All</option>
                         <option value="page">Page</option>
@@ -4064,7 +4423,9 @@ function EditSitePage() {
                         value={commentTargetId}
                         onChange={(event) => setCommentTargetId(event.target.value)}
                         placeholder="pageId / postId"
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={isCommentViewDisabled}
+                        title={canViewComments ? undefined : commentsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       />
                     </label>
                     <label className="text-sm text-muted-foreground">
@@ -4073,7 +4434,9 @@ function EditSitePage() {
                         value={commentRequestId}
                         onChange={(event) => setCommentRequestId(event.target.value)}
                         placeholder="req_..."
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={isCommentViewDisabled}
+                        title={canViewComments ? undefined : commentsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       />
                     </label>
                     <label className="text-sm text-muted-foreground">
@@ -4081,7 +4444,9 @@ function EditSitePage() {
                       <select
                         value={commentBlockReason}
                         onChange={(event) => setCommentBlockReason(event.target.value as CommentReportReason)}
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={!canManageComments}
+                        title={canManageComments ? undefined : commentsManagePermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {state.commentReportReasons.map((reason) => (
                           <option key={reason} value={reason}>
@@ -4096,7 +4461,9 @@ function EditSitePage() {
                         value={commentSearch}
                         onChange={(event) => setCommentSearch(event.target.value)}
                         placeholder="author, email, text..."
-                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background"
+                        disabled={isCommentViewDisabled}
+                        title={canViewComments ? undefined : commentsViewPermissionTitle}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border bg-background disabled:cursor-not-allowed disabled:opacity-60"
                       />
                     </label>
                   </div>
@@ -4104,8 +4471,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => void applyBulkCommentAction('approved')}
-                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
+                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment' || !canManageComments}
+                      title={canManageComments ? undefined : commentsManagePermissionTitle}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       Approve selected
@@ -4113,8 +4481,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => void applyBulkCommentAction('rejected')}
-                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
+                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment' || !canManageComments}
+                      title={canManageComments ? undefined : commentsManagePermissionTitle}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <MinusCircle className="w-3.5 h-3.5" />
                       Reject selected
@@ -4122,8 +4491,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => void applyBulkCommentAction('spam')}
-                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1"
+                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment' || !canManageComments}
+                      title={canManageComments ? undefined : commentsManagePermissionTitle}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CircleSlash className="w-3.5 h-3.5" />
                       Mark spam selected
@@ -4131,8 +4501,9 @@ function EditSitePage() {
                     <button
                       type="button"
                       onClick={() => void applyBulkCommentAction('blocked')}
-                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-red-50 hover:text-red-700 flex items-center gap-1"
+                      disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment' || !canManageComments}
+                      title={canManageComments ? undefined : commentsManagePermissionTitle}
+                      className="text-xs px-2 py-1 rounded-md border hover:bg-red-50 hover:text-red-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CircleSlash className="w-3.5 h-3.5" />
                       Block selected
@@ -4162,6 +4533,8 @@ function EditSitePage() {
                                 type="checkbox"
                                 checked={state.selectedCommentIds.includes(comment.id)}
                                 onChange={(event) => toggleCommentSelection(comment.id, event.target.checked)}
+                                disabled={!canManageComments}
+                                title={canManageComments ? undefined : commentsManagePermissionTitle}
                               />
                               <StatusBadge status={comment.status} />
                             </label>
@@ -4209,8 +4582,9 @@ function EditSitePage() {
                             <button
                               onClick={() =>
                                 updateCommentStatus(comment, 'approved', undefined, commentRequestId || undefined)}
-                              disabled={actionBusyId === comment.id}
-                              className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
+                              disabled={actionBusyId === comment.id || !canManageComments}
+                              title={canManageComments ? undefined : commentsManagePermissionTitle}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                               Approve
@@ -4218,8 +4592,9 @@ function EditSitePage() {
                             <button
                               onClick={() =>
                                 updateCommentStatus(comment, 'rejected', undefined, commentRequestId || undefined)}
-                              disabled={actionBusyId === comment.id}
-                              className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
+                              disabled={actionBusyId === comment.id || !canManageComments}
+                              title={canManageComments ? undefined : commentsManagePermissionTitle}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <MinusCircle className="w-3.5 h-3.5" />
                               Reject
@@ -4227,8 +4602,9 @@ function EditSitePage() {
                             <button
                               onClick={() =>
                                 updateCommentStatus(comment, 'spam', undefined, commentRequestId || undefined)}
-                              disabled={actionBusyId === comment.id}
-                              className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1"
+                              disabled={actionBusyId === comment.id || !canManageComments}
+                              title={canManageComments ? undefined : commentsManagePermissionTitle}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <CircleSlash className="w-3.5 h-3.5" />
                               Mark spam
@@ -4241,8 +4617,9 @@ function EditSitePage() {
                                   commentBlockReason,
                                   commentRequestId || undefined,
                                 )}
-                              disabled={actionBusyId === comment.id}
-                              className="text-xs px-2 py-1 rounded-md border hover:bg-red-50 hover:text-red-700 flex items-center gap-1"
+                              disabled={actionBusyId === comment.id || !canManageComments}
+                              title={canManageComments ? undefined : commentsManagePermissionTitle}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-red-50 hover:text-red-700 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <CircleSlash className="w-3.5 h-3.5" />
                               Block
@@ -4250,8 +4627,9 @@ function EditSitePage() {
                             <button
                               onClick={() =>
                                 updateCommentStatus(comment, 'pending', undefined, commentRequestId || undefined)}
-                              disabled={actionBusyId === comment.id}
-                              className="text-xs px-2 py-1 rounded-md border hover:bg-slate-100"
+                              disabled={actionBusyId === comment.id || !canManageComments}
+                              title={canManageComments ? undefined : commentsManagePermissionTitle}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               Reset to pending
                             </button>
@@ -4299,7 +4677,8 @@ function EditSitePage() {
                 <button
                   type="button"
                   onClick={() => void handleDelete()}
-                  disabled={isLoading}
+                  disabled={isSiteDeletionDisabled}
+                  title={canDeleteSite ? undefined : deleteSitePermissionTitle}
                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSiteSettingsBusy ? 'Deleting...' : 'Delete site'}
