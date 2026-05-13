@@ -3972,7 +3972,10 @@ export function PageRenderer({
     }
 
     const calculateScale = () => {
-      const availableWidth = Math.max(320, container.clientWidth - 24);
+      const visualViewportWidth = window.visualViewport?.width || Number.POSITIVE_INFINITY;
+      const windowViewportWidth = window.innerWidth || Number.POSITIVE_INFINITY;
+      const viewportWidth = Math.floor(Math.min(visualViewportWidth, windowViewportWidth, container.clientWidth));
+      const availableWidth = Math.max(320, Math.min(container.clientWidth, viewportWidth) - 24);
       setActiveBreakpoint(resolveBreakpoint(availableWidth));
       const ratio = availableWidth / Math.max(canvasSize.width, 1);
       const nextScale = Math.max(0.32, Math.min(1, ratio));
@@ -3985,7 +3988,13 @@ export function PageRenderer({
     });
 
     observer.observe(container);
-    return () => observer.disconnect();
+    window.visualViewport?.addEventListener('resize', calculateScale);
+    window.addEventListener('resize', calculateScale);
+    return () => {
+      observer.disconnect();
+      window.visualViewport?.removeEventListener('resize', calculateScale);
+      window.removeEventListener('resize', calculateScale);
+    };
   }, [canvasSize.width]);
 
   const styleHeight = Math.round(canvasSize.height * scale);
@@ -3998,6 +4007,13 @@ export function PageRenderer({
     overflowY: 'auto',
     padding: '12px',
     minHeight: styleHeight,
+  };
+
+  const canvasFrameStyle: React.CSSProperties = {
+    position: 'relative',
+    width: Math.round(canvasSize.width * scale),
+    minHeight: Math.round(canvasSize.height * scale),
+    flex: '0 0 auto',
   };
 
   const canvasStyle: React.CSSProperties = {
@@ -4068,19 +4084,21 @@ export function PageRenderer({
       />
 
       <div ref={viewportRef} style={viewportStyle}>
-        <div className="backy-canvas" style={canvasStyle}>
-          {elements.map((element) => (
-            element.visible === false ? null : (
-              <ElementRenderer
-                key={element.id}
-                element={element}
-                isPreview={isPreview}
-                siteId={siteId}
-                pageId={pageId}
-                postId={postId}
-              />
-            )
-          ))}
+        <div className="backy-canvas-frame" style={canvasFrameStyle}>
+          <div className="backy-canvas" style={canvasStyle}>
+            {elements.map((element) => (
+              element.visible === false ? null : (
+                <ElementRenderer
+                  key={element.id}
+                  element={element}
+                  isPreview={isPreview}
+                  siteId={siteId}
+                  pageId={pageId}
+                  postId={postId}
+                />
+              )
+            ))}
+          </div>
         </div>
       </div>
     </>

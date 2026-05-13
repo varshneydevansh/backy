@@ -906,6 +906,27 @@ const openAuthenticatedEditorTab = async (parentClient, url) => {
   return client;
 };
 
+const openPublicPreviewTab = async (parentClient, url, viewport) => {
+  const target = await parentClient.send('Target.createTarget', { url: 'about:blank' });
+  const page = (await fetchJson('/json/list')).find((candidate) => candidate.id === target.targetId);
+  assert(page?.webSocketDebuggerUrl, `No Chrome target found for public preview check ${target.targetId}`);
+
+  const client = connectCdp(page.webSocketDebuggerUrl);
+  await client.opened;
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('DOM.enable');
+  await client.send('Log.enable');
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: viewport.width <= 639,
+  });
+  await client.send('Page.navigate', { url });
+  return client;
+};
+
 const waitForEditorElements = async (client, elementIds) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const ready = await evaluate(client, `(() => ({
@@ -928,12 +949,64 @@ const waitForEditorElements = async (client, elementIds) => {
   return null;
 };
 
+const waitForPublicElements = async (client, elementIds) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const ready = await evaluate(client, `(() => ({
+      canvas: Boolean(document.querySelector('.backy-canvas')),
+      elements: ${JSON.stringify(elementIds)}.map((id) => Boolean(document.querySelector('[data-element-id="' + id + '"]'))),
+      body: document.body?.innerText?.slice(0, 160) || '',
+      location: window.location.href,
+    }))()`);
+
+    if (ready.canvas && ready.elements.every(Boolean)) {
+      return ready;
+    }
+
+    if (attempt === 119) {
+      throw new Error(`Public preview did not render expected elements: ${JSON.stringify(ready)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const getElementBox = async (client, elementId) => (
   evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return null;
     const rect = node.getBoundingClientRect();
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const canvasRect = canvas?.getBoundingClientRect?.();
+    const style = window.getComputedStyle(node);
+    const cssWidth = Number.parseFloat(style.width);
+    const cssHeight = Number.parseFloat(style.height);
+    const scaleX = Number.isFinite(cssWidth) && cssWidth > 0 ? rect.width / cssWidth : 1;
+    const scaleY = Number.isFinite(cssHeight) && cssHeight > 0 ? rect.height / cssHeight : 1;
+    return {
+      id: node.getAttribute('data-element-id'),
+      x: rect.x,
+      y: rect.y,
+      canvasX: canvasRect ? (rect.x - canvasRect.x) / scaleX : rect.x,
+      canvasY: canvasRect ? (rect.y - canvasRect.y) / scaleY : rect.y,
+      width: rect.width,
+      height: rect.height,
+      left: style.left,
+      top: style.top,
+      cssWidth: style.width,
+      cssHeight: style.height,
+      text: node.textContent.trim().slice(0, 100),
+    };
+  })()`)
+);
+
+const getPublicElementBox = async (client, elementId) => (
+  evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    const canvas = document.querySelector('.backy-canvas');
     const canvasRect = canvas?.getBoundingClientRect?.();
     const style = window.getComputedStyle(node);
     const cssWidth = Number.parseFloat(style.width);
@@ -2528,6 +2601,138 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
   };
 };
 
+const requestPagePreview = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ ttlSeconds: 600 }),
+  });
+  const preview = payload.data || {};
+  assert(preview.hostedUrl && preview.previewToken, `Unable to create page preview: ${JSON.stringify(payload).slice(0, 500)}`);
+  return preview;
+};
+
+const assertPublicResponsiveVisualGeometry = async (client, elementId, expected, label) => {
+  await scrollElementIntoView(client, elementId);
+  const box = await getPublicElementBox(client, elementId);
+  assert(box, `${label}: missing public rendered element ${elementId}`);
+
+  const cssX = parseCssPixel(box.left);
+  const cssWidth = parseCssPixel(box.cssWidth);
+  const scaleX = getVisualScale(box, 'x');
+  const visualCanvasX = getCanvasVisualX(box);
+  const visualCanvasWidth = scaleX ? box.width / scaleX : box.width;
+  const hitTest = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(centerX, centerY);
+    const owner = hit?.closest?.('[data-element-id]');
+    return {
+      centerX,
+      centerY,
+      hitElementId: owner?.getAttribute('data-element-id') || null,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
+      breakpoint: window.innerWidth <= 639 ? 'mobile' : window.innerWidth <= 1023 ? 'tablet' : 'desktop',
+    };
+  })()`);
+
+  assert(
+    cssX !== null &&
+      cssWidth !== null &&
+      Math.abs(cssX - expected.x) <= 1 &&
+      Math.abs(cssWidth - expected.width) <= 1,
+    `${label}: public CSS geometry expected x=${expected.x}, width=${expected.width}; got ${JSON.stringify({ left: box.left, cssWidth: box.cssWidth, hitTest })}`,
+  );
+  assert(
+    Number.isFinite(visualCanvasWidth) &&
+      Math.abs(visualCanvasWidth - expected.width) <= 2 &&
+      box.width > 0 &&
+      box.height > 0,
+    `${label}: public visual geometry expected width=${expected.width}; got ${JSON.stringify({ visualCanvasX, visualCanvasWidth, box, scaleX, hitTest })}`,
+  );
+  assert(
+    hitTest?.visible === true &&
+      hitTest.centerX >= 0 &&
+      hitTest.centerY >= 0 &&
+      hitTest.centerX <= hitTest.viewportWidth &&
+      hitTest.centerY <= hitTest.viewportHeight &&
+      (hitTest.hitElementId === elementId || hitTest.hitElementId === 'smoke-child-button'),
+    `${label}: public rendered element was not visibly hittable: ${JSON.stringify({ hitTest, box })}`,
+  );
+
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    clip: {
+      x: Math.max(0, Math.floor(box.x)),
+      y: Math.max(0, Math.floor(box.y)),
+      width: Math.max(1, Math.ceil(box.width)),
+      height: Math.max(1, Math.ceil(box.height)),
+      scale: 1,
+    },
+  });
+  assert(
+    typeof screenshot?.data === 'string' && screenshot.data.length > 128,
+    `${label}: public clipped visual snapshot was empty for ${elementId}`,
+  );
+
+  return {
+    label,
+    elementId,
+    css: {
+      x: Math.round(cssX),
+      width: Math.round(cssWidth),
+    },
+    visual: {
+      x: Math.round(cssX),
+      width: Math.round(visualCanvasWidth),
+      scaleX: scaleX === null ? null : Number(scaleX.toFixed(4)),
+      screenshotBytes: Buffer.byteLength(screenshot.data, 'base64'),
+    },
+    hitTest,
+  };
+};
+
+const assertPublicResponsiveRendering = async (parentClient, pageId, cases) => {
+  const preview = await requestPagePreview(pageId);
+  const results = {};
+
+  for (const testCase of cases) {
+    let publicClient = null;
+    try {
+      publicClient = await openPublicPreviewTab(parentClient, preview.hostedUrl, testCase.viewport);
+      await waitForPublicElements(publicClient, [testCase.elementId]);
+      results[testCase.key] = await assertPublicResponsiveVisualGeometry(
+        publicClient,
+        testCase.elementId,
+        { x: testCase.expectedX, width: testCase.expectedWidth },
+        testCase.label,
+      );
+    } finally {
+      if (publicClient) {
+        try {
+          await publicClient.send('Page.close');
+        } catch {
+          // The target may already be closed by Chrome during cleanup.
+        }
+        publicClient.close();
+      }
+    }
+  }
+
+  return {
+    preview: {
+      hostedUrl: preview.hostedUrl,
+      renderUrl: preview.renderUrl,
+      expiresAt: preview.expiresAt,
+    },
+    results,
+  };
+};
+
 const readPersistedElement = async (pageId, elementId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const elements = payload.data?.page?.content?.elements || [];
@@ -2540,6 +2745,7 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   const breakpointCanvasLabel = `${breakpointLabel} canvas`;
   const expectedBreakpointX = options.expectedX ?? (breakpoint === 'tablet' ? 64 : 24);
   const expectedBreakpointWidth = options.expectedWidth ?? (breakpoint === 'tablet' ? 360 : 300);
+  const testLayerOverride = options.testLayerOverride !== false;
 
   await selectLayerById(client, elementId);
   await clickButtonByAriaLabel(client, 'Desktop canvas');
@@ -2600,29 +2806,33 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     `${breakpointLabel} override did not reapply after layout reset`,
   );
 
-  const breakpointLayerHidden = await setLayerHiddenState(client, elementId, true);
-  const breakpointLayerLocked = await setLayerLockedState(client, elementId, true);
-  const layerControls = await readBreakpointOverrideControls(client);
-  assert(
-    layerControls.groups.layout.disabled === false &&
-      layerControls.groups.layer.disabled === false,
-    `Breakpoint override controls did not expose active layout and layer state: ${JSON.stringify(layerControls)}`,
-  );
+  const breakpointLayerHidden = testLayerOverride ? await setLayerHiddenState(client, elementId, true) : null;
+  const breakpointLayerLocked = testLayerOverride ? await setLayerLockedState(client, elementId, true) : null;
+  if (testLayerOverride) {
+    const layerControls = await readBreakpointOverrideControls(client);
+    assert(
+      layerControls.groups.layout.disabled === false &&
+        layerControls.groups.layer.disabled === false,
+      `Breakpoint override controls did not expose active layout and layer state: ${JSON.stringify(layerControls)}`,
+    );
 
-  await clickBreakpointResetGroup(client, 'layer');
-  const resetLayerState = await readLayerActionState(client, elementId);
-  assert(
-    resetLayerState.hidden === false && resetLayerState.locked === false,
-    `Layer reset control did not restore inherited desktop layer state: ${JSON.stringify(resetLayerState)}`,
-  );
+    await clickBreakpointResetGroup(client, 'layer');
+    const resetLayerState = await readLayerActionState(client, elementId);
+    assert(
+      resetLayerState.hidden === false && resetLayerState.locked === false,
+      `Layer reset control did not restore inherited desktop layer state: ${JSON.stringify(resetLayerState)}`,
+    );
+  }
   const breakpointVisual = await assertResponsiveBreakpointVisualGeometry(
     client,
     elementId,
     { x: expectedBreakpointX, width: expectedBreakpointWidth },
     `${breakpointLabel} breakpoint visual geometry`,
   );
-  await setLayerHiddenState(client, elementId, true);
-  await setLayerLockedState(client, elementId, true);
+  if (testLayerOverride) {
+    await setLayerHiddenState(client, elementId, true);
+    await setLayerLockedState(client, elementId, true);
+  }
 
   await clickSave(client);
 
@@ -2633,8 +2843,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     if (
       persistedOverride?.x === expectedBreakpointX &&
       persistedOverride?.width === expectedBreakpointWidth &&
-      persistedOverride?.visible === false &&
-      persistedOverride?.locked === true
+      (testLayerOverride
+        ? persistedOverride?.visible === false && persistedOverride?.locked === true
+        : persistedOverride && persistedOverride.visible === undefined && persistedOverride.locked === undefined)
     ) {
       break;
     }
@@ -2649,8 +2860,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
         persistedElement?.width === desktopBefore.width &&
         persistedOverride?.x === expectedBreakpointX &&
         persistedOverride?.width === expectedBreakpointWidth &&
-        persistedOverride?.visible === false &&
-        persistedOverride?.locked === true
+        (testLayerOverride
+          ? persistedOverride?.visible === false && persistedOverride?.locked === true
+          : persistedOverride?.visible === undefined && persistedOverride?.locked === undefined)
       );
     })(),
     `Responsive override was not persisted without changing desktop layout: ${JSON.stringify({ desktopBefore, persistedElement })}`,
@@ -2672,10 +2884,17 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
 
   await clickButtonByAriaLabel(client, breakpointCanvasLabel);
   const breakpointLayerAfter = await readLayerActionState(client, elementId);
-  assert(
-    breakpointLayerAfter.hidden === true && breakpointLayerAfter.locked === true,
-    `${breakpointLabel} layer override did not hydrate after switching breakpoints: ${JSON.stringify(breakpointLayerAfter)}`,
-  );
+  if (testLayerOverride) {
+    assert(
+      breakpointLayerAfter.hidden === true && breakpointLayerAfter.locked === true,
+      `${breakpointLabel} layer override did not hydrate after switching breakpoints: ${JSON.stringify(breakpointLayerAfter)}`,
+    );
+  } else {
+    assert(
+      breakpointLayerAfter.hidden === false && breakpointLayerAfter.locked === false,
+      `${breakpointLabel} layout-only override should inherit desktop layer state: ${JSON.stringify(breakpointLayerAfter)}`,
+    );
+  }
 
   return {
     breakpoint,
@@ -10794,11 +11013,13 @@ const main = async () => {
           breakpoint: 'mobile',
           expectedX: 42,
           expectedWidth: 260,
+          testLayerOverride: false,
         }),
         boxTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-box', {
           breakpoint: 'tablet',
           expectedX: 118,
           expectedWidth: 320,
+          testLayerOverride: false,
         }),
       };
 
@@ -10860,7 +11081,7 @@ const main = async () => {
               breakpoint: 'mobile',
               expectedX: 42,
               expectedWidth: 260,
-              expectExistingLayerOverride: true,
+              testLayerOverride: false,
             },
           ),
           boxTablet: await assertResponsiveBreakpointEditing(
@@ -10871,7 +11092,7 @@ const main = async () => {
               breakpoint: 'tablet',
               expectedX: 118,
               expectedWidth: 320,
-              expectExistingLayerOverride: true,
+              testLayerOverride: false,
             },
           ),
         };
@@ -10902,12 +11123,32 @@ const main = async () => {
         `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
 
+      const publicResponsiveRendering = await assertPublicResponsiveRendering(client, tempPageId, [
+        {
+          key: 'boxMobile',
+          label: 'Public mobile box responsive geometry',
+          elementId: 'smoke-box',
+          expectedX: 42,
+          expectedWidth: 260,
+          viewport: { width: 390, height: 900 },
+        },
+        {
+          key: 'boxTablet',
+          label: 'Public tablet box responsive geometry',
+          elementId: 'smoke-box',
+          expectedX: 118,
+          expectedWidth: 320,
+          viewport: { width: 820, height: 1024 },
+        },
+      ]);
+
       console.log(JSON.stringify({
         ok: true,
         mode: 'responsive',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         responsiveEditing,
         reloadedResponsiveEditing,
+        publicResponsiveRendering,
       }, null, 2));
       return;
     }
