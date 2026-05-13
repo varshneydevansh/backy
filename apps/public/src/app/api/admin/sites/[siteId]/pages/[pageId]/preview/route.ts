@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createPreviewToken, getAdminPageById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
@@ -66,6 +67,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const renderUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}&previewToken=${encodedToken}`;
       const pageApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`;
 
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+        entity: 'page',
+        entityId: page.id,
+        action: 'previewToken.create',
+        metadata: {
+          targetType: preview.targetType,
+          targetId: preview.targetId,
+          slug: page.slug || 'index',
+          ttlSeconds: body.ttlSeconds || null,
+          expiresAt: preview.expiresAt,
+          hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}`,
+          renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}`,
+          pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}`,
+          tokenStored: false,
+        },
+        requestId,
+      });
+
       return NextResponse.json({
         success: true,
         requestId,
@@ -106,6 +128,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}?previewToken=${encodedToken}`;
     const renderUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}&previewToken=${encodedToken}`;
     const pageApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`;
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+      entity: 'page',
+      entityId: page.id,
+      action: 'previewToken.create',
+      metadata: {
+        targetType: preview.targetType,
+        targetId: preview.targetId,
+        slug: page.slug || 'index',
+        ttlSeconds: body.ttlSeconds || null,
+        expiresAt: preview.expiresAt,
+        hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}`,
+        renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}`,
+        pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}`,
+        tokenStored: false,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

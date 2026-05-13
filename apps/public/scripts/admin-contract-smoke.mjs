@@ -1059,6 +1059,29 @@ try {
       `${pageReadiness.url} missing legacy page readiness checks`,
     );
 
+    const pagePreviewRequestId = `contract-page-preview-${unique}`;
+    const pagePreview = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}/preview`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': pagePreviewRequestId,
+      },
+      body: JSON.stringify({ ttlSeconds: 1200 }),
+    });
+    assert(pagePreview.response.status === 200, `${pagePreview.url} expected preview token response`);
+    assert(pagePreview.json?.data?.previewToken, `${pagePreview.url} missing preview token`);
+    assert(pagePreview.json?.data?.pageApiUrl?.includes('previewToken='), `${pagePreview.url} missing preview page API URL`);
+    assert(pagePreview.json?.data?.renderUrl?.includes('previewToken='), `${pagePreview.url} missing preview render URL`);
+    const pagePreviewAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=page&entityId=${createdPageId}&action=previewToken.create&requestId=${pagePreviewRequestId}`);
+    assert(pagePreviewAudit.response.status === 200, `${pagePreviewAudit.url} expected preview audit readback`);
+    const pagePreviewAuditEntry = pagePreviewAudit.json?.data?.logs?.[0];
+    assert(pagePreviewAuditEntry?.action === 'previewToken.create', `${pagePreviewAudit.url} missing preview token audit action`);
+    assert(pagePreviewAuditEntry?.metadata?.targetType === 'page', `${pagePreviewAudit.url} missing preview target type`);
+    assert(pagePreviewAuditEntry?.metadata?.ttlSeconds === 1200, `${pagePreviewAudit.url} missing preview TTL metadata`);
+    assert(pagePreviewAuditEntry?.metadata?.slug === pageSlug, `${pagePreviewAudit.url} missing preview slug metadata`);
+    assert(pagePreviewAuditEntry?.metadata?.tokenStored === false, `${pagePreviewAudit.url} should record that preview token is redacted`);
+    assert(!JSON.stringify(pagePreviewAuditEntry?.metadata || {}).includes(pagePreview.json.data.previewToken), `${pagePreviewAudit.url} leaked preview token into audit metadata`);
+
     const canonicalConflictPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
       headers: {
