@@ -230,6 +230,46 @@ const checkoutCustomerValues = ({
   };
 };
 
+const checkoutCustomerOrderLinkValues = ({
+  existingValues,
+  orderId,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  existingValues?: Record<string, unknown>;
+  orderId: string;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}): Record<string, BackyJsonValue> => {
+  const existingSourceValues = existingValues?.sourcevalues && typeof existingValues.sourcevalues === 'object' && !Array.isArray(existingValues.sourcevalues)
+    ? existingValues.sourcevalues as Record<string, unknown>
+    : {};
+  const existingLastCheckoutOrder = existingSourceValues.lastCheckoutOrder && typeof existingSourceValues.lastCheckoutOrder === 'object' && !Array.isArray(existingSourceValues.lastCheckoutOrder)
+    ? existingSourceValues.lastCheckoutOrder as Record<string, unknown>
+    : {};
+
+  return {
+    lastorderid: orderId,
+    lastordernumber: orderNumber,
+    lastorderat: orderCreatedAt,
+    sourcevalues: {
+      ...existingSourceValues,
+      lastCheckoutOrder: {
+        ...existingLastCheckoutOrder,
+        orderId,
+        orderNumber,
+        total,
+        requestId,
+        updatedAt: orderCreatedAt,
+      },
+    } as BackyJsonValue,
+  };
+};
+
 const orderContract = (siteId: string) => ({
   schemaVersion: ORDER_CONTRACT_VERSION,
   accepts: {
@@ -537,6 +577,48 @@ const upsertRepositoryCheckoutCustomer = async ({
   };
 };
 
+const updateRepositoryCheckoutCustomerOrderLink = async ({
+  siteId,
+  repositories,
+  customerProfile,
+  orderId,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  siteId: string;
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+  customerProfile: Awaited<ReturnType<typeof upsertRepositoryCheckoutCustomer>>;
+  orderId: string;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}) => {
+  if (!customerProfile) return null;
+  const orderLinkValues = checkoutCustomerOrderLinkValues({
+    existingValues: customerProfile.record.values,
+    orderId,
+    orderNumber,
+    orderCreatedAt,
+    total,
+    requestId,
+  });
+  const record = (await repositories.collections.updateRecord(siteId, customerProfile.collection.id, customerProfile.record.id, {
+    status: customerProfile.record.status,
+    values: {
+      ...customerProfile.record.values,
+      ...orderLinkValues,
+    },
+  })).item;
+
+  return {
+    ...customerProfile,
+    record,
+  };
+};
+
 const upsertDemoCheckoutCustomer = ({
   siteId,
   input,
@@ -606,6 +688,48 @@ const upsertDemoCheckoutCustomer = ({
       existingRecord: Boolean(existingRecord),
     }
     : null;
+};
+
+const updateDemoCheckoutCustomerOrderLink = ({
+  siteId,
+  customerProfile,
+  orderId,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  siteId: string;
+  customerProfile: ReturnType<typeof upsertDemoCheckoutCustomer>;
+  orderId: string;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}) => {
+  if (!customerProfile) return null;
+  const orderLinkValues = checkoutCustomerOrderLinkValues({
+    existingValues: customerProfile.record.values,
+    orderId,
+    orderNumber,
+    orderCreatedAt,
+    total,
+    requestId,
+  });
+  const record = updateAdminCollectionRecord(siteId, customerProfile.collection.id, customerProfile.record.id, {
+    status: customerProfile.record.status,
+    values: {
+      ...customerProfile.record.values,
+      ...orderLinkValues,
+    },
+  });
+
+  return record
+    ? {
+      ...customerProfile,
+      record,
+    }
+    : customerProfile;
 };
 
 const parseVariantSource = (value: unknown): unknown[] => {
@@ -827,7 +951,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         suffix += 1;
       }
       const orderCreatedAt = new Date().toISOString();
-      const customerProfile = await upsertRepositoryCheckoutCustomer({
+      let customerProfile = await upsertRepositoryCheckoutCustomer({
         siteId: site.id,
         repositories,
         input,
@@ -869,6 +993,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: 'published',
         values: toJsonRecord(values),
       })).item;
+
+      customerProfile = await updateRepositoryCheckoutCustomerOrderLink({
+        siteId: site.id,
+        repositories,
+        customerProfile,
+        orderId: order.id,
+        orderNumber,
+        orderCreatedAt,
+        total: quote.total,
+        requestId,
+      });
 
       for (const reservation of inventoryReservations.values()) {
         await repositories.collections.updateRecord(site.id, productsCollection.id, reservation.record.id, {
@@ -995,7 +1130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       suffix += 1;
     }
     const orderCreatedAt = new Date().toISOString();
-    const customerProfile = upsertDemoCheckoutCustomer({
+    let customerProfile = upsertDemoCheckoutCustomer({
       siteId: site.id,
       input,
       orderNumber,
@@ -1036,6 +1171,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!order) {
       return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
     }
+
+    customerProfile = updateDemoCheckoutCustomerOrderLink({
+      siteId: site.id,
+      customerProfile,
+      orderId: order.id,
+      orderNumber,
+      orderCreatedAt,
+      total: quote.total,
+      requestId,
+    });
 
     for (const reservation of inventoryReservations.values()) {
       updateAdminCollectionRecord(site.id, productsCollection.id, reservation.record.id, {

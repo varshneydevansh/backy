@@ -1005,7 +1005,9 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(customerRecord.values?.email === 'commerce-smoke@example.com', `Customer email was not persisted: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.ordercount === 1, `Customer order count was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.totalspent === 106.86, `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.lastorderid === order.id, `Customer last order id was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.lastordernumber === order.orderNumber, `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId === order.id, `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`);
 
   return { productRecord, updatedProduct, order, orderRecord, customersCollection, customerRecord };
 };
