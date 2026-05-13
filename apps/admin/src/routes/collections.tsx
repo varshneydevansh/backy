@@ -50,6 +50,7 @@ import {
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn, formatDate } from '@/lib/utils';
@@ -1398,7 +1399,7 @@ function CollectionsPage() {
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
-  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
@@ -2159,8 +2160,16 @@ function CollectionsPage() {
     setError(`Your account needs ${key} to ${action}. ${collectionPermissionReason(permissionMatrix, currentAdmin, key)}`);
   };
 
-  const copyCollectionApiText = async (value: string, label: string) => {
+  const copyCollectionApiText = async (
+    value: string,
+    label: string,
+    permission?: { key: CollectionPermissionKey; action: string },
+  ) => {
     if (isCollectionsBusy) return;
+    if (permission && !isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key)) {
+      showPermissionDenied(permission.key, permission.action);
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -2173,6 +2182,10 @@ function CollectionsPage() {
   };
   const downloadCollectionHandoff = () => {
     if (isCollectionsBusy) return;
+    if (!canExportCollections) {
+      showPermissionDenied('collections.export', 'export collection handoff manifests');
+      return;
+    }
 
     const blob = new Blob([collectionHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -2190,6 +2203,10 @@ function CollectionsPage() {
   const downloadCollectionSchemaCsv = () => {
     if (isCollectionsBusy) return;
     if (collections.length === 0) return;
+    if (!canExportCollections) {
+      showPermissionDenied('collections.export', 'export collection schemas');
+      return;
+    }
 
     const rows = collections.map((collection) => {
       const exportRecord = collectionToSchemaExportRecord(collection, {
@@ -2303,6 +2320,14 @@ function CollectionsPage() {
     let cancelled = false;
 
     const loadFrontendDesign = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewCollections) {
+        setFrontendDesign(null);
+        setFrontendDesignError(viewPermissionTitle || 'Your account cannot view collection frontend templates.');
+        setFrontendDesignLoading(false);
+        return;
+      }
+
       setFrontendDesignLoading(true);
       setFrontendDesignError(null);
       try {
@@ -2327,12 +2352,20 @@ function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPageTemplates = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewCollections) {
+        setPages([]);
+        setPagesError(viewPermissionTitle || 'Your account cannot view collection page templates.');
+        setIsPagesLoading(false);
+        return;
+      }
+
       setIsPagesLoading(true);
       setPagesError(null);
       try {
@@ -2357,7 +2390,7 @@ function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2437,7 +2470,14 @@ function CollectionsPage() {
   };
 
   const beginNewCollection = () => {
-    if (schemaMutationDisabled) return;
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', 'create collection schemas');
+        return;
+      }
+      setNotice('Finish the current collection operation before starting a new schema.');
+      return;
+    }
     resetCollectionForm();
     navigate({ to: '/collections', search: { siteId: activeSiteId }, replace: true });
     setError(null);
@@ -2704,6 +2744,19 @@ function CollectionsPage() {
 
   const loadCollections = async () => {
     if (isCollectionsBusy) return;
+    if (isPermissionMatrixPending) return;
+    if (!canViewCollections) {
+      setCollections([]);
+      setRecords([]);
+      setSelectedCollectionId(null);
+      setSelectedRecordId(null);
+      setSelectedRecordIds([]);
+      setError(viewPermissionTitle || 'Your account cannot view collections.');
+      setValidationDetails([]);
+      setNotice(null);
+      setIsLoading(false);
+      return;
+    }
 
     const loadInteractionVersion = collectionInteractionVersionRef.current;
     setIsLoading(true);
@@ -2729,6 +2782,13 @@ function CollectionsPage() {
         resetCollectionForm();
       }
     } catch (loadError) {
+      if (isAdminPermissionDeniedError(loadError)) {
+        setCollections([]);
+        setRecords([]);
+        setSelectedCollectionId(null);
+        setSelectedRecordId(null);
+        setSelectedRecordIds([]);
+      }
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collections');
     } finally {
       setIsLoading(false);
@@ -2736,6 +2796,14 @@ function CollectionsPage() {
   };
 
   const loadRecords = async (collectionId: string) => {
+    if (isPermissionMatrixPending) return;
+    if (!canViewCollections) {
+      setRecords([]);
+      setSelectedRecordIds([]);
+      setRecordPagination((prev) => ({ ...prev, total: 0, hasMore: false }));
+      return;
+    }
+
     setIsRecordsLoading(true);
     setError(null);
     setValidationDetails([]);
@@ -2776,6 +2844,14 @@ function CollectionsPage() {
   };
 
   const loadCollectionAuditLogs = async () => {
+    if (isPermissionMatrixPending) return;
+    if (!canExportCollections) {
+      setCollectionAuditLogs([]);
+      setAuditError(null);
+      setIsAuditLoading(false);
+      return;
+    }
+
     setIsAuditLoading(true);
     setAuditError(null);
     try {
@@ -2807,17 +2883,19 @@ function CollectionsPage() {
   };
 
   useEffect(() => {
-    void loadCollections();
-    void loadCollectionAuditLogs();
+    if (!isPermissionMatrixPending) {
+      void loadCollections();
+      void loadCollectionAuditLogs();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewCollections, canExportCollections, isPermissionMatrixPending]);
 
   useEffect(() => {
-    if (selectedCollectionId) {
+    if (!isPermissionMatrixPending && canViewCollections && selectedCollectionId) {
       void loadRecords(selectedCollectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCollectionId, activeSiteId, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
+  }, [selectedCollectionId, activeSiteId, canViewCollections, isPermissionMatrixPending, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
@@ -3378,6 +3456,19 @@ function CollectionsPage() {
     }
   };
 
+  if (!isPermissionMatrixPending && !canViewCollections) {
+    return (
+      <PageShell
+        title="Collections unavailable"
+        description={viewPermissionTitle || 'Your account cannot view collection schemas or records.'}
+      >
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant collections.view access.'}
+        </div>
+      </PageShell>
+    );
+  }
+
   const dynamicTemplateFields = collectionForm.fields
     .filter((field) => field.key.trim() && field.label.trim())
     .map((field, index) => ({
@@ -3498,8 +3589,12 @@ function CollectionsPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
-              disabled={isCollectionsBusy}
+              onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest', {
+                key: 'collections.export',
+                action: 'copy collection handoff manifests',
+              })}
+              disabled={isCollectionsBusy || !canExportCollections}
+              title={exportPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
@@ -3508,7 +3603,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={downloadCollectionHandoff}
-              disabled={isCollectionsBusy}
+              disabled={isCollectionsBusy || !canExportCollections}
+              title={exportPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -3517,7 +3613,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={downloadCollectionSchemaCsv}
-              disabled={collections.length === 0 || isCollectionsBusy}
+              disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
+              title={exportPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -3679,7 +3776,8 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={() => void loadCollectionAuditLogs()}
-            disabled={isAuditLoading}
+            disabled={isAuditLoading || isPermissionMatrixPending || !canExportCollections}
+            title={exportPermissionTitle}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${isAuditLoading ? 'animate-spin' : ''}`} />
@@ -3954,8 +4052,12 @@ function CollectionsPage() {
           </button>
           <button
             type="button"
-            onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
-            disabled={isCollectionsBusy}
+            onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest', {
+              key: 'collections.export',
+              action: 'copy collection handoff manifests',
+            })}
+            disabled={isCollectionsBusy || !canExportCollections}
+            title={exportPermissionTitle}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Copy className="h-4 w-4" />
@@ -3964,7 +4066,8 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={downloadCollectionSchemaCsv}
-            disabled={collections.length === 0 || isCollectionsBusy}
+            disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
+            title={exportPermissionTitle}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="h-4 w-4" />
