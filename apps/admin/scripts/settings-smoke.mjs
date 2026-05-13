@@ -99,6 +99,26 @@ const assertAdminKeyRotationDenied = async () => {
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Key rotation denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
+const assertAdminApiKeyPatchDenied = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      apiKeys: {
+        publicApiKey: 'should-not-persist-public-key',
+        adminApiKey: 'should-not-persist-admin-key',
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `Admin without settings.manageKeys should not patch API keys, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `API key patch denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+};
+
 const restoreSettings = async (settings) => {
   if (!settings) return;
 
@@ -696,6 +716,7 @@ const main = async () => {
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
   await assertAdminKeyRotationDenied();
+  await assertAdminApiKeyPatchDenied();
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let restored = false;

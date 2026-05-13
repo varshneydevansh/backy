@@ -745,6 +745,14 @@ export async function PATCH(request: NextRequest) {
   if (access instanceof NextResponse) {
     return access;
   }
+  if (body.apiKeys !== undefined) {
+    const keyAccess = requireAdminAccess(request, requestId, {
+      permission: 'settings.manageKeys',
+    });
+    if (keyAccess instanceof NextResponse) {
+      return keyAccess;
+    }
+  }
 
   try {
     const deliveryMode = body.deliveryMode === undefined
