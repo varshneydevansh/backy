@@ -638,6 +638,28 @@ try {
                                   height: 120,
                                   props: { content: 'Imported summary fallback', binding: 'record.summary' },
                                 },
+                                {
+                                  id: 'imported-collection-item-reverse-authors',
+                                  type: 'repeater',
+                                  x: 96,
+                                  y: 390,
+                                  width: 760,
+                                  height: 220,
+                                  props: {
+                                    collectionId: referenceCollectionSlug,
+                                    datasetId: 'dataset_contract_reverse_authors',
+                                    titleField: 'name',
+                                    descriptionField: 'bio',
+                                    query: {
+                                      fieldKey: 'company',
+                                      fieldValue: '$currentRecord.id',
+                                      sortBy: 'name',
+                                      sortDirection: 'asc',
+                                    },
+                                    limit: 6,
+                                  },
+                                  children: [],
+                                },
                               ],
                             },
                           ],
@@ -3130,6 +3152,9 @@ try {
       body: JSON.stringify({
         name: 'Admin Contract Companies',
         slug: nestedReferenceCollectionSlug,
+        frontendDesignTemplateId: 'imported-external-collection-template',
+        listRoutePattern: `/${nestedReferenceCollectionSlug}`,
+        routePattern: `/${nestedReferenceCollectionSlug}/:recordSlug`,
         status: 'published',
         fields: [
           { key: 'name', label: 'Name', type: 'text', required: true, unique: true },
@@ -5022,6 +5047,22 @@ try {
     const hostedDynamicItem = await request(`/sites/${siteSlug}${dynamicItemPath}`);
     assert(hostedDynamicItem.response.status === 200, `${hostedDynamicItem.url} expected hosted dynamic item page`);
     assert(hostedDynamicItem.text.includes('Collection Record'), `${hostedDynamicItem.url} missing hosted dynamic item title`);
+
+    const reverseDynamicItemPath = `/${nestedReferenceCollectionSlug}/${nestedReferenceRecordSlug}`;
+    const reverseDynamicRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(reverseDynamicItemPath)}`);
+    assert(reverseDynamicRender.response.status === 200, `${reverseDynamicRender.url} expected reverse dynamic item render`);
+    validateAiRenderPayload(reverseDynamicRender.json, 'collection reverse dynamic item render payload');
+    const reverseRepeaterElement = reverseDynamicRender.json?.data?.content?.elements
+      ?.find((element) => element.id === 'imported-collection-item-root')
+      ?.children?.find((child) => child.id === 'imported-collection-item-reverse-authors');
+    assert(
+      reverseRepeaterElement?.type === 'repeater'
+      && reverseRepeaterElement.props?.datasetId === 'dataset_contract_reverse_authors'
+      && reverseRepeaterElement.props?.query?.fieldKey === 'company'
+      && reverseRepeaterElement.props?.query?.fieldValue === createdNestedReferenceRecordId
+      && reverseRepeaterElement.props?.records?.some((record) => record.id === createdReferenceRecordId && record.values?.name === 'Contract Author'),
+      `${reverseDynamicRender.url} did not resolve reverse relationship repeater records: ${JSON.stringify(reverseRepeaterElement).slice(0, 1200)}`,
+    );
 
     const createBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',

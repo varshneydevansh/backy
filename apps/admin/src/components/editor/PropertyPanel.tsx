@@ -4572,6 +4572,7 @@ const collectionBindingPresetOptions = (
 type SavedCollectionBindingPreset = CollectionBindingPreset;
 
 const COLLECTION_BINDING_PRESET_STORAGE_KEY = 'backy.editor.collectionBindingPresets.v1';
+const CURRENT_RECORD_FILTER_VALUE = '$currentRecord.id';
 
 const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollectionBindingPreset[] => (
   Array.isArray(value)
@@ -4633,47 +4634,66 @@ function CollectionFilterValueControl({
   field,
   value,
   onChange,
+  allowCurrentRecordValue = false,
 }: {
   testId: string;
   field?: CollectionField | null;
   value: string;
   onChange: (value: string) => void;
+  allowCurrentRecordValue?: boolean;
 }) {
   const options = filterValueOptionsForField(field);
+  const inputType = field?.type === 'number' ? 'number' : field?.type === 'date' || field?.type === 'datetime' ? 'text' : 'text';
+  const currentRecordButton = allowCurrentRecordValue ? (
+    <button
+      type="button"
+      onClick={() => onChange(CURRENT_RECORD_FILTER_VALUE)}
+      data-testid={`${testId}-current-record`}
+      className="shrink-0 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted"
+    >
+      Current record
+    </button>
+  ) : null;
 
   if (options.length > 0) {
     return (
-      <select
-        value={options.some((option) => option.value === value) ? value : ''}
-        onChange={(event) => onChange(event.target.value)}
-        data-testid={testId}
-        className={cn(
-          'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-          'focus:outline-none focus:ring-2 focus:ring-ring'
-        )}
-      >
-        <option value="">Any value</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="flex gap-2">
+        <select
+          value={options.some((option) => option.value === value) ? value : ''}
+          onChange={(event) => onChange(event.target.value)}
+          data-testid={testId}
+          className={cn(
+            'min-w-0 flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+        >
+          <option value="">Any value</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {currentRecordButton}
+      </div>
     );
   }
 
   return (
-    <input
-      type={field?.type === 'number' ? 'number' : field?.type === 'date' || field?.type === 'datetime' ? 'text' : 'text'}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      data-testid={testId}
-      className={cn(
-        'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-        'focus:outline-none focus:ring-2 focus:ring-ring'
-      )}
-      placeholder={field ? `Filter ${field.label}` : 'Exact value'}
-    />
+    <div className="flex gap-2">
+      <input
+        type={inputType}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid={testId}
+        className={cn(
+          'min-w-0 flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+          'focus:outline-none focus:ring-2 focus:ring-ring'
+        )}
+        placeholder={field ? `Filter ${field.label}` : 'Exact value'}
+      />
+      {currentRecordButton}
+    </div>
   );
 }
 
@@ -4971,6 +4991,7 @@ function RepeaterDataProperties({
                   field={selectedFilterFieldDefinition}
                   value={selectedFilterValue}
                   onChange={(value) => updateRepeater({ filterValue: value })}
+                  allowCurrentRecordValue={selectedFilterFieldDefinition?.type === 'reference' || selectedFilterFieldDefinition?.type === 'multiReference'}
                 />
               </div>
 
@@ -5891,6 +5912,7 @@ function DataBindingProperties({
                     field={selectedFilterFieldDefinition}
                     value={selectedFilterValue}
                     onChange={(value) => updateBinding({ filterValue: value })}
+                    allowCurrentRecordValue={selectedFilterFieldDefinition?.type === 'reference' || selectedFilterFieldDefinition?.type === 'multiReference'}
                   />
                 </div>
               </div>

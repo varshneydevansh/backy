@@ -8741,6 +8741,10 @@ const testRepeaterControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-repeater-description-field', 'summary');
   await setFormControlByTestId(client, 'editor-repeater-image-field', 'thumbnail');
   await setFormControlByTestId(client, 'editor-repeater-search', 'featured');
+  await setFormControlByTestId(client, 'editor-repeater-filter-field', 'author');
+  await clickControlByTestId(client, 'editor-repeater-filter-value-current-record');
+  const reverseFilterValue = await evaluate(client, `document.querySelector('[data-testid="editor-repeater-filter-value"]')?.value || ''`);
+  assert(reverseFilterValue === '$currentRecord.id', `Repeater reverse relationship current-record filter mismatch: ${reverseFilterValue}`);
   await setFormControlByTestId(client, 'editor-repeater-filter-field', 'author.company.name');
   await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Editor Smoke Studio');
   await setFormControlByTestId(client, 'editor-repeater-sort-by', 'author.company.domain');

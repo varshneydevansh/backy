@@ -24,6 +24,8 @@ import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { publicMediaFilePath } from './mediaResponsive';
 
 type JsonObject = Record<string, unknown>;
+const CURRENT_RECORD_ID_QUERY_VALUE = '$currentRecord.id';
+const LEGACY_CURRENT_RECORD_ID_QUERY_VALUE = '$record.id';
 
 interface RenderPayloadOptions {
   requestId: string;
@@ -392,6 +394,20 @@ const normalizeCollectionRecordStatus = (value: unknown): StoreCollectionRecord[
     ? value
     : null
 );
+
+const resolveCollectionTemplateQuery = (
+  query: unknown,
+  record?: StoreCollectionRecord,
+): JsonObject => {
+  const nextQuery = isRecord(query) ? { ...query } : {};
+  if (
+    record
+    && (nextQuery.fieldValue === CURRENT_RECORD_ID_QUERY_VALUE || nextQuery.fieldValue === LEGACY_CURRENT_RECORD_ID_QUERY_VALUE)
+  ) {
+    nextQuery.fieldValue = record.id;
+  }
+  return nextQuery;
+};
 
 const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, index: number): JsonObject | null => {
   const source = normalizeBindingSource(binding.source);
@@ -1500,6 +1516,28 @@ const applyCollectionTemplateContext = (
 
   if (next.type === 'repeater' || bindsCollectionRecords) {
     const repeater = isRecord(next.props.repeater) ? { ...next.props.repeater } : {};
+    const rawRepeaterQuery = isRecord(repeater.query)
+      ? repeater.query
+      : isRecord(next.props.query)
+        ? next.props.query
+        : { status: 'published' };
+    const rawRepeaterPagination = isRecord(repeater.pagination)
+      ? repeater.pagination
+      : isRecord(next.props.pagination)
+        ? next.props.pagination
+        : { limit: 24, offset: 0 };
+    const explicitCollectionId = typeof repeater.collectionId === 'string' && repeater.collectionId.length > 0
+      ? repeater.collectionId
+      : typeof next.props.collectionId === 'string' && next.props.collectionId.length > 0
+        ? next.props.collectionId
+        : '';
+    const repeaterCollectionId = explicitCollectionId || collection.id;
+    const repeaterDatasetId = typeof repeater.datasetId === 'string' && repeater.datasetId.length > 0
+      ? repeater.datasetId
+      : typeof next.props.datasetId === 'string' && next.props.datasetId.length > 0
+        ? next.props.datasetId
+        : `dataset_${repeaterCollectionId}_list`;
+    const repeaterQuery = resolveCollectionTemplateQuery(rawRepeaterQuery, kind === 'item' ? record : undefined);
     const titleField = collection.fields.find((field) => ['title', 'name', 'label'].includes(field.key)) || collection.fields[0];
     const descriptionField = collection.fields.find((field) => ['summary', 'description', 'excerpt', 'body'].includes(field.key));
     const imageField = collection.fields.find((field) => field.type === 'image' || /image|photo|avatar|thumbnail/i.test(field.key));
@@ -1507,17 +1545,15 @@ const applyCollectionTemplateContext = (
       ...next.props,
       repeater: {
         ...repeater,
-        collectionId: collection.id,
-        datasetId: typeof repeater.datasetId === 'string' && repeater.datasetId.length > 0
-          ? repeater.datasetId
-          : `dataset_${collection.id}_list`,
-        query: isRecord(repeater.query) ? repeater.query : { status: 'published' },
-        pagination: isRecord(repeater.pagination) ? repeater.pagination : { limit: 24, offset: 0 },
+        collectionId: repeaterCollectionId,
+        datasetId: repeaterDatasetId,
+        query: repeaterQuery,
+        pagination: rawRepeaterPagination,
       },
-      collectionId: collection.id,
-      datasetId: typeof next.props.datasetId === 'string' && next.props.datasetId.length > 0
-        ? next.props.datasetId
-        : `dataset_${collection.id}_list`,
+      collectionId: repeaterCollectionId,
+      datasetId: repeaterDatasetId,
+      query: repeaterQuery,
+      pagination: rawRepeaterPagination,
       titleField: typeof next.props.titleField === 'string' ? next.props.titleField : titleField?.key || 'title',
       descriptionField: typeof next.props.descriptionField === 'string' ? next.props.descriptionField : descriptionField?.key || 'summary',
       imageField: typeof next.props.imageField === 'string' ? next.props.imageField : imageField?.key || 'image',
@@ -1573,7 +1609,9 @@ const applyCollectionTemplateContext = (
         ...(field ? { field } : {}),
         ...(kind === 'item' && record ? { recordId: record.id } : {}),
       },
-      ...(kind === 'item' && record ? { query: { ...(isRecord(dataBinding.query) ? dataBinding.query : {}), recordId: record.id } } : {}),
+      ...(kind === 'item' && record
+        ? { query: { ...resolveCollectionTemplateQuery(dataBinding.query, record), recordId: record.id } }
+        : {}),
     };
   });
 
