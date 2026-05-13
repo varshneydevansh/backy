@@ -1151,6 +1151,7 @@ function CollectionsPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(routeSearch.recordId || null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [dynamicTemplatePreviewRecordId, setDynamicTemplatePreviewRecordId] = useState('');
   const [collectionForm, setCollectionForm] = useState({
     name: '',
     slug: '',
@@ -1238,6 +1239,13 @@ function CollectionsPage() {
     () => records.find((record) => record.id === selectedRecordId) || null,
     [records, selectedRecordId],
   );
+  const dynamicTemplatePreviewRecord = useMemo(
+    () => records.find((record) => record.id === dynamicTemplatePreviewRecordId)
+      || records.find((record) => record.status === 'published')
+      || records[0]
+      || null,
+    [dynamicTemplatePreviewRecordId, records],
+  );
   const dynamicBaseUrl = getPublicBaseUrl();
   const recordPage = Math.floor(recordPagination.offset / recordPagination.limit) + 1;
   const recordPageCount = Math.max(1, Math.ceil(recordPagination.total / recordPagination.limit));
@@ -1279,6 +1287,21 @@ function CollectionsPage() {
   const activeItemRoutePath = activeCollection
     ? buildCollectionRecordRouteTemplate(activeCollection)
     : normalizeCollectionRoutePattern(collectionForm.routePattern, collectionForm.slug || 'collection');
+  const dynamicTemplatePreviewItemPath = activeCollection && dynamicTemplatePreviewRecord
+    ? buildCollectionRecordRoutePath(activeCollection, dynamicTemplatePreviewRecord.slug)
+    : activeItemRoutePath;
+  const hostedListPreviewUrl = activeCollection
+    ? `${dynamicBaseUrl}/sites/${activeSiteSlug}${activeListRoutePath}`
+    : '';
+  const hostedItemPreviewUrl = activeCollection && dynamicTemplatePreviewRecord
+    ? `${dynamicBaseUrl}/sites/${activeSiteSlug}${dynamicTemplatePreviewItemPath}`
+    : '';
+  const renderListPreviewUrl = activeCollection
+    ? `${dynamicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(activeListRoutePath)}`
+    : '';
+  const renderItemPreviewUrl = activeCollection && dynamicTemplatePreviewRecord
+    ? `${dynamicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(dynamicTemplatePreviewItemPath)}`
+    : '';
   const fieldHealth = useMemo(() => {
     const required = activeSchemaFields.filter((field) => field.required).length;
     const unique = activeSchemaFields.filter((field) => field.unique).length;
@@ -1597,6 +1620,16 @@ function CollectionsPage() {
             slug: activeCollection.slug,
             listRoute: activeListRoutePath,
             detailRoute: activeItemRoutePath,
+            previewRecord: dynamicTemplatePreviewRecord
+              ? {
+                  id: dynamicTemplatePreviewRecord.id,
+                  slug: dynamicTemplatePreviewRecord.slug,
+                  status: dynamicTemplatePreviewRecord.status,
+                  itemRoute: dynamicTemplatePreviewItemPath,
+                  hostedItemUrl: hostedItemPreviewUrl,
+                  renderItemUrl: renderItemPreviewUrl,
+                }
+              : null,
             publicReadReady: activeCollectionIsPublic,
             publicCreateReady: activeCollection.permissions.publicCreate,
             visitorWritePolicy: normalizeVisitorWritePolicy(activeCollection.metadata, activeCollection.fields),
@@ -1665,6 +1698,21 @@ function CollectionsPage() {
       routePattern: normalizeCollectionRoutePattern(activeCollection.routePattern, activeCollection.slug),
       listRoutePath: activeListRoutePath,
       itemRouteTemplate: activeItemRoutePath,
+      templatePreview: {
+        listRoutePath: activeListRoutePath,
+        itemRoutePath: dynamicTemplatePreviewItemPath,
+        hostedListUrl: hostedListPreviewUrl,
+        hostedItemUrl: hostedItemPreviewUrl,
+        renderListUrl: renderListPreviewUrl,
+        renderItemUrl: renderItemPreviewUrl,
+        record: dynamicTemplatePreviewRecord
+          ? {
+              id: dynamicTemplatePreviewRecord.id,
+              slug: dynamicTemplatePreviewRecord.slug,
+              status: dynamicTemplatePreviewRecord.status,
+            }
+          : null,
+      },
       publicApiReady: activeCollectionIsPublic,
       frontendDesignTemplateId: getCollectionFrontendTemplateId(activeCollection),
       metadata: activeCollection.metadata || {},
@@ -1731,15 +1779,21 @@ function CollectionsPage() {
     collectionReadiness.score,
     collections,
     datasetAuthoringShortcuts,
+    dynamicTemplatePreviewItemPath,
+    dynamicTemplatePreviewRecord,
     fieldHealth,
     frontendCollectionTemplates,
     frontendDesign,
+    hostedItemPreviewUrl,
+    hostedListPreviewUrl,
     publicCollectionsUrl,
     publicRecordBySlugUrl,
     publicRecordsUrl,
     recordFilters,
     recordPagination,
     records,
+    renderItemPreviewUrl,
+    renderListPreviewUrl,
     selectedRecordIds,
   ]);
   const collectionHandoffText = useMemo(() => JSON.stringify(collectionHandoff, null, 2), [collectionHandoff]);
@@ -2007,6 +2061,7 @@ function CollectionsPage() {
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
+    setDynamicTemplatePreviewRecordId('');
     setRecords([]);
     setRecordFilters({
       search: '',
@@ -2036,6 +2091,20 @@ function CollectionsPage() {
       fields: [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
+  };
+
+  const beginNewCollection = () => {
+    if (schemaMutationDisabled) return;
+    resetCollectionForm();
+    setError(null);
+    setValidationDetails([]);
+    setNotice('New collection draft ready. Add a name and fields, then save the schema.');
+    window.requestAnimationFrame(() => {
+      document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      window.setTimeout(() => {
+        document.getElementById('collections-schema-name')?.focus();
+      }, 150);
+    });
   };
 
   const resetCollectionsWorkspace = () => {
@@ -2400,6 +2469,19 @@ function CollectionsPage() {
       ),
     });
   }, [activeCollection, selectedRecord]);
+
+  useEffect(() => {
+    if (records.length === 0) {
+      setDynamicTemplatePreviewRecordId('');
+      return;
+    }
+    if (dynamicTemplatePreviewRecordId && records.some((record) => record.id === dynamicTemplatePreviewRecordId)) {
+      return;
+    }
+    setDynamicTemplatePreviewRecordId(
+      records.find((record) => record.status === 'published')?.id || records[0].id,
+    );
+  }, [dynamicTemplatePreviewRecordId, records]);
 
   const updateField = (index: number, updates: Partial<CollectionField>) => {
     setCollectionForm((prev) => ({
@@ -2912,11 +2994,12 @@ function CollectionsPage() {
           </button>
           <button
             type="button"
-            onClick={resetCollectionForm}
+            onClick={beginNewCollection}
             disabled={schemaMutationDisabled}
             title={editPermissionTitle}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Create new collection"
+            data-testid="collections-new-collection-button"
           >
             <Plus className="h-4 w-4" />
             New collection
@@ -3004,10 +3087,11 @@ function CollectionsPage() {
             </button>
             <button
               type="button"
-              onClick={resetCollectionForm}
+              onClick={beginNewCollection}
               disabled={schemaMutationDisabled}
               title={editPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="collections-library-new-collection-button"
             >
               <Plus className="h-4 w-4" />
               New collection
@@ -3885,6 +3969,7 @@ function CollectionsPage() {
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Name</span>
                 <input
+                  id="collections-schema-name"
                   value={collectionForm.name}
                   onChange={(event) => setCollectionForm((prev) => ({
                     ...prev,
@@ -4159,6 +4244,70 @@ function CollectionsPage() {
                       </>
                     )}
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/50 p-4" data-testid="collections-template-preview-controls">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-indigo-950">Template preview record</h4>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-indigo-900/80">
+                      Pick a real record to resolve the item route and render API previews for generated, captured, or authored dynamic templates.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-1 text-xs text-indigo-900">
+                    {dynamicTemplatePreviewRecord ? dynamicTemplatePreviewRecord.status : 'No record'}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium text-indigo-950">Preview record</span>
+                    <select
+                      value={dynamicTemplatePreviewRecord?.id || ''}
+                      onChange={(event) => setDynamicTemplatePreviewRecordId(event.target.value)}
+                      disabled={records.length === 0}
+                      className="w-full rounded-lg border bg-background px-3 py-2"
+                      data-testid="collections-template-preview-record-select"
+                    >
+                      {records.length === 0 ? (
+                        <option value="">Create or load records first</option>
+                      ) : records.map((record) => (
+                        <option key={record.id} value={record.id}>
+                          {record.slug} ({record.status})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <CollectionPreviewLink label="Hosted list" value={hostedListPreviewUrl} />
+                    <CollectionPreviewLink label="Hosted item" value={hostedItemPreviewUrl} />
+                    <CollectionPreviewLink label="Render list API" value={renderListPreviewUrl} />
+                    <CollectionPreviewLink label="Render item API" value={renderItemPreviewUrl} />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(renderItemPreviewUrl || renderListPreviewUrl, 'template preview render URL')}
+                    disabled={!renderItemPreviewUrl && !renderListPreviewUrl}
+                    className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-medium text-indigo-950 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-template-preview-copy-render"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy render URL
+                  </button>
+                  {hostedItemPreviewUrl ? (
+                    <a
+                      href={hostedItemPreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-800"
+                      data-testid="collections-template-preview-open-item"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open item preview
+                    </a>
+                  ) : null}
                 </div>
               </div>
 
@@ -5360,6 +5509,26 @@ function CollectionRoutePreview({ label, value }: { label: string; value: string
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <code className="mt-1 block truncate font-mono text-xs text-foreground">{value || 'Not configured'}</code>
+    </div>
+  );
+}
+
+function CollectionPreviewLink({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2">
+      <div className="text-xs font-medium text-indigo-900/70">{label}</div>
+      {value ? (
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 block truncate font-mono text-xs text-indigo-950 underline-offset-2 hover:underline"
+        >
+          {value}
+        </a>
+      ) : (
+        <code className="mt-1 block truncate font-mono text-xs text-indigo-900/60">Select a record</code>
+      )}
     </div>
   );
 }

@@ -605,7 +605,12 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       hasDynamicTemplateControl: Boolean(document.querySelector('[data-testid="collections-dynamic-template-controls"]')) &&
         Boolean(document.querySelector('[data-testid="collections-frontend-template-control"]')) &&
         Boolean(document.querySelector('[data-testid="collections-frontend-template-select"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-template-preview-controls"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-template-preview-record-select"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-template-preview-copy-render"]')) &&
         body.includes('Captured frontend template') &&
+        body.includes('Template preview record') &&
+        body.includes('Render item API') &&
         body.includes('Use generated Backy templates') &&
         body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
       hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
@@ -679,6 +684,47 @@ const assertAuthoringShortcutCopy = async (client) => {
   }
 
   throw new Error('Authoring shortcut copy action did not surface copied preset feedback');
+};
+
+const assertNewCollectionButtonReset = async (client) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="collections-new-collection-button"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'new-collection-button-missing' };
+      }
+      if (button.disabled) return { ok: false, reason: 'new-collection-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to click New collection button: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      const nameInput = document.querySelector('#collections-schema-name');
+      const form = document.querySelector('#collections-schema');
+      return {
+        hasNotice: body.includes('New collection draft ready'),
+        nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
+        activeElementId: document.activeElement?.id || '',
+        formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
+        viewportHeight: window.innerHeight,
+      };
+    })()`);
+    if (state.hasNotice && state.nameValue === '' && state.formTop !== null && state.formTop < state.viewportHeight) {
+      return;
+    }
+    if (attempt === 39) {
+      throw new Error(`New collection button did not reveal blank schema state: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
 };
 
 const createFrontendTemplateCollectionThroughUi = async (client) => {
@@ -1122,6 +1168,8 @@ const main = async () => {
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     await assertAuthoringShortcutCopy(client);
+    await assertNewCollectionButtonReset(client);
+    await navigateToCollections(client, { collectionId, recordSlug });
     await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
     await publishRecordThroughUi(client, recordSlug);
     await waitForRecordStatus(collectionId, recordSlug, 'published');
