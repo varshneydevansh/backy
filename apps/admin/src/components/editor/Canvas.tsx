@@ -2086,7 +2086,7 @@ export function Canvas({
         console.error('Failed to drop element:', error);
       }
     },
-    [disabled, elements, isPreview, onElementsChange, onSelect, toCanvasDelta]
+    [disabled, elements, isPreview, onElementsChange, onSelect, safeGridSize, snapEnabled, toCanvasDelta]
   );
 
   const handleElementPropsUpdate = useCallback(

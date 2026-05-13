@@ -6603,6 +6603,17 @@ const testGridSnapControls = async (client) => {
   const restored = await readGridSnapControlState(client, 'snap restored');
   assert(restored.snapEnabled === true, `Snap toggle did not restore snapping: ${JSON.stringify(restored)}`);
 
+  await selectLayerById(client, 'smoke-icon');
+  await blurActiveElement(client);
+  const keyboardBefore = await getElementBox(client, 'smoke-icon');
+  await pressKey(client, 'ArrowRight');
+  await pressKey(client, 'ArrowDown');
+  const keyboardAfter = await getElementBox(client, 'smoke-icon');
+  assert(
+    distanceToGridLine(keyboardAfter.canvasX, 20) <= 1 && distanceToGridLine(keyboardAfter.canvasY, 20) <= 1,
+    `Keyboard nudge with 20px snap did not land on grid: ${JSON.stringify({ keyboardBefore, keyboardAfter })}`,
+  );
+
   return {
     initial,
     gridHidden,
@@ -6612,6 +6623,8 @@ const testGridSnapControls = async (client) => {
     snapOff,
     snapOffDrag,
     restored,
+    keyboardBefore,
+    keyboardAfter,
   };
 };
 

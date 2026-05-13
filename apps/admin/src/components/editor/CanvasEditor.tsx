@@ -994,6 +994,7 @@ export function CanvasEditor({
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [gridSize, setGridSize] = useState(10);
   const [showGrid, setShowGrid] = useState(true);
+  const safeEditorGridSize = normalizeEditorGridSize(gridSize);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const canvasPanRef = useRef<{
     startX: number;
@@ -1104,6 +1105,23 @@ export function CanvasEditor({
   const handleGridSizeChange = useCallback((value: string) => {
     setGridSize(normalizeEditorGridSize(Number(value)));
   }, []);
+
+  const snapEditorValue = useCallback((value: number) => {
+    const safeValue = Math.max(0, Number.isFinite(value) ? value : 0);
+    if (!snapEnabled) {
+      return Math.round(safeValue);
+    }
+
+    return Math.round(safeValue / safeEditorGridSize) * safeEditorGridSize;
+  }, [safeEditorGridSize, snapEnabled]);
+
+  const getNestedInsertionPoint = useCallback(() => {
+    const offset = snapEnabled ? safeEditorGridSize : 20;
+    return {
+      x: offset,
+      y: offset,
+    };
+  }, [safeEditorGridSize, snapEnabled]);
 
   const handleCanvasViewportMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     if (!isCanvasPanActive || event.button !== 0) {
@@ -2963,8 +2981,10 @@ export function CanvasEditor({
       const minY = Math.min(...nudgeEntries.map((entry) => entry.element.y));
       const maxX = Math.max(...nudgeEntries.map((entry) => entry.element.x + entry.element.width));
       const maxY = Math.max(...nudgeEntries.map((entry) => entry.element.y + entry.element.height));
-      const clampedDeltaX = Math.max(0, Math.min(minX + deltaX, Math.max(0, boundsWidth - (maxX - minX)))) - minX;
-      const clampedDeltaY = Math.max(0, Math.min(minY + deltaY, Math.max(0, boundsHeight - (maxY - minY)))) - minY;
+      const targetMinX = deltaX === 0 ? minX : snapEditorValue(minX + deltaX);
+      const targetMinY = deltaY === 0 ? minY : snapEditorValue(minY + deltaY);
+      const clampedDeltaX = Math.max(0, Math.min(targetMinX, Math.max(0, boundsWidth - (maxX - minX)))) - minX;
+      const clampedDeltaY = Math.max(0, Math.min(targetMinY, Math.max(0, boundsHeight - (maxY - minY)))) - minY;
 
       if (clampedDeltaX === 0 && clampedDeltaY === 0) {
         return currentElements;
@@ -2983,7 +3003,7 @@ export function CanvasEditor({
 
       return nextElements;
     }, selectedId);
-  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, snapEditorValue, updateElementsWithHistory]);
 
   const alignSelectedElement = useCallback((alignment: CanvasAlignment) => {
     if (!selectedId) {
@@ -3031,14 +3051,14 @@ export function CanvasEditor({
         const nextX = alignment === 'left'
           ? 0
           : alignment === 'center'
-            ? Math.max(0, Math.round((boundsWidth - selected.width) / 2))
+            ? snapEditorValue((boundsWidth - selected.width) / 2)
             : alignment === 'right'
               ? Math.max(0, boundsWidth - selected.width)
               : selected.x;
         const nextY = alignment === 'top'
           ? 0
           : alignment === 'middle'
-            ? Math.max(0, Math.round((boundsHeight - selected.height) / 2))
+            ? snapEditorValue((boundsHeight - selected.height) / 2)
             : alignment === 'bottom'
               ? Math.max(0, boundsHeight - selected.height)
               : selected.y;
@@ -3048,14 +3068,14 @@ export function CanvasEditor({
         groupDeltaX = alignment === 'left'
           ? -minX
           : alignment === 'center'
-            ? Math.round((boundsWidth - groupWidth) / 2) - minX
+            ? snapEditorValue((boundsWidth - groupWidth) / 2) - minX
             : alignment === 'right'
               ? boundsWidth - maxX
               : 0;
         groupDeltaY = alignment === 'top'
           ? -minY
           : alignment === 'middle'
-            ? Math.round((boundsHeight - groupHeight) / 2) - minY
+            ? snapEditorValue((boundsHeight - groupHeight) / 2) - minY
             : alignment === 'bottom'
               ? boundsHeight - maxY
               : 0;
@@ -3078,7 +3098,7 @@ export function CanvasEditor({
 
       return nextElements;
     }, selectedId);
-  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, snapEditorValue, updateElementsWithHistory]);
 
   const distributeSelectedElements = useCallback((axis: CanvasDistribution) => {
     if (!selectedId) {
@@ -3129,7 +3149,7 @@ export function CanvasEditor({
       sortedEntries.forEach((entry, index) => {
         const sizeForAxis = axis === 'horizontal' ? entry.element.width : entry.element.height;
         const nextCenter = startCenter + centerStep * index;
-        const nextPosition = Math.round(nextCenter - sizeForAxis / 2);
+        const nextPosition = snapEditorValue(nextCenter - sizeForAxis / 2);
 
         const currentPosition = axis === 'horizontal' ? entry.element.x : entry.element.y;
         if (Math.abs(nextPosition - currentPosition) <= 0.5) {
@@ -3147,7 +3167,7 @@ export function CanvasEditor({
 
       return didMove ? nextElements : currentElements;
     }, selectedId, selectedIds);
-  }, [findElementEntry, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, snapEditorValue, updateElementsWithHistory]);
 
   /**
    * Handle drag start from component library
@@ -3173,10 +3193,10 @@ export function CanvasEditor({
     const midpointY = visibleTop < visibleBottom ? (visibleTop + visibleBottom) / 2 : canvasRect.top + 120;
 
     return {
-      x: Math.round(Math.max(0, (midpointX - canvasRect.left) / activeCanvasScale) / 10) * 10,
-      y: Math.round(Math.max(0, (midpointY - canvasRect.top) / activeCanvasScale) / 10) * 10,
+      x: snapEditorValue((midpointX - canvasRect.left) / activeCanvasScale),
+      y: snapEditorValue((midpointY - canvasRect.top) / activeCanvasScale),
     };
-  }, [activeCanvasScale]);
+  }, [activeCanvasScale, snapEditorValue]);
 
   const addLibraryItemToCanvas = useCallback((item: ComponentLibraryItem, x: number, y: number) => {
     if (isCanvasMutationDisabled) {
@@ -3187,12 +3207,13 @@ export function CanvasEditor({
     const highestZ = Math.max(walkTreeMaxZ(elements), 0);
     const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
     const canNestInSelection = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
+    const nestedInsertionPoint = getNestedInsertionPoint();
 
     if (item.reusableContent?.elements?.length) {
       const newElements = createCanvasElementsFromReusableContent(
         item.reusableContent,
-        canNestInSelection ? 20 : x,
-        canNestInSelection ? 20 : y,
+        canNestInSelection ? nestedInsertionPoint.x : x,
+        canNestInSelection ? nestedInsertionPoint.y : y,
         highestZ + 1,
       );
       if (!newElements.length) {
@@ -3227,8 +3248,8 @@ export function CanvasEditor({
     const newElement = {
       ...createCanvasElementFromLibraryItem(
         { ...item, type: normalizedType },
-        canNestInSelection ? 20 : x,
-        canNestInSelection ? 20 : y,
+        canNestInSelection ? nestedInsertionPoint.x : x,
+        canNestInSelection ? nestedInsertionPoint.y : y,
       ),
       zIndex: highestZ + 1,
     };
@@ -3248,7 +3269,7 @@ export function CanvasEditor({
     setSelectedId(newElement.id);
     setSelectedIds([newElement.id]);
     setRightPanel('properties');
-  }, [elements, findElementById, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
+  }, [elements, findElementById, getNestedInsertionPoint, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
 
   const handleAddLibraryItem = useCallback((item: ComponentLibraryItem) => {
     if (isCanvasMutationDisabled) {
@@ -3429,8 +3450,8 @@ export function CanvasEditor({
           return;
         }
 
-        const x = Math.round(Math.max(0, (e.clientX - rect.left) / activeCanvasScale) / 10) * 10;
-        const y = Math.round(Math.max(0, (e.clientY - rect.top) / activeCanvasScale) / 10) * 10;
+        const x = snapEditorValue((e.clientX - rect.left) / activeCanvasScale);
+        const y = snapEditorValue((e.clientY - rect.top) / activeCanvasScale);
 
         if (item.reusableContent?.elements?.length) {
           addLibraryItemToCanvas(item, x, y);
@@ -3442,7 +3463,7 @@ export function CanvasEditor({
         console.error('Failed to drop element:', err);
       }
     },
-    [activeCanvasScale, addLibraryItemToCanvas, isCanvasMutationDisabled]
+    [activeCanvasScale, addLibraryItemToCanvas, isCanvasMutationDisabled, snapEditorValue]
   );
 
   /**
@@ -3684,7 +3705,7 @@ export function CanvasEditor({
       }
 
       if (e.key.startsWith('Arrow')) {
-        const step = e.shiftKey ? 10 : 1;
+        const step = snapEnabled ? safeEditorGridSize : e.shiftKey ? 10 : 1;
         const deltaByKey: Record<string, [number, number]> = {
           ArrowLeft: [-step, 0],
           ArrowRight: [step, 0],
@@ -3781,6 +3802,8 @@ export function CanvasEditor({
     nudgeSelectedElement,
     isPreview,
     isSaving,
+    safeEditorGridSize,
+    snapEnabled,
   ]);
 
 
