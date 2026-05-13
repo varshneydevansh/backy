@@ -27,6 +27,7 @@ import {
   createFormContact,
   deleteContactSavedList,
   getAdminApiBase,
+  getUserPermissions,
   importFormContactsCsv,
   listAdminAuditLogs,
   listContactSavedLists,
@@ -40,6 +41,7 @@ import {
   updateContact,
   type AdminAuditLog,
   type AdminContact,
+  type AdminUserPermissionMatrix,
   type ContactConsentRetentionResult,
   type ContactSyncDelivery,
   type ContactSavedList,
@@ -47,6 +49,8 @@ import {
   type ContactStatus,
   type FormDefinition,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -58,6 +62,16 @@ import { cn, formatDate } from '@/lib/utils';
 
 type ContactStatusFilter = ContactStatus | 'all';
 type ContactQualityFilter = 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote' | 'duplicate-email';
+type ContactsPermissionKey =
+  | 'forms.view'
+  | 'forms.manage'
+  | 'forms.export'
+  | 'activity.export'
+  | 'users.view'
+  | 'users.create'
+  | 'collections.edit'
+  | 'pages.edit'
+  | 'settings.view';
 
 interface ContactsSearch {
   siteId?: string;
@@ -78,6 +92,17 @@ const CONTACT_ACCESS_PERMISSIONS = [
   { key: 'forms.export', detail: 'Export lead CSV files and contact consent evidence.' },
   { key: 'activity.export', detail: 'Read contact, form, and settings audit activity for this site.' },
 ] as const;
+const CONTACTS_PERMISSION_ROLE_DEFAULTS: Record<ContactsPermissionKey, Array<AuthUser['role']>> = {
+  'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.manage': ['owner', 'admin', 'editor'],
+  'forms.export': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+  'users.view': ['owner', 'admin'],
+  'users.create': ['owner', 'admin'],
+  'collections.edit': ['owner', 'admin', 'editor'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'settings.view': ['owner', 'admin'],
+};
 
 const normalizeContactEmail = (value?: string | null) => value?.trim().toLowerCase() || '';
 
@@ -239,6 +264,7 @@ function ContactsRoute() {
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [contactsByForm, setContactsByForm] = useState<Record<string, ContactInbox>>({});
@@ -267,11 +293,37 @@ function ContactsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const contactImportInputRef = useRef<HTMLInputElement | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canManageForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canExportForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canViewUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canCreateUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canViewSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'settings.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const usersViewPermissionTitle = canViewUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const usersCreatePermissionTitle = canCreateUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.create', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const collectionsEditPermissionTitle = canEditCollections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'collections.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const settingsViewPermissionTitle = canViewSettings ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'settings.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
   const isContactMutationBusy = updatingId !== null;
-  const isContactsBusy = isLoading || isContactMutationBusy;
+  const isContactsBusy = isLoading || isContactMutationBusy || isPermissionMatrixPending;
+  const contactViewDisabled = isContactsBusy || !canViewForms;
+  const contactMutationDisabled = isContactsBusy || !canManageForms;
+  const contactExportDisabled = isContactsBusy || !canExportForms;
+  const contactAuditDisabled = isLoadingContactAudit || isPermissionMatrixPending || !canExportActivity;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -777,8 +829,61 @@ function ContactsRoute() {
     navigate({ to: '/contacts', search: normalized, replace: true });
   };
 
+  const showPermissionDenied = (key: ContactsPermissionKey, action: string) => {
+    setNotice(null);
+    setError(`Your account needs ${key} to ${action}. ${adminPermissionReason(permissionMatrix, currentAdmin, key, CONTACTS_PERMISSION_ROLE_DEFAULTS)}`);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load contact permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    setPermissionError(null);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(loadError instanceof Error ? loadError.message : 'Unable to load contact permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const loadContacts = async () => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      setForms([]);
+      setContactsByForm({});
+      setContactSegments(null);
+      setContactSavedLists([]);
+      setSelectedContactIds([]);
+      setError(viewPermissionTitle || 'Your account cannot view contact pipelines.');
+      setNotice(null);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -820,6 +925,13 @@ function ContactsRoute() {
   };
 
   const loadContactAuditLogs = async () => {
+    if (isPermissionMatrixPending) return;
+    if (!canExportActivity) {
+      setContactAuditLogs([]);
+      setContactAuditError(activityPermissionTitle || 'Your account cannot read contact audit activity.');
+      return;
+    }
+
     setIsLoadingContactAudit(true);
     setContactAuditError(null);
 
@@ -866,13 +978,19 @@ function ContactsRoute() {
   ]);
 
   useEffect(() => {
-    void loadContacts();
-    void loadContactAuditLogs();
+    if (!isPermissionMatrixPending) {
+      void loadContacts();
+      void loadContactAuditLogs();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewForms, canExportActivity, isPermissionMatrixPending]);
 
   const handleStatus = async (contact: AdminContact, status: ContactStatus) => {
     if (isContactsBusy || contact.status === status) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'update contact lifecycle state');
+      return;
+    }
 
     setUpdatingId(contact.id);
     setError(null);
@@ -917,6 +1035,10 @@ function ContactsRoute() {
 
   const toggleContactSelection = (contactId: string, selected: boolean) => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'select contacts');
+      return;
+    }
 
     setSelectedContactIds((current) => (
       selected
@@ -927,6 +1049,10 @@ function ContactsRoute() {
 
   const toggleVisibleContactSelection = (selected: boolean) => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'select contacts');
+      return;
+    }
 
     const visibleIds = filteredContacts.map((contact) => contact.id);
     setSelectedContactIds((current) => {
@@ -940,6 +1066,10 @@ function ContactsRoute() {
 
   const handleBulkContactStatus = async () => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'bulk update contacts');
+      return;
+    }
 
     const targets = selectedContacts.filter((contact) => contact.status !== bulkContactStatus);
     if (targets.length === 0) {
@@ -970,6 +1100,10 @@ function ContactsRoute() {
 
   const handleSyncSelectedContacts = async () => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'sync selected contacts');
+      return;
+    }
 
     const targetUrl = contactSyncTarget.trim();
     if (selectedContacts.length === 0) {
@@ -1055,6 +1189,11 @@ function ContactsRoute() {
   });
 
   const downloadContactRetentionCsv = (result: ContactConsentRetentionResult) => {
+    if (!canExportForms) {
+      showPermissionDenied('forms.export', 'export contact consent evidence');
+      return;
+    }
+
     const consentKeys = result.consentFieldKeys;
     const header = [
       'contact_id',
@@ -1104,6 +1243,14 @@ function ContactsRoute() {
 
   const handleContactRetention = async (dryRun: boolean) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', dryRun ? 'scan contact consent retention' : 'apply contact retention');
+      return;
+    }
+    if (dryRun && !canExportForms) {
+      showPermissionDenied('forms.export', 'export contact consent evidence');
+      return;
+    }
 
     if (selectedContacts.length === 0) {
       setError(null);
@@ -1173,6 +1320,10 @@ function ContactsRoute() {
 
   const handleMergeSelectedContacts = async () => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'merge duplicate contacts');
+      return;
+    }
 
     if (!canMergeSelectedContacts) {
       setError(null);
@@ -1235,6 +1386,10 @@ function ContactsRoute() {
 
   const handleNotes = async (contact: AdminContact, notes: string) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'save contact notes');
+      return;
+    }
 
     setUpdatingId(contact.id);
     setError(null);
@@ -1253,6 +1408,14 @@ function ContactsRoute() {
 
   const handlePromoteContactToUser = async (contact: AdminContact) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'promote contacts');
+      return;
+    }
+    if (!canCreateUsers) {
+      showPermissionDenied('users.create', 'promote contacts to users');
+      return;
+    }
 
     setUpdatingId(`promote-user-${contact.id}`);
     setError(null);
@@ -1278,6 +1441,14 @@ function ContactsRoute() {
 
   const handlePromoteContactToCustomer = async (contact: AdminContact) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'promote contacts');
+      return;
+    }
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'promote contacts to customer records');
+      return;
+    }
 
     setUpdatingId(`promote-customer-${contact.id}`);
     setError(null);
@@ -1299,6 +1470,10 @@ function ContactsRoute() {
 
   const copyContactApiText = async (value: string, label: string) => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'copy contact API details');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1311,6 +1486,10 @@ function ContactsRoute() {
   };
   const downloadContactHandoff = () => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'download contact handoff manifests');
+      return;
+    }
 
     const blob = new Blob([contactHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1327,6 +1506,10 @@ function ContactsRoute() {
 
   const handleExportContacts = () => {
     if (filteredContacts.length === 0 || isContactsBusy) return;
+    if (!canExportForms) {
+      showPermissionDenied('forms.export', 'export contact CSV files');
+      return;
+    }
 
     const header = [
       'contact_id',
@@ -1374,6 +1557,12 @@ function ContactsRoute() {
   };
 
   const downloadContactImportTemplate = () => {
+    if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'download contact import templates');
+      return;
+    }
+
     const rows = [
       CONTACT_IMPORT_COLUMNS,
       [
@@ -1401,6 +1590,10 @@ function ContactsRoute() {
 
   const handleCreateContact = async () => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'create contacts');
+      return;
+    }
     if (!apiForm) {
       setError(null);
       setNotice('Select one source form before creating a contact.');
@@ -1458,6 +1651,11 @@ function ContactsRoute() {
 
   const handleImportContacts = async (event: ChangeEvent<HTMLInputElement>) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'import contacts');
+      event.target.value = '';
+      return;
+    }
 
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1503,6 +1701,10 @@ function ContactsRoute() {
 
   const handleSaveContactList = async () => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'save contact lists');
+      return;
+    }
 
     const name = savedListName.trim();
     if (!name) {
@@ -1533,6 +1735,10 @@ function ContactsRoute() {
 
   const applyContactSavedList = (list: ContactSavedList) => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'apply contact lists');
+      return;
+    }
 
     const formId = list.filters.formId || 'all';
     const status = list.filters.status || 'all';
@@ -1553,6 +1759,10 @@ function ContactsRoute() {
 
   const handleDeleteContactSavedList = async (list: ContactSavedList) => {
     if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'delete contact lists');
+      return;
+    }
 
     setUpdatingId(`delete-contact-list-${list.id}`);
     setError(null);
@@ -1572,6 +1782,10 @@ function ContactsRoute() {
 
   const clearContactFilters = () => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'filter contacts');
+      return;
+    }
 
     setSearchQuery('');
     setSelectedFormId('all');
@@ -1587,21 +1801,37 @@ function ContactsRoute() {
   };
   const openFormsWorkspace = () => {
     if (isContactsBusy) return;
+    if (!canViewForms) {
+      showPermissionDenied('forms.view', 'open forms');
+      return;
+    }
 
     navigate({ to: '/forms', search: activeSiteSearch });
   };
   const openUsersWorkspace = () => {
     if (isContactsBusy) return;
+    if (!canViewUsers) {
+      showPermissionDenied('users.view', 'open users');
+      return;
+    }
 
     navigate({ to: '/users', search: activeSiteSearch });
   };
   const openLeadInfrastructureSettings = () => {
     if (isContactsBusy) return;
+    if (!canViewSettings) {
+      showPermissionDenied('settings.view', 'open settings');
+      return;
+    }
 
     navigate({ to: '/settings', search: { tab: 'infrastructure' } });
   };
   const openLeadCapturePage = (template: 'contact' | 'registration') => {
     if (isContactsBusy) return;
+    if (!canEditPages) {
+      showPermissionDenied('pages.edit', 'start lead capture pages');
+      return;
+    }
 
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
   };
@@ -1622,6 +1852,20 @@ function ContactsRoute() {
     }
 
     openLeadInfrastructureSettings();
+  };
+  const contactWorkflowSurfaceDisabled = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
+    if (isContactsBusy) return true;
+    if (surface.route === '/pages/new') return !canEditPages;
+    if (surface.route === '/forms') return !canViewForms;
+    if (surface.route === '/users') return !canViewUsers;
+    return !canViewSettings;
+  };
+  const contactWorkflowSurfaceTitle = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
+    if (surface.route === '/pages/new' && !canEditPages) return pagesEditPermissionTitle;
+    if (surface.route === '/forms' && !canViewForms) return viewPermissionTitle;
+    if (surface.route === '/users' && !canViewUsers) return usersViewPermissionTitle;
+    if (surface.route !== '/pages/new' && surface.route !== '/forms' && surface.route !== '/users' && !canViewSettings) return settingsViewPermissionTitle;
+    return undefined;
   };
   const selectContactsSite = (nextSiteId: string) => {
     if (isContactsBusy) return;
@@ -1659,7 +1903,7 @@ function ContactsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadContacts()} disabled={isContactsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadContacts()} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1676,6 +1920,11 @@ function ContactsRoute() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+      {permissionError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
         </div>
       )}
       {notice && (
@@ -1705,35 +1954,38 @@ function ContactsRoute() {
             <Button
               variant="outline"
               onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
-              disabled={isContactsBusy}
+              disabled={contactViewDisabled}
+              title={!canViewForms ? viewPermissionTitle : undefined}
               iconStart={<Copy className="size-4" />}
             >
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadContactHandoff} disabled={isContactsBusy} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadContactHandoff} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
             <Button
               variant="outline"
               onClick={handleExportContacts}
-              disabled={filteredContacts.length === 0 || isContactsBusy}
+              disabled={filteredContacts.length === 0 || contactExportDisabled}
+              title={!canExportForms ? exportPermissionTitle : undefined}
               iconStart={<Download className="size-4" />}
             >
               Export CSV
             </Button>
-            <Button variant="outline" onClick={downloadContactImportTemplate} disabled={isContactsBusy} iconStart={<FileText className="size-4" />}>
+            <Button variant="outline" onClick={downloadContactImportTemplate} disabled={contactMutationDisabled} title={!canManageForms ? managePermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
               CSV template
             </Button>
             <Button
               variant="outline"
               onClick={() => contactImportInputRef.current?.click()}
-              disabled={!apiForm || isContactsBusy}
+              disabled={!apiForm || contactMutationDisabled}
+              title={!canManageForms ? managePermissionTitle : undefined}
               iconStart={<Upload className="size-4" />}
               data-testid="contacts-import-csv"
             >
               Import CSV
             </Button>
-            <Button onClick={() => void loadContacts()} disabled={isContactsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadContacts()} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh contacts
             </Button>
           </div>
@@ -1809,7 +2061,8 @@ function ContactsRoute() {
                 key={surface.key}
                 type="button"
                 onClick={() => openContactWorkflowSurface(surface)}
-                disabled={isContactsBusy}
+                disabled={contactWorkflowSurfaceDisabled(surface)}
+                title={contactWorkflowSurfaceTitle(surface)}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -1831,10 +2084,10 @@ function ContactsRoute() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy} iconStart={<UserCheck className="size-4" />}>
+              <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy || !canViewUsers} title={!canViewUsers ? usersViewPermissionTitle : undefined} iconStart={<UserCheck className="size-4" />}>
                 Users
               </Button>
-              <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy} iconStart={<UserPlus className="size-4" />}>
+              <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<UserPlus className="size-4" />}>
                 Registration page
               </Button>
             </div>
@@ -1904,7 +2157,8 @@ function ContactsRoute() {
           <Button
             variant="outline"
             onClick={() => void copyContactApiText(contactSegmentsUrl, 'Contact segments URL')}
-            disabled={isContactsBusy}
+            disabled={contactViewDisabled}
+            title={!canViewForms ? viewPermissionTitle : undefined}
             iconStart={<Copy className="size-4" />}
           >
             Copy endpoint
@@ -1943,7 +2197,8 @@ function ContactsRoute() {
           <Button
             variant="outline"
             onClick={() => void copyContactApiText(contactListsUrl, 'Contact lists URL')}
-            disabled={isContactsBusy}
+            disabled={contactViewDisabled}
+            title={!canViewForms ? viewPermissionTitle : undefined}
             iconStart={<Copy className="size-4" />}
           >
             Copy endpoint
@@ -1954,7 +2209,7 @@ function ContactsRoute() {
             List name
             <input
               value={savedListName}
-              disabled={isContactsBusy}
+              disabled={contactMutationDisabled}
               onChange={(event) => setSavedListName(event.target.value)}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Qualified leads with source values"
@@ -1963,7 +2218,8 @@ function ContactsRoute() {
           <div className="flex items-end">
             <Button
               type="button"
-              disabled={isContactsBusy || !savedListName.trim()}
+              disabled={contactMutationDisabled || !savedListName.trim()}
+              title={!canManageForms ? managePermissionTitle : undefined}
               onClick={() => void handleSaveContactList()}
               iconStart={<Save className="size-4" />}
             >
@@ -1990,10 +2246,10 @@ function ContactsRoute() {
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" disabled={isContactsBusy} onClick={() => applyContactSavedList(list)}>
+                <Button size="sm" variant="outline" disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} onClick={() => applyContactSavedList(list)}>
                   Apply
                 </Button>
-                <Button size="sm" variant="ghost" disabled={isContactsBusy} onClick={() => void handleDeleteContactSavedList(list)}>
+                <Button size="sm" variant="ghost" disabled={contactMutationDisabled} title={!canManageForms ? managePermissionTitle : undefined} onClick={() => void handleDeleteContactSavedList(list)}>
                   Delete
                 </Button>
               </div>
@@ -2019,7 +2275,8 @@ function ContactsRoute() {
           <Button
             variant="outline"
             onClick={() => void loadContactAuditLogs()}
-            disabled={isLoadingContactAudit}
+            disabled={contactAuditDisabled}
+            title={!canExportActivity ? activityPermissionTitle : undefined}
             iconStart={<RefreshCw className={cn('size-4', isLoadingContactAudit && 'animate-spin')} />}
           >
             Refresh audit
@@ -2077,7 +2334,8 @@ function ContactsRoute() {
               <Button
                 variant="outline"
                 onClick={handleExportContacts}
-                disabled={filteredContacts.length === 0 || isContactsBusy}
+                disabled={filteredContacts.length === 0 || contactExportDisabled}
+                title={!canExportForms ? exportPermissionTitle : undefined}
                 iconStart={<Download className="size-4" />}
               >
                 Export CSV
@@ -2085,12 +2343,13 @@ function ContactsRoute() {
               <Button
                 variant="outline"
                 onClick={() => contactImportInputRef.current?.click()}
-                disabled={!apiForm || isContactsBusy}
+                disabled={!apiForm || contactMutationDisabled}
+                title={!canManageForms ? managePermissionTitle : undefined}
                 iconStart={<Upload className="size-4" />}
               >
                 Import CSV
               </Button>
-              <Button variant="outline" onClick={openFormsWorkspace} disabled={isContactsBusy} iconStart={<Mail className="size-4" />}>
+              <Button variant="outline" onClick={openFormsWorkspace} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Mail className="size-4" />}>
                 Forms
               </Button>
             </div>
@@ -2158,13 +2417,14 @@ function ContactsRoute() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} disabled={isContactsBusy} iconStart={<Copy className="size-4" />}>
+                  <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                     Copy contacts
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
-                    disabled={isContactsBusy}
+                    disabled={contactViewDisabled}
+                    title={!canViewForms ? viewPermissionTitle : undefined}
                     iconStart={<Copy className="size-4" />}
                   >
                     Copy manifest
@@ -2173,10 +2433,14 @@ function ContactsRoute() {
                     href={contactsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    aria-disabled={isContactsBusy}
+                    aria-disabled={contactViewDisabled}
+                    onClick={(event) => {
+                      if (contactViewDisabled) event.preventDefault();
+                    }}
+                    title={!canViewForms ? viewPermissionTitle : undefined}
                     className={cn(
                       'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                      isContactsBusy && 'pointer-events-none opacity-60',
+                      contactViewDisabled && 'pointer-events-none opacity-60',
                     )}
                   >
                     <ExternalLink className="size-4" />
@@ -2214,7 +2478,7 @@ function ContactsRoute() {
                     Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.
                   </p>
                 </div>
-                <Button variant="outline" onClick={openFormsWorkspace} disabled={isContactsBusy} iconStart={<Mail className="size-4" />}>
+                <Button variant="outline" onClick={openFormsWorkspace} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Mail className="size-4" />}>
                   Configure forms
                 </Button>
               </div>
@@ -2238,7 +2502,8 @@ function ContactsRoute() {
                 <Button
                   variant="outline"
                   onClick={downloadContactImportTemplate}
-                  disabled={isContactsBusy}
+                  disabled={contactMutationDisabled}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   iconStart={<FileText className="size-4" />}
                   data-testid="contacts-import-template"
                 >
@@ -2247,7 +2512,8 @@ function ContactsRoute() {
                 <Button
                   variant="outline"
                   onClick={() => contactImportInputRef.current?.click()}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   iconStart={<Upload className="size-4" />}
                 >
                   Import CSV
@@ -2260,7 +2526,7 @@ function ContactsRoute() {
                 Name
                 <input
                   value={contactDraft.name}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
                   onChange={(event) => setContactDraft((current) => ({ ...current, name: event.target.value }))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Lead name"
@@ -2270,7 +2536,7 @@ function ContactsRoute() {
                 Email
                 <input
                   value={contactDraft.email}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
                   onChange={(event) => setContactDraft((current) => ({ ...current, email: event.target.value }))}
                   type="email"
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -2281,7 +2547,7 @@ function ContactsRoute() {
                 Phone
                 <input
                   value={contactDraft.phone}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
                   onChange={(event) => setContactDraft((current) => ({ ...current, phone: event.target.value }))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="+1 555 0100"
@@ -2291,7 +2557,7 @@ function ContactsRoute() {
                 Status
                 <select
                   value={contactDraft.status}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
                   onChange={(event) => setContactDraft((current) => ({ ...current, status: event.target.value as ContactStatus }))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -2307,7 +2573,7 @@ function ContactsRoute() {
                 Notes
                 <textarea
                   value={contactDraft.notes}
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
                   onChange={(event) => setContactDraft((current) => ({ ...current, notes: event.target.value }))}
                   rows={2}
                   className="mt-1 w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -2317,7 +2583,8 @@ function ContactsRoute() {
               <div className="flex items-end">
                 <Button
                   type="button"
-                  disabled={!apiForm || isContactsBusy}
+                  disabled={!apiForm || contactMutationDisabled}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleCreateContact()}
                   iconStart={<UserPlus className="size-4" />}
                 >
@@ -2334,7 +2601,7 @@ function ContactsRoute() {
                 type="search"
                 aria-label="Search contacts"
                 value={searchQuery}
-                disabled={isContactsBusy}
+                disabled={contactViewDisabled}
                 onChange={(event) => {
                   if (isContactsBusy) return;
                   const q = event.target.value;
@@ -2348,7 +2615,7 @@ function ContactsRoute() {
             <select
               aria-label="Form filter"
               value={selectedFormId}
-              disabled={isContactsBusy}
+              disabled={contactViewDisabled}
               onChange={(event) => {
                 if (isContactsBusy) return;
                 const formId = event.target.value;
@@ -2365,7 +2632,7 @@ function ContactsRoute() {
             <select
               aria-label="Lead quality filter"
               value={qualityFilter}
-              disabled={isContactsBusy}
+              disabled={contactViewDisabled}
               onChange={(event) => {
                 if (isContactsBusy) return;
                 const quality = event.target.value as ContactQualityFilter;
@@ -2393,7 +2660,7 @@ function ContactsRoute() {
                     setStatusFilter(status);
                     updateContactsRouteSearch({ status });
                   }}
-                  disabled={isContactsBusy}
+                  disabled={contactViewDisabled}
                   aria-pressed={statusFilter === status}
                   className={cn(
                     'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
@@ -2405,7 +2672,7 @@ function ContactsRoute() {
               ))}
             </div>
             {hasActiveContactFilters && (
-              <Button variant="outline" onClick={clearContactFilters} disabled={isContactsBusy}>
+              <Button variant="outline" onClick={clearContactFilters} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined}>
                 Clear filters
               </Button>
             )}
@@ -2418,7 +2685,7 @@ function ContactsRoute() {
                   <input
                     type="checkbox"
                     checked={allVisibleContactsSelected}
-                    disabled={isContactsBusy || filteredContacts.length === 0}
+                    disabled={contactViewDisabled || filteredContacts.length === 0}
                     onChange={(event) => toggleVisibleContactSelection(event.target.checked)}
                     className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Select visible contacts"
@@ -2440,7 +2707,7 @@ function ContactsRoute() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={isContactsBusy}
+                    disabled={contactViewDisabled}
                     onClick={() => setSelectedContactIds([])}
                   >
                     Clear
@@ -2455,7 +2722,7 @@ function ContactsRoute() {
                     type="number"
                     min={0}
                     value={contactRetentionDays}
-                    disabled={isContactsBusy}
+                    disabled={contactMutationDisabled}
                     onChange={(event) => setContactRetentionDays(event.target.value)}
                     className="min-h-10 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Contact consent retention days"
@@ -2465,7 +2732,8 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  disabled={isContactsBusy || selectedContacts.length === 0 || !canManageForms || !canExportForms}
+                  title={!canManageForms ? managePermissionTitle : !canExportForms ? exportPermissionTitle : undefined}
                   onClick={() => void handleContactRetention(true)}
                   iconStart={<Download className="size-4" />}
                   data-testid="contacts-retention-export"
@@ -2475,7 +2743,8 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  disabled={contactMutationDisabled || selectedContacts.length === 0}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleContactRetention(false)}
                   iconStart={<ShieldCheck className="size-4" />}
                   data-testid="contacts-retention-apply"
@@ -2485,7 +2754,7 @@ function ContactsRoute() {
                 <input
                   type="url"
                   value={contactSyncTarget}
-                  disabled={isContactsBusy}
+                  disabled={contactMutationDisabled}
                   onChange={(event) => setContactSyncTarget(event.target.value)}
                   placeholder="https://crm.example.com/backy/contacts"
                   className="min-h-10 min-w-[18rem] rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -2495,7 +2764,8 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || selectedContacts.length === 0 || !contactSyncTarget.trim()}
+                  disabled={contactMutationDisabled || selectedContacts.length === 0 || !contactSyncTarget.trim()}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleSyncSelectedContacts()}
                   iconStart={<Upload className="size-4" />}
                   data-testid="contacts-sync-webhook"
@@ -2504,7 +2774,7 @@ function ContactsRoute() {
                 </Button>
                 <select
                   value={bulkContactStatus}
-                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  disabled={contactMutationDisabled || selectedContacts.length === 0}
                   onChange={(event) => setBulkContactStatus(event.target.value as ContactStatus)}
                   className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Bulk contact lifecycle status"
@@ -2516,7 +2786,8 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  disabled={contactMutationDisabled || selectedContacts.length === 0}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleBulkContactStatus()}
                   iconStart={<CheckCircle2 className="size-4" />}
                 >
@@ -2525,7 +2796,8 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || !canMergeSelectedContacts}
+                  disabled={contactMutationDisabled || !canMergeSelectedContacts}
+                  title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleMergeSelectedContacts()}
                   iconStart={<GitMerge className="size-4" />}
                   data-testid="contacts-merge-duplicates"
@@ -2562,7 +2834,7 @@ function ContactsRoute() {
               title="No contacts yet"
               description="Contacts appear when forms share lead information into the contact pipeline."
               action={
-                <Button onClick={openFormsWorkspace} disabled={isContactsBusy} className="mt-2" iconStart={<Mail className="size-4" />}>
+                <Button onClick={openFormsWorkspace} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} className="mt-2" iconStart={<Mail className="size-4" />}>
                   Review Forms
                 </Button>
               }
@@ -2574,7 +2846,7 @@ function ContactsRoute() {
                 Change the search, form, lifecycle, or lead quality filters to broaden the inbox.
               </div>
               {hasActiveContactFilters && (
-                <Button variant="outline" onClick={clearContactFilters} disabled={isContactsBusy} className="mt-4">
+                <Button variant="outline" onClick={clearContactFilters} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} className="mt-4">
                   Clear filters
                 </Button>
               )}
@@ -2587,12 +2859,16 @@ function ContactsRoute() {
                   contact={contact}
                   form={formById.get(contact.formId)}
                   selected={selectedContactSet.has(contact.id)}
-                  disabled={isContactsBusy}
+                  disabled={contactMutationDisabled}
                   onSelect={(selected) => toggleContactSelection(contact.id, selected)}
                   onStatus={(status) => void handleStatus(contact, status)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
                   onPromoteUser={() => void handlePromoteContactToUser(contact)}
                   onPromoteCustomer={() => void handlePromoteContactToCustomer(contact)}
+                  promoteUserDisabled={!canCreateUsers}
+                  promoteUserTitle={!canCreateUsers ? usersCreatePermissionTitle : undefined}
+                  promoteCustomerDisabled={!canEditCollections}
+                  promoteCustomerTitle={!canEditCollections ? collectionsEditPermissionTitle : undefined}
                 />
               ))}
             </div>
@@ -2745,6 +3021,10 @@ function ContactCard({
   onNotes,
   onPromoteUser,
   onPromoteCustomer,
+  promoteUserDisabled,
+  promoteUserTitle,
+  promoteCustomerDisabled,
+  promoteCustomerTitle,
 }: {
   contact: AdminContact;
   form?: FormDefinition;
@@ -2755,6 +3035,10 @@ function ContactCard({
   onNotes: (notes: string) => void;
   onPromoteUser: () => void;
   onPromoteCustomer: () => void;
+  promoteUserDisabled: boolean;
+  promoteUserTitle?: string;
+  promoteCustomerDisabled: boolean;
+  promoteCustomerTitle?: string;
 }) {
   const [notesDraft, setNotesDraft] = useState(contact.notes || '');
 
@@ -2903,7 +3187,8 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={onPromoteUser}
-          disabled={disabled || !canPromoteToUser}
+          disabled={disabled || promoteUserDisabled || !canPromoteToUser}
+          title={promoteUserTitle}
           iconStart={<UserPlus className="size-4" />}
           aria-label={`Promote ${contact.name || contact.email || contact.id} to user`}
           data-testid="contacts-promote-user"
@@ -2914,7 +3199,8 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={onPromoteCustomer}
-          disabled={disabled || !canPromoteToCustomer}
+          disabled={disabled || promoteCustomerDisabled || !canPromoteToCustomer}
+          title={promoteCustomerTitle}
           iconStart={<UserCheck className="size-4" />}
           aria-label={`Promote ${contact.name || contact.email || contact.id} to customer`}
           data-testid="contacts-promote-customer"

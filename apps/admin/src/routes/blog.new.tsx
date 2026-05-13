@@ -10,22 +10,25 @@ import {
     createBlogPostPreview,
     getAdminApiBase,
     getSiteFrontendDesign,
+    getUserPermissions,
     listBlogPosts,
     listBlogAuthors,
     listBlogCategories,
     listBlogTags,
+    type AdminUserPermissionMatrix,
     type BlogPostInput,
     type BlogAuthor,
     type BlogCategory,
     type BlogTag,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
@@ -86,6 +89,21 @@ export const Route = createFileRoute('/blog/new')({
 });
 
 const BLOG_CREATE_AUTOSAVE_KEY = 'backy:blog-new:draft:v1';
+
+type BlogCreatePermissionKey =
+  | 'pages.view'
+  | 'pages.edit'
+  | 'pages.publish'
+  | 'media.view'
+  | 'sites.configure';
+
+const BLOG_CREATE_PERMISSION_ROLE_DEFAULTS: Record<BlogCreatePermissionKey, Array<User['role']>> = {
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.publish': ['owner', 'admin', 'editor'],
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.configure': ['owner', 'admin'],
+};
 
 const BLOG_CREATE_CONTROL_AREAS = [
     {
@@ -614,7 +632,26 @@ function NewBlogPostPage() {
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
     const [designTemplateId, setDesignTemplateId] = useState(search.designTemplate || '');
-    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPosts;
+    const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+    const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(user?.id));
+    const [permissionError, setPermissionError] = useState<string | null>(null);
+    const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+    const canViewBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canConfigureSite = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewMediaPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const configureSitePermissionTitle = canConfigureSite ? undefined : adminPermissionReason(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewBlogDeniedMessage = `Your account needs pages.view to load blog creation data. ${viewBlogPermissionTitle}`;
+    const editBlogDeniedMessage = `Your account needs pages.edit to create or change blog drafts. ${editBlogPermissionTitle}`;
+    const publishBlogDeniedMessage = `Your account needs pages.publish to create previews, publish posts, or schedule posts. ${publishBlogPermissionTitle}`;
+    const viewMediaDeniedMessage = `Your account needs media.view to select featured media. ${viewMediaPermissionTitle}`;
+    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPosts || isPermissionMatrixPending;
+    const createFormDisabled = isCreateBusy || !canEditBlog;
 
     const clearCreationFeedback = () => {
         setError((current) => current ? null : current);
@@ -623,8 +660,56 @@ function NewBlogPostPage() {
 
     useEffect(() => {
         let cancelled = false;
+        setPermissionError(null);
+
+        if (!user?.id) {
+            setPermissionMatrix(null);
+            setPermissionError('Sign in with an admin account to load blog creation permissions.');
+            setIsPermissionsLoading(false);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        setIsPermissionsLoading(true);
+        getUserPermissions(user.id)
+            .then((matrix) => {
+                if (!cancelled) {
+                    setPermissionMatrix(matrix);
+                    setPermissionError(null);
+                }
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    setPermissionMatrix(null);
+                    setPermissionError(error instanceof Error ? error.message : 'Unable to load blog creation permissions.');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setIsPermissionsLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.id]);
+
+    useEffect(() => {
+        let cancelled = false;
 
         const loadTaxonomy = async () => {
+            if (isPermissionMatrixPending) return;
+
+            if (!canViewBlog) {
+                setCategories([]);
+                setTags([]);
+                setAuthors([]);
+                setError(viewBlogDeniedMessage);
+                return;
+            }
+
             try {
                 const [backendCategories, backendTags, backendAuthors] = await Promise.all([
                     listBlogCategories(activeSiteId),
@@ -653,12 +738,22 @@ function NewBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, selectedAuthorId, user?.id]);
+    }, [activeSiteId, canViewBlog, isPermissionMatrixPending, selectedAuthorId, user?.id, viewBlogDeniedMessage]);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadExistingPosts = async () => {
+            if (isPermissionMatrixPending) return;
+
+            if (!canViewBlog) {
+                setExistingBlogPosts([]);
+                setRouteCheckError(viewBlogDeniedMessage);
+                setError(viewBlogDeniedMessage);
+                setIsCheckingPosts(false);
+                return;
+            }
+
             setIsCheckingPosts(true);
             setRouteCheckError(null);
 
@@ -688,13 +783,20 @@ function NewBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, routeCheckRetry]);
+    }, [activeSiteId, canViewBlog, isPermissionMatrixPending, routeCheckRetry, viewBlogDeniedMessage]);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadFrontendDesignTemplates = async () => {
             if (!activeSiteId) return;
+            if (isPermissionMatrixPending) return;
+
+            if (!canConfigureSite) {
+                setFrontendDesign(null);
+                setFrontendDesignError(`Your account needs sites.configure to load frontend design templates. ${configureSitePermissionTitle}`);
+                return;
+            }
 
             setFrontendDesignLoading(true);
             setFrontendDesignError(null);
@@ -721,7 +823,7 @@ function NewBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId]);
+    }, [activeSiteId, canConfigureSite, configureSitePermissionTitle, isPermissionMatrixPending]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
@@ -752,6 +854,11 @@ function NewBlogPostPage() {
 
     const selectBlogSite = (nextSiteId: string) => {
         if (isCreateBusy) return;
+        if (!canViewBlog) {
+            setError(viewBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         setActiveSiteId(nextSiteId);
         setSelectedCategoryIds([]);
@@ -772,6 +879,11 @@ function NewBlogPostPage() {
         setSelectedIds: Dispatch<SetStateAction<string[]>>,
     ) => {
         if (isCreateBusy) return;
+        if (!canEditBlog) {
+            setError(editBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         clearCreationFeedback();
         setSelectedIds(
@@ -807,6 +919,11 @@ function NewBlogPostPage() {
     );
     const addLongFormBlock = (kind: 'section' | 'quote') => {
         if (isCreateBusy) return;
+        if (!canEditBlog) {
+            setError(editBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         clearCreationFeedback();
         const nextElements = appendLongFormBlockToElements(canvasElements, {
@@ -824,6 +941,11 @@ function NewBlogPostPage() {
     };
     const applyFrontendTemplate = (template: SiteFrontendDesignTemplate, options: { syncRoute?: boolean } = {}) => {
         if (isCreateBusy) return;
+        if (!canEditBlog) {
+            setError(editBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         const currentSlugValue = slug || slugify(title);
         const nextElements = buildFrontendBlogTemplateElements(template, {
@@ -950,16 +1072,20 @@ function NewBlogPostPage() {
     const readyCount = readinessChecks.filter((check) => check.complete).length;
     const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
     const canCreateDraft = title.trim().length > 0
+        && canEditBlog
         && slugValue.trim().length > 0
         && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
         && canonicalValid;
     const canCreatePreviewDraft = title.trim().length > 0
+        && canEditBlog
+        && canPublishBlog
         && slugValue.trim().length > 0
         && !routeConflict
         && canonicalValid;
     const canSubmit = canCreateDraft
+        && (status === 'draft' || canPublishBlog)
         && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
@@ -1378,6 +1504,11 @@ function NewBlogPostPage() {
 
     const copyCreationText = async (value: string, label: string) => {
         if (isCreateBusy) return;
+        if (!canViewBlog) {
+            setError(viewBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         try {
             await navigator.clipboard.writeText(value);
@@ -1391,6 +1522,11 @@ function NewBlogPostPage() {
 
     const downloadCreationHandoff = () => {
         if (isCreateBusy) return;
+        if (!canViewBlog) {
+            setError(viewBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1465,7 +1601,13 @@ function NewBlogPostPage() {
     };
 
     const getCreateBlockedMessage = (mode: 'save' | 'preview') => (
-        isCheckingPosts
+        !canEditBlog
+            ? editBlogDeniedMessage
+            : mode === 'preview' && !canPublishBlog
+                ? publishBlogDeniedMessage
+                : mode === 'save' && status !== 'draft' && !canPublishBlog
+                    ? publishBlogDeniedMessage
+                    : isCheckingPosts
             ? 'Checking existing blog routes before saving'
             : routeCheckError
                 ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
@@ -1480,6 +1622,11 @@ function NewBlogPostPage() {
 
     const handleCreatePreview = async () => {
         if (isLoading || isPreviewAfterCreateBusy) return;
+        if (!canEditBlog || !canPublishBlog) {
+            setError(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         if (!canCreatePreviewDraft) {
             setError(getCreateBlockedMessage('preview'));
@@ -1519,6 +1666,11 @@ function NewBlogPostPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isCreateBusy) return;
+        if (!canEditBlog || (status !== 'draft' && !canPublishBlog)) {
+            setError(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
+            setNotice(null);
+            return;
+        }
 
         if (!canSubmit) {
             setError(getCreateBlockedMessage('save'));
@@ -1612,6 +1764,11 @@ function NewBlogPostPage() {
                         {notice}
                     </Notice>
                 )}
+                {permissionError && (
+                    <Notice tone="warning" className="mb-4">
+                        {permissionError}
+                    </Notice>
+                )}
                 {draftRecovery && (
                     <Notice tone="info" title="Recovered unsaved blog draft" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1674,7 +1831,8 @@ function NewBlogPostPage() {
                             <div className="flex flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
-                                    disabled={isCreateBusy}
+                                    disabled={isCreateBusy || !canViewBlog}
+                                    title={viewBlogPermissionTitle}
                                     onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                     variant="outline"
                                     iconStart={<Copy className="size-4" />}
@@ -1683,7 +1841,8 @@ function NewBlogPostPage() {
                                 </Button>
                                 <Button
                                     type="button"
-                                    disabled={isCreateBusy}
+                                    disabled={isCreateBusy || !canViewBlog}
+                                    title={viewBlogPermissionTitle}
                                     onClick={downloadCreationHandoff}
                                     variant="outline"
                                     iconStart={<Download className="size-4" />}
@@ -1784,7 +1943,8 @@ function NewBlogPostPage() {
                                     }
                                 }}
                                 placeholder="Untitled post"
-                                disabled={isCreateBusy}
+                                disabled={createFormDisabled}
+                                title={editBlogPermissionTitle}
                                 className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 autoFocus
                             />
@@ -1800,7 +1960,8 @@ function NewBlogPostPage() {
                                     clearCreationFeedback();
                                     setSlug(e.target.value);
                                 }}
-                                disabled={isCreateBusy}
+                                disabled={createFormDisabled}
+                                title={editBlogPermissionTitle}
                                 className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="post-slug"
                             />
@@ -1823,7 +1984,8 @@ function NewBlogPostPage() {
                                     setExcerpt(e.target.value);
                                 }}
                                 rows={3}
-                                disabled={isCreateBusy}
+                                disabled={createFormDisabled}
+                                title={editBlogPermissionTitle}
                                 className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="Write the summary that appears in blog lists, feeds, and SEO previews."
                             />
@@ -1857,7 +2019,8 @@ function NewBlogPostPage() {
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        disabled={isCreateBusy}
+                                disabled={createFormDisabled}
+                                title={editBlogPermissionTitle}
                                         onClick={() => addLongFormBlock('section')}
                                         data-testid="blog-create-add-section"
                                     >
@@ -1866,7 +2029,8 @@ function NewBlogPostPage() {
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        disabled={isCreateBusy}
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
                                         onClick={() => addLongFormBlock('quote')}
                                         data-testid="blog-create-add-quote"
                                     >
@@ -1897,7 +2061,8 @@ function NewBlogPostPage() {
                                                 clearCreationFeedback();
                                                 setSeoTitle(e.target.value);
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             placeholder={title || 'Search result title'}
                                         />
@@ -1913,7 +2078,8 @@ function NewBlogPostPage() {
                                                 clearCreationFeedback();
                                                 setCanonicalPath(e.target.value);
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             placeholder={routePath}
                                         />
@@ -1933,7 +2099,8 @@ function NewBlogPostPage() {
                                             setSeoDescription(e.target.value);
                                         }}
                                         rows={3}
-                                        disabled={isCreateBusy}
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
                                         className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder={excerpt || 'Describe the article for search, social previews, feeds, and generated frontends.'}
                                     />
@@ -1952,7 +2119,8 @@ function NewBlogPostPage() {
                                             clearCreationFeedback();
                                             setOgImage(e.target.value);
                                         }}
-                                        disabled={isCreateBusy}
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
                                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder={selectedFeaturedImageUrl || 'https://...'}
                                     />
@@ -1967,7 +2135,8 @@ function NewBlogPostPage() {
                                                 clearCreationFeedback();
                                                 setNoIndex(e.target.checked);
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle}
                                             className="mt-1"
                                         />
                                         <span>
@@ -1983,7 +2152,8 @@ function NewBlogPostPage() {
                                                 clearCreationFeedback();
                                                 setNoFollow(e.target.checked);
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle}
                                             className="mt-1"
                                         />
                                         <span>
@@ -2022,7 +2192,8 @@ function NewBlogPostPage() {
                                                     key={template.id}
                                                     type="button"
                                                     onClick={() => applyFrontendTemplate(template, { syncRoute: true })}
-                                                    disabled={isCreateBusy}
+                                                    disabled={createFormDisabled || !canConfigureSite}
+                                                    title={editBlogPermissionTitle || configureSitePermissionTitle}
                                                     data-testid={`blog-frontend-template-${template.id}`}
                                                     data-active={designTemplateId === template.id}
                                                     className={cn(
@@ -2139,7 +2310,7 @@ function NewBlogPostPage() {
                                     initialSize={canvasSize}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
-                                        if (isCreateBusy) return;
+                                        if (isCreateBusy || !canEditBlog) return;
                                         clearCreationFeedback();
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
@@ -2175,7 +2346,7 @@ function NewBlogPostPage() {
                                             key={nextStatus}
                                             type="button"
                                             onClick={() => {
-                                                if (isCreateBusy) return;
+                                                if (isCreateBusy || !canEditBlog) return;
 
                                                 clearCreationFeedback();
                                                 setStatus(nextStatus);
@@ -2183,7 +2354,8 @@ function NewBlogPostPage() {
                                                     setScheduledAt(null);
                                                 }
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled || (nextStatus !== 'draft' && !canPublishBlog)}
+                                            title={nextStatus !== 'draft' ? publishBlogPermissionTitle : editBlogPermissionTitle}
                                             className={cn(
                                                 'rounded-md px-3 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                                 status === nextStatus
@@ -2203,12 +2375,13 @@ function NewBlogPostPage() {
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
                                             onChange={(e) => {
-                                                if (isCreateBusy) return;
+                                                if (isCreateBusy || !canEditBlog || !canPublishBlog) return;
 
                                                 clearCreationFeedback();
                                                 setScheduledAt(fromDateTimeLocalValue(e.target.value));
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled || !canPublishBlog}
+                                            title={publishBlogPermissionTitle}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
@@ -2272,7 +2445,8 @@ function NewBlogPostPage() {
                                         id="blog-create-active-site"
                                         value={activeSiteId}
                                         onChange={(event) => selectBlogSite(event.target.value)}
-                                        disabled={isCreateBusy}
+                                        disabled={isCreateBusy || !canViewBlog}
+                                        title={viewBlogPermissionTitle}
                                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {sites.length === 0 ? (
@@ -2291,12 +2465,13 @@ function NewBlogPostPage() {
                                         <select
                                             value={selectedAuthorId}
                                             onChange={(event) => {
-                                                if (isCreateBusy) return;
+                                                if (isCreateBusy || !canEditBlog) return;
 
                                                 clearCreationFeedback();
                                                 setSelectedAuthorId(event.target.value);
                                             }}
-                                            disabled={isCreateBusy}
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle}
                                             className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             {authors.length === 0 ? (
@@ -2349,8 +2524,21 @@ function NewBlogPostPage() {
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => setIsFeaturedMediaOpen(true)}
-                                        disabled={isCreateBusy}
+                                        onClick={() => {
+                                            if (!canEditBlog) {
+                                                setError(editBlogDeniedMessage);
+                                                setNotice(null);
+                                                return;
+                                            }
+                                            if (!canViewMedia) {
+                                                setError(viewMediaDeniedMessage);
+                                                setNotice(null);
+                                                return;
+                                            }
+                                            setIsFeaturedMediaOpen(true);
+                                        }}
+                                        disabled={isCreateBusy || !canEditBlog || !canViewMedia}
+                                        title={viewMediaPermissionTitle || editBlogPermissionTitle}
                                         iconStart={<ImageIcon className="size-4" />}
                                     >
                                         {featuredImageId ? 'Replace image' : 'Select image'}
@@ -2359,13 +2547,14 @@ function NewBlogPostPage() {
                                         type="button"
                                         variant="outline"
                                         onClick={() => {
-                                            if (isCreateBusy) return;
+                                            if (isCreateBusy || !canEditBlog) return;
 
                                             clearCreationFeedback();
                                             setFeaturedImageId(null);
                                             setOgImage('');
                                         }}
-                                        disabled={isCreateBusy || !featuredImageId}
+                                        disabled={createFormDisabled || !featuredImageId}
+                                        title={editBlogPermissionTitle}
                                         iconStart={<X className="size-4" />}
                                     >
                                         Clear image
@@ -2388,7 +2577,7 @@ function NewBlogPostPage() {
                                     items={categories}
                                     selectedIds={selectedCategoryIds}
                                     onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
-                                    disabled={isCreateBusy}
+                                    disabled={createFormDisabled}
                                 />
                                 <TaxonomyPicker
                                     title="Tags"
@@ -2396,7 +2585,7 @@ function NewBlogPostPage() {
                                     items={tags}
                                     selectedIds={selectedTagIds}
                                     onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
-                                    disabled={isCreateBusy}
+                                    disabled={createFormDisabled}
                                 />
                             </PanelContent>
                         </Panel>
@@ -2437,7 +2626,8 @@ function NewBlogPostPage() {
                                 <div className="grid gap-2">
                                     <Button
                                         type="button"
-                                        disabled={isCreateBusy}
+                                        disabled={isCreateBusy || !canViewBlog}
+                                        title={viewBlogPermissionTitle}
                                         onClick={() => void copyCreationText(adminBlogUrl, 'Blog create API URL')}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
@@ -2447,7 +2637,8 @@ function NewBlogPostPage() {
                                     </Button>
                                     <Button
                                         type="button"
-                                        disabled={isCreateBusy}
+                                        disabled={isCreateBusy || !canViewBlog}
+                                        title={viewBlogPermissionTitle}
                                         onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
@@ -2472,7 +2663,7 @@ function NewBlogPostPage() {
                         }
                     }}
                     onSelect={(asset) => {
-                        if (isCreateBusy) return;
+                        if (isCreateBusy || !canEditBlog || !canViewMedia) return;
 
                         const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
                         clearCreationFeedback();

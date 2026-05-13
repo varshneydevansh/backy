@@ -11,14 +11,18 @@ import {
     getPage,
     getSiteFrontendDesign,
     getSiteNavigation,
+    getUserPermissions,
     listCollections,
     listPages,
     updateSiteNavigation,
+    type AdminUserPermissionMatrix,
     type Collection,
     type CollectionField,
     type CollectionFieldType,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -60,6 +64,7 @@ type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' 
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
+type PageCreatePermissionKey = 'pages.view' | 'pages.edit' | 'pages.publish' | 'collections.view' | 'sites.view' | 'sites.configure' | 'sites.create';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -103,6 +108,16 @@ interface PageCreateAutosaveDraft {
 }
 
 const PAGE_CREATE_AUTOSAVE_KEY = 'backy:page-new:draft:v1';
+
+const PAGE_CREATE_PERMISSION_ROLE_DEFAULTS: Record<PageCreatePermissionKey, Array<AuthUser['role']>> = {
+    'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+    'pages.edit': ['owner', 'admin', 'editor'],
+    'pages.publish': ['owner', 'admin', 'editor'],
+    'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+    'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+    'sites.configure': ['owner', 'admin'],
+    'sites.create': ['owner', 'admin'],
+};
 
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
@@ -462,6 +477,7 @@ export const Route = createFileRoute('/pages/new')({
 function NewPageRoute() {
     const navigate = useNavigate();
     const search = Route.useSearch();
+    const currentAdmin = useAuthStore((state) => state.user);
     const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
     const [isCheckingPages, setIsCheckingPages] = useState(false);
@@ -480,7 +496,26 @@ function NewPageRoute() {
     const [collections, setCollections] = useState<Collection[]>([]);
     const [collectionsLoading, setCollectionsLoading] = useState(false);
     const [collectionsError, setCollectionsError] = useState<string | null>(null);
-    const isPageCreateBusy = isLoading || isCheckingPages;
+    const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+    const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+    const [permissionError, setPermissionError] = useState<string | null>(null);
+    const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+    const canViewPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canPublishPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canConfigureSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canCreateSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewPermissionTitle = canViewPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const editPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const publishPermissionTitle = canPublishPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const collectionsViewPermissionTitle = canViewCollections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'collections.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const sitesViewPermissionTitle = canViewSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const sitesConfigurePermissionTitle = canConfigureSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const sitesCreatePermissionTitle = canCreateSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canApplyNavigationPlacement = canViewSites && canConfigureSites;
+    const isPageCreateBusy = isLoading || isCheckingPages || isPermissionMatrixPending;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -538,7 +573,7 @@ function NewPageRoute() {
         datasetMode: nextFormData.datasetMode || undefined,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
-        if (isPageCreateBusy) return;
+        if (isPageCreateBusy || !canEditPages) return;
 
         const nextFormData = {
             ...formData,
@@ -550,6 +585,43 @@ function NewPageRoute() {
         setNotice(null);
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
     };
+
+    useEffect(() => {
+        let cancelled = false;
+        setPermissionError(null);
+
+        if (!currentAdmin?.id) {
+            setPermissionMatrix(null);
+            setIsPermissionsLoading(false);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        setIsPermissionsLoading(true);
+        getUserPermissions(currentAdmin.id)
+            .then((matrix) => {
+                if (!cancelled) {
+                    setPermissionMatrix(matrix);
+                    setPermissionError(null);
+                }
+            })
+            .catch((permissionLoadError) => {
+                if (!cancelled) {
+                    setPermissionMatrix(null);
+                    setPermissionError(permissionLoadError instanceof Error ? permissionLoadError.message : 'Unable to load page permissions.');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setIsPermissionsLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentAdmin?.id]);
 
     useEffect(() => {
         try {
@@ -577,6 +649,12 @@ function NewPageRoute() {
         const siteId = formData.siteId;
 
         if (!siteId) return;
+        if (isPermissionMatrixPending) return;
+        if (!canViewPages) {
+            setRouteCheckError(null);
+            setIsCheckingPages(false);
+            return;
+        }
 
         const loadSelectedSitePages = async () => {
             setIsCheckingPages(true);
@@ -595,7 +673,9 @@ function NewPageRoute() {
                 }
             } catch (loadError) {
                 if (!cancelled) {
-                    const message = loadError instanceof Error ? loadError.message : 'Unable to check existing pages for this site';
+                    const message = isAdminPermissionDeniedError(loadError)
+                        ? viewPermissionTitle || 'Your account cannot view pages for route checks.'
+                        : loadError instanceof Error ? loadError.message : 'Unable to check existing pages for this site';
                     setRouteCheckError(message);
                     setError(message);
                 }
@@ -611,13 +691,20 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [formData.siteId, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages]);
+    }, [canViewPages, formData.siteId, isPermissionMatrixPending, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages, viewPermissionTitle]);
 
     useEffect(() => {
         let cancelled = false;
         const siteId = formData.siteId;
 
         if (!siteId) return;
+        if (isPermissionMatrixPending) return;
+        if (!canViewSites) {
+            setFrontendDesign(null);
+            setFrontendDesignError(sitesViewPermissionTitle || 'Your account cannot view frontend design templates.');
+            setFrontendDesignLoading(false);
+            return;
+        }
 
         const loadFrontendDesignTemplates = async () => {
             setFrontendDesignLoading(true);
@@ -645,7 +732,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [formData.siteId]);
+    }, [canViewSites, formData.siteId, isPermissionMatrixPending, sitesViewPermissionTitle]);
 
     useEffect(() => {
         let cancelled = false;
@@ -654,6 +741,13 @@ function NewPageRoute() {
         if (!siteId || !formData.collectionId) {
             setCollections([]);
             setCollectionsError(null);
+            setCollectionsLoading(false);
+            return;
+        }
+        if (isPermissionMatrixPending) return;
+        if (!canViewCollections) {
+            setCollections([]);
+            setCollectionsError(collectionsViewPermissionTitle || 'Your account cannot view collections for dataset page creation.');
             setCollectionsLoading(false);
             return;
         }
@@ -685,7 +779,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [formData.collectionId, formData.siteId]);
+    }, [canViewCollections, collectionsViewPermissionTitle, formData.collectionId, formData.siteId, isPermissionMatrixPending]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
@@ -821,7 +915,7 @@ function NewPageRoute() {
     }, [formData.designTemplateId, frontendDesign, frontendPageTemplates]);
 
     const handleTemplateChange = (nextTemplate: PageTemplate) => {
-        if (isPageCreateBusy) return;
+        if (isPageCreateBusy || !canEditPages) return;
 
         const currentDefaults = TEMPLATE_DEFAULTS[formData.template];
         const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
@@ -841,7 +935,7 @@ function NewPageRoute() {
         });
     };
     const handleFrontendTemplateChange = (template: SiteFrontendDesignTemplate) => {
-        if (isPageCreateBusy) return;
+        if (isPageCreateBusy || !canEditPages) return;
 
         const shouldApplyTitle = !formData.title.trim() || formData.title === TEMPLATE_DEFAULTS[formData.template].title;
         const routeSlug = routeSlugFromPattern(template.routePattern);
@@ -873,7 +967,7 @@ function NewPageRoute() {
     useEffect(() => {
         const parentPageId = formData.parentPageId.trim();
 
-        if (!parentPageId || selectedParentPage || !formData.siteId) {
+        if (!parentPageId || selectedParentPage || !formData.siteId || isPermissionMatrixPending || !canViewPages) {
             return;
         }
 
@@ -902,7 +996,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [formData.parentPageId, formData.siteId, selectedParentPage, setPages]);
+    }, [canViewPages, formData.parentPageId, formData.siteId, isPermissionMatrixPending, selectedParentPage, setPages]);
     const selectableParentPages = useMemo(
         () => selectedSitePages
             .filter((page) => page.status !== 'archived')
@@ -918,7 +1012,7 @@ function NewPageRoute() {
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
     const titleDerivedSlug = slugify(formData.title || 'new-page');
-    const canSyncSlugFromTitle = !isPageCreateBusy && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
+    const canSyncSlugFromTitle = !isPageCreateBusy && canEditPages && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
     const normalizedCanonicalPath = normalizeCanonicalPath(formData.canonicalPath || routePreview);
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const effectiveSeoTitle = formData.seoTitle.trim() || formData.title.trim();
@@ -961,10 +1055,16 @@ function NewPageRoute() {
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
         [formData.siteId, requestedSiteId],
     );
-    const canSubmit = Boolean(
-        formData.title.trim()
+    const publishPermissionReady = formData.status === 'draft' || canPublishPages;
+    const navigationPermissionReady = formData.navigationPlacement === 'none' || canApplyNavigationPlacement;
+	    const canSubmit = Boolean(
+	        canEditPages
+	        &&
+	        formData.title.trim()
         && formData.siteId
         && !isCheckingPages
+        && publishPermissionReady
+        && navigationPermissionReady
         && hasSchedule
         && !routeConflict
         && !routeCheckError
@@ -977,6 +1077,11 @@ function NewPageRoute() {
     );
     const submitBlockerMessage = useMemo(() => {
         if (isLoading || canSubmit) return null;
+        if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
+        if (!publishPermissionReady) return publishPermissionTitle || 'Your account cannot publish or schedule pages during creation.';
+        if (!navigationPermissionReady) return !canViewSites
+            ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
+            : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
         if (isCheckingPages) return 'Checking existing routes for this site before creating the page.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the page.';
         if (!selectedSite) return 'Select a target site before creating this page.';
@@ -990,7 +1095,7 @@ function NewPageRoute() {
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, canonicalValid, collectionsError, collectionsLoading, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, routeCheckError, routeConflict, routePreview, selectedDatasetCollection, selectedSite]);
+    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, routePreview, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -1466,7 +1571,7 @@ function NewPageRoute() {
     };
 
     const restoreRecoveredDraft = () => {
-        if (!draftRecovery || isPageCreateBusy) return;
+        if (!draftRecovery || isPageCreateBusy || !canEditPages) return;
 
         const recoveredFormData: PageCreateDraftState = {
             ...draftRecovery.formData,
@@ -1501,6 +1606,10 @@ function NewPageRoute() {
 
     const copyCreationText = async (value: string, label: string) => {
         if (isPageCreateBusy) return;
+        if (!canEditPages) {
+            setNotice(editPermissionTitle || 'Your account cannot prepare page creation handoff data.');
+            return;
+        }
 
         try {
             await navigator.clipboard.writeText(value);
@@ -1514,6 +1623,10 @@ function NewPageRoute() {
 
     const downloadCreationHandoff = () => {
         if (isPageCreateBusy) return;
+        if (!canEditPages) {
+            setNotice(editPermissionTitle || 'Your account cannot download page creation handoff data.');
+            return;
+        }
 
         const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1531,6 +1644,26 @@ function NewPageRoute() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isPageCreateBusy) return;
+
+        if (!canEditPages) {
+            setError(editPermissionTitle || 'Your account cannot create pages.');
+            setNotice(null);
+            return;
+        }
+
+        if (!publishPermissionReady) {
+            setError(publishPermissionTitle || 'Your account cannot publish or schedule pages during creation.');
+            setNotice(null);
+            return;
+        }
+
+        if (!navigationPermissionReady) {
+            setError(!canViewSites
+                ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
+                : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.');
+            setNotice(null);
+            return;
+        }
 
         if (!canSubmit) {
             if (routeConflict) {
@@ -1628,6 +1761,19 @@ function NewPageRoute() {
         }
     };
 
+    if (!isPermissionMatrixPending && !canEditPages) {
+        return (
+            <PageShell
+                title="Page creation unavailable"
+                description={editPermissionTitle || 'Your account cannot create pages.'}
+            >
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {permissionError || editPermissionTitle || 'Ask an owner or admin to grant pages.edit access.'}
+                </div>
+            </PageShell>
+        );
+    }
+
     return (
         <PageShell
             title="Create page"
@@ -1700,10 +1846,11 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={() => {
-                                if (isPageCreateBusy) return;
+                                if (isPageCreateBusy || !canCreateSites) return;
                                 navigate({ to: '/sites/new' });
                             }}
-                            disabled={isPageCreateBusy}
+                            disabled={isPageCreateBusy || !canCreateSites}
+                            title={!canCreateSites ? sitesCreatePermissionTitle : undefined}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Globe className="h-4 w-4" />
@@ -2008,15 +2155,16 @@ function NewPageRoute() {
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            if (isPageCreateBusy) return;
-                                            navigate({
+	                                        onClick={() => {
+	                                            if (isPageCreateBusy || !canEditPages) return;
+	                                            navigate({
                                                 to: '/pages/$pageId/edit',
                                                 params: { pageId: routeConflict.id },
                                                 search: { siteId: formData.siteId },
                                             });
                                         }}
-                                        disabled={isPageCreateBusy}
+	                                        disabled={isPageCreateBusy || !canEditPages}
+	                                        title={!canEditPages ? editPermissionTitle : undefined}
                                         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         Open existing page
@@ -2041,18 +2189,19 @@ function NewPageRoute() {
                                 <div>
                                     <label htmlFor="page-navigation-placement-select" className="mb-2 block text-sm font-medium">Placement</label>
                                     <select
-                                        id="page-navigation-placement-select"
-                                        value={formData.navigationPlacement}
-                                        onChange={(event) => updatePageDraft({
-                                            navigationPlacement: event.target.value as PageNavigationPlacement,
-                                            navigationLabel: formData.navigationLabel || formData.title,
-                                        })}
-                                        disabled={isPageCreateBusy}
-                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        <option value="none">Do not add</option>
-                                        <option value="primary">Primary menu</option>
-                                        <option value="footer">Footer menu</option>
+	                                        id="page-navigation-placement-select"
+	                                        value={formData.navigationPlacement}
+	                                        onChange={(event) => updatePageDraft({
+	                                            navigationPlacement: event.target.value as PageNavigationPlacement,
+	                                            navigationLabel: formData.navigationLabel || formData.title,
+	                                        })}
+	                                        disabled={isPageCreateBusy}
+	                                        title={!canApplyNavigationPlacement && formData.navigationPlacement !== 'none' ? sitesConfigurePermissionTitle || sitesViewPermissionTitle : undefined}
+	                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+	                                    >
+	                                        <option value="none">Do not add</option>
+	                                        <option value="primary" disabled={!canApplyNavigationPlacement}>Primary menu</option>
+	                                        <option value="footer" disabled={!canApplyNavigationPlacement}>Footer menu</option>
                                     </select>
                                 </div>
                                 <div>
@@ -2062,8 +2211,8 @@ function NewPageRoute() {
                                         type="text"
                                         value={formData.navigationLabel}
                                         onChange={(event) => updatePageDraft({ navigationLabel: event.target.value })}
-                                        placeholder={formData.title || 'Navigation label'}
-                                        disabled={isPageCreateBusy || formData.navigationPlacement === 'none'}
+	                                        placeholder={formData.title || 'Navigation label'}
+	                                        disabled={isPageCreateBusy || formData.navigationPlacement === 'none' || !canApplyNavigationPlacement}
                                         className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </div>
@@ -2385,9 +2534,9 @@ function NewPageRoute() {
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
                                 <label htmlFor="page-status" className="mb-2 block text-sm font-medium">Status</label>
-                                <select
-                                    id="page-status"
-                                    value={formData.status}
+	                                <select
+	                                    id="page-status"
+	                                    value={formData.status}
                                     onChange={(e) => {
                                         const status = e.target.value as typeof formData.status;
                                         updatePageDraft({
@@ -2395,12 +2544,13 @@ function NewPageRoute() {
                                             scheduledAt: status === 'scheduled' ? formData.scheduledAt : null,
                                         });
                                     }}
-                                    disabled={isPageCreateBusy}
-                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <option value="draft">Draft</option>
-                                    <option value="published">Published</option>
-                                    <option value="scheduled">Scheduled</option>
+	                                    disabled={isPageCreateBusy}
+	                                    title={!canPublishPages && formData.status !== 'draft' ? publishPermissionTitle : undefined}
+	                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+	                                >
+	                                    <option value="draft">Draft</option>
+	                                    <option value="published" disabled={!canPublishPages}>Published</option>
+	                                    <option value="scheduled" disabled={!canPublishPages}>Scheduled</option>
                                 </select>
                             </div>
 

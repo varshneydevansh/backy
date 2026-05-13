@@ -18,17 +18,21 @@ import {
   createReusableSection,
   deleteReusableSection,
   getSiteFrontendDesign,
+  getUserPermissions,
   listReusableSections,
   updateReusableSection,
+  type AdminUserPermissionMatrix,
   type ReusableSection,
   type ReusableSectionContent,
   type ReusableSectionInput,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { cn, formatDate } from '@/lib/utils';
 import { normalizeSavedCanvasContent } from '@/components/editor/editorCatalog';
@@ -37,6 +41,13 @@ import type { CanvasElement, CanvasSize } from '@/types/editor';
 type SectionStatusFilter = ReusableSection['status'] | 'all';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
+type ReusableSectionPermissionKey = 'pages.view' | 'pages.edit' | 'pages.delete';
+
+const REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS: Record<ReusableSectionPermissionKey, Array<AuthUser['role']>> = {
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.delete': ['owner', 'admin'],
+};
 
 interface ReusableSectionsSearch {
   siteId?: string;
@@ -284,6 +295,7 @@ const parseReusableSectionContent = (rawJson: string): ReusableSectionContent =>
 
 function ReusableSectionsRoute() {
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
@@ -310,6 +322,9 @@ function ReusableSectionsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -334,7 +349,14 @@ function ReusableSectionsRoute() {
     })),
     [frontendDesign, frontendSectionTemplates],
   );
-  const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const canEditSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const editPermissionTitle = canEditSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeleteSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId) || isPermissionMatrixPending;
   const filteredSections = useMemo(() => (
     sections.filter((section) => {
       if (statusFilter !== 'all' && section.status !== statusFilter) return false;
@@ -401,6 +423,11 @@ function ReusableSectionsRoute() {
     });
   };
 
+  const showPermissionDenied = (key: ReusableSectionPermissionKey, action: string) => {
+    setNotice(null);
+    setError(`Your account needs ${key} to ${action}. ${adminPermissionReason(permissionMatrix, currentAdmin, key, REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS)}`);
+  };
+
   const setFormFromSection = (section: ReusableSection | null) => {
     if (!section) {
       setFormState({
@@ -437,6 +464,11 @@ function ReusableSectionsRoute() {
   };
 
   const normalizeContentJsonForEditing = () => {
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'edit reusable section content');
+      return;
+    }
+
     try {
       const content = parseReusableSectionContent(contentJson);
       setContentJson(JSON.stringify(content, null, 2));
@@ -449,6 +481,11 @@ function ReusableSectionsRoute() {
   };
 
   const insertStarterContent = () => {
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'edit reusable section content');
+      return;
+    }
+
     const content = defaultSectionContent(
       formState.name.trim() || 'New reusable section',
       formState.description || 'Reusable section starter content.',
@@ -467,6 +504,14 @@ function ReusableSectionsRoute() {
 
   const loadSections = async () => {
     if (!activeSiteId) return;
+    if (isPermissionMatrixPending) return;
+    if (!canViewSections) {
+      setSections([]);
+      setFrontendDesign(null);
+      setError(viewPermissionTitle || 'Your account cannot view reusable sections.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -483,11 +528,50 @@ function ReusableSectionsRoute() {
       }
     } catch (loadError) {
       setSections([]);
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load reusable sections');
+      setError(isAdminPermissionDeniedError(loadError)
+        ? viewPermissionTitle || 'Your account cannot view reusable sections.'
+        : loadError instanceof Error ? loadError.message : 'Unable to load reusable sections');
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(loadError instanceof Error ? loadError.message : 'Unable to load reusable section permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -502,13 +586,21 @@ function ReusableSectionsRoute() {
   }, [routeSearch.q, routeSearch.sectionId, routeSearch.status]);
 
   useEffect(() => {
+    if (isPermissionMatrixPending) return;
     void loadSections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewSections, isPermissionMatrixPending]);
 
   useEffect(() => {
     let cancelled = false;
     const loadFrontendDesign = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewSections) {
+        setFrontendDesign(null);
+        setFrontendDesignError(viewPermissionTitle || 'Your account cannot view reusable section frontend templates.');
+        return;
+      }
+
       setFrontendDesignLoading(true);
       setFrontendDesignError(null);
       try {
@@ -517,7 +609,9 @@ function ReusableSectionsRoute() {
       } catch (loadError) {
         if (!cancelled) {
           setFrontendDesign(null);
-          setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
+          setFrontendDesignError(isAdminPermissionDeniedError(loadError)
+            ? viewPermissionTitle || 'Your account cannot view reusable section frontend templates.'
+            : loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
         }
       } finally {
         if (!cancelled) setFrontendDesignLoading(false);
@@ -527,9 +621,15 @@ function ReusableSectionsRoute() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewSections, isPermissionMatrixPending, viewPermissionTitle]);
 
   const copyText = async (value: string, label: string) => {
+    if (isBusy) return;
+    if (!canViewSections) {
+      showPermissionDenied('pages.view', 'export reusable section manifests');
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -553,6 +653,10 @@ function ReusableSectionsRoute() {
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'save reusable sections');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -582,7 +686,9 @@ function ReusableSectionsRoute() {
       updateRouteSearch({ sectionId: saved.id });
       setNotice(`${saved.name} saved.`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save reusable section');
+      setError(isAdminPermissionDeniedError(saveError)
+        ? editPermissionTitle || 'Your account cannot save reusable sections.'
+        : saveError instanceof Error ? saveError.message : 'Unable to save reusable section');
     } finally {
       setIsSaving(false);
     }
@@ -590,6 +696,11 @@ function ReusableSectionsRoute() {
 
   const createFromFrontendTemplate = async (template: SiteFrontendDesignTemplate, blueprint: SectionTemplateBlueprint) => {
     if (isBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'create reusable sections from frontend templates');
+      return;
+    }
+
     setIsCreatingTemplateId(template.id);
     setIsSaving(true);
     setError(null);
@@ -609,7 +720,9 @@ function ReusableSectionsRoute() {
       updateRouteSearch({ sectionId: saved.id });
       setNotice(`${saved.name} created from frontend design template ${template.name}.`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to create reusable section from frontend template');
+      setError(isAdminPermissionDeniedError(saveError)
+        ? editPermissionTitle || 'Your account cannot create reusable sections.'
+        : saveError instanceof Error ? saveError.message : 'Unable to create reusable section from frontend template');
     } finally {
       setIsCreatingTemplateId(null);
       setIsSaving(false);
@@ -618,6 +731,11 @@ function ReusableSectionsRoute() {
 
   const handleDeleteSection = async (section: ReusableSection) => {
     if (isBusy) return;
+    if (!canDeleteSections) {
+      showPermissionDenied('pages.delete', 'delete reusable sections');
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -631,7 +749,9 @@ function ReusableSectionsRoute() {
       }
       setNotice(`${section.name} deleted.`);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete reusable section');
+      setError(isAdminPermissionDeniedError(deleteError)
+        ? deletePermissionTitle || 'Your account cannot delete reusable sections.'
+        : deleteError instanceof Error ? deleteError.message : 'Unable to delete reusable section');
     } finally {
       setIsSaving(false);
     }
@@ -643,18 +763,23 @@ function ReusableSectionsRoute() {
       description="Manage saved editor sections and frontend-derived UI blocks for every custom site."
       action={
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => void loadSections()} disabled={isBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button size="sm" onClick={() => void loadSections()} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
           <Button
             size="sm"
             variant="primary"
             onClick={() => {
+              if (!canEditSections) {
+                showPermissionDenied('pages.edit', 'create reusable sections');
+                return;
+              }
               setSelectedSectionId(null);
               setFormFromSection(null);
               updateRouteSearch({ sectionId: null });
             }}
-            disabled={isBusy}
+            disabled={isBusy || !canEditSections}
+            title={!canEditSections ? editPermissionTitle : undefined}
             iconStart={<Plus className="size-4" />}
           >
             New section
@@ -665,6 +790,11 @@ function ReusableSectionsRoute() {
       {error ? (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      ) : null}
+      {permissionError ? (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
         </div>
       ) : null}
       {notice ? (
@@ -687,10 +817,10 @@ function ReusableSectionsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')} disabled={isBusy} iconStart={<Copy className="size-4" />}>
+            <Button size="sm" onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
-            <Button size="sm" onClick={() => void loadSections()} disabled={isBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button size="sm" onClick={() => void loadSections()} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -816,17 +946,18 @@ function ReusableSectionsRoute() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button
                           size="sm"
-                          variant="primary"
-                          onClick={() => void createFromFrontendTemplate(template, blueprint)}
-                          disabled={isBusy}
-                          iconStart={<Layers3 className="size-4" />}
+                            variant="primary"
+                            onClick={() => void createFromFrontendTemplate(template, blueprint)}
+                            disabled={isBusy || !canEditSections}
+                            title={!canEditSections ? editPermissionTitle : undefined}
+                            iconStart={<Layers3 className="size-4" />}
                           data-testid={`reusable-sections-frontend-template-${template.id}`}
                         >
                           {isCreatingTemplateId === template.id ? 'Creating...' : 'Create section'}
                         </Button>
-                        <Button size="sm" onClick={() => void copyText(manifestText, `${template.name} frontend section template`)} disabled={isBusy} iconStart={<Copy className="size-4" />}>
-                          Copy schema
-                        </Button>
+                          <Button size="sm" onClick={() => void copyText(manifestText, `${template.name} frontend section template`)} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
+                            Copy schema
+                          </Button>
                       </div>
                     </article>
                   );
@@ -883,8 +1014,8 @@ function ReusableSectionsRoute() {
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs text-muted-foreground">Updated {formatDate(section.updatedAt || section.createdAt || '')}</div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => selectSection(section)} disabled={isBusy}>Edit</Button>
-                          <Button size="sm" variant="danger" onClick={() => void handleDeleteSection(section)} disabled={isBusy} iconStart={<Trash2 className="size-3.5" />}>Delete</Button>
+                            <Button size="sm" onClick={() => selectSection(section)} disabled={isBusy}>{canEditSections ? 'Edit' : 'View'}</Button>
+                            <Button size="sm" variant="danger" onClick={() => void handleDeleteSection(section)} disabled={isBusy || !canDeleteSections} title={!canDeleteSections ? deletePermissionTitle : undefined} iconStart={<Trash2 className="size-3.5" />}>Delete</Button>
                         </div>
                       </div>
                     </article>
@@ -905,11 +1036,12 @@ function ReusableSectionsRoute() {
             <form onSubmit={handleFormSubmit} className="space-y-4">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Name</span>
-                <input
-                  value={formState.name}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-                  disabled={isBusy}
-                  data-testid="reusable-section-name"
+                  <input
+                    value={formState.name}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                    disabled={isBusy || !canEditSections}
+                    title={!canEditSections ? editPermissionTitle : undefined}
+                    data-testid="reusable-section-name"
                   className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   required
                 />
@@ -917,32 +1049,35 @@ function ReusableSectionsRoute() {
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Slug</span>
-                  <input
-                    value={formState.slug || ''}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, slug: normalizeSlug(event.target.value, '') }))}
-                    disabled={isBusy}
-                    data-testid="reusable-section-slug"
+                    <input
+                      value={formState.slug || ''}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, slug: normalizeSlug(event.target.value, '') }))}
+                      disabled={isBusy || !canEditSections}
+                      title={!canEditSections ? editPermissionTitle : undefined}
+                      data-testid="reusable-section-slug"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Category</span>
-                  <input
-                    value={formState.category || ''}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, category: event.target.value }))}
-                    disabled={isBusy}
-                    data-testid="reusable-section-category"
+                    <input
+                      value={formState.category || ''}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, category: event.target.value }))}
+                      disabled={isBusy || !canEditSections}
+                      title={!canEditSections ? editPermissionTitle : undefined}
+                      data-testid="reusable-section-category"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
               </div>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Description</span>
-                <textarea
-                  value={formState.description || ''}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
-                  disabled={isBusy}
-                  data-testid="reusable-section-description"
+                  <textarea
+                    value={formState.description || ''}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
+                    disabled={isBusy || !canEditSections}
+                    title={!canEditSections ? editPermissionTitle : undefined}
+                    data-testid="reusable-section-description"
                   rows={3}
                   className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                 />
@@ -950,11 +1085,12 @@ function ReusableSectionsRoute() {
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Status</span>
-                  <select
-                    value={formState.status || 'active'}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, status: event.target.value as ReusableSection['status'] }))}
-                    disabled={isBusy}
-                    data-testid="reusable-section-status"
+                    <select
+                      value={formState.status || 'active'}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, status: event.target.value as ReusableSection['status'] }))}
+                      disabled={isBusy || !canEditSections}
+                      title={!canEditSections ? editPermissionTitle : undefined}
+                      data-testid="reusable-section-status"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="active">Active</option>
@@ -963,11 +1099,12 @@ function ReusableSectionsRoute() {
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Tags</span>
-                  <input
-                    value={tagsText}
-                    onChange={(event) => setTagsText(event.target.value)}
-                    disabled={isBusy}
-                    placeholder="hero, pricing, footer"
+                    <input
+                      value={tagsText}
+                      onChange={(event) => setTagsText(event.target.value)}
+                      disabled={isBusy || !canEditSections}
+                      title={!canEditSections ? editPermissionTitle : undefined}
+                      placeholder="hero, pricing, footer"
                     data-testid="reusable-section-tags"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
@@ -977,22 +1114,23 @@ function ReusableSectionsRoute() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">Content JSON</span>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" onClick={insertStarterContent} disabled={isBusy} iconStart={<Sparkles className="size-3.5" />} data-testid="reusable-section-insert-starter">
-                      Insert starter
-                    </Button>
-                    <Button size="sm" onClick={normalizeContentJsonForEditing} disabled={isBusy} iconStart={<Code2 className="size-3.5" />} data-testid="reusable-section-format-json">
-                      Format JSON
-                    </Button>
+                      <Button size="sm" onClick={insertStarterContent} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Sparkles className="size-3.5" />} data-testid="reusable-section-insert-starter">
+                        Insert starter
+                      </Button>
+                      <Button size="sm" onClick={normalizeContentJsonForEditing} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Code2 className="size-3.5" />} data-testid="reusable-section-format-json">
+                        Format JSON
+                      </Button>
                   </div>
                 </div>
-                <textarea
-                  value={contentJson}
+                  <textarea
+                    value={contentJson}
                   onChange={(event) => {
                     setContentJson(event.target.value);
                     setContentValidationMessage(null);
                   }}
-                  disabled={isBusy}
-                  rows={14}
+                    disabled={isBusy || !canEditSections}
+                    title={!canEditSections ? editPermissionTitle : undefined}
+                    rows={14}
                   spellCheck={false}
                   data-testid="reusable-section-content-json"
                   className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
@@ -1013,19 +1151,24 @@ function ReusableSectionsRoute() {
                 </div>
               ) : null}
               <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  onClick={() => {
-                    setSelectedSectionId(null);
+                  <Button
+                    onClick={() => {
+                      if (!canEditSections) {
+                        showPermissionDenied('pages.edit', 'prepare reusable section edits');
+                        return;
+                      }
+                      setSelectedSectionId(null);
                     setFormFromSection(null);
                     updateRouteSearch({ sectionId: null });
                   }}
-                  disabled={isBusy}
-                  data-testid="reusable-section-reset"
+                    disabled={isBusy || !canEditSections}
+                    title={!canEditSections ? editPermissionTitle : undefined}
+                    data-testid="reusable-section-reset"
                 >
                   Reset
                 </Button>
-                <Button type="submit" variant="primary" disabled={isBusy || formState.name.trim().length === 0} iconStart={<Save className="size-4" />} data-testid="reusable-section-save">
-                  {isSaving ? 'Saving...' : 'Save section'}
+                  <Button type="submit" variant="primary" disabled={isBusy || formState.name.trim().length === 0 || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Save className="size-4" />} data-testid="reusable-section-save">
+                    {isSaving ? 'Saving...' : 'Save section'}
                 </Button>
               </div>
             </form>

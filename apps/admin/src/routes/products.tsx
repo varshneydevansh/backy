@@ -25,6 +25,7 @@ import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
   listCollectionRecords,
@@ -34,8 +35,10 @@ import {
   type Collection,
   type CollectionField,
   type CollectionRecord,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -44,6 +47,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 import type { SiteSettings } from '@backy-cms/core';
@@ -81,6 +85,32 @@ type ProductTypeFilter = ProductFormState['productType'] | 'all';
 type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
+type ProductPermissionKey =
+  | 'commerce.view'
+  | 'commerce.edit'
+  | 'commerce.configure'
+  | 'commerce.delete'
+  | 'collections.view'
+  | 'collections.edit'
+  | 'collections.export'
+  | 'collections.delete'
+  | 'media.view'
+  | 'media.create'
+  | 'pages.edit';
+
+const PRODUCT_PERMISSION_ROLE_DEFAULTS: Record<ProductPermissionKey, Array<AuthUser['role']>> = {
+  'commerce.view': ['owner', 'admin', 'editor', 'viewer'],
+  'commerce.edit': ['owner', 'admin', 'editor'],
+  'commerce.configure': ['owner', 'admin'],
+  'commerce.delete': ['owner', 'admin'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'collections.edit': ['owner', 'admin', 'editor'],
+  'collections.export': ['owner', 'admin'],
+  'collections.delete': ['owner', 'admin'],
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'media.create': ['owner', 'admin', 'editor'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+};
 
 interface ProductsSearch {
   siteId?: string;
@@ -397,6 +427,7 @@ function ProductsRoute() {
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
@@ -430,6 +461,45 @@ function ProductsRoute() {
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canEditCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.configure', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.delete', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canExportCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canViewProducts = canViewCommerce && canViewCollections;
+  const canEditProducts = canEditCommerce && canEditCollections;
+  const canConfigureProducts = canConfigureCommerce && canEditCollections;
+  const canExportProducts = canViewCommerce && canExportCollections;
+  const canDeleteProducts = canDeleteCommerce && canDeleteCollections;
+  const viewPermissionTitle = canViewProducts
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canViewCommerce ? 'commerce.view' : 'collections.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const editPermissionTitle = canEditProducts
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canEditCommerce ? 'commerce.edit' : 'collections.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const configurePermissionTitle = canConfigureProducts
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canConfigureCommerce ? 'commerce.configure' : 'collections.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const exportPermissionTitle = canExportProducts
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canViewCommerce ? 'commerce.view' : 'collections.export', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeleteProducts
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canDeleteCommerce ? 'commerce.delete' : 'collections.delete', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const mediaViewPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const isProductsAccessBusy = isProductsBusy || isPermissionMatrixPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -871,6 +941,15 @@ function ProductsRoute() {
 
   const loadProducts = async () => {
     if (isProductsBusy) return;
+    if (isPermissionMatrixPending) return;
+    if (!canViewProducts) {
+      setProductCollection(null);
+      setOrdersCollection(null);
+      setProducts([]);
+      clearProductEditorState();
+      setError(viewPermissionTitle || 'Your account cannot view commerce products.');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -899,6 +978,43 @@ function ProductsRoute() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(loadError instanceof Error ? loadError.message : 'Unable to load commerce permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -938,12 +1054,19 @@ function ProductsRoute() {
   useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewProducts, isPermissionMatrixPending]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadFrontendDesign = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewProducts) {
+        setFrontendDesign(null);
+        setFrontendDesignError(viewPermissionTitle || 'Your account cannot view commerce products.');
+        return;
+      }
+
       setFrontendDesignLoading(true);
       setFrontendDesignError(null);
 
@@ -969,7 +1092,7 @@ function ProductsRoute() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewProducts, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -991,6 +1114,10 @@ function ProductsRoute() {
 
   const resetForm = () => {
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot edit products.');
+      return;
+    }
 
     clearProductEditorState();
     updateProductsRouteSearch({ productId: undefined });
@@ -998,6 +1125,10 @@ function ProductsRoute() {
 
   const selectProductForEditing = (productId: string) => {
     if (isProductsBusy) return;
+    if (!canViewProducts) {
+      setError(viewPermissionTitle || 'Your account cannot view products.');
+      return;
+    }
 
     setSelectedProductId(productId);
     updateProductsRouteSearch({ productId });
@@ -1005,6 +1136,14 @@ function ProductsRoute() {
 
   const openMediaPicker = (target: 'image' | 'gallery' | 'download') => {
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot edit products.');
+      return;
+    }
+    if (!canViewMedia) {
+      setError(mediaViewPermissionTitle || 'Your account cannot view media.');
+      return;
+    }
 
     setMediaPickerTarget(target);
     setIsMediaLibraryOpen(true);
@@ -1016,6 +1155,7 @@ function ProductsRoute() {
 
   const addGalleryImageUrl = (url: string) => {
     if (isProductsBusy) return;
+    if (!canEditProducts) return;
 
     const normalizedUrl = url.trim();
     if (!normalizedUrl) return;
@@ -1026,6 +1166,7 @@ function ProductsRoute() {
 
   const removeGalleryImageUrl = (url: string) => {
     if (isProductsBusy) return;
+    if (!canEditProducts) return;
 
     setGalleryImages(galleryImageUrls.filter((item) => item !== url));
   };
@@ -1046,6 +1187,7 @@ function ProductsRoute() {
 
   const addProductVariant = () => {
     if (isProductsBusy) return;
+    if (!canEditProducts) return;
 
     const title = variantDraft.title.trim();
     const sku = variantDraft.sku.trim();
@@ -1069,12 +1211,17 @@ function ProductsRoute() {
 
   const removeProductVariant = (variantId: string) => {
     if (isProductsBusy) return;
+    if (!canEditProducts) return;
 
     setProductVariants(productVariants.filter((variant) => variant.id !== variantId));
   };
 
   const createProductsCollection = async () => {
     if (isProductsBusy) return;
+    if (!canConfigureProducts) {
+      setError(configurePermissionTitle || 'Your account cannot configure commerce products.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1109,6 +1256,10 @@ function ProductsRoute() {
   const syncProductsCollection = async () => {
     if (!productCollection) return;
     if (isProductsBusy) return;
+    if (!canConfigureProducts) {
+      setError(configurePermissionTitle || 'Your account cannot configure commerce products.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1145,6 +1296,10 @@ function ProductsRoute() {
     blueprint: FrontendProductTemplateBlueprint,
   ) => {
     if (!productCollection || isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot create products.');
+      return;
+    }
 
     const creatingId = `frontend:${template.id}`;
     setIsCreatingTemplateId(creatingId);
@@ -1178,6 +1333,10 @@ function ProductsRoute() {
     event.preventDefault();
     if (!productCollection) return;
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot save products.');
+      return;
+    }
 
     if (!formState.title.trim() || !formState.sku.trim()) {
       setError('Add a product title and SKU before saving.');
@@ -1254,6 +1413,10 @@ function ProductsRoute() {
   const changeProductStatus = async (product: CollectionRecord, status: ContentStatus) => {
     if (!productCollection) return;
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot update product status.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1280,6 +1443,10 @@ function ProductsRoute() {
   const removeProduct = async (product: CollectionRecord) => {
     if (!productCollection) return;
     if (isProductsBusy) return;
+    if (!canDeleteProducts) {
+      setError(deletePermissionTitle || 'Your account cannot delete products.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1303,6 +1470,10 @@ function ProductsRoute() {
 
   const copyStorefrontApiUrl = async () => {
     if (isProductsBusy) return;
+    if (!canViewProducts) {
+      setError(viewPermissionTitle || 'Your account cannot view product APIs.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(storefrontApiUrl);
@@ -1313,6 +1484,10 @@ function ProductsRoute() {
   };
   const copyProductHandoff = async () => {
     if (isProductsBusy) return;
+    if (!canExportProducts) {
+      setError(exportPermissionTitle || 'Your account cannot export product data.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(productHandoffText);
@@ -1324,6 +1499,10 @@ function ProductsRoute() {
 
   const copyText = async (value: string, label: string) => {
     if (isProductsBusy) return;
+    if (!canExportProducts) {
+      setError(exportPermissionTitle || 'Your account cannot export product data.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1335,6 +1514,10 @@ function ProductsRoute() {
 
   const downloadProductHandoff = () => {
     if (isProductsBusy) return;
+    if (!canExportProducts) {
+      setError(exportPermissionTitle || 'Your account cannot export product data.');
+      return;
+    }
 
     const blob = new Blob([productHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1349,6 +1532,10 @@ function ProductsRoute() {
   };
   const exportProductsCsv = () => {
     if (filteredProducts.length === 0 || isProductsBusy) return;
+    if (!canExportProducts) {
+      setError(exportPermissionTitle || 'Your account cannot export products.');
+      return;
+    }
 
     const rows = filteredProducts.map((product) => {
       const exportRecord = productToExportRecord(product, {
@@ -1374,6 +1561,10 @@ function ProductsRoute() {
   };
   const downloadProductImportTemplate = () => {
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot import products.');
+      return;
+    }
 
     const csv = `${PRODUCT_IMPORT_COLUMNS.join(',')}\n`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -1390,6 +1581,11 @@ function ProductsRoute() {
   const importProductsCsv = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!productCollection) return;
     if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot import products.');
+      event.target.value = '';
+      return;
+    }
 
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1439,6 +1635,10 @@ function ProductsRoute() {
   };
   const openStorefrontPage = () => {
     if (isProductsBusy) return;
+    if (!canEditPages) {
+      setError(pagesEditPermissionTitle || 'Your account cannot create storefront pages.');
+      return;
+    }
 
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
   };
@@ -1479,7 +1679,7 @@ function ProductsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadProducts()} disabled={isProductsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadProducts()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1489,6 +1689,11 @@ function ProductsRoute() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+      {permissionError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
         </div>
       )}
       {notice && (
@@ -1523,34 +1728,34 @@ function ProductsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyProductHandoff()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
+            <Button variant="outline" onClick={() => void copyProductHandoff()} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadProductHandoff} disabled={isProductsBusy} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadProductHandoff} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
-            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
-            <Button variant="outline" onClick={downloadProductImportTemplate} disabled={!productCollection || isProductsBusy} iconStart={<FileText className="size-4" />}>
+            <Button variant="outline" onClick={downloadProductImportTemplate} disabled={!productCollection || isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
               CSV template
             </Button>
-            <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={!productCollection || isProductsBusy} iconStart={<Upload className="size-4" />}>
+            <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={!productCollection || isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
               {isImportingProducts ? 'Importing...' : 'Import CSV'}
             </Button>
-            <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
+            <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
               Storefront page
             </Button>
             {!productCollection ? (
-              <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createProductsCollection()} disabled={isProductsAccessBusy || !canConfigureProducts} title={!canConfigureProducts ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
               </Button>
             ) : (
-              <Button onClick={resetForm} disabled={isProductsBusy} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
                 New product
               </Button>
             )}
-            <Button onClick={() => void loadProducts()} disabled={isProductsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadProducts()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1680,7 +1885,8 @@ function ProductsRoute() {
                           size="sm"
                           variant="primary"
                           onClick={() => void createProductFromFrontendTemplate(template, blueprint)}
-                          disabled={!productCollection || isProductsBusy}
+                          disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
+                          title={!canEditProducts ? editPermissionTitle : undefined}
                           iconStart={<Package className="size-4" />}
                           data-testid={`products-frontend-template-${template.id}`}
                         >
@@ -1690,7 +1896,8 @@ function ProductsRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyText(manifestText, `${template.name} frontend product template`)}
-                          disabled={isProductsBusy}
+                          disabled={isProductsAccessBusy || !canExportProducts}
+                          title={!canExportProducts ? exportPermissionTitle : undefined}
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy schema
@@ -1721,38 +1928,42 @@ function ProductsRoute() {
                 {!productApiReady && (
                   <Button
                     onClick={() => void syncProductsCollection()}
-                    disabled={isProductsBusy}
+                    disabled={isProductsAccessBusy || !canConfigureProducts}
+                    title={!canConfigureProducts ? configurePermissionTitle : undefined}
                     iconStart={<Sparkles className="size-4" />}
                   >
                     Sync Schema
                   </Button>
                 )}
-                <Button onClick={() => void copyProductHandoff()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyProductHandoff()} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy manifest
                 </Button>
-                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
+                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
                   Export CSV
                 </Button>
-                <Button variant="outline" onClick={downloadProductImportTemplate} disabled={isProductsBusy} iconStart={<FileText className="size-4" />}>
+                <Button variant="outline" onClick={downloadProductImportTemplate} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
                   CSV template
                 </Button>
-                <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={isProductsBusy} iconStart={<Upload className="size-4" />}>
+                <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
                   {isImportingProducts ? 'Importing...' : 'Import CSV'}
                 </Button>
-                <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
-                <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
+                <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                   Storefront page
                 </Button>
                 <a
                   href={storefrontApiUrl}
                   target="_blank"
                   rel="noreferrer"
-                  aria-disabled={isProductsBusy}
+                  aria-disabled={isProductsAccessBusy || !canViewProducts}
+                  onClick={(event) => {
+                    if (isProductsAccessBusy || !canViewProducts) event.preventDefault();
+                  }}
                   className={cn(
                     'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    isProductsBusy && 'pointer-events-none opacity-60',
+                    (isProductsAccessBusy || !canViewProducts) && 'pointer-events-none opacity-60',
                   )}
                 >
                   <ExternalLink className="size-4" />
@@ -1954,10 +2165,10 @@ function ProductsRoute() {
           description="Create a products collection with pricing, SKU, inventory, image, and publishing fields."
           action={
             <div className="mt-2 flex flex-wrap justify-center gap-2">
-              <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createProductsCollection()} disabled={isProductsAccessBusy || !canConfigureProducts} title={!canConfigureProducts ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Products'}
               </Button>
-              <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 Start storefront page
               </Button>
             </div>
@@ -1971,7 +2182,7 @@ function ProductsRoute() {
                 title="Catalog"
                 description={`${filteredProducts.length}/${products.length} visible products`}
                 icon={<ShoppingBag className="size-4" />}
-                action={<Button onClick={resetForm} disabled={isProductsBusy} iconStart={<Plus className="size-4" />}>New Product</Button>}
+                action={<Button onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>New Product</Button>}
               />
               <PanelContent>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1980,7 +2191,7 @@ function ProductsRoute() {
                     <input
                       aria-label="Search products"
                       value={searchQuery}
-                      disabled={isProductsBusy}
+                      disabled={isProductsAccessBusy || !canViewProducts}
                       onChange={(event) => {
                         if (isProductsBusy) return;
                         const q = event.target.value;
@@ -1997,7 +2208,7 @@ function ProductsRoute() {
                       <button
                         key={status}
                         type="button"
-                        disabled={isProductsBusy}
+                        disabled={isProductsAccessBusy || !canViewProducts}
                         onClick={() => {
                           if (isProductsBusy) return;
                           setStatusFilter(status);
@@ -2016,7 +2227,7 @@ function ProductsRoute() {
                   <select
                     aria-label="Product type filter"
                     value={productTypeFilter}
-                    disabled={isProductsBusy}
+                    disabled={isProductsAccessBusy || !canViewProducts}
                     onChange={(event) => {
                       if (isProductsBusy) return;
                       const type = event.target.value as ProductTypeFilter;
@@ -2034,7 +2245,7 @@ function ProductsRoute() {
                   <select
                     aria-label="Product category filter"
                     value={categoryFilter}
-                    disabled={isProductsBusy}
+                    disabled={isProductsAccessBusy || !canViewProducts}
                     onChange={(event) => {
                       if (isProductsBusy) return;
                       const category = event.target.value;
@@ -2052,7 +2263,7 @@ function ProductsRoute() {
                   <select
                     aria-label="Product stock filter"
                     value={stockFilter}
-                    disabled={isProductsBusy}
+                    disabled={isProductsAccessBusy || !canViewProducts}
                     onChange={(event) => {
                       if (isProductsBusy) return;
                       const stock = event.target.value as ProductStockFilter;
@@ -2070,7 +2281,7 @@ function ProductsRoute() {
                     <option value="checkout-missing">No checkout URL</option>
                   </select>
                   {hasActiveCatalogFilters && (
-                    <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsBusy}>
+                    <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsAccessBusy || !canViewProducts}>
                       Clear filters
                     </Button>
                   )}
@@ -2087,7 +2298,7 @@ function ProductsRoute() {
                         : 'Change the search, status, type, category, or stock filters to broaden the catalog.'}
                     </div>
                     {products.length > 0 && hasActiveCatalogFilters && (
-                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsBusy} className="mt-4">
+                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsAccessBusy || !canViewProducts} className="mt-4">
                         Clear filters
                       </Button>
                     )}
@@ -2102,8 +2313,16 @@ function ProductsRoute() {
                         onEdit={() => selectProductForEditing(product.id)}
                         onPublish={() => void changeProductStatus(product, 'published')}
                         onArchive={() => void changeProductStatus(product, 'archived')}
-                        onDelete={() => setPendingDeleteProduct(product)}
-                        disabled={isProductsBusy}
+                        onDelete={() => {
+                          if (!canDeleteProducts) {
+                            setError(deletePermissionTitle || 'Your account cannot delete products.');
+                            return;
+                          }
+                          setPendingDeleteProduct(product);
+                        }}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        canDelete={canDeleteProducts}
+                        deleteDisabledReason={deletePermissionTitle}
                       />
                     ))}
                   </div>
@@ -2120,7 +2339,7 @@ function ProductsRoute() {
             />
             <PanelContent>
               <form onSubmit={saveProduct}>
-                <fieldset disabled={isProductsBusy} className={cn('space-y-4', isProductsBusy && 'opacity-70')}>
+                <fieldset disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} className={cn('space-y-4', (isProductsAccessBusy || !canEditProducts) && 'opacity-70')}>
                 <Field label="Title">
                   <input
                     value={formState.title}
@@ -2211,7 +2430,7 @@ function ProductsRoute() {
                           <div className="font-mono text-xs text-muted-foreground">
                             {variant.inventory === null ? 'Stock n/a' : `${variant.inventory} stock`}
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => removeProductVariant(variant.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => removeProductVariant(variant.id)} disabled={isProductsAccessBusy || !canEditProducts}>
                             Remove
                           </Button>
                         </div>
@@ -2346,7 +2565,7 @@ function ProductsRoute() {
                         className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="https://downloads.example.com/product.zip"
                       />
-                      <Button onClick={() => openMediaPicker('download')} iconStart={<FileText className="size-4" />}>
+                      <Button onClick={() => openMediaPicker('download')} disabled={!canViewMedia} title={!canViewMedia ? mediaViewPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
                         File
                       </Button>
                     </div>
@@ -2411,7 +2630,7 @@ function ProductsRoute() {
                         className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="https://..."
                       />
-                      <Button onClick={() => openMediaPicker('image')} iconStart={<ImageIcon className="size-4" />}>
+                      <Button onClick={() => openMediaPicker('image')} disabled={!canViewMedia} title={!canViewMedia ? mediaViewPermissionTitle : undefined} iconStart={<ImageIcon className="size-4" />}>
                         Media
                       </Button>
                     </div>
@@ -2467,7 +2686,8 @@ function ProductsRoute() {
                       </Button>
                       <Button
                         onClick={() => openMediaPicker('gallery')}
-                        disabled={galleryImageUrls.length >= 12}
+                        disabled={galleryImageUrls.length >= 12 || !canViewMedia}
+                        title={!canViewMedia ? mediaViewPermissionTitle : undefined}
                         iconStart={<ImageIcon className="size-4" />}
                       >
                         Media
@@ -2580,8 +2800,8 @@ function ProductsRoute() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={resetForm} disabled={isProductsBusy}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isProductsBusy || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} iconStart={<Package className="size-4" />}>
+                  <Button variant="outline" onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts}>Clear</Button>
+                  <Button type="submit" variant="primary" disabled={isProductsAccessBusy || !canEditProducts || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Package className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
@@ -2613,7 +2833,7 @@ function ProductsRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteProduct(null)}
-                disabled={isProductsBusy}
+                disabled={isProductsAccessBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2621,7 +2841,8 @@ function ProductsRoute() {
               <button
                 type="button"
                 onClick={() => void removeProduct(pendingDeleteProduct)}
-                disabled={isProductsBusy}
+                disabled={isProductsAccessBusy || !canDeleteProducts}
+                title={!canDeleteProducts ? deletePermissionTitle : undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete product'}
@@ -2634,12 +2855,13 @@ function ProductsRoute() {
       <MediaLibraryModal
         isOpen={isMediaLibraryOpen}
         onClose={() => {
-          if (!isProductsBusy) {
+          if (!isProductsAccessBusy) {
             setIsMediaLibraryOpen(false);
           }
         }}
         onSelect={(asset) => {
           if (isProductsBusy) return;
+          if (!canEditProducts || !canViewMedia) return;
 
           const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
           if (mediaPickerTarget === 'download') {
@@ -2657,6 +2879,10 @@ function ProductsRoute() {
           setFormState((current) => ({ ...current, imageUrl: deliveryUrl }));
           setNotice(`Attached ${asset.name} to the product image field.`);
         }}
+        canView={canViewMedia}
+        canCreate={canCreateMedia}
+        viewDisabledReason={mediaViewPermissionTitle}
+        createDisabledReason={mediaCreatePermissionTitle}
         allowedTypes={mediaPickerTarget === 'download' ? 'any' : 'image'}
         initialUploadFilter={mediaPickerTarget === 'download' ? 'file' : 'image'}
         mediaContext={{
@@ -2746,10 +2972,14 @@ function ProductCard({
   onPublish,
   onArchive,
   onDelete,
+  canDelete,
+  deleteDisabledReason,
 }: {
   product: CollectionRecord;
   selected: boolean;
   disabled: boolean;
+  canDelete: boolean;
+  deleteDisabledReason?: string;
   onEdit: () => void;
   onPublish: () => void;
   onArchive: () => void;
@@ -2877,7 +3107,7 @@ function ProductCard({
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Edit3 className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPublish} disabled={disabled || product.status === 'published'} iconStart={<CheckCircle2 className="size-4" />}>Publish</Button>
         <Button size="sm" variant="outline" onClick={onArchive} disabled={disabled || product.status === 'archived'} iconStart={<Archive className="size-4" />}>Archive</Button>
-        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled} iconStart={<Trash2 className="size-4" />}>Delete</Button>
+        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
     </article>
   );

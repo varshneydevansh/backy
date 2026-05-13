@@ -17,6 +17,7 @@ import {
   deleteBlogPost,
   deleteBlogTag,
   getAdminApiBase,
+  getUserPermissions,
   listBlogAuthors,
   listBlogCategories,
   listBlogPosts,
@@ -27,10 +28,13 @@ import {
   updateBlogPost,
   updateBlogTag,
   type AdminComment,
+  type AdminUserPermissionMatrix,
   type BlogAuthor,
   type BlogCategory,
   type BlogTag,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -71,6 +75,23 @@ const BLOG_CONTROL_AREAS = [
     href: '#blog-posts',
   },
 ] as const;
+
+type BlogPermissionKey =
+  | 'pages.view'
+  | 'pages.edit'
+  | 'pages.publish'
+  | 'pages.delete'
+  | 'comments.view'
+  | 'activity.export';
+
+const BLOG_PERMISSION_ROLE_DEFAULTS: Record<BlogPermissionKey, Array<User['role']>> = {
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.publish': ['owner', 'admin', 'editor'],
+  'pages.delete': ['owner', 'admin'],
+  'comments.view': ['owner', 'admin', 'editor', 'viewer'],
+  'activity.export': ['owner', 'admin'],
+};
 
 const BLOG_FRONTEND_SYSTEMS = [
   {
@@ -190,6 +211,7 @@ function BlogListView() {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const { sites, posts, setPosts, deletePost, updatePost } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -216,11 +238,39 @@ function BlogListView() {
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingTaxonomyDelete, setPendingTaxonomyDelete] = useState<TaxonomyDeleteTarget | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canExportBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const deleteBlogPermissionTitle = canDeleteBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const exportBlogPermissionTitle = canExportBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const viewBlogDeniedMessage = `Your account needs pages.view to load blog posts. ${viewBlogPermissionTitle}`;
+  const editBlogDeniedMessage = `Your account needs pages.edit to change blog posts or taxonomy. ${editBlogPermissionTitle}`;
+  const publishBlogDeniedMessage = `Your account needs pages.publish to preview or publish blog posts. ${publishBlogPermissionTitle}`;
+  const deleteBlogDeniedMessage = `Your account needs pages.delete to delete blog posts or taxonomy. ${deleteBlogPermissionTitle}`;
+  const exportBlogDeniedMessage = `Your account needs activity.export to export blog data. ${exportBlogPermissionTitle}`;
+  const canRunBulkAction = bulkAction === 'publish'
+    ? canPublishBlog
+    : bulkAction === 'archive'
+      ? canEditBlog
+      : bulkAction === 'delete'
+        ? canDeleteBlog
+        : false;
+  const canSelectBlogRows = canPublishBlog || canEditBlog || canDeleteBlog;
   const isPostMutationBusy = mutatingPostId !== null;
   const isPostPreviewBusy = previewingPostId !== null;
   const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
   const isSeoBusy = Boolean(updatingSeoPostId);
-  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy || isSeoBusy;
+  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy || isSeoBusy || isPermissionMatrixPending;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -278,8 +328,54 @@ function BlogListView() {
   const adminBlogReadinessUrl = `${adminBlogPostUrl}/readiness`;
   const adminBlogPreviewUrl = `${adminBlogPostUrl}/preview`;
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load blog permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load blog permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const refreshPosts = useMemo(
     () => async (siteId: string) => {
+      if (isPermissionMatrixPending) return;
+
+      if (!canViewBlog) {
+        setIsLoading(false);
+        setError(viewBlogDeniedMessage);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -290,7 +386,9 @@ function BlogListView() {
           listBlogTags(siteId),
           listBlogAuthors(siteId),
         ]);
-        const commentResult = await listComments(siteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }));
+        const commentResult = canViewComments
+          ? await listComments(siteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }))
+          : { comments: [] };
         setPosts(backendPosts);
         setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
         setCategories(backendCategories);
@@ -303,7 +401,7 @@ function BlogListView() {
         setIsLoading(false);
       }
     },
-    [setPosts],
+    [canViewBlog, canViewComments, isPermissionMatrixPending, setPosts, viewBlogDeniedMessage],
   );
 
   useEffect(() => {
@@ -316,6 +414,14 @@ function BlogListView() {
     let cancelled = false;
 
     const loadPosts = async () => {
+      if (isPermissionMatrixPending) return;
+
+      if (!canViewBlog) {
+        setIsLoading(false);
+        setError(viewBlogDeniedMessage);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -326,7 +432,9 @@ function BlogListView() {
           listBlogTags(activeSiteId),
           listBlogAuthors(activeSiteId),
         ]);
-        const commentResult = await listComments(activeSiteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }));
+        const commentResult = canViewComments
+          ? await listComments(activeSiteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }))
+          : { comments: [] };
         if (!cancelled) {
           setPosts(backendPosts);
           setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
@@ -351,7 +459,7 @@ function BlogListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, setPosts]);
+  }, [activeSiteId, canViewBlog, canViewComments, isPermissionMatrixPending, setPosts, viewBlogDeniedMessage]);
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -386,6 +494,10 @@ function BlogListView() {
 
   const startEditCategory = (category: BlogCategory) => {
     if (isBlogWorkflowBusy) return;
+    if (!canEditBlog) {
+      setError(editBlogDeniedMessage);
+      return;
+    }
 
     setEditingCategoryId(category.id);
     setCategoryDraft({
@@ -398,6 +510,10 @@ function BlogListView() {
 
   const startEditTag = (tag: BlogTag) => {
     if (isBlogWorkflowBusy) return;
+    if (!canEditBlog) {
+      setError(editBlogDeniedMessage);
+      return;
+    }
 
     setEditingTagId(tag.id);
     setTagDraft({
@@ -420,6 +536,11 @@ function BlogListView() {
 
   const saveCategoryDraft = async () => {
     if (isBlogWorkflowBusy || !categoryDraft.name.trim()) return;
+    if (!canEditBlog) {
+      setError(editBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     const payload = {
       name: categoryDraft.name.trim(),
@@ -452,6 +573,11 @@ function BlogListView() {
 
   const saveTagDraft = async () => {
     if (isBlogWorkflowBusy || !tagDraft.name.trim()) return;
+    if (!canEditBlog) {
+      setError(editBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     const payload = {
       name: tagDraft.name.trim(),
@@ -483,6 +609,11 @@ function BlogListView() {
 
   const deleteTaxonomyTarget = async () => {
     if (!pendingTaxonomyDelete || isBlogWorkflowBusy) return;
+    if (!canDeleteBlog) {
+      setError(deleteBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     const target = pendingTaxonomyDelete;
     setMutatingTaxonomyKey(`${target.type}:${target.id}:delete`);
@@ -513,6 +644,11 @@ function BlogListView() {
 
   const togglePostSeoFlag = async (post: BlogPost, key: 'noIndex' | 'noFollow') => {
     if (isBlogWorkflowBusy) return;
+    if (!canEditBlog) {
+      setError(editBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     const currentPost = posts.find((candidate) => candidate.id === post.id) || post;
     setUpdatingSeoPostId(post.id);
@@ -587,6 +723,11 @@ function BlogListView() {
 
   const handlePreviewPost = async (post: BlogPost) => {
     if (isBlogWorkflowBusy) return;
+    if (!canPublishBlog) {
+      setError(publishBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     setPreviewingPostId(post.id);
     setError(null);
@@ -604,6 +745,11 @@ function BlogListView() {
 
   const handleDeletePost = async (post: BlogPost) => {
     if (isBlogWorkflowBusy) return;
+    if (!canDeleteBlog) {
+      setError(deleteBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     setMutatingPostId(post.id);
     setError(null);
@@ -630,6 +776,17 @@ function BlogListView() {
     if (isBlogWorkflowBusy) return;
 
     if (!bulkAction || selectedPosts.length === 0) {
+      return;
+    }
+
+    if (!canRunBulkAction) {
+      const deniedMessage = bulkAction === 'publish'
+        ? publishBlogDeniedMessage
+        : bulkAction === 'delete'
+          ? deleteBlogDeniedMessage
+          : editBlogDeniedMessage;
+      setError(deniedMessage);
+      setNotice(null);
       return;
     }
 
@@ -692,7 +849,7 @@ function BlogListView() {
           type="checkbox"
           aria-label={`Select ${post.title}`}
           checked={selectedPostIds.has(post.id)}
-          disabled={isBlogWorkflowBusy}
+          disabled={isBlogWorkflowBusy || !canSelectBlogRows}
           onChange={() => togglePostSelection(post.id)}
           className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
@@ -764,7 +921,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void togglePostSeoFlag(post, 'noIndex')}
-                disabled={isBlogWorkflowBusy || seoBusy}
+                disabled={isBlogWorkflowBusy || seoBusy || !canEditBlog}
+                title={editBlogPermissionTitle}
                 data-testid={`blog-post-seo-noindex-${post.id}`}
                 className={cn(
                   'rounded-full border px-2 py-0.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
@@ -776,7 +934,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void togglePostSeoFlag(post, 'noFollow')}
-                disabled={isBlogWorkflowBusy || seoBusy}
+                disabled={isBlogWorkflowBusy || seoBusy || !canEditBlog}
+                title={editBlogPermissionTitle}
                 data-testid={`blog-post-seo-nofollow-${post.id}`}
                 className={cn(
                   'rounded-full border px-2 py-0.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
@@ -798,7 +957,19 @@ function BlogListView() {
             <a
               href={commentsHref}
               data-testid={`blog-post-comments-${post.id}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-disabled={!canViewComments}
+              title={canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', BLOG_PERMISSION_ROLE_DEFAULTS)}
+              onClick={(event) => {
+                if (!canViewComments) {
+                  event.preventDefault();
+                  setError(`Your account needs comments.view to open post comments. ${adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', BLOG_PERMISSION_ROLE_DEFAULTS)}`);
+                  setNotice(null);
+                }
+              }}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-muted-foreground transition hover:bg-muted hover:text-foreground',
+                !canViewComments && 'opacity-60',
+              )}
             >
               <MessageSquare className="h-3.5 w-3.5" />
               {summary.total} comments · {summary.pending} pending · {summary.flagged} flagged
@@ -842,8 +1013,8 @@ function BlogListView() {
             onClick={() => {
               void handlePreviewPost(post);
             }}
-            disabled={isBlogWorkflowBusy}
-            title="Preview post"
+            disabled={isBlogWorkflowBusy || !canPublishBlog}
+            title={publishBlogPermissionTitle || 'Preview post'}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Eye className="w-4 h-4" />
@@ -854,8 +1025,8 @@ function BlogListView() {
                 void navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } });
               }
             }}
-            disabled={isBlogWorkflowBusy}
-            title="Edit post"
+            disabled={isBlogWorkflowBusy || !canViewBlog}
+            title={viewBlogPermissionTitle || 'Edit post'}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Edit className="w-4 h-4" />
@@ -866,8 +1037,8 @@ function BlogListView() {
                 setPendingDeletePost(post);
               }
             }}
-            disabled={isBlogWorkflowBusy}
-            title="Delete post"
+            disabled={isBlogWorkflowBusy || !canDeleteBlog}
+            title={deleteBlogPermissionTitle || 'Delete post'}
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
@@ -1123,6 +1294,11 @@ function BlogListView() {
 
   const copyBlogText = async (value: string, label: string) => {
     if (isBlogWorkflowBusy) return;
+    if (!canViewBlog) {
+      setError(viewBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1136,6 +1312,11 @@ function BlogListView() {
 
   const downloadBlogHandoff = () => {
     if (isBlogWorkflowBusy) return;
+    if (!canViewBlog) {
+      setError(viewBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     const blob = new Blob([blogHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1152,6 +1333,11 @@ function BlogListView() {
 
   const downloadBlogCsv = () => {
     if (isBlogWorkflowBusy) return;
+    if (!canExportBlog) {
+      setError(exportBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
 
     if (data.length === 0) {
       setError('No blog posts are available to export with the current controls.');
@@ -1236,10 +1422,11 @@ function BlogListView() {
         <Link
           to="/blog/new"
           search={createPostSearch}
-          aria-disabled={isBlogWorkflowBusy}
+          aria-disabled={isBlogWorkflowBusy || !canEditBlog}
+          title={editBlogPermissionTitle}
           className={cn(
             'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
-            isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+            (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
           )}
         >
           <Plus className="w-4 h-4" />
@@ -1250,6 +1437,12 @@ function BlogListView() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+
+      {permissionError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
         </div>
       )}
 
@@ -1286,7 +1479,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-              disabled={isBlogWorkflowBusy}
+              disabled={isBlogWorkflowBusy || !canViewBlog}
+              title={viewBlogPermissionTitle}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="size-4" />
@@ -1295,7 +1489,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogHandoff}
-              disabled={isBlogWorkflowBusy}
+              disabled={isBlogWorkflowBusy || !canViewBlog}
+              title={viewBlogPermissionTitle}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1304,7 +1499,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogCsv}
-              disabled={data.length === 0 || isBlogWorkflowBusy}
+              disabled={data.length === 0 || isBlogWorkflowBusy || !canExportBlog}
+              title={exportBlogPermissionTitle}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1313,10 +1509,11 @@ function BlogListView() {
             <Link
               to="/blog/new"
               search={createPostSearch}
-              aria-disabled={isBlogWorkflowBusy}
+              aria-disabled={isBlogWorkflowBusy || !canEditBlog}
+              title={editBlogPermissionTitle}
               className={cn(
                 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
-                isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+                (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
               )}
               data-testid="blog-command-create"
             >
@@ -1485,7 +1682,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(publicBlogUrl, 'Blog posts API URL')}
-              disabled={isBlogWorkflowBusy}
+              disabled={isBlogWorkflowBusy || !canViewBlog}
+              title={viewBlogPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
@@ -1494,7 +1692,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-              disabled={isBlogWorkflowBusy}
+              disabled={isBlogWorkflowBusy || !canViewBlog}
+              title={viewBlogPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
@@ -1503,7 +1702,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogCsv}
-              disabled={data.length === 0 || isBlogWorkflowBusy}
+              disabled={data.length === 0 || isBlogWorkflowBusy || !canExportBlog}
+              title={exportBlogPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -1575,7 +1775,7 @@ function BlogListView() {
               kind="category"
               draft={categoryDraft}
               editingName={selectedCategory?.name || ''}
-              busy={isBlogWorkflowBusy}
+              busy={isBlogWorkflowBusy || !canEditBlog}
               colorEnabled
               onDraftChange={patchCategoryDraft}
               onSave={() => void saveCategoryDraft()}
@@ -1608,7 +1808,8 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => startEditCategory(category)}
-                        disabled={isBlogWorkflowBusy}
+                        disabled={isBlogWorkflowBusy || !canEditBlog}
+                        title={editBlogPermissionTitle}
                         aria-label={`Edit category ${category.name}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1617,7 +1818,8 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'category', id: category.id, name: category.name, postCount: category.postCount })}
-                        disabled={isBlogWorkflowBusy}
+                        disabled={isBlogWorkflowBusy || !canDeleteBlog}
+                        title={deleteBlogPermissionTitle}
                         aria-label={`Delete category ${category.name}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1635,7 +1837,7 @@ function BlogListView() {
               kind="tag"
               draft={tagDraft}
               editingName={selectedTag?.name || ''}
-              busy={isBlogWorkflowBusy}
+              busy={isBlogWorkflowBusy || !canEditBlog}
               onDraftChange={patchTagDraft}
               onSave={() => void saveTagDraft()}
               onCancel={resetTagDraft}
@@ -1662,7 +1864,8 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => startEditTag(tag)}
-                        disabled={isBlogWorkflowBusy}
+                        disabled={isBlogWorkflowBusy || !canEditBlog}
+                        title={editBlogPermissionTitle}
                         aria-label={`Edit tag ${tag.name}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1671,7 +1874,8 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'tag', id: tag.id, name: tag.name, postCount: tag.postCount })}
-                        disabled={isBlogWorkflowBusy}
+                        disabled={isBlogWorkflowBusy || !canDeleteBlog}
+                        title={deleteBlogPermissionTitle}
                         aria-label={`Delete tag ${tag.name}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1694,16 +1898,16 @@ function BlogListView() {
           <button
             type="button"
             onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
-            disabled={data.length === 0 || isBlogWorkflowBusy}
+            disabled={data.length === 0 || isBlogWorkflowBusy || !canSelectBlogRows}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
           <select
             value={bulkAction}
-            disabled={isBlogWorkflowBusy}
+            disabled={isBlogWorkflowBusy || !canSelectBlogRows}
             onChange={(event) => {
-              if (isBlogWorkflowBusy) return;
+              if (isBlogWorkflowBusy || !canSelectBlogRows) return;
 
               setBulkAction(event.target.value as typeof bulkAction);
               setPendingBulkDelete(false);
@@ -1711,14 +1915,14 @@ function BlogListView() {
             className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Bulk action...</option>
-            <option value="publish">Publish selected</option>
-            <option value="archive">Archive selected</option>
-            <option value="delete">Delete selected</option>
+            <option value="publish" disabled={!canPublishBlog}>Publish selected</option>
+            <option value="archive" disabled={!canEditBlog}>Archive selected</option>
+            <option value="delete" disabled={!canDeleteBlog}>Delete selected</option>
           </select>
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPosts.length === 0 || isBlogWorkflowBusy}
+            disabled={!bulkAction || selectedPosts.length === 0 || isBlogWorkflowBusy || !canRunBulkAction}
             className={cn(
               'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -1926,10 +2130,11 @@ function BlogListView() {
                     to="/blog/new"
                     search={createPostSearch}
                     data-testid="blog-empty-create"
-                    aria-disabled={isBlogWorkflowBusy}
+                    aria-disabled={isBlogWorkflowBusy || !canEditBlog}
+                    title={editBlogPermissionTitle}
                     className={cn(
                       'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-                      isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+                      (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
                     )}
                   >
                     <Plus className="w-4 h-4" />
@@ -1971,7 +2176,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void deleteTaxonomyTarget()}
-                disabled={isTaxonomyBusy}
+                disabled={isTaxonomyBusy || !canDeleteBlog}
+                title={deleteBlogPermissionTitle}
                 data-testid="blog-taxonomy-confirm-delete"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -2011,7 +2217,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void handleDeletePost(pendingDeletePost)}
-                disabled={mutatingPostId === pendingDeletePost.id}
+                disabled={mutatingPostId === pendingDeletePost.id || !canDeleteBlog}
+                title={deleteBlogPermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {mutatingPostId === pendingDeletePost.id ? 'Deleting...' : 'Delete post'}
@@ -2049,7 +2256,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void handleBulkAction()}
-                disabled={isBulkBusy}
+                disabled={isBulkBusy || !canDeleteBlog}
+                title={deleteBlogPermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Deleting...' : 'Delete posts'}

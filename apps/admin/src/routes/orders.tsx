@@ -29,6 +29,7 @@ import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  getUserPermissions,
   importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
@@ -39,13 +40,16 @@ import {
   type Collection,
   type CollectionField,
   type CollectionRecord,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
@@ -86,6 +90,28 @@ type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
+type OrderPermissionKey =
+  | 'commerce.view'
+  | 'commerce.edit'
+  | 'commerce.configure'
+  | 'commerce.delete'
+  | 'collections.view'
+  | 'collections.edit'
+  | 'collections.export'
+  | 'collections.delete'
+  | 'pages.edit';
+
+const ORDER_PERMISSION_ROLE_DEFAULTS: Record<OrderPermissionKey, Array<AuthUser['role']>> = {
+  'commerce.view': ['owner', 'admin', 'editor', 'viewer'],
+  'commerce.edit': ['owner', 'admin', 'editor'],
+  'commerce.configure': ['owner', 'admin'],
+  'commerce.delete': ['owner', 'admin'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'collections.edit': ['owner', 'admin', 'editor'],
+  'collections.export': ['owner', 'admin'],
+  'collections.delete': ['owner', 'admin'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+};
 
 interface OrdersSearch {
   siteId?: string;
@@ -371,6 +397,7 @@ const EMPTY_ORDER_FORM: OrderFormState = {
 
 function OrdersRoute() {
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
@@ -400,6 +427,41 @@ function OrdersRoute() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.view', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canEditCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.configure', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canExportCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canViewOrders = canViewCommerce && canViewCollections;
+  const canEditOrders = canEditCommerce && canEditCollections;
+  const canConfigureOrders = canConfigureCommerce && canEditCollections;
+  const canExportOrders = canViewCommerce && canExportCollections;
+  const canDeleteOrders = canDeleteCommerce && canDeleteCollections;
+  const viewPermissionTitle = canViewOrders
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canViewCommerce ? 'commerce.view' : 'collections.view', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const editPermissionTitle = canEditOrders
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canEditCommerce ? 'commerce.edit' : 'collections.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const configurePermissionTitle = canConfigureOrders
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canConfigureCommerce ? 'commerce.configure' : 'collections.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const exportPermissionTitle = canExportOrders
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canViewCommerce ? 'commerce.view' : 'collections.export', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeleteOrders
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, !canDeleteCommerce ? 'commerce.delete' : 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const isOrdersAccessBusy = isOrdersBusy || isPermissionMatrixPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -752,6 +814,14 @@ function OrdersRoute() {
 
   const loadOrders = async () => {
     if (isOrdersBusy) return;
+    if (isPermissionMatrixPending) return;
+    if (!canViewOrders) {
+      setOrdersCollection(null);
+      setOrders([]);
+      clearOrderEditorState();
+      setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -779,6 +849,43 @@ function OrdersRoute() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(loadError instanceof Error ? loadError.message : 'Unable to load commerce permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -818,7 +925,7 @@ function OrdersRoute() {
   useEffect(() => {
     void loadOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewOrders, isPermissionMatrixPending]);
 
   useEffect(() => {
     if (!selectedOrder) return;
@@ -839,6 +946,10 @@ function OrdersRoute() {
 
   const resetForm = () => {
     if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot edit orders.');
+      return;
+    }
 
     clearOrderEditorState({
       ...EMPTY_ORDER_FORM,
@@ -849,6 +960,10 @@ function OrdersRoute() {
 
   const selectOrderForEditing = (orderId: string) => {
     if (isOrdersBusy) return;
+    if (!canViewOrders) {
+      setError(viewPermissionTitle || 'Your account cannot view orders.');
+      return;
+    }
 
     setSelectedOrderId(orderId);
     updateOrdersRouteSearch({ orderId });
@@ -860,6 +975,7 @@ function OrdersRoute() {
 
   const addLineItem = () => {
     if (isOrdersBusy) return;
+    if (!canEditOrders) return;
 
     const title = itemDraft.title.trim();
     if (!title || orderLineItems.length >= 100) return;
@@ -893,12 +1009,14 @@ function OrdersRoute() {
 
   const removeLineItem = (itemId: string) => {
     if (isOrdersBusy) return;
+    if (!canEditOrders) return;
 
     setLineItems(orderLineItems.filter((item) => item.id !== itemId));
   };
 
   const applyLineItemTotals = () => {
     if (isOrdersBusy) return;
+    if (!canEditOrders) return;
 
     const shippingAmount = Number(formState.shippingAmount || 0);
     const taxAmount = Number(formState.taxAmount || 0);
@@ -914,6 +1032,10 @@ function OrdersRoute() {
 
   const createOrdersCollection = async () => {
     if (isOrdersBusy) return;
+    if (!canConfigureOrders) {
+      setError(configurePermissionTitle || 'Your account cannot configure commerce orders.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -952,6 +1074,10 @@ function OrdersRoute() {
   const syncOrdersCollection = async () => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canConfigureOrders) {
+      setError(configurePermissionTitle || 'Your account cannot configure commerce orders.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -987,6 +1113,10 @@ function OrdersRoute() {
     event.preventDefault();
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot save orders.');
+      return;
+    }
 
     if (!formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()) {
       setError('Add an order number, customer name, and email before saving.');
@@ -1066,6 +1196,10 @@ function OrdersRoute() {
   const updateOrderWorkflow = async (order: CollectionRecord, updates: Partial<OrderFormState>) => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot update order workflow.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1094,6 +1228,10 @@ function OrdersRoute() {
   const reconcileOrders = async () => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canConfigureOrders) {
+      setError(configurePermissionTitle || 'Your account cannot reconcile commerce orders.');
+      return;
+    }
 
     setIsReconcilingOrders(true);
     setError(null);
@@ -1121,6 +1259,10 @@ function OrdersRoute() {
   const removeOrder = async (order: CollectionRecord) => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canDeleteOrders) {
+      setError(deletePermissionTitle || 'Your account cannot delete orders.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -1147,6 +1289,10 @@ function OrdersRoute() {
 
   const copyOrdersApiUrl = async (value: string, label: string) => {
     if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order endpoints.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1157,6 +1303,10 @@ function OrdersRoute() {
   };
   const copyOrderHandoff = async () => {
     if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(orderHandoffText);
@@ -1167,6 +1317,10 @@ function OrdersRoute() {
   };
   const downloadOrderHandoff = () => {
     if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
 
     const blob = new Blob([orderHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1182,6 +1336,10 @@ function OrdersRoute() {
   const exportOrdersCsv = () => {
     if (isOrdersBusy) return;
     if (filteredOrders.length === 0) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export orders.');
+      return;
+    }
 
     const rows = filteredOrders.map((order) => {
       const exportRecord = orderToExportRecord(order, {
@@ -1208,6 +1366,10 @@ function OrdersRoute() {
   };
   const downloadOrderImportTemplate = () => {
     if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot import orders.');
+      return;
+    }
 
     const csv = `${ORDER_IMPORT_COLUMNS.join(',')}\n`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -1224,6 +1386,11 @@ function OrdersRoute() {
   const importOrdersCsv = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot import orders.');
+      event.target.value = '';
+      return;
+    }
 
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1278,6 +1445,10 @@ function OrdersRoute() {
   };
   const openStorefrontPage = () => {
     if (isOrdersBusy) return;
+    if (!canEditPages) {
+      setError(pagesEditPermissionTitle || 'Your account cannot create storefront pages.');
+      return;
+    }
 
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
   };
@@ -1304,7 +1475,7 @@ function OrdersRoute() {
             id="orders-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            disabled={isOrdersBusy}
+            disabled={isOrdersAccessBusy}
             onChange={(event) => selectOrdersSite(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -1316,7 +1487,7 @@ function OrdersRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadOrders()} disabled={isOrdersBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadOrders()} disabled={isOrdersAccessBusy || !canViewOrders} title={!canViewOrders ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1326,6 +1497,11 @@ function OrdersRoute() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+      {permissionError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
         </div>
       )}
       {notice && (
@@ -1360,37 +1536,37 @@ function OrdersRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyOrderHandoff()} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
+            <Button variant="outline" onClick={() => void copyOrderHandoff()} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadOrderHandoff} disabled={isOrdersBusy} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadOrderHandoff} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
-            <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
-            <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={!ordersCollection || isOrdersBusy} iconStart={<FileText className="size-4" />}>
+            <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
               CSV template
             </Button>
-            <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={!ordersCollection || isOrdersBusy} iconStart={<Upload className="size-4" />}>
+            <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
               {isImportingOrders ? 'Importing...' : 'Import CSV'}
             </Button>
             <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
               Products
             </Button>
-            <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
+            <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
               Storefront page
             </Button>
             {!ordersCollection ? (
-              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersAccessBusy || !canConfigureOrders} title={!canConfigureOrders ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
               </Button>
             ) : (
-              <Button onClick={resetForm} disabled={isOrdersBusy} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
                 New order
               </Button>
             )}
-            <Button onClick={() => void loadOrders()} disabled={isOrdersBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadOrders()} disabled={isOrdersAccessBusy || !canViewOrders} title={!canViewOrders ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1457,34 +1633,36 @@ function OrdersRoute() {
                 {!ordersApiReady && (
                   <Button
                     onClick={() => void syncOrdersCollection()}
-                    disabled={isOrdersBusy}
+                    disabled={isOrdersAccessBusy || !canConfigureOrders}
+                    title={!canConfigureOrders ? configurePermissionTitle : undefined}
                     iconStart={<Sparkles className="size-4" />}
                   >
                     Sync Schema
                   </Button>
                 )}
-                <Button onClick={() => void copyOrderHandoff()} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrderHandoff()} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy manifest
                 </Button>
-                <Button onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+                <Button onClick={exportOrdersCsv} disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
                   Export CSV
                 </Button>
-                <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={isOrdersBusy} iconStart={<FileText className="size-4" />}>
+                <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
                   CSV template
                 </Button>
-                <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={isOrdersBusy} iconStart={<Upload className="size-4" />}>
+                <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
                   {isImportingOrders ? 'Importing...' : 'Import CSV'}
                 </Button>
-                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy admin API
                 </Button>
-                <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy checkout
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => void reconcileOrders()}
-                  disabled={isOrdersBusy || !ordersApiReady}
+                  disabled={isOrdersAccessBusy || !ordersApiReady || !canConfigureOrders}
+                  title={!canConfigureOrders ? configurePermissionTitle : undefined}
                   iconStart={<RefreshCw className="size-4" />}
                   data-testid="orders-reconcile-provider"
                 >
@@ -1493,20 +1671,20 @@ function OrdersRoute() {
                 <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
                   Products
                 </Button>
-                <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
+                <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                   Storefront page
                 </Button>
                 <a
                   href={adminOrdersApiUrl}
                   target="_blank"
                   rel="noreferrer"
-                  aria-disabled={isOrdersBusy}
+                  aria-disabled={isOrdersAccessBusy || !canExportOrders}
                   onClick={(event) => {
-                    if (isOrdersBusy) event.preventDefault();
+                    if (isOrdersAccessBusy || !canExportOrders) event.preventDefault();
                   }}
                   className={cn(
                     'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    isOrdersBusy && 'pointer-events-none opacity-60',
+                    (isOrdersAccessBusy || !canExportOrders) && 'pointer-events-none opacity-60',
                   )}
                 >
                   <ExternalLink className="size-4" />
@@ -1646,13 +1824,13 @@ function OrdersRoute() {
           description="Create an internal orders collection for payment state, fulfillment, customer, and line item data."
           action={
             <div className="mt-2 flex flex-wrap justify-center gap-2">
-              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersAccessBusy || !canConfigureOrders} title={!canConfigureOrders ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Orders'}
               </Button>
               <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
                 Set up products
               </Button>
-              <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
+              <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 Start storefront page
               </Button>
             </div>
@@ -1665,7 +1843,7 @@ function OrdersRoute() {
               title="Order Queue"
               description={`${filteredOrders.length}/${orders.length} visible orders`}
               icon={<ClipboardCheck className="size-4" />}
-              action={<Button onClick={resetForm} disabled={isOrdersBusy} iconStart={<Plus className="size-4" />}>New Order</Button>}
+              action={<Button onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>New Order</Button>}
             />
             <PanelContent>
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1674,7 +1852,7 @@ function OrdersRoute() {
                   <input
                     aria-label="Search orders"
                     value={searchQuery}
-                    disabled={isOrdersBusy}
+                    disabled={isOrdersAccessBusy || !canViewOrders}
                     onChange={(event) => {
                       if (isOrdersBusy) return;
                       const q = event.target.value;
@@ -1691,7 +1869,7 @@ function OrdersRoute() {
                     <button
                       key={status}
                       type="button"
-                      disabled={isOrdersBusy}
+                      disabled={isOrdersAccessBusy || !canViewOrders}
                       onClick={() => {
                         if (isOrdersBusy) return;
                         setFilter(status);
@@ -1710,7 +1888,7 @@ function OrdersRoute() {
                 <select
                   aria-label="Payment status filter"
                   value={paymentFilter}
-                  disabled={isOrdersBusy}
+                  disabled={isOrdersAccessBusy || !canViewOrders}
                   onChange={(event) => {
                     if (isOrdersBusy) return;
                     const payment = event.target.value as PaymentStatusFilter;
@@ -1729,7 +1907,7 @@ function OrdersRoute() {
                 <select
                   aria-label="Fulfillment status filter"
                   value={fulfillmentFilter}
-                  disabled={isOrdersBusy}
+                  disabled={isOrdersAccessBusy || !canViewOrders}
                   onChange={(event) => {
                     if (isOrdersBusy) return;
                     const fulfillment = event.target.value as FulfillmentStatusFilter;
@@ -1748,7 +1926,7 @@ function OrdersRoute() {
                 <select
                   aria-label="Order source filter"
                   value={sourceFilter}
-                  disabled={isOrdersBusy}
+                  disabled={isOrdersAccessBusy || !canViewOrders}
                   onChange={(event) => {
                     if (isOrdersBusy) return;
                     const source = event.target.value as OrderSourceFilter;
@@ -1766,7 +1944,7 @@ function OrdersRoute() {
                   <option value="pos">POS</option>
                 </select>
                 {hasActiveOrderFilters && (
-                  <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersBusy}>
+                  <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersAccessBusy || !canViewOrders}>
                     Clear filters
                   </Button>
                 )}
@@ -1783,7 +1961,7 @@ function OrdersRoute() {
                       : 'Change the search, workflow, payment, fulfillment, or source filters to broaden the queue.'}
                   </div>
                   {orders.length > 0 && hasActiveOrderFilters && (
-                    <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersBusy} className="mt-4">
+                    <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersAccessBusy || !canViewOrders} className="mt-4">
                       Clear filters
                     </Button>
                   )}
@@ -1795,7 +1973,7 @@ function OrdersRoute() {
                       key={order.id}
                       order={order}
                       selected={order.id === selectedOrderId}
-                      disabled={isOrdersBusy}
+                      disabled={isOrdersAccessBusy || !canEditOrders}
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
@@ -1803,8 +1981,14 @@ function OrdersRoute() {
                       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
                       onDelete={() => {
                         if (isOrdersBusy) return;
+                        if (!canDeleteOrders) {
+                          setError(deletePermissionTitle || 'Your account cannot delete orders.');
+                          return;
+                        }
                         setPendingDeleteOrder(order);
                       }}
+                      canDelete={canDeleteOrders}
+                      deleteDisabledReason={deletePermissionTitle}
                     />
                   ))}
                 </div>
@@ -1820,7 +2004,7 @@ function OrdersRoute() {
             />
             <PanelContent>
               <form onSubmit={saveOrder}>
-                <fieldset disabled={isOrdersBusy} className={cn('space-y-4', isOrdersBusy && 'opacity-70')}>
+                <fieldset disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} className={cn('space-y-4', (isOrdersAccessBusy || !canEditOrders) && 'opacity-70')}>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Order number">
                     <input
@@ -2085,7 +2269,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={applyLineItemTotals}
-                        disabled={isOrdersBusy || orderLineItems.length === 0}
+                        disabled={isOrdersAccessBusy || !canEditOrders || orderLineItems.length === 0}
                       >
                         Use totals
                       </Button>
@@ -2108,7 +2292,7 @@ function OrdersRoute() {
                           </div>
                           <div className="font-mono text-xs text-muted-foreground">x{item.quantity}</div>
                           <div className="font-mono text-xs text-muted-foreground">{formatMoney(item.lineTotal, item.currency)}</div>
-                          <Button size="sm" variant="ghost" onClick={() => removeLineItem(item.id)} disabled={isOrdersBusy}>
+                          <Button size="sm" variant="ghost" onClick={() => removeLineItem(item.id)} disabled={isOrdersAccessBusy || !canEditOrders}>
                             Remove
                           </Button>
                         </div>
@@ -2157,7 +2341,7 @@ function OrdersRoute() {
                     <Button
                       variant="outline"
                       onClick={addLineItem}
-                      disabled={isOrdersBusy || !itemDraft.title.trim() || orderLineItems.length >= 100}
+                      disabled={isOrdersAccessBusy || !canEditOrders || !itemDraft.title.trim() || orderLineItems.length >= 100}
                     >
                       Add
                     </Button>
@@ -2230,8 +2414,8 @@ function OrdersRoute() {
                   </Field>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={resetForm} disabled={isOrdersBusy}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isOrdersBusy || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} iconStart={<Receipt className="size-4" />}>
+                  <Button variant="outline" onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders}>Clear</Button>
+                  <Button type="submit" variant="primary" disabled={isOrdersAccessBusy || !canEditOrders || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Receipt className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedOrder ? 'Save Order' : 'Create Order'}
                   </Button>
                 </div>
@@ -2265,7 +2449,7 @@ function OrdersRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteOrder(null)}
-                disabled={isOrdersBusy}
+                disabled={isOrdersAccessBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2273,7 +2457,8 @@ function OrdersRoute() {
               <button
                 type="button"
                 onClick={() => void removeOrder(pendingDeleteOrder)}
-                disabled={isOrdersBusy}
+                disabled={isOrdersAccessBusy || !canDeleteOrders}
+                title={!canDeleteOrders ? deletePermissionTitle : undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete order'}
@@ -2363,10 +2548,14 @@ function OrderCard({
   onRefunded,
   onCancelled,
   onDelete,
+  canDelete,
+  deleteDisabledReason,
 }: {
   order: CollectionRecord;
   selected: boolean;
   disabled: boolean;
+  canDelete: boolean;
+  deleteDisabledReason?: string;
   onEdit: () => void;
   onPaid: () => void;
   onFulfilled: () => void;
@@ -2488,7 +2677,7 @@ function OrderCard({
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Refund/Return</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Cancel</Button>
-        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled} iconStart={<Trash2 className="size-4" />}>Delete</Button>
+        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
     </article>
   );

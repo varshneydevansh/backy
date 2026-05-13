@@ -2,10 +2,11 @@
  * BACKY CMS - NEW SITE PAGE
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
-import { createPage, createSite, getAdminApiBase } from '@/lib/adminContentApi';
+import { createPage, createSite, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { getSiteSelectionFromSearch } from '@/lib/siteSelection';
@@ -29,6 +30,45 @@ const STATUS_OPTIONS: Array<{ value: Site['status']; label: string; detail: stri
 ];
 
 type SiteBlueprint = 'blank' | 'business' | 'storefront' | 'publication';
+type SiteCreatePermissionKey = 'sites.create' | 'pages.edit' | 'pages.publish';
+
+const SITE_CREATE_PERMISSION_ROLE_DEFAULTS: Record<SiteCreatePermissionKey, Array<User['role']>> = {
+  'sites.create': ['owner', 'admin'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.publish': ['owner', 'admin', 'editor'],
+};
+
+const siteCreatePermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: SiteCreatePermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isSiteCreatePermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SiteCreatePermissionKey,
+): boolean => {
+  const matrixRule = siteCreatePermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.allowed;
+
+  return Boolean(currentAdmin && SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const siteCreatePermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SiteCreatePermissionKey,
+): string => {
+  const matrixRule = siteCreatePermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.reason;
+  if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+
+  return SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
 
 interface StarterPageSpec {
   title: string;
@@ -128,11 +168,15 @@ const isValidDomain = (value: string) => !value || /^[a-z0-9.-]+\.[a-z]{2,}$/.te
 function NewSitePage() {
   const navigate = useNavigate();
   const { sites, pages, setSites, setPages } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [createdSiteRecovery, setCreatedSiteRecovery] = useState<Site | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -141,7 +185,14 @@ function NewSitePage() {
     status: 'draft' as Site['status'],
     blueprint: 'business' as SiteBlueprint,
   });
-  const isCreateBusy = isLoading;
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canCreateSites = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
+  const canEditPages = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');
+  const canPublishPages = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish');
+  const createPermissionTitle = canCreateSites ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'sites.create');
+  const editPagesPermissionTitle = canEditPages ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'pages.edit');
+  const publishPagesPermissionTitle = canPublishPages ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'pages.publish');
+  const isCreateBusy = isLoading || isPermissionMatrixPending;
 
   const selectedStatus = useMemo(
     () => STATUS_OPTIONS.find((status) => status.value === formData.status) || STATUS_OPTIONS[0],
@@ -155,9 +206,24 @@ function NewSitePage() {
     () => BLUEPRINT_OPTIONS.find((blueprint) => blueprint.id === formData.blueprint) || BLUEPRINT_OPTIONS[0],
     [formData.blueprint],
   );
+  const starterPagesSelected = selectedBlueprint.pages.length > 0;
+  const statusSeedsPublishedPages = formData.status === 'published';
+  const canSeedStarterPages = !starterPagesSelected || (canEditPages && (!statusSeedsPublishedPages || canPublishPages));
+  const creationFormDisabled = isCreateBusy || !canCreateSites;
+  const starterPageControlsDisabled = creationFormDisabled || !canEditPages;
+  const creationDisabledTitle = isPermissionMatrixPending
+    ? 'Loading site creation permissions...'
+    : !canCreateSites
+      ? createPermissionTitle
+      : undefined;
+  const starterPageDisabledTitle = creationDisabledTitle
+    || (!canEditPages ? editPagesPermissionTitle : undefined)
+    || (statusSeedsPublishedPages && !canPublishPages ? publishPagesPermissionTitle : undefined);
   const canSubmit = formData.name.trim().length > 1
     && isValidSlug(displaySlug)
-    && isValidDomain(normalizedDomain);
+    && isValidDomain(normalizedDomain)
+    && canCreateSites
+    && canSeedStarterPages;
   const adminSitesUrl = useMemo(() => `${getAdminApiBase()}/sites`, []);
   const publicApiBase = useMemo(() => getAdminApiBase().replace(/\/api\/admin$/, '/api'), []);
   const siteCreationReadiness = useMemo(() => {
@@ -183,10 +249,17 @@ function NewSitePage() {
       },
       {
         label: 'Starter pages',
-        detail: hasStarterPages
+        detail: hasStarterPages && canSeedStarterPages
           ? `${selectedBlueprint.pages.length} page${selectedBlueprint.pages.length === 1 ? '' : 's'} will be seeded with editable header, navigation, and footer`
-          : 'Blank workspace starts without pages.',
-        ready: true,
+          : hasStarterPages
+            ? `Starter pages need pages.edit${statusSeedsPublishedPages ? ' and pages.publish' : ''}.`
+            : 'Blank workspace starts without pages.',
+        ready: !hasStarterPages || canSeedStarterPages,
+      },
+      {
+        label: 'Site creation access',
+        detail: canCreateSites ? 'Your account can create site workspaces.' : createPermissionTitle || 'Site creation is not available.',
+        ready: canCreateSites,
       },
       {
         label: 'Homepage seed',
@@ -218,9 +291,13 @@ function NewSitePage() {
     formData.name,
     formData.status,
     normalizedDomain,
+    canCreateSites,
+    canSeedStarterPages,
+    createPermissionTitle,
     selectedBlueprint.id,
     selectedBlueprint.pages,
     selectedStatus.detail,
+    statusSeedsPublishedPages,
   ]);
   const createPayloadPreview = useMemo(() => ({
     name: formData.name.trim() || 'Untitled site',
@@ -309,6 +386,43 @@ function NewSitePage() {
   ]);
   const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((permissionsError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load site creation permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const copyCreationText = async (value: string, label: string) => {
     if (isCreateBusy) return;
 
@@ -352,6 +466,21 @@ function NewSitePage() {
     e.preventDefault();
 
     if (isCreateBusy) return;
+    if (!canCreateSites) {
+      setError(`Your account needs sites.create to create a site. ${createPermissionTitle}`);
+      setNotice(null);
+      return;
+    }
+    if (starterPagesSelected && !canEditPages) {
+      setError(`Your account needs pages.edit to seed starter pages. ${editPagesPermissionTitle}`);
+      setNotice(null);
+      return;
+    }
+    if (starterPagesSelected && statusSeedsPublishedPages && !canPublishPages) {
+      setError(`Your account needs pages.publish to create published starter pages. ${publishPagesPermissionTitle}`);
+      setNotice(null);
+      return;
+    }
 
     if (!canSubmit) {
       setError('Add a site name, use a valid URL slug, and check the custom domain format.');
@@ -573,6 +702,18 @@ function NewSitePage() {
               {notice}
             </div>
           )}
+          {(permissionError || isPermissionMatrixPending || !canCreateSites || (starterPagesSelected && !canSeedStarterPages)) && (
+            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {permissionError
+                || (isPermissionMatrixPending
+                  ? 'Loading site creation permissions...'
+                  : !canCreateSites
+                    ? `Your account needs sites.create to create a site. ${createPermissionTitle}`
+                    : starterPagesSelected && !canEditPages
+                      ? `Starter page seeding needs pages.edit. ${editPagesPermissionTitle}`
+                      : `Published starter page seeding needs pages.publish. ${publishPagesPermissionTitle}`)}
+            </div>
+          )}
           {createdSiteRecovery && (
             <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
               <div className="text-sm font-semibold text-teal-950">Continue with {createdSiteRecovery.name}</div>
@@ -608,9 +749,10 @@ function NewSitePage() {
               <input
                 type="text"
                 value={formData.name}
-                disabled={isCreateBusy}
+                disabled={creationFormDisabled}
+                title={creationDisabledTitle}
                 onChange={(e) => {
-                  if (isCreateBusy) return;
+                  if (creationFormDisabled) return;
 
                   setFormData({
                     ...formData,
@@ -628,9 +770,10 @@ function NewSitePage() {
               <span className="text-sm font-medium">Status</span>
               <select
                 value={formData.status}
-                disabled={isCreateBusy}
+                disabled={creationFormDisabled}
+                title={creationDisabledTitle}
                 onChange={(e) => {
-                  if (isCreateBusy) return;
+                  if (creationFormDisabled) return;
 
                   setFormData({ ...formData, status: e.target.value as Site['status'] });
                 }}
@@ -652,9 +795,10 @@ function NewSitePage() {
                 <input
                   type="text"
                   value={displaySlug}
-                  disabled={isCreateBusy}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
                   onChange={(e) => {
-                    if (isCreateBusy) return;
+                    if (creationFormDisabled) return;
 
                     setSlugEdited(true);
                     setFormData({ ...formData, slug: slugify(e.target.value) });
@@ -676,14 +820,15 @@ function NewSitePage() {
                 <input
                   type="text"
                   value={formData.customDomain}
-                  disabled={isCreateBusy}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
                   onChange={(e) => {
-                    if (isCreateBusy) return;
+                    if (creationFormDisabled) return;
 
                     setFormData({ ...formData, customDomain: e.target.value });
                   }}
                   onBlur={(e) => {
-                    if (isCreateBusy) return;
+                    if (creationFormDisabled) return;
 
                     setFormData({ ...formData, customDomain: normalizeDomain(e.target.value) });
                   }}
@@ -701,9 +846,10 @@ function NewSitePage() {
             <span className="text-sm font-medium">Description</span>
             <textarea
               value={formData.description}
-              disabled={isCreateBusy}
+              disabled={creationFormDisabled}
+              title={creationDisabledTitle}
               onChange={(e) => {
-                if (isCreateBusy) return;
+                if (creationFormDisabled) return;
 
                 setFormData({ ...formData, description: e.target.value });
               }}
@@ -728,17 +874,18 @@ function NewSitePage() {
                   className={cn(
                     'cursor-pointer rounded-lg border p-4 transition hover:border-primary/50',
                     formData.blueprint === blueprint.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-background',
-                    isCreateBusy && 'cursor-not-allowed opacity-60',
+                    (creationFormDisabled || (blueprint.pages.length > 0 && starterPageControlsDisabled)) && 'cursor-not-allowed opacity-60',
                   )}
+                  title={blueprint.pages.length > 0 ? starterPageDisabledTitle : creationDisabledTitle}
                 >
                   <input
                     type="radio"
                     name="site-blueprint"
                     value={blueprint.id}
                     checked={formData.blueprint === blueprint.id}
-                    disabled={isCreateBusy}
+                    disabled={creationFormDisabled || (blueprint.pages.length > 0 && starterPageControlsDisabled)}
                     onChange={(event) => {
-                      if (isCreateBusy) return;
+                      if (creationFormDisabled || (blueprint.pages.length > 0 && starterPageControlsDisabled)) return;
 
                       setFormData({ ...formData, blueprint: event.target.value as SiteBlueprint });
                     }}
@@ -846,7 +993,8 @@ function NewSitePage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
-              disabled={isLoading || !canSubmit}
+              disabled={isCreateBusy || !canSubmit}
+              title={!canCreateSites ? createPermissionTitle : !canSeedStarterPages ? starterPageDisabledTitle : undefined}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50',

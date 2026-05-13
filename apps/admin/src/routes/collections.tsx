@@ -2543,6 +2543,10 @@ function CollectionsPage() {
   };
   const openDatasetPageBuilder = (mode: 'list' | 'item') => {
     if (isCollectionsBusy || !activeCollection) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'open dynamic page-builder shortcuts');
+      return;
+    }
 
     const suggestedTitle = mode === 'item' ? `${activeCollection.name} detail` : activeCollection.name;
     const suggestedSlug = mode === 'item' ? `${activeCollection.slug}-detail` : `${activeCollection.slug}-list`;
@@ -2948,6 +2952,13 @@ function CollectionsPage() {
   };
 
   const updateDynamicListTemplate = (updates: Partial<CollectionDynamicTemplatesForm['list']>) => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', 'update dynamic list templates');
+      }
+      return;
+    }
+
     setCollectionForm((prev) => ({
       ...prev,
       dynamicTemplates: {
@@ -2961,6 +2972,13 @@ function CollectionsPage() {
   };
 
   const updateDynamicItemTemplate = (updates: Partial<CollectionDynamicTemplatesForm['item']>) => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', 'update dynamic item templates');
+      }
+      return;
+    }
+
     setCollectionForm((prev) => ({
       ...prev,
       dynamicTemplates: {
@@ -2974,6 +2992,13 @@ function CollectionsPage() {
   };
 
   const toggleDynamicDetailField = (fieldKey: string, checked: boolean) => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', 'update dynamic item detail fields');
+      }
+      return;
+    }
+
     updateDynamicItemTemplate({
       detailFields: checked
         ? [...collectionForm.dynamicTemplates.item.detailFields, fieldKey]
@@ -3031,6 +3056,13 @@ function CollectionsPage() {
 
   const captureAuthoredDynamicTemplate = async (kind: 'list' | 'item') => {
     if (isCollectionsBusy) return;
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', `capture ${kind} dynamic templates`);
+      }
+      return;
+    }
+
     const pageId = kind === 'list'
       ? collectionForm.dynamicTemplates.list.authoredPageId
       : collectionForm.dynamicTemplates.item.authoredPageId;
@@ -3076,6 +3108,13 @@ function CollectionsPage() {
   };
 
   const clearAuthoredDynamicTemplate = (kind: 'list' | 'item') => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', `clear ${kind} dynamic templates`);
+      }
+      return;
+    }
+
     if (kind === 'list') {
       updateDynamicListTemplate({
         authoredPageId: '',
@@ -3098,6 +3137,13 @@ function CollectionsPage() {
     kind: 'list' | 'item',
     version: CollectionAuthoredDynamicTemplateVersion,
   ) => {
+    if (schemaMutationDisabled) {
+      if (!canEditCollections) {
+        showPermissionDenied('collections.edit', `restore ${kind} dynamic template versions`);
+      }
+      return;
+    }
+
     const restoredCanvas: CollectionAuthoredDynamicTemplate = {
       pageId: version.pageId,
       pageTitle: version.pageTitle,
@@ -3965,12 +4011,16 @@ function CollectionsPage() {
                           <Database className="h-4 w-4" />
                           {isCreatingFrontendTemplateId === template.id ? 'Creating...' : 'Create collection'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void copyCollectionApiText(manifestText, `${template.name} frontend collection template`)}
-                          disabled={isCollectionsBusy}
-                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                        >
+                          <button
+                            type="button"
+                            onClick={() => void copyCollectionApiText(manifestText, `${template.name} frontend collection template`, {
+                              key: 'collections.export',
+                              action: 'export frontend collection template schemas',
+                            })}
+                            disabled={isCollectionsBusy || !canExportCollections}
+                            title={!canExportCollections ? exportPermissionTitle : undefined}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                          >
                           <Copy className="h-4 w-4" />
                           Copy schema
                         </button>
@@ -4040,11 +4090,15 @@ function CollectionsPage() {
               Public endpoints for storefronts plus private admin endpoints for schema, records, import, and bulk workflows.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void copyCollectionApiText(recordsCopyUrl, recordsCopyLabel)}
-            disabled={isCollectionsBusy}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            <button
+              type="button"
+              onClick={() => void copyCollectionApiText(recordsCopyUrl, recordsCopyLabel, {
+                key: 'collections.export',
+                action: 'export collection API records URLs',
+              })}
+              disabled={isCollectionsBusy || !canExportCollections}
+              title={!canExportCollections ? exportPermissionTitle : undefined}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             aria-label={`Copy ${activeCollectionIsPublic ? 'public' : 'admin'} records URL`}
           >
             <Copy className="h-4 w-4" />
@@ -4216,63 +4270,81 @@ function CollectionsPage() {
 
               <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.repeaterPresetText, 'Repeater dataset preset')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-copy-repeater"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.repeaterPresetText, 'Repeater dataset preset', {
+                        key: 'collections.export',
+                        action: 'export dataset authoring shortcuts',
+                      })}
+                      disabled={isCollectionsBusy || !canExportCollections}
+                      title={!canExportCollections ? exportPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-copy-repeater"
+                    >
                     <Copy className="h-4 w-4" />
                     Copy repeater preset
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.fieldBindingPresetText, 'Field binding preset')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-copy-binding"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.fieldBindingPresetText, 'Field binding preset', {
+                        key: 'collections.export',
+                        action: 'export dataset authoring shortcuts',
+                      })}
+                      disabled={isCollectionsBusy || !canExportCollections}
+                      title={!canExportCollections ? exportPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-copy-binding"
+                    >
                     <Copy className="h-4 w-4" />
                     Copy field binding
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.listPageBriefText, 'List page dataset brief')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-copy-list-brief"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.listPageBriefText, 'List page dataset brief', {
+                        key: 'collections.export',
+                        action: 'export dataset authoring shortcuts',
+                      })}
+                      disabled={isCollectionsBusy || !canExportCollections}
+                      title={!canExportCollections ? exportPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-copy-list-brief"
+                    >
                     <Copy className="h-4 w-4" />
                     Copy list page brief
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.itemPageBriefText, 'Item page dataset brief')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-copy-item-brief"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.itemPageBriefText, 'Item page dataset brief', {
+                        key: 'collections.export',
+                        action: 'export dataset authoring shortcuts',
+                      })}
+                      disabled={isCollectionsBusy || !canExportCollections}
+                      title={!canExportCollections ? exportPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-copy-item-brief"
+                    >
                     <Copy className="h-4 w-4" />
                     Copy item page brief
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openDatasetPageBuilder('list')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-open-list-builder"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => openDatasetPageBuilder('list')}
+                      disabled={isCollectionsBusy || !canEditCollections}
+                      title={!canEditCollections ? editPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-open-list-builder"
+                    >
                     <ExternalLink className="h-4 w-4" />
                     Open list builder
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openDatasetPageBuilder('item')}
-                    disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    data-testid="collections-authoring-open-item-builder"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => openDatasetPageBuilder('item')}
+                      disabled={isCollectionsBusy || !canEditCollections}
+                      title={!canEditCollections ? editPermissionTitle : undefined}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-authoring-open-item-builder"
+                    >
                     <ExternalLink className="h-4 w-4" />
                     Open item builder
                   </button>
@@ -4928,15 +5000,25 @@ function CollectionsPage() {
                 <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.6fr)]">
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">Template source</span>
-                    <select
-                      value={collectionForm.frontendDesignTemplateId}
-                      onChange={(event) => setCollectionForm((prev) => ({
-                        ...prev,
-                        frontendDesignTemplateId: event.target.value,
-                      }))}
-                      className="w-full rounded-lg border bg-background px-3 py-2"
-                      data-testid="collections-frontend-template-select"
-                    >
+                      <select
+                        value={collectionForm.frontendDesignTemplateId}
+                        onChange={(event) => {
+                          if (schemaMutationDisabled) {
+                            if (!canEditCollections) {
+                              showPermissionDenied('collections.edit', 'attach frontend collection templates');
+                            }
+                            return;
+                          }
+                          setCollectionForm((prev) => ({
+                            ...prev,
+                            frontendDesignTemplateId: event.target.value,
+                          }));
+                        }}
+                        disabled={schemaMutationDisabled}
+                        title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                        className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-testid="collections-frontend-template-select"
+                      >
                       <option value="">Use generated Backy templates</option>
                       {frontendCollectionTemplates.map((template) => (
                         <option key={template.id} value={template.id}>
@@ -5047,12 +5129,14 @@ function CollectionsPage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1 text-sm md:col-span-2">
                       <span className="font-medium">Layout</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.list.variant}
-                        onChange={(event) => updateDynamicListTemplate({ variant: event.target.value as CollectionDynamicListVariant })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                        data-testid="collections-list-template-variant"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.list.variant}
+                          onChange={(event) => updateDynamicListTemplate({ variant: event.target.value as CollectionDynamicListVariant })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="collections-list-template-variant"
+                        >
                         {COLLECTION_DYNAMIC_LIST_VARIANTS.map((variant) => (
                           <option key={variant.value} value={variant.value}>{variant.label}</option>
                         ))}
@@ -5063,11 +5147,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">Title field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.list.titleField}
-                        onChange={(event) => updateDynamicListTemplate({ titleField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.list.titleField}
+                          onChange={(event) => updateDynamicListTemplate({ titleField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Automatic</option>
                         {dynamicTemplateFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5076,11 +5162,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">Summary field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.list.descriptionField}
-                        onChange={(event) => updateDynamicListTemplate({ descriptionField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.list.descriptionField}
+                          onChange={(event) => updateDynamicListTemplate({ descriptionField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Automatic</option>
                         {dynamicTemplateFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5089,11 +5177,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">Image field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.list.imageField}
-                        onChange={(event) => updateDynamicListTemplate({ imageField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.list.imageField}
+                          onChange={(event) => updateDynamicListTemplate({ imageField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Automatic</option>
                         {dynamicTemplateImageFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5105,11 +5195,13 @@ function CollectionsPage() {
                       <input
                         type="number"
                         min={1}
-                        max={48}
-                        value={collectionForm.dynamicTemplates.list.limit}
-                        onChange={(event) => updateDynamicListTemplate({ limit: normalizeDynamicTemplateLimit(event.target.value) })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      />
+                          max={48}
+                          value={collectionForm.dynamicTemplates.list.limit}
+                          onChange={(event) => updateDynamicListTemplate({ limit: normalizeDynamicTemplateLimit(event.target.value) })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
                     </label>
                     <div className="space-y-2 rounded-lg border border-cyan-200 bg-cyan-50/60 p-3 text-sm md:col-span-2" data-testid="collections-list-authored-template">
                       <div>
@@ -5118,12 +5210,14 @@ function CollectionsPage() {
                           Capture an existing Backy page canvas as this collection&apos;s dynamic list template.
                         </p>
                       </div>
-                      <select
-                        value={collectionForm.dynamicTemplates.list.authoredPageId}
-                        onChange={(event) => updateDynamicListTemplate({ authoredPageId: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                        data-testid="collections-list-authored-template-select"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.list.authoredPageId}
+                          onChange={(event) => updateDynamicListTemplate({ authoredPageId: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="collections-list-authored-template-select"
+                        >
                         <option value="">Generated layout</option>
                         {pages.map((page) => (
                           <option key={page.id} value={page.id}>
@@ -5206,12 +5300,14 @@ function CollectionsPage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="space-y-1 text-sm md:col-span-2">
                       <span className="font-medium">Layout</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.item.variant}
-                        onChange={(event) => updateDynamicItemTemplate({ variant: event.target.value as CollectionDynamicItemVariant })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                        data-testid="collections-item-template-variant"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.item.variant}
+                          onChange={(event) => updateDynamicItemTemplate({ variant: event.target.value as CollectionDynamicItemVariant })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="collections-item-template-variant"
+                        >
                         {COLLECTION_DYNAMIC_ITEM_VARIANTS.map((variant) => (
                           <option key={variant.value} value={variant.value}>{variant.label}</option>
                         ))}
@@ -5222,11 +5318,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">Title field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.item.titleField}
-                        onChange={(event) => updateDynamicItemTemplate({ titleField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.item.titleField}
+                          onChange={(event) => updateDynamicItemTemplate({ titleField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Use list setting</option>
                         {dynamicTemplateFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5235,11 +5333,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">Summary field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.item.descriptionField}
-                        onChange={(event) => updateDynamicItemTemplate({ descriptionField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.item.descriptionField}
+                          onChange={(event) => updateDynamicItemTemplate({ descriptionField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Use list setting</option>
                         {dynamicTemplateFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5248,11 +5348,13 @@ function CollectionsPage() {
                     </label>
                     <label className="space-y-1 text-sm md:col-span-2">
                       <span className="font-medium">Image field</span>
-                      <select
-                        value={collectionForm.dynamicTemplates.item.imageField}
-                        onChange={(event) => updateDynamicItemTemplate({ imageField: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.item.imageField}
+                          onChange={(event) => updateDynamicItemTemplate({ imageField: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
                         <option value="">Use list setting</option>
                         {dynamicTemplateImageFields.map((field) => (
                           <option key={field.key} value={field.key}>{field.label}</option>
@@ -5266,12 +5368,14 @@ function CollectionsPage() {
                           Capture an existing Backy page canvas as the dynamic record-detail template.
                         </p>
                       </div>
-                      <select
-                        value={collectionForm.dynamicTemplates.item.authoredPageId}
-                        onChange={(event) => updateDynamicItemTemplate({ authoredPageId: event.target.value })}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                        data-testid="collections-item-authored-template-select"
-                      >
+                        <select
+                          value={collectionForm.dynamicTemplates.item.authoredPageId}
+                          onChange={(event) => updateDynamicItemTemplate({ authoredPageId: event.target.value })}
+                          disabled={schemaMutationDisabled}
+                          title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="collections-item-authored-template-select"
+                        >
                         <option value="">Generated layout</option>
                         {pages.map((page) => (
                           <option key={page.id} value={page.id}>
@@ -5346,12 +5450,14 @@ function CollectionsPage() {
                       <div className="grid gap-2 sm:grid-cols-2">
                         {dynamicTemplateFields.map((field) => (
                           <label key={field.key} className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={collectionForm.dynamicTemplates.item.detailFields.includes(field.key)}
-                              onChange={(event) => toggleDynamicDetailField(field.key, event.target.checked)}
-                              className="mt-0.5"
-                            />
+                              <input
+                                type="checkbox"
+                                checked={collectionForm.dynamicTemplates.item.detailFields.includes(field.key)}
+                                onChange={(event) => toggleDynamicDetailField(field.key, event.target.checked)}
+                                disabled={schemaMutationDisabled}
+                                title={schemaMutationDisabled && !canEditCollections ? editPermissionTitle : undefined}
+                                className="mt-0.5"
+                              />
                             <span>
                               <span className="block font-medium text-foreground">{field.label}</span>
                               <span className="block text-muted-foreground">{field.key} · {field.type}</span>

@@ -69,10 +69,12 @@ type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
 type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
-type FormsPermissionKey = 'forms.view' | 'forms.manage' | 'forms.export' | 'collections.view' | 'activity.export';
+type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'collections.view' | 'activity.export';
 
 const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser['role']>> = {
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.create': ['owner', 'admin', 'editor'],
+  'forms.edit': ['owner', 'admin', 'editor'],
   'forms.manage': ['owner', 'admin', 'editor'],
   'forms.export': ['owner', 'admin'],
   'collections.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -513,11 +515,15 @@ function FormsRoute() {
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
   const canViewForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const canCreateForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const canEditForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canManageForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canExportForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const createPermissionTitle = canCreateForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const editPermissionTitle = canEditForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCreatingEmbedBlock || isSavingForm || isPermissionMatrixPending;
@@ -1150,8 +1156,8 @@ function FormsRoute() {
 
   const createFormFromTemplate = async (template: FormTemplateBlueprint) => {
     if (isFormsBusy) return;
-    if (!canManageForms) {
-      setError(managePermissionTitle || 'Your account cannot create forms.');
+    if (!canCreateForms) {
+      setError(createPermissionTitle || 'Your account cannot create forms.');
       setNotice(null);
       return;
     }
@@ -1197,8 +1203,8 @@ function FormsRoute() {
 
   const createFormFromFrontendTemplate = async (template: SiteFrontendDesignTemplate, blueprint: FormTemplateBlueprint) => {
     if (isFormsBusy) return;
-    if (!canManageForms) {
-      setError(managePermissionTitle || 'Your account cannot create forms.');
+    if (!canCreateForms) {
+      setError(createPermissionTitle || 'Your account cannot create forms.');
       setNotice(null);
       return;
     }
@@ -1334,12 +1340,12 @@ function FormsRoute() {
   }, [selectedForm]);
 
   const patchFormDraft = (patch: Partial<FormDefinition>) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => (current ? { ...current, ...patch } : current));
   };
 
   const patchFormDraftSpamSettings = (patch: Partial<FormSpamSettings>) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -1362,7 +1368,7 @@ function FormsRoute() {
   };
 
   const patchFormDraftConsentSettings = (patch: Partial<FormConsentSettings>) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -1383,7 +1389,7 @@ function FormsRoute() {
   };
 
   const patchFormDraftField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -1401,7 +1407,7 @@ function FormsRoute() {
     ruleType: FormValidationRuleType,
     patch: Partial<FormValidationRule>,
   ) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -1435,7 +1441,7 @@ function FormsRoute() {
   };
 
   const patchFormDraftCollectionTarget = (patch: Partial<NonNullable<FormDefinition['collectionTarget']>>) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -1458,7 +1464,7 @@ function FormsRoute() {
   };
 
   const addFormDraftField = () => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
       const nextNumber = current.fields.length + 1;
@@ -1478,7 +1484,7 @@ function FormsRoute() {
   };
 
   const removeFormDraftField = (fieldIndex: number) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current || current.fields.length <= 1) return current;
       return {
@@ -1489,7 +1495,7 @@ function FormsRoute() {
   };
 
   const moveFormDraftField = (fieldIndex: number, direction: -1 | 1) => {
-    if (!canManageForms) return;
+    if (!canEditForms) return;
     setFormDraft((current) => {
       if (!current) return current;
       const nextIndex = fieldIndex + direction;
@@ -1504,8 +1510,8 @@ function FormsRoute() {
 
   const saveFormDraft = async () => {
     if (isFormsBusy || !selectedForm || !formDraft || !selectedFormIsStandalone) return;
-    if (!canManageForms) {
-      setError(managePermissionTitle || 'Your account cannot update forms.');
+    if (!canEditForms) {
+      setError(editPermissionTitle || 'Your account cannot update forms.');
       setNotice(null);
       return;
     }
@@ -1813,8 +1819,8 @@ function FormsRoute() {
 
   const handleCreateEmbedBlock = async () => {
     if (isFormsBusy || !selectedForm) return;
-    if (!canManageForms) {
-      setError(managePermissionTitle || 'Your account cannot create reusable form blocks.');
+    if (!canEditForms) {
+      setError(editPermissionTitle || 'Your account cannot create reusable form blocks.');
       setNotice(null);
       return;
     }
@@ -1921,6 +1927,11 @@ function FormsRoute() {
   };
   const downloadFormsHandoff = () => {
     if (isFormsBusy) return;
+    if (!canExportForms) {
+      setError(exportPermissionTitle || 'Your account cannot export forms handoff data.');
+      setNotice(null);
+      return;
+    }
 
     const blob = new Blob([formsHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -2056,15 +2067,16 @@ function FormsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
-              disabled={isFormsBusy}
-              iconStart={<Copy className="size-4" />}
-            >
-              Copy manifest
-            </Button>
-            <Button variant="outline" onClick={downloadFormsHandoff} disabled={isFormsBusy} iconStart={<Download className="size-4" />}>
+              <Button
+                variant="outline"
+                onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+            <Button variant="outline" onClick={downloadFormsHandoff} disabled={isFormsBusy || !canExportForms} title={!canExportForms ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
             <Button
@@ -2173,8 +2185,8 @@ function FormsRoute() {
                 size="sm"
                 variant="primary"
                 onClick={() => void createFormFromTemplate(REGISTRATION_FORM_TEMPLATE)}
-                disabled={isFormsBusy || !canManageForms}
-                title={!canManageForms ? managePermissionTitle : undefined}
+                disabled={isFormsBusy || !canCreateForms}
+                title={!canCreateForms ? createPermissionTitle : undefined}
                 iconStart={<FileInput className="size-4" />}
               >
                 {isCreatingTemplateId === REGISTRATION_FORM_TEMPLATE.id ? 'Creating...' : 'Create registration form'}
@@ -2417,8 +2429,8 @@ function FormsRoute() {
                             size="sm"
                             variant="primary"
                             onClick={() => void createFormFromFrontendTemplate(template, blueprint)}
-                            disabled={isFormsBusy || !canManageForms}
-                            title={!canManageForms ? managePermissionTitle : undefined}
+                            disabled={isFormsBusy || !canCreateForms}
+                            title={!canCreateForms ? createPermissionTitle : undefined}
                             iconStart={<FileInput className="size-4" />}
                             data-testid={`forms-frontend-template-${template.id}`}
                           >
@@ -2485,8 +2497,8 @@ function FormsRoute() {
                       size="sm"
                       variant="primary"
                       onClick={() => void createFormFromTemplate(template)}
-                      disabled={isFormsBusy || !canManageForms}
-                      title={!canManageForms ? managePermissionTitle : undefined}
+                      disabled={isFormsBusy || !canCreateForms}
+                      title={!canCreateForms ? createPermissionTitle : undefined}
                       iconStart={<FileInput className="size-4" />}
                     >
                       {isCreatingTemplateId === template.id ? 'Creating...' : 'Create form'}
@@ -2785,15 +2797,15 @@ function FormsRoute() {
                           <Button
                             variant="outline"
                             onClick={() => setFormDraft(cloneFormDefinition(selectedForm))}
-                            disabled={isFormsBusy || !formDraftDirty || !canManageForms}
-                            title={!canManageForms ? managePermissionTitle : undefined}
+                            disabled={isFormsBusy || !formDraftDirty || !canEditForms}
+                            title={!canEditForms ? editPermissionTitle : undefined}
                           >
                             Reset
                           </Button>
                           <Button
                             onClick={() => void saveFormDraft()}
-                            disabled={isFormsBusy || !selectedFormIsStandalone || !formDraftDirty || !canManageForms}
-                            title={!canManageForms ? managePermissionTitle : undefined}
+                            disabled={isFormsBusy || !selectedFormIsStandalone || !formDraftDirty || !canEditForms}
+                            title={!canEditForms ? editPermissionTitle : undefined}
                             iconStart={<Save className="size-4" />}
                           >
                             {isSavingForm ? 'Saving...' : 'Save form'}
@@ -2808,8 +2820,8 @@ function FormsRoute() {
                       )}
 
                       <fieldset
-                        disabled={isFormsBusy || !selectedFormIsStandalone || !canManageForms}
-                        title={!canManageForms ? managePermissionTitle : undefined}
+                        disabled={isFormsBusy || !selectedFormIsStandalone || !canEditForms}
+                        title={!canEditForms ? editPermissionTitle : undefined}
                         className="mt-4 grid gap-4 disabled:opacity-60"
                       >
                         <div className="grid gap-3 lg:grid-cols-2">
@@ -3215,7 +3227,7 @@ function FormsRoute() {
                               <h3 className="text-sm font-semibold">Fields</h3>
                               <p className="mt-1 text-xs text-muted-foreground">Keys drive API payloads, contact mapping, and collection writes. Keep them stable after launch.</p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={addFormDraftField} disabled={!canManageForms} title={!canManageForms ? managePermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
+                            <Button size="sm" variant="outline" onClick={addFormDraftField} disabled={!canEditForms} title={!canEditForms ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
                               Add field
                             </Button>
                           </div>
@@ -3447,7 +3459,8 @@ function FormsRoute() {
                         <Button
                           variant="outline"
                           onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
-                          disabled={isFormsBusy}
+                          disabled={isFormsBusy || !canExportForms}
+                          title={!canExportForms ? exportPermissionTitle : undefined}
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy manifest
@@ -3455,8 +3468,8 @@ function FormsRoute() {
                         <Button
                           variant="outline"
                           onClick={() => void handleCreateEmbedBlock()}
-                          disabled={isFormsBusy || !selectedForm || !canManageForms}
-                          title={!canManageForms ? managePermissionTitle : undefined}
+                          disabled={isFormsBusy || !selectedForm || !canEditForms}
+                          title={!canEditForms ? editPermissionTitle : undefined}
                           iconStart={<Sparkles className="size-4" />}
                           data-testid="forms-create-embed-block-button"
                         >
@@ -3689,7 +3702,7 @@ function FormsRoute() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={isFormsBusy || selectedConsentFields.length === 0 || selectedConsentRetentionMetrics.deleteDue === 0}
+                          disabled={isFormsBusy || selectedConsentFields.length === 0 || selectedConsentRetentionMetrics.deleteDue === 0 || !canManageForms}
                           title={!canManageForms ? managePermissionTitle : undefined}
                           onClick={() => void handleApplyConsentRetention()}
                           data-testid="forms-consent-anonymize-due-button"
@@ -3700,7 +3713,7 @@ function FormsRoute() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={isFormsBusy || selectedConsentFields.length === 0 || filteredSubmissions.length === 0}
+                          disabled={isFormsBusy || selectedConsentFields.length === 0 || filteredSubmissions.length === 0 || !canExportForms}
                           title={!canExportForms ? exportPermissionTitle : undefined}
                           onClick={handleExportConsentRecords}
                           iconStart={<Download className="size-4" />}

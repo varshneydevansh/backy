@@ -13,17 +13,21 @@ import {
   archivePage,
   createPagePreview,
   deletePage as deletePageFromApi,
+  getUserPermissions,
   getPageReadiness,
   getPageRevisionSummary,
   getSiteReadiness,
   listCollections,
   listPages,
   publishPage,
+  type AdminUserPermissionMatrix,
   type Collection,
   type ContentRevisionSummary,
   type PageReadiness,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { useStore, type Page } from '@/stores/mockStore';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
@@ -47,6 +51,7 @@ type PageLibraryFilter =
   | 'not-checked';
 
 type PageSortKey = keyof Pick<Page, 'title' | 'status' | 'lastUpdated'>;
+type PagePermissionKey = 'pages.view' | 'pages.edit' | 'pages.publish' | 'pages.delete' | 'collections.view' | 'sites.view';
 
 interface PagesSearch {
   siteId?: string;
@@ -72,6 +77,15 @@ const PAGE_HEALTH_FILTERS: PageLibraryFilter[] = [
   'not-checked',
 ];
 const PAGE_SORT_KEYS: PageSortKey[] = ['title', 'status', 'lastUpdated'];
+
+const PAGE_PERMISSION_ROLE_DEFAULTS: Record<PagePermissionKey, Array<AuthUser['role']>> = {
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.publish': ['owner', 'admin', 'editor'],
+  'pages.delete': ['owner', 'admin'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+};
 
 const normalizedSearchString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -385,6 +399,7 @@ function PagesLayout() {
 function PagesListView() {
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
+  const currentAdmin = useAuthStore((state) => state.user);
   const { sites, pages, setPages, deletePage, updatePage } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
@@ -410,8 +425,23 @@ function PagesListView() {
   const [pendingBulkPublish, setPendingBulkPublish] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canPublishPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canDeletePages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canViewSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const editPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const publishPermissionTitle = canPublishPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeletePages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', PAGE_PERMISSION_ROLE_DEFAULTS);
   const isPageMutationBusy = isBulkBusy || mutatingPageId !== null || previewingPageId !== null;
-  const isPageLibraryBusy = isLoading || isLoadingReadiness || isPageMutationBusy;
+  const isPageLibraryBusy = isLoading || isLoadingReadiness || isPageMutationBusy || isPermissionMatrixPending;
+  const canRunAnyBulkAction = canPublishPages || canEditPages || canDeletePages;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -620,6 +650,10 @@ function PagesListView() {
 
   const copyPageApiText = async (value: string, label: string) => {
     if (isPageLibraryBusy) return;
+    if (!canViewPages) {
+      setNotice(viewPermissionTitle || 'Your account cannot copy page data.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -648,6 +682,10 @@ function PagesListView() {
 
   const downloadPagesCsv = () => {
     if (isPageLibraryBusy) return;
+    if (!canViewPages) {
+      setNotice(viewPermissionTitle || 'Your account cannot export pages.');
+      return;
+    }
 
     if (filteredPages.length === 0) {
       setError('No pages are available to export with the current controls.');
@@ -723,7 +761,7 @@ function PagesListView() {
   };
 
   const togglePageSelection = (pageId: string) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || !canRunAnyBulkAction) return;
 
     setSelectedPageIds((current) => {
       const next = new Set(current);
@@ -739,7 +777,7 @@ function PagesListView() {
   };
 
   const setPageSelection = (targetPages: Page[], selected: boolean) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || !canRunAnyBulkAction) return;
 
     setSelectedPageIds((current) => {
       const next = new Set(current);
@@ -760,9 +798,55 @@ function PagesListView() {
     }
   }, [selectedSiteId, sites]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((permissionLoadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionLoadError instanceof Error ? permissionLoadError.message : 'Unable to load page permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const refreshPages = useMemo(
     () => async (siteId: string) => {
       if (isPageLibraryBusy) return;
+      if (!canViewPages) {
+        setPages([]);
+        setRouteCollections([]);
+        setReadinessMap({});
+        setRevisionSummaryMap({});
+        setNotice(viewPermissionTitle || 'Your account cannot view pages.');
+        setError(null);
+        return;
+      }
 
       setIsLoading(true);
       setIsLoadingReadiness(true);
@@ -772,9 +856,9 @@ function PagesListView() {
       try {
         const [backendPages, readiness] = await Promise.all([
           listPages(siteId),
-          getSiteReadiness(siteId).catch(() => null),
+          canViewSites ? getSiteReadiness(siteId).catch(() => null) : Promise.resolve(null),
         ]);
-        const collections = await listCollections(siteId).catch(() => []);
+        const collections = canViewCollections ? await listCollections(siteId).catch(() => []) : [];
         const revisionSummaries = await loadPageRevisionSummaries(siteId, backendPages);
         setPages(backendPages);
         setRouteCollections(collections);
@@ -788,6 +872,13 @@ function PagesListView() {
         setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
         setRevisionSummaryMap(revisionSummaries);
       } catch (loadError) {
+        if (isAdminPermissionDeniedError(loadError)) {
+          setPages([]);
+          setRouteCollections([]);
+          setNotice(loadError instanceof Error ? loadError.message : viewPermissionTitle || 'Your account cannot view pages.');
+          return;
+        }
+
         setError(loadError instanceof Error ? loadError.message : 'Unable to load pages');
       } finally {
         setIsLoading(false);
@@ -795,13 +886,27 @@ function PagesListView() {
         setIsLoadingRevisions(false);
       }
     },
-    [isPageLibraryBusy, setPages],
+    [canViewCollections, canViewPages, canViewSites, isPageLibraryBusy, setPages, viewPermissionTitle],
   );
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPages = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewPages) {
+        setPages([]);
+        setRouteCollections([]);
+        setReadinessMap({});
+        setRevisionSummaryMap({});
+        setSelectedPageIds(new Set());
+        setNotice(viewPermissionTitle || 'Your account cannot view pages.');
+        setIsLoading(false);
+        setIsLoadingReadiness(false);
+        setIsLoadingRevisions(false);
+        return;
+      }
+
       setIsLoading(true);
       setIsLoadingReadiness(true);
       setIsLoadingRevisions(true);
@@ -810,9 +915,9 @@ function PagesListView() {
       try {
         const [backendPages, readiness] = await Promise.all([
           listPages(activeSiteId),
-          getSiteReadiness(activeSiteId).catch(() => null),
+          canViewSites ? getSiteReadiness(activeSiteId).catch(() => null) : Promise.resolve(null),
         ]);
-        const collections = await listCollections(activeSiteId).catch(() => []);
+        const collections = canViewCollections ? await listCollections(activeSiteId).catch(() => []) : [];
         const revisionSummaries = await loadPageRevisionSummaries(activeSiteId, backendPages);
         if (!cancelled) {
           setPages(backendPages);
@@ -829,6 +934,13 @@ function PagesListView() {
         }
       } catch (loadError) {
         if (!cancelled) {
+          if (isAdminPermissionDeniedError(loadError)) {
+            setPages([]);
+            setRouteCollections([]);
+            setNotice(loadError instanceof Error ? loadError.message : viewPermissionTitle || 'Your account cannot view pages.');
+            return;
+          }
+
           setError(loadError instanceof Error ? loadError.message : 'Unable to load pages');
         }
       } finally {
@@ -845,7 +957,7 @@ function PagesListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, setPages]);
+  }, [activeSiteId, canViewCollections, canViewPages, canViewSites, isPermissionMatrixPending, setPages, viewPermissionTitle]);
 
   const publicPageUrl = (page: Page) => (
     `${publicBaseUrl}/sites/${encodeURIComponent(siteSlug)}${pagePublicPath(page)}`
@@ -914,6 +1026,10 @@ function PagesListView() {
 
   const handleRefreshDeliveryHealth = async (targetPages = deliveryProbeTargets) => {
     if (isLoading || targetPages.length === 0 || isRefreshingAllDeliveryHealth) {
+      return;
+    }
+    if (!canViewPages) {
+      setNotice(viewPermissionTitle || 'Your account cannot view page delivery health.');
       return;
     }
 
@@ -990,6 +1106,10 @@ function PagesListView() {
 
   const handlePreviewPage = async (page: Page) => {
     if (isPageLibraryBusy) return;
+    if (!canPublishPages) {
+      setNotice(publishPermissionTitle || 'Your account cannot create page preview links.');
+      return;
+    }
 
     setPreviewingPageId(page.id);
     setError(null);
@@ -1006,6 +1126,11 @@ function PagesListView() {
 
   const handlePublishPage = async (page: Page) => {
     if (isPageLibraryBusy) return;
+    if (!canPublishPages) {
+      setNotice(publishPermissionTitle || 'Your account cannot publish pages.');
+      setPendingPublishPage(null);
+      return;
+    }
 
     setMutatingPageId(page.id);
     setError(null);
@@ -1041,6 +1166,10 @@ function PagesListView() {
 
   const handleArchivePage = async (page: Page) => {
     if (isPageLibraryBusy) return;
+    if (!canEditPages) {
+      setNotice(editPermissionTitle || 'Your account cannot archive pages.');
+      return;
+    }
 
     setMutatingPageId(page.id);
     setError(null);
@@ -1060,6 +1189,11 @@ function PagesListView() {
 
   const handleDeletePage = async (page: Page) => {
     if (isPageLibraryBusy) return;
+    if (!canDeletePages) {
+      setNotice(deletePermissionTitle || 'Your account cannot delete pages.');
+      setPendingDeletePage(null);
+      return;
+    }
 
     setMutatingPageId(page.id);
     setError(null);
@@ -1098,6 +1232,21 @@ function PagesListView() {
     }
 
     if (!bulkAction || selectedPages.length === 0) {
+      return;
+    }
+
+    if (bulkAction === 'publish' && !canPublishPages) {
+      setNotice(publishPermissionTitle || 'Your account cannot publish pages.');
+      return;
+    }
+
+    if (bulkAction === 'archive' && !canEditPages) {
+      setNotice(editPermissionTitle || 'Your account cannot archive pages.');
+      return;
+    }
+
+    if (bulkAction === 'delete' && !canDeletePages) {
+      setNotice(deletePermissionTitle || 'Your account cannot delete pages.');
       return;
     }
 
@@ -1200,7 +1349,8 @@ function PagesListView() {
           type="checkbox"
           aria-label={`Select ${page.title}`}
           checked={selectedPageIds.has(page.id)}
-          disabled={isPageLibraryBusy}
+          disabled={isPageLibraryBusy || !canRunAnyBulkAction}
+          title={!canRunAnyBulkAction ? publishPermissionTitle || editPermissionTitle || deletePermissionTitle : undefined}
           onChange={() => togglePageSelection(page.id)}
           className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
@@ -1347,12 +1497,12 @@ function PagesListView() {
           <div className="flex items-center justify-end gap-2">
             {page.status !== 'published' && (
               <button
-                onClick={() => {
-                  if (isPageLibraryBusy) return;
-                  setPendingPublishPage(page);
-                }}
-                disabled={isPageLibraryBusy || Boolean(routeBlocker || publishBlocker)}
-                title={routeBlocker ? `Resolve route before publishing: ${routeBlocker}` : publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
+	                onClick={() => {
+	                  if (isPageLibraryBusy || !canPublishPages) return;
+	                  setPendingPublishPage(page);
+	                }}
+	                disabled={isPageLibraryBusy || !canPublishPages || Boolean(routeBlocker || publishBlocker)}
+	                title={!canPublishPages ? publishPermissionTitle : routeBlocker ? `Resolve route before publishing: ${routeBlocker}` : publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
                 data-testid={`pages-publish-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1362,10 +1512,10 @@ function PagesListView() {
             {page.status !== 'archived' && (
               <button
                 onClick={() => {
-                  void handleArchivePage(page);
-                }}
-                disabled={isPageLibraryBusy}
-                title="Archive page"
+	                  void handleArchivePage(page);
+	                }}
+	                disabled={isPageLibraryBusy || !canEditPages}
+	                title={!canEditPages ? editPermissionTitle : 'Archive page'}
                 className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Archive className="w-4 h-4" />
@@ -1384,29 +1534,32 @@ function PagesListView() {
             )}
             <button
               onClick={() => {
-                void handlePreviewPage(page);
-              }}
-              disabled={isPageLibraryBusy}
-              title="Preview page"
+	                void handlePreviewPage(page);
+	              }}
+	              disabled={isPageLibraryBusy || !canPublishPages}
+	              title={!canPublishPages ? publishPermissionTitle : 'Preview page'}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } })}
-              disabled={isPageMutationBusy}
-              title="Edit page"
+	              onClick={() => {
+	                if (isPageMutationBusy || !canEditPages) return;
+	                navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } });
+	              }}
+	              disabled={isPageMutationBusy || !canEditPages}
+	              title={!canEditPages ? editPermissionTitle : 'Edit page'}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => {
-                if (isPageLibraryBusy) return;
-                setPendingDeletePage(page);
-              }}
-              disabled={isPageLibraryBusy}
-              title="Delete page"
+	              onClick={() => {
+	                if (isPageLibraryBusy || !canDeletePages) return;
+	                setPendingDeletePage(page);
+	              }}
+	              disabled={isPageLibraryBusy || !canDeletePages}
+	              title={!canDeletePages ? deletePermissionTitle : 'Delete page'}
               className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
@@ -1519,6 +1672,22 @@ function PagesListView() {
   );
   const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete, pendingBulkPublish);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
+  const bulkPermissionTitle = bulkAction === 'publish'
+    ? publishPermissionTitle
+    : bulkAction === 'archive'
+      ? editPermissionTitle
+      : bulkAction === 'delete'
+        ? deletePermissionTitle
+        : !canRunAnyBulkAction
+          ? publishPermissionTitle || editPermissionTitle || deletePermissionTitle
+          : undefined;
+  const selectedBulkActionAllowed = bulkAction === 'publish'
+    ? canPublishPages
+    : bulkAction === 'archive'
+      ? canEditPages
+      : bulkAction === 'delete'
+        ? canDeletePages
+        : true;
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -1714,6 +1883,10 @@ function PagesListView() {
 
   const downloadPageHandoff = () => {
     if (isPageLibraryBusy) return;
+    if (!canViewPages) {
+      setNotice(viewPermissionTitle || 'Your account cannot export pages.');
+      return;
+    }
 
     const blob = new Blob([pageHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1727,19 +1900,34 @@ function PagesListView() {
     setError(null);
     setNotice('Pages handoff manifest downloaded.');
   };
+
+  if (!isPermissionMatrixPending && !canViewPages) {
+    return (
+      <PageShell
+        title="Pages unavailable"
+        description={viewPermissionTitle || 'Your account cannot view pages.'}
+      >
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant pages.view access.'}
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Pages"
       description="Manage the structure and content of your site."
       action={
         <Link
-          to="/pages/new"
-          search={createPageSearch}
-          aria-disabled={isPageLibraryBusy}
-          className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
-            isPageLibraryBusy && 'pointer-events-none opacity-60',
-          )}
+	          to="/pages/new"
+	          search={createPageSearch}
+	          aria-disabled={isPageLibraryBusy || !canEditPages}
+	          className={cn(
+	            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
+	            (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
+	          )}
+	          title={!canEditPages ? editPermissionTitle : undefined}
           aria-label="Create new page for active site"
           data-testid="pages-header-create"
         >
@@ -1787,8 +1975,9 @@ function PagesListView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-              disabled={isPageLibraryBusy}
+	              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
+	              disabled={isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="size-4" />
@@ -1796,8 +1985,9 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={downloadPageHandoff}
-              disabled={isPageLibraryBusy}
+	              onClick={downloadPageHandoff}
+	              disabled={isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1805,8 +1995,9 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={downloadPagesCsv}
-              disabled={filteredPages.length === 0 || isPageLibraryBusy}
+	              onClick={downloadPagesCsv}
+	              disabled={filteredPages.length === 0 || isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1814,8 +2005,9 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={() => void refreshPages(activeSiteId)}
-              disabled={isPageLibraryBusy}
+	              onClick={() => void refreshPages(activeSiteId)}
+	              disabled={isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
@@ -1823,23 +2015,24 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={() => void handleRefreshDeliveryHealth()}
-              disabled={isLoading || isRefreshingAllDeliveryHealth || deliveryProbeTargets.length === 0}
+	              onClick={() => void handleRefreshDeliveryHealth()}
+	              disabled={isLoading || isRefreshingAllDeliveryHealth || deliveryProbeTargets.length === 0 || !canViewPages}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="pages-refresh-delivery-health"
-              title={deliveryProbeTargets.length === 0 ? 'No published pages are ready for delivery health checks' : 'Refresh published page delivery health'}
+	              title={!canViewPages ? viewPermissionTitle : deliveryProbeTargets.length === 0 ? 'No published pages are ready for delivery health checks' : 'Refresh published page delivery health'}
             >
               <RefreshCw className={cn('size-4', isRefreshingAllDeliveryHealth && 'animate-spin')} />
               Refresh delivery
             </button>
             <Link
               to="/pages/new"
-              search={createPageSearch}
-              aria-disabled={isPageLibraryBusy}
-              className={cn(
-                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90',
-                isPageLibraryBusy && 'pointer-events-none opacity-60',
-              )}
+	              search={createPageSearch}
+	              aria-disabled={isPageLibraryBusy || !canEditPages}
+	              className={cn(
+	                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90',
+	                (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
+	              )}
+	              title={!canEditPages ? editPermissionTitle : undefined}
               data-testid="pages-command-create"
             >
               <Plus className="size-4" />
@@ -1927,12 +2120,13 @@ function PagesListView() {
                 <Link
                   key={shortcut.key}
                   to="/pages/new"
-                  search={getCreatePageSearch(shortcut.key)}
-                  aria-disabled={isPageLibraryBusy}
-                  className={cn(
-                    'group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
-                    isPageLibraryBusy && 'pointer-events-none opacity-60',
-                  )}
+	                  search={getCreatePageSearch(shortcut.key)}
+	                  aria-disabled={isPageLibraryBusy || !canEditPages}
+	                  className={cn(
+	                    'group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
+	                    (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
+	                  )}
+	                  title={!canEditPages ? editPermissionTitle : undefined}
                   data-testid={`pages-create-${shortcut.key}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -2056,8 +2250,9 @@ function PagesListView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
-              disabled={isPageLibraryBusy}
+	              onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
+	              disabled={isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Copy pages API URL"
             >
@@ -2066,8 +2261,9 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-              disabled={isPageLibraryBusy}
+	              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
+	              disabled={isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Copy pages handoff manifest"
             >
@@ -2076,8 +2272,9 @@ function PagesListView() {
             </button>
             <button
               type="button"
-              onClick={downloadPagesCsv}
-              disabled={filteredPages.length === 0 || isPageLibraryBusy}
+	              onClick={downloadPagesCsv}
+	              disabled={filteredPages.length === 0 || isPageLibraryBusy || !canViewPages}
+	              title={!canViewPages ? viewPermissionTitle : undefined}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Export filtered pages CSV"
             >
@@ -2221,14 +2418,16 @@ function PagesListView() {
           <button
             type="button"
             onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
-            disabled={data.length === 0 || isPageLibraryBusy}
+	            disabled={data.length === 0 || isPageLibraryBusy || !canRunAnyBulkAction}
+	            title={!canRunAnyBulkAction ? bulkPermissionTitle : undefined}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
           <select
-            value={bulkAction}
-            disabled={isPageLibraryBusy}
+	            value={bulkAction}
+	            disabled={isPageLibraryBusy || !canRunAnyBulkAction}
+	            title={!canRunAnyBulkAction ? bulkPermissionTitle : undefined}
             onChange={(event) => {
               if (isPageLibraryBusy) return;
               setBulkAction(event.target.value as typeof bulkAction);
@@ -2245,10 +2444,12 @@ function PagesListView() {
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPages.length === 0 || isPageLibraryBusy || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
-            title={bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
-              ? 'Resolve selected page blockers before publishing.'
-              : 'Apply selected bulk action'}
+	            disabled={!bulkAction || selectedPages.length === 0 || isPageLibraryBusy || !selectedBulkActionAllowed || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
+	            title={!selectedBulkActionAllowed
+	              ? bulkPermissionTitle
+	              : bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
+	              ? 'Resolve selected page blockers before publishing.'
+	              : 'Apply selected bulk action'}
             className={cn(
               'rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -2359,8 +2560,9 @@ function PagesListView() {
         </select>
         <button
           type="button"
-          onClick={() => void refreshPages(activeSiteId)}
-          disabled={isPageLibraryBusy}
+	          onClick={() => void refreshPages(activeSiteId)}
+	          disabled={isPageLibraryBusy || !canViewPages}
+	          title={!canViewPages ? viewPermissionTitle : undefined}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Refresh pages"
         >
@@ -2425,13 +2627,14 @@ function PagesListView() {
                   )}
                   <Link
                     to="/pages/new"
-                    search={createPageSearch}
-                    aria-disabled={isPageLibraryBusy}
-                    data-testid="pages-empty-create"
-                    className={cn(
-                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-                      isPageLibraryBusy && 'pointer-events-none opacity-60',
-                    )}
+	                    search={createPageSearch}
+	                    aria-disabled={isPageLibraryBusy || !canEditPages}
+	                    data-testid="pages-empty-create"
+	                    className={cn(
+	                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+	                      (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
+	                    )}
+	                    title={!canEditPages ? editPermissionTitle : undefined}
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create page for active site'}
                   >
                     <Plus className="w-4 h-4" />
@@ -2483,10 +2686,11 @@ function PagesListView() {
               <div className="mt-5 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    void handlePreviewPage(pendingPublishPage);
-                  }}
-                  disabled={isPageLibraryBusy}
+	                  onClick={() => {
+	                    void handlePreviewPage(pendingPublishPage);
+	                  }}
+	                  disabled={isPageLibraryBusy || !canPublishPages}
+	                  title={!canPublishPages ? publishPermissionTitle : undefined}
                   className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Preview first
@@ -2502,8 +2706,9 @@ function PagesListView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handlePublishPage(pendingPublishPage)}
-                  disabled={isPageLibraryBusy || deliveryStatus === 'blocked'}
+	                  onClick={() => void handlePublishPage(pendingPublishPage)}
+	                  disabled={isPageLibraryBusy || !canPublishPages || deliveryStatus === 'blocked'}
+	                  title={!canPublishPages ? publishPermissionTitle : undefined}
                   data-testid="pages-publish-confirm"
                   className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -2573,8 +2778,9 @@ function PagesListView() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleBulkAction()}
-                disabled={isPageLibraryBusy}
+	                onClick={() => void handleBulkAction()}
+	                disabled={isPageLibraryBusy || !canPublishPages}
+	                title={!canPublishPages ? publishPermissionTitle : undefined}
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Publishing...' : `Publish ${selectedPages.length} page${selectedPages.length === 1 ? '' : 's'}`}
@@ -2612,8 +2818,9 @@ function PagesListView() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleDeletePage(pendingDeletePage)}
-                disabled={isPageLibraryBusy}
+	                onClick={() => void handleDeletePage(pendingDeletePage)}
+	                disabled={isPageLibraryBusy || !canDeletePages}
+	                title={!canDeletePages ? deletePermissionTitle : undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {mutatingPageId === pendingDeletePage.id ? 'Deleting...' : 'Delete page'}
@@ -2650,8 +2857,9 @@ function PagesListView() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleBulkAction()}
-                disabled={isPageLibraryBusy}
+	                onClick={() => void handleBulkAction()}
+	                disabled={isPageLibraryBusy || !canDeletePages}
+	                title={!canDeletePages ? deletePermissionTitle : undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Deleting...' : 'Delete pages'}
