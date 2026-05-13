@@ -4681,6 +4681,7 @@ function MediaPage() {
                     disabled={isMediaLibraryBusy}
                     onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk visibility"
                   >
                     <option value="keep">No change</option>
                     <option value="public">Public</option>
@@ -4695,6 +4696,7 @@ function MediaPage() {
                     disabled={isMediaLibraryBusy}
                     onChange={(event) => setBulkFolderId(event.target.value)}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk folder"
                   >
                     <option value="keep">No change</option>
                     <option value="root">Root</option>

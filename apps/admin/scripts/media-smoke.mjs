@@ -338,8 +338,10 @@ const listMedia = async (search) => {
 };
 
 const waitForMedia = async (search, predicate = () => true) => {
+  let lastMedia = [];
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const media = await listMedia(search);
+    lastMedia = media;
     const match = media.find(predicate);
     if (match) {
       return match;
@@ -347,7 +349,15 @@ const waitForMedia = async (search, predicate = () => true) => {
     await sleep(250);
   }
 
-  throw new Error(`Timed out waiting for media matching ${search}`);
+  throw new Error(`Timed out waiting for media matching ${search}: ${JSON.stringify(lastMedia.map((item) => ({
+    id: item.id,
+    originalName: item.originalName,
+    filename: item.filename,
+    type: item.type,
+    folderId: item.folderId,
+    visibility: item.visibility,
+    tags: item.tags,
+  }))).slice(0, 1200)}`);
 };
 
 const waitForMediaMissing = async (search) => {
@@ -1367,19 +1377,115 @@ const setBulkSafetyAction = async (client, value) => {
   return result;
 };
 
-const selectVisibleMedia = async (client) => {
-  const result = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').includes('Select visible')
-    ));
-    if (!(button instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'button-not-found' };
+const setBulkSelectValue = async (client, ariaLabel, value) => {
+  let result;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const select = document.querySelector(\`select[aria-label="${ariaLabel}"]\`);
+      if (!(select instanceof HTMLSelectElement)) {
+        return {
+          ok: false,
+          retry: true,
+          reason: 'select-not-found',
+          ariaLabel: ${JSON.stringify(ariaLabel)},
+          selects: Array.from(document.querySelectorAll('select')).map((item) => item.getAttribute('aria-label') || item.textContent || '').slice(0, 80),
+        };
+      }
+      if (select.disabled) return { ok: false, retry: true, reason: 'select-disabled', ariaLabel: ${JSON.stringify(ariaLabel)} };
+      const optionExists = Array.from(select.options).some((option) => option.value === ${JSON.stringify(value)});
+      if (!optionExists) {
+        return {
+          ok: false,
+          retry: true,
+          reason: 'option-not-found',
+          value: ${JSON.stringify(value)},
+          options: Array.from(select.options).map((option) => ({ value: option.value, text: option.textContent || '' })).slice(0, 80),
+        };
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      descriptor?.set?.call(select, ${JSON.stringify(value)});
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, value: select.value };
+    })()`);
+    if (result.ok) break;
+    if (!result.retry || attempt === 79) {
+      assert(false, `Unable to set ${ariaLabel}: ${JSON.stringify(result)}`);
     }
-    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
-    button.click();
-    return { ok: true };
+    await sleep(250);
+  }
+  await sleep(100);
+  return result;
+};
+
+const setBulkTagAction = (client, value) => setBulkSelectValue(client, 'Bulk tag action', value);
+const setBulkFolder = (client, value) => setBulkSelectValue(client, 'Bulk folder', value);
+
+const setBulkTags = async (client, tags) => {
+  const tagText = Array.isArray(tags) ? tags.join(', ') : String(tags || '');
+  const result = await evaluate(client, `(async () => {
+    const input = document.querySelector('input[aria-label="Bulk media tags"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'input-not-found' };
+    }
+    if (input.disabled) return { ok: false, reason: 'input-disabled' };
+    input.focus();
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    descriptor?.set?.call(input, ${JSON.stringify(tagText)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    input.blur();
+    return { ok: true, value: input.value };
   })()`);
-  assert(result.ok, `Unable to select visible media: ${JSON.stringify(result)}`);
+  assert(result.ok, `Unable to set bulk tags: ${JSON.stringify(result)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: ${JSON.stringify(tagText ? tagText.split(',').map((tag) => tag.trim()).filter(Boolean) : [])}.every((tag) => document.body?.innerText?.includes(tag)),
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.ready) return state;
+    if (attempt === 39) {
+      throw new Error(`Bulk tags did not render after entry: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  return null;
+};
+
+const selectVisibleMedia = async (client) => {
+  let result;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').includes('Select visible')
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, retry: true, reason: 'button-not-found' };
+      }
+      if (button.disabled) {
+        const alreadySelected = document.body?.innerText?.includes('1 selected') || false;
+        return {
+          ok: alreadySelected,
+          retry: !alreadySelected,
+          reason: 'button-disabled',
+          text: button.textContent || '',
+          body: document.body?.innerText?.slice(0, 1400) || '',
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (result.ok) break;
+    if (!result.retry || attempt === 79) {
+      assert(false, `Unable to select visible media: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
   await sleep(100);
 };
 
@@ -1396,6 +1502,93 @@ const applyBulkChanges = async (client) => {
     return { ok: true };
   })()`);
   assert(result.ok, `Unable to apply bulk changes: ${JSON.stringify(result)}`);
+};
+
+const waitForBulkNotice = async (client, expectedText) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasExpected: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
+      applying: document.body?.innerText?.includes('Applying...') || document.body?.innerText?.includes('Deleting...'),
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (state.hasExpected && !state.applying) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Bulk notice ${expectedText} did not appear: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const selectSingleAssetForBulk = async (client, assetName) => {
+  await navigateToMedia(client, assetName);
+  await waitForMediaPageAsset(client, assetName);
+  await selectVisibleMedia(client);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      selected: document.body?.innerText?.includes('1 selected') || false,
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.selected) return state;
+    if (attempt === 79) {
+      throw new Error(`Bulk selection did not select ${assetName}: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  return null;
+};
+
+const applySingleAssetBulkUpdate = async (client, assetName, options = {}) => {
+  await selectSingleAssetForBulk(client, assetName);
+  if (options.folderId !== undefined) {
+    await setBulkFolder(client, options.folderId === null ? 'root' : options.folderId);
+  }
+  if (options.tagMode) {
+    await setBulkTagAction(client, options.tagMode);
+    if (options.tags?.length) {
+      await setBulkTags(client, options.tags);
+    }
+  }
+  await applyBulkChanges(client);
+  await waitForBulkNotice(client, 'Updated 1 asset');
+};
+
+const deleteSingleAssetThroughBulk = async (client, assetName) => {
+  await selectSingleAssetForBulk(client, assetName);
+  const openResult = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').includes('Delete selected')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'button-not-found' };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(openResult.ok, `Unable to open bulk delete confirmation: ${JSON.stringify(openResult)}`);
+
+  const confirmResult = await evaluate(client, `(() => {
+    const dialog = Array.from(document.querySelectorAll('[class*="fixed"]')).find((candidate) => (
+      (candidate.textContent || '').includes('Delete 1 selected asset?')
+    ));
+    const button = dialog && Array.from(dialog.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === 'Delete assets'
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'confirm-missing', dialog: dialog?.textContent?.slice(0, 500) || '' };
+    }
+    if (button.disabled) return { ok: false, reason: 'confirm-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(confirmResult.ok, `Unable to confirm bulk delete: ${JSON.stringify(confirmResult)}`);
+  await waitForBulkNotice(client, 'Deleted 1 asset');
 };
 
 const releaseQuarantineThroughBulk = async (client) => {
@@ -1592,6 +1785,7 @@ const main = async () => {
   const renamedImageName = `${marker}-renamed.png`;
   const privateName = `${marker}.txt`;
   const centralUploadName = `${marker}-central-upload.txt`;
+  const bulkName = `${marker}-bulk.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
   const centralUploadPath = path.join(os.tmpdir(), centralUploadName);
@@ -1655,9 +1849,20 @@ const main = async () => {
       caption: 'Temporary private file for signed delivery smoke.',
     });
     mediaIds.push(privateFile.id);
+    const bulkFile = await uploadMedia({
+      filename: bulkName,
+      mimeType: 'text/plain',
+      bytes: Buffer.from(`Backy media bulk smoke ${suffix}\n`, 'utf8'),
+      visibility: 'public',
+      folderId: null,
+      tags: ['bulk-original'],
+      caption: 'Temporary file for media bulk organization smoke.',
+    });
+    mediaIds.push(bulkFile.id);
 
     await waitForMedia(marker, (item) => item.id === publicImage.id);
     await waitForMedia(marker, (item) => item.id === privateFile.id);
+    await waitForMedia(marker, (item) => item.id === bulkFile.id);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1678,6 +1883,43 @@ const main = async () => {
     await waitForMediaPageAsset(client, privateName);
     await assertMediaLayout(client, imageName);
     await assertMediaPaginationControls(client);
+    await applySingleAssetBulkUpdate(client, bulkName, { folderId });
+    await waitForMedia(marker, (item) => (
+      item.id === bulkFile.id &&
+      item.folderId === folderId &&
+      Array.isArray(item.tags) &&
+      item.tags.includes('bulk-original')
+    ));
+    await applySingleAssetBulkUpdate(client, bulkName, { folderId: null, tagMode: 'merge', tags: ['bulk-merge'] });
+    await waitForMedia(marker, (item) => (
+      item.id === bulkFile.id &&
+      item.folderId === null &&
+      Array.isArray(item.tags) &&
+      item.tags.includes('bulk-original') &&
+      item.tags.includes('bulk-merge')
+    ));
+    await applySingleAssetBulkUpdate(client, bulkName, { tagMode: 'replace', tags: ['bulk-replace'] });
+    await waitForMedia(marker, (item) => (
+      item.id === bulkFile.id &&
+      Array.isArray(item.tags) &&
+      item.tags.length === 1 &&
+      item.tags[0] === 'bulk-replace'
+    ));
+    await applySingleAssetBulkUpdate(client, bulkName, { tagMode: 'clear' });
+    await waitForMedia(marker, (item) => (
+      item.id === bulkFile.id &&
+      Array.isArray(item.tags) &&
+      item.tags.length === 0
+    ));
+    await deleteSingleAssetThroughBulk(client, bulkName);
+    await waitForMediaMissing(bulkName);
+    const bulkFileIndex = mediaIds.indexOf(bulkFile.id);
+    if (bulkFileIndex !== -1) {
+      mediaIds.splice(bulkFileIndex, 1);
+    }
+    await navigateToMedia(client, marker);
+    await waitForMediaPageAsset(client, imageName);
+    await waitForMediaPageAsset(client, privateName);
     await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
     centralUploadedFile = await waitForMedia(marker, (item) => (
       item.originalName === centralUploadName &&
