@@ -8387,6 +8387,12 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const optionValues = (testId) => {
+      const select = document.querySelector('[data-testid="' + testId + '"]');
+      return select instanceof HTMLSelectElement
+        ? Array.from(select.options).map((option) => option.value)
+        : [];
+    };
     const summary = Array.from(document.querySelectorAll('[data-testid="editor-data-query-controls"] ~ div, [data-testid="editor-data-query-controls"]'))
       .map((node) => node.textContent || '')
       .join(' ');
@@ -8397,6 +8403,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       search: value('editor-data-query-search'),
       filterField: value('editor-data-query-filter-field'),
       filterValue: value('editor-data-query-filter-value'),
+      filterValueOptions: optionValues('editor-data-query-filter-value'),
       sortBy: value('editor-data-query-sort-by'),
       sortDirection: value('editor-data-query-sort-direction'),
       limit: value('editor-data-query-limit'),
@@ -8408,6 +8415,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(state.collectionId === collectionId, `Collection binding did not select collection: ${JSON.stringify(state)}`);
   assert(state.field === 'title' && state.target === 'props.content', `Collection binding field/target mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Collection query filter mismatch: ${JSON.stringify(state)}`);
+  assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Collection query filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
   assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
 
@@ -8527,6 +8535,12 @@ const testRepeaterControls = async (client, collectionId) => {
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const optionValues = (testId) => {
+      const select = document.querySelector('[data-testid="' + testId + '"]');
+      return select instanceof HTMLSelectElement
+        ? Array.from(select.options).map((option) => option.value)
+        : [];
+    };
     const summary = Array.from(document.querySelectorAll('[data-testid="editor-repeater-controls"]'))
       .map((node) => node.textContent || '')
       .join(' ');
@@ -8539,6 +8553,7 @@ const testRepeaterControls = async (client, collectionId) => {
       search: value('editor-repeater-search'),
       filterField: value('editor-repeater-filter-field'),
       filterValue: value('editor-repeater-filter-value'),
+      filterValueOptions: optionValues('editor-repeater-filter-value'),
       sortBy: value('editor-repeater-sort-by'),
       sortDirection: value('editor-repeater-sort-direction'),
       limit: value('editor-repeater-limit'),
@@ -8554,6 +8569,7 @@ const testRepeaterControls = async (client, collectionId) => {
   assert(state.datasetId === `dataset_${collectionId}_smoke_repeater`, `Repeater dataset id mismatch: ${JSON.stringify(state)}`);
   assert(state.titleField === 'title' && state.descriptionField === 'summary' && state.imageField === 'thumbnail', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
+  assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Repeater filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
   assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
   assert(/sort rank desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
@@ -11668,6 +11684,11 @@ const main = async () => {
         targetElementId: 'smoke-heading',
         test: () => testHeadingTypographyControls(client),
         assertPersisted: () => assertPersistedHeadingTypography(tempPageId),
+      },
+      'data-binding': {
+        targetElementId: 'smoke-heading',
+        test: () => testCollectionDataBindingControls(client, tempCollection?.id),
+        assertPersisted: () => assertPersistedDataBinding(tempPageId, tempCollection?.id),
       },
     };
     const componentSmoke = componentSmokeHandlers[COMPONENT_SMOKE];

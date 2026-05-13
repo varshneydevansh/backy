@@ -4293,6 +4293,74 @@ const normalizedNumberInput = (value: unknown): string => (
       : ''
 );
 
+const filterValueOptionsForField = (field?: CollectionField | null): Array<{ value: string; label: string }> => {
+  if (!field) return [];
+
+  if (field.type === 'boolean') {
+    return [
+      { value: 'true', label: 'True' },
+      { value: 'false', label: 'False' },
+    ];
+  }
+
+  if ((field.type === 'select' || field.type === 'tags') && Array.isArray(field.options)) {
+    return field.options
+      .filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
+      .map((option) => ({ value: option, label: option }));
+  }
+
+  return [];
+};
+
+function CollectionFilterValueControl({
+  testId,
+  field,
+  value,
+  onChange,
+}: {
+  testId: string;
+  field?: CollectionField | null;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const options = filterValueOptionsForField(field);
+
+  if (options.length > 0) {
+    return (
+      <select
+        value={options.some((option) => option.value === value) ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid={testId}
+        className={cn(
+          'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+          'focus:outline-none focus:ring-2 focus:ring-ring'
+        )}
+      >
+        <option value="">Any value</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={field?.type === 'number' ? 'number' : field?.type === 'date' || field?.type === 'datetime' ? 'text' : 'text'}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      data-testid={testId}
+      className={cn(
+        'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+        'focus:outline-none focus:ring-2 focus:ring-ring'
+      )}
+      placeholder={field ? `Filter ${field.label}` : 'Exact value'}
+    />
+  );
+}
+
 interface RepeaterDataPropertiesProps {
   element: CanvasElement;
   collections: Collection[];
@@ -4334,6 +4402,7 @@ function RepeaterDataProperties({
       ? query.search
       : '';
   const selectedFilterField = typeof query.fieldKey === 'string' ? query.fieldKey : '';
+  const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
   const selectedFilterValue = typeof query.fieldValue === 'string' || typeof query.fieldValue === 'number' || typeof query.fieldValue === 'boolean'
     ? String(query.fieldValue)
     : '';
@@ -4580,16 +4649,11 @@ function RepeaterDataProperties({
                   ))}
                 </select>
 
-                <input
-                  type="text"
+                <CollectionFilterValueControl
+                  testId="editor-repeater-filter-value"
+                  field={selectedFilterFieldDefinition}
                   value={selectedFilterValue}
-                  onChange={(event) => updateRepeater({ filterValue: event.target.value })}
-                  data-testid="editor-repeater-filter-value"
-                  className={cn(
-                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                    'focus:outline-none focus:ring-2 focus:ring-ring'
-                  )}
-                  placeholder="Exact value"
+                  onChange={(value) => updateRepeater({ filterValue: value })}
                 />
               </div>
 
@@ -4751,6 +4815,7 @@ function DataBindingProperties({
     : getTargetPathOptions(element.type)[0].value;
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) || null;
   const selectedField = selectedCollection?.fields.find((field) => field.key === selectedFieldKey) || null;
+  const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
   const targetPathOptions = getTargetPathOptions(element.type);
 
   const updateBinding = (updates: {
@@ -4999,16 +5064,11 @@ function DataBindingProperties({
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Filter value
                   </label>
-                  <input
-                    type="text"
+                  <CollectionFilterValueControl
+                    testId="editor-data-query-filter-value"
+                    field={selectedFilterFieldDefinition}
                     value={selectedFilterValue}
-                    onChange={(event) => updateBinding({ filterValue: event.target.value })}
-                    data-testid="editor-data-query-filter-value"
-                    className={cn(
-                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                      'focus:outline-none focus:ring-2 focus:ring-ring'
-                    )}
-                    placeholder="Exact value"
+                    onChange={(value) => updateBinding({ filterValue: value })}
                   />
                 </div>
               </div>
