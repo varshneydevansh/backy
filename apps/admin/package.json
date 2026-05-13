@@ -28,6 +28,7 @@
     "test:editor-multiselect": "BACKY_EDITOR_MULTI_SELECT_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-nested-group": "BACKY_EDITOR_NESTED_GROUP_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-grouping": "npm run test:editor-multiselect && npm run test:editor-nested-group",
+    "test:editor-animation": "BACKY_EDITOR_ANIMATION_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:pages-list": "node scripts/pages-list-smoke.mjs",
     "test:page-create": "node scripts/page-create-smoke.mjs",
     "test:blog-create": "node scripts/blog-create-smoke.mjs",

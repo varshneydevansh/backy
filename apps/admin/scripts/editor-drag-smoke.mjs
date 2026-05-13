@@ -23,6 +23,7 @@ const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const NESTED_GROUP_SMOKE = process.env.BACKY_EDITOR_NESTED_GROUP_SMOKE === '1';
+const ANIMATION_SMOKE = process.env.BACKY_EDITOR_ANIMATION_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
 const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
@@ -7539,6 +7540,139 @@ const waitForPageSettingsPersisted = async (pageId, expected) => {
   throw new Error(`Page settings did not persist: expected ${JSON.stringify(expected)}, got ${JSON.stringify(lastPage)}`);
 };
 
+const waitForPersistedElementAnimation = async (pageId, elementId, expectedAnimation) => {
+  let lastAnimation = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const elements = payload.data?.page?.content?.elements || [];
+    const element = findCanvasElement(elements, elementId);
+    lastAnimation = element?.animation || null;
+
+    const scrollTrigger = lastAnimation?.scrollTrigger || {};
+    const matches = element &&
+      lastAnimation?.type === expectedAnimation.type &&
+      lastAnimation?.trigger === expectedAnimation.trigger &&
+      lastAnimation?.direction === expectedAnimation.direction &&
+      Math.abs(Number(lastAnimation?.duration) - expectedAnimation.duration) <= 0.01 &&
+      Math.abs(Number(lastAnimation?.delay) - expectedAnimation.delay) <= 0.01 &&
+      lastAnimation?.easing === expectedAnimation.easing &&
+      scrollTrigger.start === expectedAnimation.scrollTrigger.start &&
+      scrollTrigger.end === expectedAnimation.scrollTrigger.end &&
+      scrollTrigger.scrub === expectedAnimation.scrollTrigger.scrub;
+
+    if (matches) {
+      return {
+        elementId,
+        animation: lastAnimation,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Animation did not persist for ${elementId}: expected ${JSON.stringify(expectedAnimation)}, got ${JSON.stringify(lastAnimation)}`);
+};
+
+const testAnimationControls = async (client, pageId, elementId = 'smoke-heading') => {
+  const expected = {
+    type: 'slideIn',
+    trigger: 'scroll',
+    direction: 'left',
+    duration: 1.2,
+    delay: 0.3,
+    easing: 'back.out(1.7)',
+    scrollTrigger: {
+      start: 'top 75%',
+      end: 'bottom 25%',
+      scrub: true,
+    },
+  };
+
+  await selectLayerById(client, elementId);
+  await switchToPropertiesPanel(client);
+  await ensurePropertySectionExpanded(client, 'Animation', 'editor-animation-type');
+  await setFormControlByTestId(client, 'editor-animation-type', expected.type);
+  await setFormControlByTestId(client, 'editor-animation-trigger', expected.trigger);
+  await setFormControlByTestId(client, 'editor-animation-direction', expected.direction);
+  await setFormControlByTestId(client, 'editor-animation-duration', String(expected.duration));
+  await setFormControlByTestId(client, 'editor-animation-delay', String(expected.delay));
+  await setFormControlByTestId(client, 'editor-animation-easing', expected.easing);
+  await setFormControlByTestId(client, 'editor-animation-scroll-start', expected.scrollTrigger.start);
+  await setFormControlByTestId(client, 'editor-animation-scroll-end', expected.scrollTrigger.end);
+  await setCheckboxByTestId(client, 'editor-animation-scroll-scrub', expected.scrollTrigger.scrub);
+
+  const authored = await evaluate(client, `(() => {
+    const value = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+        ? control.value
+        : null;
+    };
+    const checked = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return control instanceof HTMLInputElement && control.type === 'checkbox' ? control.checked : null;
+    };
+    return {
+      type: value('editor-animation-type'),
+      trigger: value('editor-animation-trigger'),
+      direction: value('editor-animation-direction'),
+      duration: Number(value('editor-animation-duration')),
+      delay: Number(value('editor-animation-delay')),
+      easing: value('editor-animation-easing'),
+      scrollStart: value('editor-animation-scroll-start'),
+      scrollEnd: value('editor-animation-scroll-end'),
+      scrub: checked('editor-animation-scroll-scrub'),
+    };
+  })()`);
+
+  assert(
+    authored.type === expected.type &&
+      authored.trigger === expected.trigger &&
+      authored.direction === expected.direction &&
+      Math.abs(authored.duration - expected.duration) <= 0.01 &&
+      Math.abs(authored.delay - expected.delay) <= 0.01 &&
+      authored.easing === expected.easing &&
+      authored.scrollStart === expected.scrollTrigger.start &&
+      authored.scrollEnd === expected.scrollTrigger.end &&
+      authored.scrub === expected.scrollTrigger.scrub,
+    `Animation controls did not reflect authored values: ${JSON.stringify(authored)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-animation-preview');
+  let preview = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    preview = await evaluate(client, `(() => {
+      const box = document.querySelector('[data-testid="editor-animation-preview-box"]');
+      if (!(box instanceof HTMLElement)) return { ok: false, reason: 'missing-preview-box' };
+      const style = window.getComputedStyle(box);
+      return {
+        ok: true,
+        opacity: style.opacity,
+        transform: style.transform,
+      };
+    })()`);
+    if (preview?.ok && Number(preview.opacity) >= 0.9) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(preview?.ok && Number(preview.opacity) >= 0.9, `Animation preview did not play: ${JSON.stringify(preview)}`);
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after animation smoke save');
+  const persisted = await waitForPersistedElementAnimation(pageId, elementId, expected);
+
+  return {
+    elementId,
+    expected,
+    authored,
+    preview,
+    savedStatus,
+    persisted,
+  };
+};
+
 const testPageSettingsControls = async (client, pageId) => {
   assert(pageId, 'Page settings smoke requires an internally created smoke page');
   const suffix = Date.now().toString(36);
@@ -11842,7 +11976,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -12003,6 +12137,19 @@ const main = async () => {
         mode: 'nested-group',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         nestedGrouping,
+      }, null, 2));
+      return;
+    }
+
+    if (ANIMATION_SMOKE) {
+      assert(!EDITOR_PATH, 'Animation smoke currently requires an internally created smoke page');
+      const animation = await testAnimationControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'animation',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        animation,
       }, null, 2));
       return;
     }

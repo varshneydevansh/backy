@@ -188,6 +188,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                 <label style={styles.label}>Animation Type</label>
                 <select
                     style={styles.select}
+                    data-testid="editor-animation-type"
                     value={config.type}
                     onChange={(e) =>
                         updateConfig({ type: e.target.value as AnimationConfig['type'] })
@@ -208,6 +209,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         <label style={styles.label}>Trigger</label>
                         <select
                             style={styles.select}
+                            data-testid="editor-animation-trigger"
                             value={config.trigger}
                             onChange={(e) =>
                                 updateConfig({ trigger: e.target.value as AnimationConfig['trigger'] })
@@ -227,6 +229,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <label style={styles.label}>Direction</label>
                             <select
                                 style={styles.select}
+                                data-testid="editor-animation-direction"
                                 value={config.direction || 'up'}
                                 onChange={(e) =>
                                     updateConfig({
@@ -251,6 +254,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             </label>
                             <input
                                 type="range"
+                                data-testid="editor-animation-duration"
                                 min="0.1"
                                 max="3"
                                 step="0.1"
@@ -267,6 +271,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             </label>
                             <input
                                 type="range"
+                                data-testid="editor-animation-delay"
                                 min="0"
                                 max="2"
                                 step="0.1"
@@ -284,6 +289,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         <label style={styles.label}>Easing</label>
                         <select
                             style={styles.select}
+                            data-testid="editor-animation-easing"
                             value={config.easing}
                             onChange={(e) => updateConfig({ easing: e.target.value })}
                         >
@@ -315,6 +321,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                     </label>
                                     <input
                                         type="text"
+                                        data-testid="editor-animation-scroll-start"
                                         value={config.scrollTrigger?.start || 'top 80%'}
                                         onChange={(e) =>
                                             updateConfig({
@@ -336,6 +343,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                     </label>
                                     <input
                                         type="text"
+                                        data-testid="editor-animation-scroll-end"
                                         value={config.scrollTrigger?.end || 'bottom 20%'}
                                         onChange={(e) =>
                                             updateConfig({
@@ -355,6 +363,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <label style={{ ...styles.checkbox, marginTop: '12px' }}>
                                 <input
                                     type="checkbox"
+                                    data-testid="editor-animation-scroll-scrub"
                                     checked={config.scrollTrigger?.scrub || false}
                                     onChange={(e) =>
                                         updateConfig({
@@ -375,6 +384,8 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                     {/* Preview */}
                     <div style={styles.section}>
                         <button
+                            type="button"
+                            data-testid="editor-animation-preview"
                             onClick={playPreview}
                             style={{
                                 width: '100%',
@@ -394,6 +405,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
 
                     <div style={styles.preview}>
                         <div
+                            data-testid="editor-animation-preview-box"
                             style={{
                                 ...styles.previewBox,
                                 opacity: isPlaying ? 1 : 0.5,
