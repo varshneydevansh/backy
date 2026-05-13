@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Code2,
   Copy,
+  CreditCard,
   Download,
   Edit,
   Eye,
@@ -57,13 +58,14 @@ export const Route = createFileRoute('/sites')({
 type SiteStatusFilter = 'all' | Site['status'];
 type SiteDomainFilter = 'all' | 'custom' | 'backy';
 type SitePageCoverageFilter = 'all' | 'with-pages' | 'empty';
-type SitePermissionKey = 'sites.view' | 'sites.create' | 'sites.configure' | 'sites.delete' | 'activity.export';
+type SitePermissionKey = 'sites.view' | 'sites.create' | 'sites.configure' | 'sites.delete' | 'settings.billing' | 'activity.export';
 
 const SITE_PERMISSION_ROLE_DEFAULTS: Record<SitePermissionKey, Array<User['role']>> = {
   'sites.view': ['owner', 'admin', 'editor', 'viewer'],
   'sites.create': ['owner', 'admin'],
   'sites.configure': ['owner', 'admin'],
   'sites.delete': ['owner'],
+  'settings.billing': ['owner'],
   'activity.export': ['owner', 'admin'],
 };
 
@@ -277,6 +279,7 @@ const getPublicPreviewHref = (site: Site) => {
 
 type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
 type SiteVercelDeployment = NonNullable<NonNullable<Site['settings']>['vercelDeployment']>;
+type SiteBillingQuota = NonNullable<NonNullable<Site['settings']>['billingQuota']>;
 
 const domainVerificationStatusClass: Record<SiteDomainVerification['status'], string> = {
   not_started: 'bg-muted text-muted-foreground',
@@ -381,6 +384,98 @@ const getVercelDeployment = (
     history: current?.history || [],
   };
 };
+
+const BILLING_PLAN_LIMITS: Record<SiteBillingQuota['plan'], SiteBillingQuota['limits']> = {
+  free: {
+    pages: 10,
+    mediaGb: 1,
+    bandwidthGb: 10,
+    forms: 3,
+    products: 25,
+    collections: 3,
+    teamMembers: 2,
+    customDomains: 1,
+  },
+  pro: {
+    pages: 75,
+    mediaGb: 25,
+    bandwidthGb: 250,
+    forms: 20,
+    products: 500,
+    collections: 25,
+    teamMembers: 8,
+    customDomains: 5,
+  },
+  business: {
+    pages: 250,
+    mediaGb: 100,
+    bandwidthGb: 1000,
+    forms: 75,
+    products: 5000,
+    collections: 100,
+    teamMembers: 25,
+    customDomains: 20,
+  },
+  enterprise: {
+    pages: 1000,
+    mediaGb: 1000,
+    bandwidthGb: 10000,
+    forms: 500,
+    products: 50000,
+    collections: 500,
+    teamMembers: 250,
+    customDomains: 100,
+  },
+};
+
+const billingPlanLabels: Record<SiteBillingQuota['plan'], string> = {
+  free: 'Free',
+  pro: 'Pro',
+  business: 'Business',
+  enterprise: 'Enterprise',
+};
+
+const billingStatusClass: Record<SiteBillingQuota['status'], string> = {
+  active: 'bg-emerald-50 text-emerald-700',
+  trialing: 'bg-blue-50 text-blue-700',
+  past_due: 'bg-red-50 text-red-700',
+  paused: 'bg-amber-50 text-amber-700',
+  comped: 'bg-violet-50 text-violet-700',
+};
+
+const getBillingUsageSnapshot = (site: Site): SiteBillingQuota['usage'] => ({
+  pages: site.pageCount || site.settings?.billingQuota?.usage.pages || 0,
+  mediaGb: site.settings?.billingQuota?.usage.mediaGb || 0,
+  bandwidthGb: site.settings?.billingQuota?.usage.bandwidthGb || 0,
+  forms: site.settings?.billingQuota?.usage.forms || 0,
+  products: site.settings?.billingQuota?.usage.products || 0,
+  collections: site.settings?.billingQuota?.usage.collections || 0,
+  teamMembers: site.settings?.billingQuota?.usage.teamMembers || 1,
+  customDomains: site.customDomain ? 1 : 0,
+  updatedAt: new Date().toISOString(),
+});
+
+const getBillingQuota = (site: Site): SiteBillingQuota => {
+  const current = site.settings?.billingQuota;
+  const plan = current?.plan || 'free';
+
+  return {
+    plan,
+    status: current?.status || 'active',
+    billingOwnerId: current?.billingOwnerId || null,
+    billingEmail: current?.billingEmail || '',
+    renewalAt: current?.renewalAt || null,
+    limits: current?.limits || BILLING_PLAN_LIMITS[plan],
+    usage: current?.usage || getBillingUsageSnapshot(site),
+    lastAction: current?.lastAction || null,
+    notes: current?.notes || '',
+    history: current?.history || [],
+  };
+};
+
+const quotaPercent = (value: number, limit: number): number => (
+  limit <= 0 ? 0 : Math.min(999, Math.round((value / limit) * 100))
+);
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
@@ -536,11 +631,13 @@ function SitesListView() {
   const canCreateSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
   const canConfigureSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure');
   const canDeleteSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.delete');
+  const canManageBilling = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'settings.billing');
   const canExportActivity = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
   const viewPermissionTitle = canViewSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.view');
   const createPermissionTitle = canCreateSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.create');
   const configurePermissionTitle = canConfigureSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.configure');
   const deletePermissionTitle = canDeleteSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.delete');
+  const billingPermissionTitle = canManageBilling ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'settings.billing');
   const activityPermissionTitle = canExportActivity ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'activity.export');
   const isSiteMutationBusy = updatingSiteId !== null;
   const isSitesBusy = isLoading || isSiteMutationBusy || isPermissionMatrixPending;
@@ -699,6 +796,9 @@ function SitesListView() {
   const selectedVercelDeployment = useMemo(() => (
     selectedApiSite ? getVercelDeployment(selectedApiSite, platformSettings) : null
   ), [platformSettings, selectedApiSite]);
+  const selectedBillingQuota = useMemo(() => (
+    selectedApiSite ? getBillingQuota(selectedApiSite) : null
+  ), [selectedApiSite]);
   const siteLaunchReadiness = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
     const draft = sites.filter((site) => site.status === 'draft').length;
@@ -898,6 +998,76 @@ function SitesListView() {
       void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update deployment workflow');
+    } finally {
+      setUpdatingSiteId(null);
+    }
+  };
+
+  const handleBillingQuotaAction = async (
+    site: Site,
+    action: NonNullable<SiteBillingQuota['lastAction']>,
+  ) => {
+    if (isSitesBusy) return;
+    if (!canManageBilling) {
+      setNotice(`Your account needs settings.billing to update site billing and quotas. ${billingPermissionTitle}`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const current = getBillingQuota(site);
+    const nextPlan: SiteBillingQuota['plan'] = action === 'set-pro'
+      ? 'pro'
+      : action === 'set-business'
+        ? 'business'
+        : action === 'set-enterprise'
+          ? 'enterprise'
+          : action === 'set-free'
+            ? 'free'
+            : current.plan;
+    const usage = getBillingUsageSnapshot(site);
+    const limits = action === 'refresh-usage' ? current.limits : BILLING_PLAN_LIMITS[nextPlan];
+    const nextQuota: SiteBillingQuota = {
+      ...current,
+      plan: nextPlan,
+      status: current.status || 'active',
+      limits,
+      usage,
+      lastAction: action,
+      renewalAt: current.renewalAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      history: [
+        {
+          id: `quota_${Date.now().toString(36)}`,
+          action,
+          plan: nextPlan,
+          status: current.status || 'active',
+          requestedAt: now,
+          usage,
+          limits,
+        },
+        ...(current.history || []),
+      ].slice(0, 8),
+    };
+
+    setUpdatingSiteId(site.id);
+    setNotice(null);
+
+    try {
+      const saved = await updateSiteFromApi(site.publicSiteId || site.id, {
+        settings: {
+          ...(site.settings || {}),
+          billingQuota: nextQuota,
+        },
+      });
+      const savedWithPageCount = { ...saved, pageCount: site.pageCount };
+      setSites(sites.map((item) => (item.id === site.id ? savedWithPageCount : item)));
+      setNotice(
+        action === 'refresh-usage'
+          ? `${site.name} quota usage snapshot refreshed.`
+          : `${site.name} billing plan set to ${billingPlanLabels[nextPlan]}.`,
+      );
+      void loadSiteAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update billing quotas');
     } finally {
       setUpdatingSiteId(null);
     }
@@ -1368,12 +1538,13 @@ function SitesListView() {
               {permissionError}
             </div>
           )}
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {([
               ['sites.view', 'View sites', canViewSites, viewPermissionTitle],
               ['sites.create', 'Create sites', canCreateSites, createPermissionTitle],
               ['sites.configure', 'Configure sites', canConfigureSites, configurePermissionTitle],
               ['sites.delete', 'Archive/delete', canDeleteSites, deletePermissionTitle],
+              ['settings.billing', 'Billing/quotas', canManageBilling, billingPermissionTitle],
               ['activity.export', 'Activity trail', canExportActivity, activityPermissionTitle],
             ] as const).map(([key, label, allowed, reason]) => (
               <div key={key} className="rounded-lg border border-border bg-card px-3 py-2">
@@ -1686,6 +1857,145 @@ function SitesListView() {
                             <span className="text-[11px] text-muted-foreground">{formatDate(run.requestedAt)}</span>
                           </div>
                           <div className="mt-1 truncate text-[11px] text-muted-foreground">{run.targetUrl || run.command}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </PanelContent>
+      </Panel>
+
+      <Panel id="sites-billing-quotas" className="scroll-mt-24" data-testid="sites-billing-quotas">
+        <PanelHeader
+          title="Billing and quotas"
+          description="Track per-site plan, quota limits, usage snapshots, and ownership before a workspace can be offered as a hosted product."
+          icon={<CreditCard className="size-4" />}
+          action={
+            selectedApiSite && selectedBillingQuota ? (
+              <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', billingStatusClass[selectedBillingQuota.status])}>
+                {billingPlanLabels[selectedBillingQuota.plan]} · {selectedBillingQuota.status.replace(/_/g, ' ')}
+              </span>
+            ) : null
+          }
+        />
+        <PanelContent>
+          {!selectedApiSite || !selectedBillingQuota ? (
+            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
+              Create a site to assign a plan and track quota usage.
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">{selectedApiSite.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Backy stores site-level plan metadata and usage snapshots here. Checkout provider billing can attach later without losing quota history.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                    {selectedBillingQuota.lastAction || 'no billing event'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {([
+                    ['pages', 'Pages'],
+                    ['mediaGb', 'Media GB'],
+                    ['bandwidthGb', 'Bandwidth GB'],
+                    ['forms', 'Forms'],
+                    ['products', 'Products'],
+                    ['collections', 'Collections'],
+                    ['teamMembers', 'Team members'],
+                    ['customDomains', 'Custom domains'],
+                  ] as const).map(([key, label]) => {
+                    const value = selectedBillingQuota.usage[key] || 0;
+                    const limit = selectedBillingQuota.limits[key] || 0;
+                    const percentage = quotaPercent(value, limit);
+                    return (
+                      <div key={key} className="rounded-lg border border-border bg-card p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-foreground">{label}</span>
+                          <span className={cn(
+                            'text-xs font-medium',
+                            percentage >= 100 ? 'text-red-700' : percentage >= 80 ? 'text-amber-700' : 'text-muted-foreground',
+                          )}
+                          >
+                            {value}/{limit}
+                          </span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={cn('h-full rounded-full', percentage >= 100 ? 'bg-red-500' : percentage >= 80 ? 'bg-amber-500' : 'bg-emerald-500')}
+                            style={{ width: `${Math.min(100, percentage)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {([
+                    ['set-free', 'Free'],
+                    ['set-pro', 'Pro'],
+                    ['set-business', 'Business'],
+                    ['set-enterprise', 'Enterprise'],
+                  ] as const).map(([action, label]) => (
+                    <Button
+                      key={action}
+                      type="button"
+                      variant="outline"
+                      disabled={isSitesBusy || !canManageBilling}
+                      title={billingPermissionTitle}
+                      onClick={() => void handleBillingQuotaAction(selectedApiSite, action)}
+                      aria-label={`Set ${label} plan for ${selectedApiSite.name}`}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canManageBilling}
+                    title={billingPermissionTitle}
+                    onClick={() => void handleBillingQuotaAction(selectedApiSite, 'refresh-usage')}
+                    iconStart={<RefreshCw className="size-3.5" />}
+                    aria-label={`Refresh quota usage for ${selectedApiSite.name}`}
+                  >
+                    Refresh usage
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Plan ownership</h3>
+                <div className="mt-3 grid gap-2">
+                  <SiteApiStat label="Plan" value={billingPlanLabels[selectedBillingQuota.plan]} />
+                  <SiteApiStat label="Status" value={selectedBillingQuota.status.replace(/_/g, ' ')} />
+                  <SiteApiStat label="Renewal" value={selectedBillingQuota.renewalAt ? formatDate(selectedBillingQuota.renewalAt) : 'Not scheduled'} />
+                  <SiteApiStat label="Usage updated" value={selectedBillingQuota.usage.updatedAt ? formatDate(selectedBillingQuota.usage.updatedAt) : 'Not refreshed'} />
+                </div>
+                <div className="mt-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent quota events</h4>
+                  <div className="mt-2 grid gap-2">
+                    {(selectedBillingQuota.history || []).length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-center text-xs text-muted-foreground">
+                        No billing or quota event recorded yet.
+                      </div>
+                    ) : (
+                      selectedBillingQuota.history?.slice(0, 4).map((event) => (
+                        <div key={event.id} className="rounded-lg border border-border bg-card px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-foreground">{event.action.replace(/-/g, ' ')}</span>
+                            <span className="text-[11px] text-muted-foreground">{formatDate(event.requestedAt)}</span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {billingPlanLabels[event.plan]} · {event.usage.pages}/{event.limits.pages} pages
+                          </div>
                         </div>
                       ))
                     )}

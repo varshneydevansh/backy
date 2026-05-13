@@ -310,6 +310,9 @@ export interface SiteSettings {
   /** Per-site Vercel deployment workflow state and non-secret deploy handoff history */
   vercelDeployment?: SiteVercelDeploymentSettings;
 
+  /** Per-site plan, quota, and billing ownership state used by Backy admin surfaces */
+  billingQuota?: SiteBillingQuotaSettings;
+
   /** Captured custom frontend design contract used to seed new Backy pages, posts, forms, products, and reusable sections */
   frontendDesign?: SiteFrontendDesignContract;
 
@@ -363,6 +366,48 @@ export interface SiteVercelDeploymentRun {
   requestedAt: string;
   completedAt?: string | null;
   missing?: string[];
+}
+
+export interface SiteBillingQuotaSettings {
+  plan: 'free' | 'pro' | 'business' | 'enterprise';
+  status: 'active' | 'trialing' | 'past_due' | 'paused' | 'comped';
+  billingOwnerId?: string | null;
+  billingEmail?: string;
+  renewalAt?: string | null;
+  limits: {
+    pages: number;
+    mediaGb: number;
+    bandwidthGb: number;
+    forms: number;
+    products: number;
+    collections: number;
+    teamMembers: number;
+    customDomains: number;
+  };
+  usage: {
+    pages: number;
+    mediaGb: number;
+    bandwidthGb: number;
+    forms: number;
+    products: number;
+    collections: number;
+    teamMembers: number;
+    customDomains: number;
+    updatedAt?: string;
+  };
+  lastAction?: 'set-free' | 'set-pro' | 'set-business' | 'set-enterprise' | 'refresh-usage' | null;
+  notes?: string;
+  history?: SiteBillingQuotaEvent[];
+}
+
+export interface SiteBillingQuotaEvent {
+  id: string;
+  action: NonNullable<SiteBillingQuotaSettings['lastAction']>;
+  plan: SiteBillingQuotaSettings['plan'];
+  status: SiteBillingQuotaSettings['status'];
+  requestedAt: string;
+  usage: SiteBillingQuotaSettings['usage'];
+  limits: SiteBillingQuotaSettings['limits'];
 }
 
 export interface SiteEditorCollectionBindingPreset {

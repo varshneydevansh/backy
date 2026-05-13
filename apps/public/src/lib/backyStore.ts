@@ -59,6 +59,7 @@ interface PageMeta {
 }
 
 type SiteVercelDeploymentRun = NonNullable<NonNullable<SiteSettings['vercelDeployment']>['history']>[number];
+type SiteBillingQuotaEvent = NonNullable<NonNullable<SiteSettings['billingQuota']>['history']>[number];
 
 interface CanvasElement {
   id: string;
@@ -484,6 +485,12 @@ const createDefaultSiteSettings = (): SiteSettings => ({
   },
   domainVerification: { ...DEFAULT_SITE_SETTINGS.domainVerification },
   vercelDeployment: { ...DEFAULT_SITE_SETTINGS.vercelDeployment, missing: [], history: [] },
+  billingQuota: {
+    ...DEFAULT_SITE_SETTINGS.billingQuota,
+    limits: { ...DEFAULT_SITE_SETTINGS.billingQuota.limits },
+    usage: { ...DEFAULT_SITE_SETTINGS.billingQuota.usage },
+    history: [],
+  },
   frontendDesign: emptyFrontendDesignContract(),
   contacts: { savedLists: [] },
   editor: { collectionBindingPresets: [] },
@@ -4005,6 +4012,40 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
     ? vercelDeploymentInput.lastAction as NonNullable<SiteSettings['vercelDeployment']>['lastAction']
     : baseVercelDeployment.lastAction || null;
   const vercelDeploymentEnvironment = vercelDeploymentInput.environment === 'production' ? 'production' : 'preview';
+  const billingQuotaInput = toRecord(settingsInput.billingQuota);
+  const billingLimitsInput = toRecord(billingQuotaInput.limits);
+  const billingUsageInput = toRecord(billingQuotaInput.usage);
+  const defaultBillingQuota: NonNullable<SiteSettings['billingQuota']> = {
+    ...DEFAULT_SITE_SETTINGS.billingQuota,
+    limits: { ...DEFAULT_SITE_SETTINGS.billingQuota.limits },
+    usage: { ...DEFAULT_SITE_SETTINGS.billingQuota.usage },
+    history: [],
+  };
+  const baseBillingQuota: NonNullable<SiteSettings['billingQuota']> = {
+    ...defaultBillingQuota,
+    ...(base.billingQuota || {}),
+    limits: {
+      ...defaultBillingQuota.limits,
+      ...(base.billingQuota?.limits || {}),
+    },
+    usage: {
+      ...defaultBillingQuota.usage,
+      ...(base.billingQuota?.usage || {}),
+    },
+    history: [...(base.billingQuota?.history || [])],
+  };
+  const billingPlan = ['free', 'pro', 'business', 'enterprise'].includes(String(billingQuotaInput.plan))
+    ? billingQuotaInput.plan as NonNullable<SiteSettings['billingQuota']>['plan']
+    : baseBillingQuota.plan;
+  const billingStatus = ['active', 'trialing', 'past_due', 'paused', 'comped'].includes(String(billingQuotaInput.status))
+    ? billingQuotaInput.status as NonNullable<SiteSettings['billingQuota']>['status']
+    : baseBillingQuota.status;
+  const billingAction = ['set-free', 'set-pro', 'set-business', 'set-enterprise', 'refresh-usage'].includes(String(billingQuotaInput.lastAction))
+    ? billingQuotaInput.lastAction as NonNullable<SiteSettings['billingQuota']>['lastAction']
+    : baseBillingQuota.lastAction || null;
+  const numberValue = (value: unknown, fallback: number): number => (
+    typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback
+  );
 
   return {
     ...base,
@@ -4071,6 +4112,50 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
             : [],
           history: Array.isArray(vercelDeploymentInput.history)
             ? vercelDeploymentInput.history.filter((item): item is SiteVercelDeploymentRun => (
+                isObjectRecord(item) && typeof item.id === 'string' && typeof item.action === 'string'
+              )).slice(0, 10)
+            : [],
+        },
+    billingQuota: settingsInput.billingQuota === undefined
+      ? {
+          ...baseBillingQuota,
+          limits: { ...baseBillingQuota.limits },
+          usage: { ...baseBillingQuota.usage },
+          history: [...(baseBillingQuota.history || [])],
+        }
+      : {
+          ...baseBillingQuota,
+          ...billingQuotaInput,
+          plan: billingPlan,
+          status: billingStatus,
+          billingOwnerId: billingQuotaInput.billingOwnerId === null ? null : sanitizeString(billingQuotaInput.billingOwnerId) || baseBillingQuota.billingOwnerId || null,
+          billingEmail: sanitizeString(billingQuotaInput.billingEmail) || '',
+          renewalAt: sanitizeString(billingQuotaInput.renewalAt) || null,
+          limits: {
+            pages: numberValue(billingLimitsInput.pages, baseBillingQuota.limits.pages),
+            mediaGb: numberValue(billingLimitsInput.mediaGb, baseBillingQuota.limits.mediaGb),
+            bandwidthGb: numberValue(billingLimitsInput.bandwidthGb, baseBillingQuota.limits.bandwidthGb),
+            forms: numberValue(billingLimitsInput.forms, baseBillingQuota.limits.forms),
+            products: numberValue(billingLimitsInput.products, baseBillingQuota.limits.products),
+            collections: numberValue(billingLimitsInput.collections, baseBillingQuota.limits.collections),
+            teamMembers: numberValue(billingLimitsInput.teamMembers, baseBillingQuota.limits.teamMembers),
+            customDomains: numberValue(billingLimitsInput.customDomains, baseBillingQuota.limits.customDomains),
+          },
+          usage: {
+            pages: numberValue(billingUsageInput.pages, baseBillingQuota.usage.pages),
+            mediaGb: numberValue(billingUsageInput.mediaGb, baseBillingQuota.usage.mediaGb),
+            bandwidthGb: numberValue(billingUsageInput.bandwidthGb, baseBillingQuota.usage.bandwidthGb),
+            forms: numberValue(billingUsageInput.forms, baseBillingQuota.usage.forms),
+            products: numberValue(billingUsageInput.products, baseBillingQuota.usage.products),
+            collections: numberValue(billingUsageInput.collections, baseBillingQuota.usage.collections),
+            teamMembers: numberValue(billingUsageInput.teamMembers, baseBillingQuota.usage.teamMembers),
+            customDomains: numberValue(billingUsageInput.customDomains, baseBillingQuota.usage.customDomains),
+            updatedAt: sanitizeString(billingUsageInput.updatedAt) || '',
+          },
+          lastAction: billingAction,
+          notes: sanitizeString(billingQuotaInput.notes),
+          history: Array.isArray(billingQuotaInput.history)
+            ? billingQuotaInput.history.filter((item): item is SiteBillingQuotaEvent => (
                 isObjectRecord(item) && typeof item.id === 'string' && typeof item.action === 'string'
               )).slice(0, 10)
             : [],

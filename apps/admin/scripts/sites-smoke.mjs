@@ -641,6 +641,7 @@ const assertLayout = async (client, siteName) => {
     hasFrontendApi: document.body?.innerText?.includes('Site frontend API') || false,
     hasDomainVerification: Boolean(document.querySelector('[data-testid="sites-domain-verification"]')),
     hasVercelDeployment: Boolean(document.querySelector('[data-testid="sites-vercel-deployment"]')),
+    hasBillingQuotas: Boolean(document.querySelector('[data-testid="sites-billing-quotas"]')),
     hasFeatureContract: document.body?.innerText?.includes('Website feature contract') || false,
     hasRequiredControls: document.body?.innerText?.includes('What Backy still needs here') || false,
     hasAuditPanel: Boolean(document.querySelector('[data-testid="sites-audit-panel"]')),
@@ -648,7 +649,7 @@ const assertLayout = async (client, siteName) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Sites page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasDomainVerification && layout.hasVercelDeployment && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
+    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasDomainVerification && layout.hasVercelDeployment && layout.hasBillingQuotas && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
     `Sites page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -810,6 +811,77 @@ const exerciseVercelDeployment = async (client, { siteId, siteName }) => {
   throw new Error(`Vercel deployment workflow did not persist for ${siteName}`);
 };
 
+const exerciseBillingQuotas = async (client, { siteId, siteName }) => {
+  const actions = [
+    `Set Pro plan for ${siteName}`,
+    `Set Business plan for ${siteName}`,
+    `Refresh quota usage for ${siteName}`,
+  ];
+
+  for (const ariaLabel of actions) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const button = document.querySelector(${JSON.stringify(`[aria-label="${ariaLabel}"]`)});
+        const panel = document.querySelector('[data-testid="sites-billing-quotas"]');
+        return {
+          ready: button instanceof HTMLButtonElement && !button.disabled,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          text: panel?.textContent?.slice(0, 1600) || '',
+        };
+      })()`);
+      if (state.ready) break;
+      if (attempt === 79) {
+        throw new Error(`Billing quota action stayed disabled: ${JSON.stringify({ ariaLabel, ...state })}`);
+      }
+      await sleep(250);
+    }
+
+    const result = await evaluate(client, `(() => {
+      const button = document.querySelector(${JSON.stringify(`[aria-label="${ariaLabel}"]`)});
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          ariaLabel: ${JSON.stringify(ariaLabel)},
+          buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.getAttribute('aria-label') || candidate.textContent || '').slice(0, 160),
+        };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled', ariaLabel: ${JSON.stringify(ariaLabel)} };
+      button.click();
+      return { ok: true };
+    })()`);
+    assert(result.ok, `Unable to run billing quota action: ${JSON.stringify(result)}`);
+    await sleep(550);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const site = await getSite(siteId);
+    const quota = site?.settings?.billingQuota;
+    if (
+      quota?.plan === 'business' &&
+      quota?.lastAction === 'refresh-usage' &&
+      quota?.history?.length >= 3 &&
+      quota?.usage?.pages >= 3
+    ) {
+      const state = await evaluate(client, `(() => {
+        const panel = document.querySelector('[data-testid="sites-billing-quotas"]');
+        const text = panel?.textContent || '';
+        return {
+          hasPanel: Boolean(panel),
+          hasBusiness: text.includes('Business'),
+          hasRefresh: text.includes('refresh usage'),
+          hasPages: text.includes(${JSON.stringify(`${quota.usage.pages}/${quota.limits.pages}`)}),
+          text: text.slice(0, 1600),
+        };
+      })()`);
+      assert(state.hasPanel && state.hasBusiness && state.hasRefresh && state.hasPages, `Billing quota panel did not render persisted state: ${JSON.stringify(state)}`);
+      return quota;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Billing quota workflow did not persist for ${siteName}`);
+};
+
 const assertSiteAuditTrail = async (client, { siteId, siteName }) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const logs = await listSiteAuditLogs(siteId);
@@ -883,6 +955,13 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
         (button.getAttribute('aria-label') || '').startsWith('Record Vercel production deploy for ') ||
         (button.getAttribute('aria-label') || '').startsWith('Record Vercel rollback for ')
       ));
+      const billingButtons = Array.from(document.querySelectorAll('button')).filter((button) => (
+        (button.getAttribute('aria-label') || '').startsWith('Set Free plan for ') ||
+        (button.getAttribute('aria-label') || '').startsWith('Set Pro plan for ') ||
+        (button.getAttribute('aria-label') || '').startsWith('Set Business plan for ') ||
+        (button.getAttribute('aria-label') || '').startsWith('Set Enterprise plan for ') ||
+        (button.getAttribute('aria-label') || '').startsWith('Refresh quota usage for ')
+      ));
       const auditText = auditPanel?.textContent || '';
       const auditRefreshButton = Array.from(auditPanel?.querySelectorAll('button') || []).find((button) => (
         (button.textContent || '').includes('Refresh activity')
@@ -903,6 +982,7 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
         prepareDomainDisabled: prepareDomainButtons.length > 0 && prepareDomainButtons.every((button) => button.disabled),
         verifyDomainDisabled: verifyDomainButtons.length > 0 && verifyDomainButtons.every((button) => button.disabled),
         deployActionsDisabled: deployButtons.length > 0 && deployButtons.every((button) => button.disabled),
+        billingActionsDisabled: billingButtons.length > 0 && billingButtons.every((button) => button.disabled),
         auditRefreshDisabled: auditRefreshButton instanceof HTMLButtonElement ? auditRefreshButton.disabled : null,
         auditDenied: auditText.includes('role does not include') || auditText.includes('Blocked by viewer'),
         hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
@@ -922,6 +1002,7 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
       assert(state.prepareDomainDisabled === true, `Viewer sites page left domain prepare enabled: ${JSON.stringify(state)}`);
       assert(state.verifyDomainDisabled === true, `Viewer sites page left domain verify enabled: ${JSON.stringify(state)}`);
       assert(state.deployActionsDisabled === true, `Viewer sites page left Vercel deployment actions enabled: ${JSON.stringify(state)}`);
+      assert(state.billingActionsDisabled === true, `Viewer sites page left billing quota actions enabled: ${JSON.stringify(state)}`);
       assert(state.auditRefreshDisabled === true && state.auditDenied, `Viewer sites page did not hide audit activity: ${JSON.stringify(state)}`);
       assert(!state.hasFrameworkOverlay, `Viewer sites page rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
       return { state, preloadScriptIdentifier: viewerPreload.identifier };
@@ -1048,6 +1129,7 @@ const main = async () => {
     await assertLayout(client, siteName);
     await exerciseDomainVerification(client, { siteId: createdSiteId, siteName });
     await exerciseVercelDeployment(client, { siteId: createdSiteId, siteName });
+    await exerciseBillingQuotas(client, { siteId: createdSiteId, siteName });
 
     await setSiteStatusSelect(client, siteName, 'draft');
     await waitForSite(slug, (site) => site.status === 'draft' || site.isPublished === false);
