@@ -62,6 +62,24 @@ interface CheckoutOrderInput {
   checkoutSessionId?: string;
 }
 
+interface CheckoutSessionHandoff {
+  id: string;
+  provider: 'manual' | 'stripe';
+  providerMode: 'test' | 'live';
+  accountId: string | null;
+  status: 'requires_action' | 'provider_ready';
+  handoffMode: 'manual' | 'provider';
+  url: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  expiresAt: string;
+  reference: string;
+  amountTotal: number;
+  currency: string;
+  metadata: Record<string, string>;
+  providerPayload: Record<string, unknown> | null;
+}
+
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_CONTRACT_VERSION = 'backy.commerce-orders.v1';
@@ -128,6 +146,14 @@ const normalizeCheckoutInput = (body: Record<string, unknown>): CheckoutOrderInp
 };
 
 const buildOrderNumber = () => `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+const buildAbsoluteUrl = (request: NextRequest, path: string, params: Record<string, string> = {}): string => {
+  const url = new URL(path.startsWith('/') ? path : `/${path}`, request.url);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+  });
+  return url.toString();
+};
 
 const normalizeSlug = (value: unknown): string => (
   typeof value === 'string'
@@ -305,6 +331,7 @@ const orderContract = (siteId: string) => ({
   },
   relatedEndpoints: {
     catalog: `/api/sites/${siteId}/commerce/catalog`,
+    checkoutSession: `/api/sites/${siteId}/commerce/orders`,
     rawOrdersBlocked: `/api/sites/${siteId}/collections/${ORDERS_COLLECTION_SLUG}/records`,
   },
 });
@@ -487,6 +514,101 @@ const calculateCheckoutQuote = (
     taxLines,
     shippingLines,
     pricing: commerce.pricing,
+  };
+};
+
+const buildCheckoutSessionHandoff = ({
+  request,
+  siteId,
+  commerce,
+  input,
+  orderNumber,
+  orderSlug,
+  quote,
+  lineItems,
+  requestId,
+  createdAt,
+}: {
+  request: NextRequest;
+  siteId: string;
+  commerce: CommerceStorefrontContract;
+  input: CheckoutOrderInput;
+  orderNumber: string;
+  orderSlug: string;
+  quote: ReturnType<typeof calculateCheckoutQuote>;
+  lineItems: CheckoutLineItem[];
+  requestId: string;
+  createdAt: string;
+}): CheckoutSessionHandoff => {
+  const requestedProvider = textValue(input.paymentProvider).toLowerCase();
+  const provider: CheckoutSessionHandoff['provider'] = requestedProvider === 'stripe'
+    ? 'stripe'
+    : commerce.paymentProvider === 'stripe'
+      ? 'stripe'
+      : 'manual';
+  const id = input.checkoutSessionId || `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const metadata = {
+    siteId,
+    orderNumber,
+    orderSlug,
+    requestId,
+  };
+  const successUrl = buildAbsoluteUrl(request, commerce.checkout.successPath, {
+    order: orderNumber,
+    session: id,
+    request: requestId,
+  });
+  const cancelUrl = buildAbsoluteUrl(request, commerce.checkout.cancelPath, {
+    order: orderNumber,
+    session: id,
+    request: requestId,
+  });
+  const expiresAt = new Date(Date.parse(createdAt) + commerce.inventory.reservationMinutes * 60_000).toISOString();
+  const providerPayload = provider === 'stripe'
+    ? {
+      action: 'checkout.sessions.create',
+      mode: 'payment',
+      accountId: commerce.provider.accountId,
+      providerMode: commerce.provider.mode,
+      successUrl,
+      cancelUrl,
+      currency: quote.currency.toLowerCase(),
+      lineItems: lineItems.map((item) => ({
+        quantity: item.quantity,
+        priceData: {
+          currency: item.currency.toLowerCase(),
+          unitAmount: Math.round(item.price * 100),
+          productData: {
+            name: item.title,
+            metadata: {
+              productId: item.productId,
+              slug: item.slug,
+              variantId: item.variant?.id || '',
+              variantSku: item.variant?.sku || '',
+            },
+          },
+        },
+      })),
+      metadata,
+    }
+    : null;
+
+  return {
+    id,
+    provider,
+    providerMode: commerce.provider.mode,
+    accountId: commerce.provider.accountId,
+    status: provider === 'stripe' ? 'provider_ready' : 'requires_action',
+    handoffMode: provider === 'stripe' ? 'provider' : 'manual',
+    url: provider === 'manual' ? successUrl : null,
+    successUrl,
+    cancelUrl,
+    expiresAt,
+    reference: input.paymentReference || `${provider}:${id}`,
+    amountTotal: quote.total,
+    currency: quote.currency,
+    metadata,
+    providerPayload,
   };
 };
 
@@ -951,6 +1073,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         suffix += 1;
       }
       const orderCreatedAt = new Date().toISOString();
+      const checkoutSession = buildCheckoutSessionHandoff({
+        request,
+        siteId: site.id,
+        commerce,
+        input,
+        orderNumber,
+        orderSlug: slug,
+        quote,
+        lineItems,
+        requestId,
+        createdAt: orderCreatedAt,
+      });
       let customerProfile = await upsertRepositoryCheckoutCustomer({
         siteId: site.id,
         repositories,
@@ -974,12 +1108,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         currency,
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
-        checkoutsessionid: input.checkoutSessionId || requestId,
+        checkoutsessionid: checkoutSession.id,
         customerid: customerProfile?.record.id || '',
         orderstatus: 'open',
         paymentstatus: 'pending',
-        paymentprovider: input.paymentProvider || 'manual',
-        paymentreference: input.paymentReference || '',
+        paymentprovider: checkoutSession.provider,
+        paymentreference: checkoutSession.reference,
         fulfillmentstatus: 'unfulfilled',
         shippingaddress: input.shippingAddress || '',
         billingaddress: input.billingAddress || '',
@@ -1038,6 +1172,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             slug: customerProfile.record.slug,
             existing: customerProfile.existingRecord,
           } : null,
+          checkoutSession,
           quote,
           lineItems,
         },
@@ -1130,6 +1265,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       suffix += 1;
     }
     const orderCreatedAt = new Date().toISOString();
+    const checkoutSession = buildCheckoutSessionHandoff({
+      request,
+      siteId: site.id,
+      commerce,
+      input,
+      orderNumber,
+      orderSlug: slug,
+      quote,
+      lineItems,
+      requestId,
+      createdAt: orderCreatedAt,
+    });
     let customerProfile = upsertDemoCheckoutCustomer({
       siteId: site.id,
       input,
@@ -1155,12 +1302,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         currency,
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
-        checkoutsessionid: input.checkoutSessionId || requestId,
+        checkoutsessionid: checkoutSession.id,
         customerid: customerProfile?.record.id || '',
         orderstatus: 'open',
         paymentstatus: 'pending',
-        paymentprovider: input.paymentProvider || 'manual',
-        paymentreference: input.paymentReference || '',
+        paymentprovider: checkoutSession.provider,
+        paymentreference: checkoutSession.reference,
         fulfillmentstatus: 'unfulfilled',
         shippingaddress: input.shippingAddress || '',
         billingaddress: input.billingAddress || '',
@@ -1215,6 +1362,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           slug: customerProfile.record.slug,
           existing: customerProfile.existingRecord,
         } : null,
+        checkoutSession,
         quote,
         lineItems,
       },

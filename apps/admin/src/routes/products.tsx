@@ -313,7 +313,7 @@ const PRODUCT_FRONTEND_SYSTEMS = [
   {
     key: 'checkout',
     title: 'Checkout handoff',
-    detail: 'Per-product checkout URLs today, with payment session creation called out as the next backend commerce milestone.',
+    detail: 'Per-product checkout URLs, Backy order-intake posts, and provider-ready checkout session handoff metadata.',
   },
   {
     key: 'merchandising',
@@ -725,8 +725,8 @@ function ProductsRoute() {
         orderIntakeReady,
         reservesInventory: orderIntakeReady,
         note: orderIntakeReady
-          ? 'Custom frontends can post cart/customer data to Backy order intake. Physical product and variant stock is reserved while payment-provider settlement remains the next commerce milestone.'
-          : 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
+          ? 'Custom frontends can post cart/customer data to Backy order intake, receive a checkout-session handoff, and reserve physical product or variant stock while provider settlement remains a deeper commerce milestone.'
+          : 'Backy stores product checkout URLs today. Sync the private orders queue before using order-intake checkout sessions.',
       },
       normalizedApi: {
         schemaVersion: 'backy.commerce-catalog.v1',
@@ -1832,7 +1832,7 @@ function ProductsRoute() {
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="text-xs font-semibold text-foreground">Next commerce milestone</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture order records. Payment-provider sessions, tax/shipping quotes, discounts, refunds, and webhook settlement remain the deeper commerce backend work.
+                      Backy can capture private orders, calculate quote totals, create checkout-session handoffs, and link customers. Provider settlement, automated refunds, and webhook processing remain deeper commerce backend work.
                     </p>
                     <Link
                       to="/orders"

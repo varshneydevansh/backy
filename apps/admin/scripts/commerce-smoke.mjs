@@ -192,7 +192,11 @@ const enableCommercePricingSettings = async (settings) => {
     ...(next.integrations || {}),
     commerce: {
       ...(next.integrations?.commerce || {}),
-      mode: 'manual-orders',
+      mode: 'checkout-provider',
+      paymentProvider: 'manual',
+      providerMode: 'test',
+      checkoutSuccessPath: '/checkout/success',
+      checkoutCancelPath: '/checkout/cancel',
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
@@ -973,9 +977,14 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
 
   const order = orderPayload.data?.order;
   const customer = orderPayload.data?.customer;
+  const checkoutSession = orderPayload.data?.checkoutSession;
   const quote = orderPayload.data?.quote;
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(customer?.id, `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`);
+  assert(checkoutSession?.id === `cs_${slug}`, `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`);
+  assert(checkoutSession.provider === 'manual', `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`);
+  assert(checkoutSession.amountTotal === 106.86, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
+  assert(checkoutSession.url?.includes('/checkout/success'), `Checkout session handoff URL was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
   assert(quote.discountAmount === 11.76, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
   assert(quote.shippingAmount === 12, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
@@ -991,6 +1000,9 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
   assert(orderRecord.values?.customername === 'Commerce Smoke Buyer', 'Order customer name was not persisted');
   assert(orderRecord.values?.customerid === customer.id, `Order did not link to the private customer profile: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Order checkout session was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.paymentprovider === checkoutSession.provider, `Order payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.paymentreference === checkoutSession.reference, `Order payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);

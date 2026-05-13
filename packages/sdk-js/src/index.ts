@@ -415,6 +415,25 @@ export interface BackyCommerceOrderSummary {
   [key: string]: unknown;
 }
 
+export interface BackyCommerceCheckoutSession {
+  id: string;
+  provider: 'manual' | 'stripe';
+  providerMode: 'test' | 'live';
+  accountId?: string | null;
+  status: 'requires_action' | 'provider_ready';
+  handoffMode: 'manual' | 'provider';
+  url?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  expiresAt: string;
+  reference: string;
+  amountTotal: number;
+  currency: string;
+  metadata?: Record<string, string>;
+  providerPayload?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
 export interface BackyCommerceStorefrontContract {
   schemaVersion: 'backy.commerce-settings.v1';
   mode: 'catalog-only' | 'manual-orders' | 'checkout-provider';
@@ -1377,6 +1396,7 @@ export class BackyClient {
   createCommerceOrder(input: BackyCommerceOrderInput, siteId = this.requireSiteId()): Promise<BackyEnvelope<{
     schemaVersion: 'backy.commerce-orders.v1';
     order: BackyCommerceOrderSummary;
+    checkoutSession?: BackyCommerceCheckoutSession;
     lineItems: Array<Record<string, unknown>>;
   }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`, {
