@@ -148,6 +148,8 @@ export interface ReusableSectionContent {
   name?: string;
   sourceUpdatedAt?: string;
   syncMode?: 'synced' | 'detached';
+  rootIndex?: number;
+  sourceElementId?: string;
 }
 
 /** Nested child in a composed component preset */

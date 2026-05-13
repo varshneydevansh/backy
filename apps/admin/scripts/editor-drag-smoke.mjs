@@ -695,7 +695,7 @@ const createSmokeReusableSection = async () => {
       tags: ['editor-smoke', 'synced'],
       sourceElementId: 'editor-smoke-source',
       content: {
-        canvasSize: { width: 240, height: 90 },
+        canvasSize: { width: 500, height: 110 },
         elements: [
           {
             id: 'editor-smoke-reusable-root',
@@ -725,6 +725,38 @@ const createSmokeReusableSection = async () => {
                   level: 'h2',
                   fontSize: 24,
                   color: '#312e81',
+                },
+              },
+            ],
+          },
+          {
+            id: 'editor-smoke-reusable-secondary-root',
+            type: 'box',
+            x: 270,
+            y: 0,
+            width: 220,
+            height: 80,
+            zIndex: 2,
+            props: {
+              backgroundColor: '#fef3c7',
+              borderColor: '#d97706',
+              borderWidth: 1,
+              borderRadius: 10,
+            },
+            children: [
+              {
+                id: 'editor-smoke-reusable-secondary-label',
+                type: 'heading',
+                x: 18,
+                y: 18,
+                width: 170,
+                height: 36,
+                zIndex: 1,
+                props: {
+                  content: 'Reusable sibling v1',
+                  level: 'h3',
+                  fontSize: 20,
+                  color: '#92400e',
                 },
               },
             ],
@@ -8475,13 +8507,27 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   assert(inserted.refreshDisabled === false, `Synced reusable refresh control disabled: ${JSON.stringify(inserted)}`);
   assert(inserted.detachDisabled === false, `Synced reusable detach control disabled: ${JSON.stringify(inserted)}`);
 
-  const beforeRefresh = await readEditorElementState(client, [inserted.selectedElementId]);
+  const insertedRoots = await evaluate(client, `(() => (
+    Array.from(document.querySelectorAll('[data-element-id]'))
+      .filter((node) => !node.parentElement?.closest('[data-element-id]'))
+      .map((node) => ({
+        id: node.getAttribute('data-element-id') || '',
+        text: node.textContent || '',
+      }))
+      .filter((node) => /Reusable/i.test(node.text))
+  ))()`);
+  const secondaryRoot = insertedRoots.find((node) => /Reusable sibling v1/i.test(node.text));
+  assert(secondaryRoot?.id, `Multi-root reusable insertion did not render the secondary root: ${JSON.stringify(insertedRoots)}`);
+
+  await selectLayerById(client, secondaryRoot.id);
+  await switchToPropertiesPanel(client);
+  const beforeRefresh = await readEditorElementState(client, [secondaryRoot.id]);
 
   await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       content: {
-        canvasSize: { width: 360, height: 120 },
+        canvasSize: { width: 620, height: 140 },
         elements: [
           {
             id: 'editor-smoke-reusable-root-updated',
@@ -8515,6 +8561,38 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
               },
             ],
           },
+          {
+            id: 'editor-smoke-reusable-secondary-root-updated',
+            type: 'box',
+            x: 390,
+            y: 0,
+            width: 230,
+            height: 130,
+            zIndex: 2,
+            props: {
+              backgroundColor: '#fff7ed',
+              borderColor: '#ea580c',
+              borderWidth: 1,
+              borderRadius: 14,
+            },
+            children: [
+              {
+                id: 'editor-smoke-reusable-secondary-label-updated',
+                type: 'heading',
+                x: 22,
+                y: 34,
+                width: 180,
+                height: 46,
+                zIndex: 1,
+                props: {
+                  content: 'Reusable sibling v2',
+                  level: 'h3',
+                  fontSize: 22,
+                  color: '#9a3412',
+                },
+              },
+            ],
+          },
         ],
       },
       updatedBy: 'admin',
@@ -8531,7 +8609,7 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   })()`);
   assert(refreshedList, 'Unable to refresh saved section library after source update');
   await sleep(600);
-  await selectLayerById(client, inserted.selectedElementId);
+  await selectLayerById(client, secondaryRoot.id);
   await switchToPropertiesPanel(client);
 
   let reusableRefreshState = null;
@@ -8552,7 +8630,7 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
       };
     })()`);
     if (
-      reusableRefreshState?.selectedElementId === inserted.selectedElementId &&
+      reusableRefreshState?.selectedElementId === secondaryRoot.id &&
       reusableRefreshState.hasPanel &&
       reusableRefreshState.hasButton &&
       reusableRefreshState.disabled === false
@@ -8573,17 +8651,17 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   assert(refreshClicked, `Unable to refresh selected synced reusable instance: ${JSON.stringify(reusableRefreshState)}`);
   await sleep(350);
 
-  const afterRefresh = await readEditorElementState(client, [inserted.selectedElementId]);
+  const afterRefresh = await readEditorElementState(client, [secondaryRoot.id]);
   const refreshedText = await evaluate(client, `(() => {
-    const node = document.querySelector('[data-element-id="${inserted.selectedElementId}"]');
+    const node = document.querySelector('[data-element-id="${secondaryRoot.id}"]');
     return node?.textContent || '';
   })()`);
   assert(
-    afterRefresh[inserted.selectedElementId].width > beforeRefresh[inserted.selectedElementId].width &&
-      afterRefresh[inserted.selectedElementId].height > beforeRefresh[inserted.selectedElementId].height,
+    afterRefresh[secondaryRoot.id].height > beforeRefresh[secondaryRoot.id].height,
     `Synced reusable refresh did not apply source dimensions: before ${JSON.stringify(beforeRefresh)}, after ${JSON.stringify(afterRefresh)}`,
   );
-  assert(/Reusable v2/i.test(refreshedText), `Synced reusable refresh did not apply source content: ${JSON.stringify(refreshedText)}`);
+  assert(/Reusable sibling v2/i.test(refreshedText), `Synced reusable refresh did not preserve the selected source root: ${JSON.stringify(refreshedText)}`);
+  assert(!/Reusable v2/i.test(refreshedText), `Synced reusable refresh incorrectly used the first source root: ${JSON.stringify(refreshedText)}`);
 
   const detachClicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="editor-detach-reusable-instance"]');

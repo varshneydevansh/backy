@@ -773,6 +773,8 @@ function LibraryItem({
             disabled={disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
             title="Rename saved section"
+            aria-label={`Rename ${item.name}`}
+            data-reusable-section-rename={reusableSectionId}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -788,6 +790,8 @@ function LibraryItem({
             disabled={disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             title="Delete saved section"
+            aria-label={`Delete ${item.name}`}
+            data-reusable-section-delete={reusableSectionId}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

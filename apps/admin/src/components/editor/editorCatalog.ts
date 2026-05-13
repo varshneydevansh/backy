@@ -910,6 +910,8 @@ const cloneReusableElement = (
       name?: string;
       sourceUpdatedAt?: string;
       mode: 'synced' | 'detached';
+      rootIndex?: number;
+      sourceElementId?: string;
     };
   },
 ): CanvasElement => {
@@ -966,7 +968,13 @@ export function createCanvasElementsFromReusableContent(
     targetX: x,
     targetY: y,
     zIndex: zIndexStart + index,
-    reusableMeta,
+    reusableMeta: reusableMeta
+      ? {
+          ...reusableMeta,
+          rootIndex: index,
+          sourceElementId: typeof element.id === 'string' ? element.id : undefined,
+        }
+      : undefined,
   }));
 }
 

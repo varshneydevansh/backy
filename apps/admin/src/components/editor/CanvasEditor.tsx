@@ -135,6 +135,8 @@ type ReusableSectionInstanceMeta = {
   slug?: string;
   name?: string;
   sourceUpdatedAt?: string;
+  rootIndex?: number;
+  sourceElementId?: string;
 };
 type EditorHistoryEntry = {
   elements: CanvasElement[];
@@ -424,6 +426,10 @@ const getReusableSectionInstanceMeta = (value: unknown): ReusableSectionInstance
     slug: typeof value.slug === 'string' ? value.slug : undefined,
     name: typeof value.name === 'string' ? value.name : undefined,
     sourceUpdatedAt: typeof value.sourceUpdatedAt === 'string' ? value.sourceUpdatedAt : undefined,
+    rootIndex: typeof value.rootIndex === 'number' && Number.isInteger(value.rootIndex) && value.rootIndex >= 0
+      ? value.rootIndex
+      : undefined,
+    sourceElementId: typeof value.sourceElementId === 'string' ? value.sourceElementId : undefined,
   };
 };
 
@@ -1360,6 +1366,8 @@ export function CanvasEditor({
       x: number;
       y: number;
       zIndex: number;
+      rootIndex?: number;
+      sourceElementId?: string;
     },
   ): CanvasElement => {
     const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
@@ -1374,6 +1382,8 @@ export function CanvasEditor({
           slug: section.slug,
           name: section.name,
           sourceUpdatedAt: section.updatedAt,
+          rootIndex: options.rootIndex,
+          sourceElementId: options.sourceElementId,
         };
       }
 
@@ -2729,13 +2739,27 @@ export function CanvasEditor({
       return;
     }
 
+    const sectionRoots = selectedReusableSectionSource.content.elements;
+    const sourceRoot = selectedReusableSectionMeta?.rootIndex !== undefined
+      ? sectionRoots[selectedReusableSectionMeta.rootIndex]
+      : selectedReusableSectionMeta?.sourceElementId
+        ? sectionRoots.find((element) => element.id === selectedReusableSectionMeta.sourceElementId)
+        : undefined;
+    const sourceRootIndex = sourceRoot
+      ? sectionRoots.findIndex((element) => element === sourceRoot)
+      : 0;
+    const refreshSourceElement = sourceRoot || sectionRoots[0];
+    if (!refreshSourceElement) {
+      return;
+    }
+
     const selectedEntry = findElementEntry(elements, selectedId);
     if (!selectedEntry || selectedEntry.element.locked) {
       return;
     }
 
     const nextElement = cloneReusableSectionInstanceTree(
-      selectedReusableSectionSource.content.elements[0],
+      refreshSourceElement,
       selectedReusableSectionSource,
       {
         rootId: selectedEntry.element.id,
@@ -2743,6 +2767,8 @@ export function CanvasEditor({
         x: selectedEntry.element.x,
         y: selectedEntry.element.y,
         zIndex: selectedEntry.element.zIndex || 1,
+        rootIndex: sourceRootIndex >= 0 ? sourceRootIndex : undefined,
+        sourceElementId: refreshSourceElement.id,
       },
     );
 
@@ -2760,6 +2786,7 @@ export function CanvasEditor({
     findElementEntry,
     isCanvasMutationDisabled,
     selectedId,
+    selectedReusableSectionMeta,
     selectedReusableSectionSource,
     updateElementsWithHistory,
   ]);
