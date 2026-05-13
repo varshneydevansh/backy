@@ -2565,6 +2565,10 @@ try {
     assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
     assert(create.json?.data?.post?.slug === postSlug, `${create.url} returned wrong post slug`);
     createdPostId = create.json.data.post.id;
+    const postCreateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=post&entityId=${createdPostId}&action=create&requestId=${create.json.requestId}`);
+    assert(postCreateAudit.response.status === 200, `${postCreateAudit.url} expected post create audit readback`);
+    assert(postCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === postSlug, `${postCreateAudit.url} missing post create audit metadata`);
+    assert(postCreateAudit.json?.data?.logs?.[0]?.after?.status === 'draft', `${postCreateAudit.url} missing post create audit after snapshot`);
 
     const list = await request(`/api/admin/sites/${createdSiteId}/blog?status=draft`);
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
@@ -2820,7 +2824,11 @@ try {
     assert(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.templateId === 'captured-blog-template', `${publicCapturedTemplatePost.url} missing normalized captured blog frontend design`);
     assert(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.routePattern === '/captured-journal/{slug}', `${publicCapturedTemplatePost.url} missing normalized captured blog route pattern`);
     assert(Array.isArray(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.bindingHints) && publicCapturedTemplatePost.json.data.post.frontendDesign.bindingHints.length === 2, `${publicCapturedTemplatePost.url} missing normalized captured blog binding hints`);
-    await request(`/api/admin/sites/${createdSiteId}/blog/${capturedTemplatePostId}`, { method: 'DELETE' });
+    const deleteCapturedTemplatePost = await request(`/api/admin/sites/${createdSiteId}/blog/${capturedTemplatePostId}`, { method: 'DELETE' });
+    assert(deleteCapturedTemplatePost.response.status === 200, `${deleteCapturedTemplatePost.url} expected captured template post delete`);
+    const postDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=post&entityId=${capturedTemplatePostId}&action=delete&requestId=${deleteCapturedTemplatePost.json.requestId}`);
+    assert(postDeleteAudit.response.status === 200, `${postDeleteAudit.url} expected post delete audit readback`);
+    assert(postDeleteAudit.json?.data?.logs?.[0]?.metadata?.slug === `${postSlug}-captured-design`, `${postDeleteAudit.url} missing post delete audit metadata`);
     capturedTemplatePostId = null;
 
     const blogFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
@@ -2860,6 +2868,11 @@ try {
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.post?.title === 'Updated Admin Contract Post', `${update.url} expected updated title`);
     assert(update.json?.data?.post?.status === 'published', `${update.url} expected published status`);
+    const postUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=post&entityId=${createdPostId}&action=update&requestId=${update.json.requestId}`);
+    assert(postUpdateAudit.response.status === 200, `${postUpdateAudit.url} expected post update audit readback`);
+    assert(postUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('title'), `${postUpdateAudit.url} missing post update changedFields metadata`);
+    assert(postUpdateAudit.json?.data?.logs?.[0]?.before?.title === 'Admin Contract Post', `${postUpdateAudit.url} missing post update before snapshot`);
+    assert(postUpdateAudit.json?.data?.logs?.[0]?.after?.title === 'Updated Admin Contract Post', `${postUpdateAudit.url} missing post update after snapshot`);
 
     const resolvedPost = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
     assert(resolvedPost.response.status === 200, `${resolvedPost.url} expected 200, got ${resolvedPost.response.status}`);

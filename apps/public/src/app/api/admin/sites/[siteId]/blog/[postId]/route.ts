@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   canvasElementsToBackyContentDocument,
   isBackyContentDocument,
+  type BackyJsonObject,
   type BackyContentDocument,
   type BackyPost,
 } from '@backy-cms/core';
@@ -24,6 +25,7 @@ import {
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 export const runtime = 'nodejs';
 
@@ -124,6 +126,31 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
     },
   };
 };
+
+const postAuditMetadata = (post: {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  scheduledAt?: string | null;
+  authorId?: string | null;
+  categoryIds?: string[];
+  tagIds?: string[];
+}): BackyJsonObject => ({
+  postId: post.id,
+  title: post.title,
+  slug: post.slug,
+  status: post.status,
+  scheduledAt: post.scheduledAt || null,
+  authorId: post.authorId || null,
+  categoryIds: Array.isArray(post.categoryIds) ? post.categoryIds : [],
+  tagIds: Array.isArray(post.tagIds) ? post.tagIds : [],
+});
+
+const updateAuditMetadata = (post: Parameters<typeof postAuditMetadata>[0], body: Record<string, unknown>): BackyJsonObject => ({
+  ...postAuditMetadata(post),
+  changedFields: Object.keys(body).filter((key) => key !== 'expectedUpdatedAt'),
+});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -252,6 +279,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: 'post-updated',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'post',
+        entityId: post.id,
+        action: 'update',
+        before: postAuditMetadata(post),
+        after: postAuditMetadata(updated.item),
+        metadata: updateAuditMetadata(updated.item, body),
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -301,6 +339,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'post',
+      entityId: post.id,
+      action: 'update',
+      before: postAuditMetadata(post),
+      after: postAuditMetadata(updated),
+      metadata: updateAuditMetadata(updated, body),
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
@@ -330,6 +378,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
+      const post = await repositories.posts.getById(site.id, postId);
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
       await repositories.contentWorkflows.deletePreviewTokensForTarget(site.id, 'post', postId);
       const deleted = await repositories.posts.delete(site.id, postId);
 
@@ -342,6 +395,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         entity: 'post',
         entityId: postId,
         reason: 'post-deleted',
+        requestId,
+      });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'post',
+        entityId: postId,
+        action: 'delete',
+        before: postAuditMetadata(post),
+        metadata: postAuditMetadata(post),
         requestId,
       });
 
@@ -362,11 +425,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const post = getAdminBlogPostById(site.id, postId);
+    if (!post) {
+      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+    }
+
     const deleted = deleteAdminBlogPost(site.id, postId);
 
     if (!deleted) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'post',
+      entityId: postId,
+      action: 'delete',
+      before: postAuditMetadata(post),
+      metadata: postAuditMetadata(post),
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
