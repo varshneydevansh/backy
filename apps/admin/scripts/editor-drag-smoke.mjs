@@ -22,6 +22,7 @@ const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
+const NESTED_GROUP_SMOKE = process.env.BACKY_EDITOR_NESTED_GROUP_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
 const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
@@ -501,6 +502,23 @@ const createSmokePage = async () => {
                   color: '#ffffff',
                   borderRadius: 6,
                   fontSize: 16,
+                },
+              },
+              {
+                id: 'smoke-child-link',
+                type: 'link',
+                x: 34,
+                y: 108,
+                width: 160,
+                height: 32,
+                zIndex: 2,
+                props: {
+                  content: 'Nested link',
+                  href: '#nested',
+                  target: '_self',
+                  color: '#2563eb',
+                  fontSize: 15,
+                  underline: true,
                 },
               },
             ],
@@ -7395,6 +7413,121 @@ const testLayerGrouping = async (client, elementIds) => {
   };
 };
 
+const waitForPersistedNestedGroup = async (pageId, parentId, childIds) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const elements = payload.data?.page?.content?.elements || [];
+    const parent = findCanvasElement(elements, parentId);
+    const groups = Array.isArray(parent?.children)
+      ? parent.children.filter((child) => child.type === 'box' && child.name === 'Group')
+      : [];
+    const group = groups.find((candidate) => (
+      candidate.parentId === parentId &&
+      childIds.every((childId) => (
+        Array.isArray(candidate.children) &&
+        candidate.children.some((child) => child.id === childId && child.parentId === candidate.id)
+      ))
+    ));
+
+    lastState = {
+      parentId,
+      childIds,
+      parentFound: Boolean(parent),
+      groups: groups.map((candidate) => ({
+        id: candidate.id,
+        parentId: candidate.parentId || '',
+        childIds: (candidate.children || []).map((child) => ({
+          id: child.id,
+          parentId: child.parentId || '',
+        })),
+      })),
+    };
+
+    if (group?.id) {
+      return {
+        groupId: group.id,
+        parentId: group.parentId,
+        children: group.children || [],
+        lastState,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted nested group did not preserve parent metadata: ${JSON.stringify(lastState)}`);
+};
+
+const testNestedLayerGroupingPersistence = async (client, pageId) => {
+  const parentId = 'smoke-box';
+  const childIds = ['smoke-child-button', 'smoke-child-link'];
+  const before = await readEditorElementState(client, childIds);
+
+  await selectLayerIds(client, childIds);
+  await pressKey(client, 'g', { ctrlKey: true });
+  await sleep(250);
+
+  const grouped = await evaluate(client, `(() => {
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    const selectedCanvasNodes = Array.from(document.querySelectorAll('[data-element-id]'))
+      .filter((node) => Array.from(node.children).some((child) => child.getAttribute('data-role') === 'canvas-move-handle'))
+      .map((node) => node.getAttribute('data-element-id'))
+      .filter(Boolean);
+    const selectedElementId = selectedCanvasNodes.find((id) => id !== '${parentId}') || selectedCanvasNodes[0] || '';
+    const selectedElement = selectedElementId
+      ? document.querySelector('[data-element-id="' + CSS.escape(selectedElementId) + '"]')
+      : null;
+    const parentElement = document.querySelector('[data-element-id="${parentId}"]');
+    const childLayers = ${JSON.stringify(childIds)}.map((id) => {
+      const layer = document.querySelector('[data-element-id="' + id + '"]');
+      return {
+        id,
+        visible: Boolean(layer),
+      };
+    });
+    return {
+      hasSelection: Boolean(selected),
+      selectedText: selected?.textContent || '',
+      selectedCanvasNodes,
+      selectedElementId,
+      selectedInsideParent: Boolean(parentElement && selectedElement && selectedElement !== parentElement && parentElement.contains(selectedElement)),
+      childLayers,
+    };
+  })()`);
+
+  assert(grouped.hasSelection && grouped.selectedElementId, `Nested grouping did not select the new group: ${JSON.stringify(grouped)}`);
+  assert(
+    grouped.selectedInsideParent,
+    `Nested group canvas node did not stay under parent element: ${JSON.stringify(grouped)}`,
+  );
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after nested group smoke save');
+  const persisted = await waitForPersistedNestedGroup(pageId, parentId, childIds);
+
+  await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
+  await sleep(250);
+  const after = await readEditorElementState(client, childIds);
+  assertElementState(after, before, 'nested group/ungroup roundtrip');
+
+  return {
+    parentId,
+    childIds,
+    grouped,
+    savedStatus,
+    persisted: {
+      groupId: persisted.groupId,
+      parentId: persisted.parentId,
+      childIds: persisted.children.map((child) => child.id),
+      childParentIds: Object.fromEntries(persisted.children.map((child) => [child.id, child.parentId || ''])),
+    },
+    before,
+    after,
+  };
+};
+
 const selectLayerIds = async (client, elementIds) => {
   const [firstId] = elementIds;
 
@@ -7790,12 +7923,13 @@ const testMultiSelectionDistribution = async (client, elementIds) => {
   };
 };
 
-const testMultiSelectionControls = async (client) => {
+const testMultiSelectionControls = async (client, pageId) => {
   const canvasShiftSelection = await testCanvasShiftMultiSelect(client, ['smoke-heading', 'smoke-image']);
   const canvasDrag = await testMultiSelectionCanvasDrag(client, ['smoke-heading', 'smoke-image']);
   const canvasResize = await testMultiSelectionResize(client, ['smoke-image', 'smoke-heading']);
   const distribution = await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
   const grouping = await testLayerGrouping(client, ['smoke-heading', 'smoke-image']);
+  const nestedGrouping = await testNestedLayerGroupingPersistence(client, pageId);
 
   return {
     canvasShiftSelection,
@@ -7803,6 +7937,7 @@ const testMultiSelectionControls = async (client) => {
     canvasResize,
     distribution,
     grouping,
+    nestedGrouping,
   };
 };
 
@@ -10946,7 +11081,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
@@ -11087,13 +11222,26 @@ const main = async () => {
 
     if (MULTI_SELECT_SMOKE) {
       assert(!EDITOR_PATH, 'Multi-select smoke currently requires an internally created smoke page');
-      const multiSelect = await testMultiSelectionControls(client);
+      const multiSelect = await testMultiSelectionControls(client, tempPageId);
 
       console.log(JSON.stringify({
         ok: true,
         mode: 'multi-select',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         multiSelect,
+      }, null, 2));
+      return;
+    }
+
+    if (NESTED_GROUP_SMOKE) {
+      assert(!EDITOR_PATH, 'Nested group smoke currently requires an internally created smoke page');
+      const nestedGrouping = await testNestedLayerGroupingPersistence(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'nested-group',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        nestedGrouping,
       }, null, 2));
       return;
     }

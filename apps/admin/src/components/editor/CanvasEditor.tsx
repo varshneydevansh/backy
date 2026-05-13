@@ -2432,6 +2432,7 @@ export function CanvasEditor({
         id: groupId,
         type: 'box',
         name: 'Group',
+        ...(parentId ? { parentId } : {}),
         x: minX,
         y: minY,
         width: Math.max(1, maxX - minX),
