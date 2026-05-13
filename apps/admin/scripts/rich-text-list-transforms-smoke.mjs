@@ -65,6 +65,32 @@ assert.equal(changedType.nodes[0].type, 'ul');
 assert.equal(changedType.nodes[0].children[0].indent, 1);
 assert.equal(helper.applyListTypeToNodes(changedType.nodes, 'ul').changed, false);
 
+const selectedTypeChange = helper.applyListTypeToSelectedListItemNodes([{
+  type: 'ul',
+  children: [
+    { type: 'li', indent: 8, children: [{ text: 'Nested item' }] },
+    { type: 'li', children: [{ text: 'Sibling item' }] },
+  ],
+}], 'ol', 'Nested item');
+assert.equal(selectedTypeChange.changed, true);
+assert.equal(selectedTypeChange.nodes.length, 2);
+assert.equal(selectedTypeChange.nodes[0].type, 'ol');
+assert.equal(selectedTypeChange.nodes[0].children[0].indent, 8);
+assert.equal(selectedTypeChange.nodes[1].type, 'ul');
+assert.equal(selectedTypeChange.nodes[1].children[0].indent, undefined);
+
+const selectedMoveDown = helper.moveSelectedListItemNodes(selectedTypeChange.nodes, 'Nested item', 1);
+assert.equal(selectedMoveDown.changed, true);
+assert.equal(selectedMoveDown.nodes[0].type, 'ul');
+assert.equal(selectedMoveDown.nodes[1].type, 'ol');
+assert.equal(selectedMoveDown.nodes[1].children[0].indent, 8);
+
+const selectedMoveUp = helper.moveSelectedListItemNodes(selectedMoveDown.nodes, 'Nested item', -1);
+assert.equal(selectedMoveUp.changed, true);
+assert.equal(selectedMoveUp.nodes[0].type, 'ol');
+assert.equal(selectedMoveUp.nodes[0].children[0].indent, 8);
+assert.equal(selectedMoveUp.nodes[1].type, 'ul');
+
 const outdented = helper.applyListIndentToNodes(existingOrdered, -2);
 assert.equal(outdented[0].children[0].indent, undefined);
 assert.equal(outdented[0].children[1].indent, undefined);
@@ -113,5 +139,5 @@ assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 23,
+  cases: 38,
 }));

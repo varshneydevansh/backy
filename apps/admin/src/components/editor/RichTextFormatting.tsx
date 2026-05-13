@@ -15,7 +15,9 @@ import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import {
   applyListIndentToNodes,
+  applyListTypeToSelectedListItemNodes,
   applyListTypeToNodes,
+  moveSelectedListItemNodes,
   RICH_TEXT_LIST_MAX_INDENT,
   type RichTextListType,
 } from './richTextListTransforms';
@@ -1302,9 +1304,182 @@ export function RichTextFormatting({
     }
   }, [applyBlockPropertiesToElementContent, isTargetEditorUsable, runForTextSelectionOrCaret, setAlign]);
 
+  const readSelectedListItemIndentSnapshot = useCallback((): { text: string; indent: number } | null => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return null;
+    }
+
+    const isListItemNode = (node: unknown) => (
+      !!node &&
+      typeof node === 'object' &&
+      !Editor.isEditor(node) &&
+      (node as { type?: unknown }).type === 'li'
+    );
+    const readDomIndent = (text: string): number | undefined => {
+      if (typeof document === 'undefined' || typeof window === 'undefined' || !elementId) {
+        return undefined;
+      }
+
+      const host = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+        node.getAttribute('data-element-id') === elementId
+      ));
+      const item = Array.from(host?.querySelectorAll('li') || []).find((node) => (
+        (node.textContent || '').includes(text)
+      ));
+      if (!(item instanceof HTMLElement)) {
+        return undefined;
+      }
+
+      const marginLeft = Number.parseFloat(window.getComputedStyle(item).marginLeft || '0');
+      if (!Number.isFinite(marginLeft) || marginLeft <= 0) {
+        return undefined;
+      }
+
+      return Math.max(1, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.round(marginLeft / 24)));
+    };
+
+    const snapshotFromEntry = (entry: [Record<string, unknown>, number[]] | undefined | null) => {
+      if (!entry) {
+        return null;
+      }
+
+      const [node, path] = entry;
+      const text = Editor.string(editor as any, path as any).trim();
+      if (!text) {
+        return null;
+      }
+
+      const indent = typeof node.indent === 'number' ? node.indent : readDomIndent(text);
+      if (typeof indent !== 'number' || indent <= 0) {
+        return null;
+      }
+
+      return { text, indent };
+    };
+
+    if (editor.selection && SlateRange.isRange(editor.selection)) {
+      const listItemEntry = Editor.above(editor as any, {
+        at: SlateRange.start(editor.selection).path,
+        match: isListItemNode,
+      }) as [Record<string, unknown>, number[]] | undefined;
+      const snapshot = snapshotFromEntry(listItemEntry);
+      if (snapshot) {
+        return snapshot;
+      }
+    }
+
+    const selectedText = typeof window !== 'undefined'
+      ? window.getSelection()?.toString()?.trim() || ''
+      : '';
+    if (!selectedText) {
+      return null;
+    }
+
+    const listItemEntries = Array.from(
+      Editor.nodes(editor as any, {
+        at: [],
+        match: isListItemNode,
+        mode: 'lowest',
+      })
+    ) as unknown as [Record<string, unknown>, number[]][];
+    const matchingEntry = listItemEntries.find(([, path]) => (
+      Editor.string(editor as any, path as any).trim().includes(selectedText)
+    ));
+    const snapshot = snapshotFromEntry(matchingEntry);
+    if (snapshot) {
+      return snapshot;
+    }
+
+    const domIndent = readDomIndent(selectedText);
+    if (typeof domIndent === 'number' && domIndent > 0) {
+      return { text: selectedText, indent: domIndent };
+    }
+
+    return null;
+  }, [elementId, getActiveEditor]);
+
+  const restoreSelectedListItemIndentSnapshot = useCallback((snapshot: { text: string; indent: number } | null) => {
+    if (!snapshot) {
+      return;
+    }
+
+    const editor = getActiveEditor();
+    if (!editor) {
+      return;
+    }
+
+    const listItemEntries = Array.from(
+      Editor.nodes(editor as any, {
+        at: [],
+        match: (node) => (
+          !!node &&
+          typeof node === 'object' &&
+          !Editor.isEditor(node) &&
+          (node as { type?: unknown }).type === 'li'
+        ),
+        mode: 'lowest',
+      })
+    ) as unknown as [Record<string, unknown>, number[]][];
+    const match = listItemEntries.find(([, path]) => Editor.string(editor as any, path as any).trim() === snapshot.text)
+      || listItemEntries.find(([, path]) => Editor.string(editor as any, path as any).includes(snapshot.text));
+    if (!match) {
+      return;
+    }
+
+    const [, path] = match;
+    Transforms.setNodes(editor as any, { indent: snapshot.indent } as any, {
+      at: path,
+      match: (node) => (
+        !!node &&
+        typeof node === 'object' &&
+        !Editor.isEditor(node) &&
+        (node as { type?: unknown }).type === 'li'
+      ),
+    });
+    const patchedNode = Node.get(editor as any, path as any) as { indent?: unknown };
+    if (patchedNode && typeof patchedNode === 'object') {
+      patchedNode.indent = snapshot.indent;
+    }
+    syncActiveEditorContentAfterCommand();
+  }, [getActiveEditor, syncActiveEditorContentAfterCommand]);
+
   const toggleElementListType = useCallback((format: 'ul' | 'ol') => {
+    const selectedListItemIndentSnapshot = readSelectedListItemIndentSnapshot();
+    const editorBeforeListTypeChange = getActiveEditor();
+    const selectedTextBeforeListTypeChange = selectedListItemIndentSnapshot?.text || (
+      typeof window !== 'undefined' ? window.getSelection()?.toString()?.trim() || '' : ''
+    );
+    const contentBeforeListTypeChange = Array.isArray((editorBeforeListTypeChange as unknown as { children?: unknown } | null)?.children)
+      ? JSON.parse(JSON.stringify((editorBeforeListTypeChange as unknown as { children: unknown[] }).children)) as unknown[]
+      : null;
+    const selectedListTypeChange = contentBeforeListTypeChange && selectedTextBeforeListTypeChange
+      ? applyListTypeToSelectedListItemNodes(contentBeforeListTypeChange, format, selectedTextBeforeListTypeChange)
+      : null;
+    const applySelectedListTypeSnapshot = () => {
+      if (!selectedListTypeChange?.changed) {
+        return;
+      }
+
+      const editor = getActiveEditor();
+      if (!editor) {
+        onElementContentChange?.(selectedListTypeChange.nodes);
+        return;
+      }
+
+      (editor as unknown as { children: unknown[] }).children = JSON.parse(JSON.stringify(selectedListTypeChange.nodes));
+      try {
+        (editor as { onChange?: () => void }).onChange?.();
+      } catch {
+      }
+      onElementContentChange?.(selectedListTypeChange.nodes);
+      syncActiveEditorContentAfterCommand();
+    };
+
     if (!isTargetEditorUsable()) {
       applyListTypeToElementContent(format);
+      applySelectedListTypeSnapshot();
+      restoreSelectedListItemIndentSnapshot(selectedListItemIndentSnapshot);
       return;
     }
 
@@ -1315,7 +1490,25 @@ export function RichTextFormatting({
     if (!didApply) {
       applyListTypeToElementContent(format);
     }
-  }, [applyListTypeToElementContent, isTargetEditorUsable, runForTextSelectionOrCaret, toggleList]);
+    applySelectedListTypeSnapshot();
+    restoreSelectedListItemIndentSnapshot(selectedListItemIndentSnapshot);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        applySelectedListTypeSnapshot();
+        restoreSelectedListItemIndentSnapshot(selectedListItemIndentSnapshot);
+      });
+    }
+  }, [
+    applyListTypeToElementContent,
+    getActiveEditor,
+    isTargetEditorUsable,
+    onElementContentChange,
+    readSelectedListItemIndentSnapshot,
+    restoreSelectedListItemIndentSnapshot,
+    runForTextSelectionOrCaret,
+    syncActiveEditorContentAfterCommand,
+    toggleList,
+  ]);
 
   const adjustElementListIndent = useCallback((step: number) => {
     const activeEditorElementId = getCurrentActiveEditorId();
@@ -1347,18 +1540,57 @@ export function RichTextFormatting({
   }, [adjustElementListIndent]);
 
   const moveListItemAtSelection = useCallback((direction: -1 | 1) => {
+    const selectedListItemIndentSnapshot = readSelectedListItemIndentSnapshot();
+    const editorBeforeMove = getActiveEditor();
+    const selectedTextBeforeMove = selectedListItemIndentSnapshot?.text || (
+      typeof window !== 'undefined' ? window.getSelection()?.toString()?.trim() || '' : ''
+    );
+    const contentBeforeMove = Array.isArray((editorBeforeMove as unknown as { children?: unknown } | null)?.children)
+      ? JSON.parse(JSON.stringify((editorBeforeMove as unknown as { children: unknown[] }).children)) as unknown[]
+      : null;
+    const selectedMove = contentBeforeMove && selectedTextBeforeMove
+      ? moveSelectedListItemNodes(contentBeforeMove, selectedTextBeforeMove, direction)
+      : null;
+    const applySelectedMoveSnapshot = () => {
+      if (!selectedMove?.changed) {
+        return;
+      }
+
+      const editor = getActiveEditor();
+      if (editor) {
+        (editor as unknown as { children: unknown[] }).children = JSON.parse(JSON.stringify(selectedMove.nodes));
+        try {
+          (editor as { onChange?: () => void }).onChange?.();
+        } catch {
+        }
+      }
+      onElementContentChange?.(selectedMove.nodes);
+      syncActiveEditorContentAfterCommand();
+    };
     const activeEditorElementId = getCurrentActiveEditorId();
     const canUseActiveEditor = canInteractWithEditor()
       && (!elementId || !activeEditorElementId || activeEditorElementId === elementId);
+    const restoreMovedItemIndent = () => {
+      restoreSelectedListItemIndentSnapshot(selectedListItemIndentSnapshot);
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          restoreSelectedListItemIndentSnapshot(selectedListItemIndentSnapshot);
+        });
+      }
+    };
 
     if (canUseActiveEditor) {
       const didApplyToActiveEditor = direction < 0 ? moveListItemUp() : moveListItemDown();
       if (didApplyToActiveEditor) {
+        applySelectedMoveSnapshot();
+        restoreMovedItemIndent();
         return;
       }
     }
 
     if (moveListItemInElementSelection(direction)) {
+      applySelectedMoveSnapshot();
+      restoreMovedItemIndent();
       return;
     }
 
@@ -1369,14 +1601,21 @@ export function RichTextFormatting({
         moveListItemDown();
       }
     });
+    applySelectedMoveSnapshot();
+    restoreMovedItemIndent();
   }, [
     canInteractWithEditor,
     elementId,
+    getActiveEditor,
     getCurrentActiveEditorId,
     moveListItemDown,
     moveListItemInElementSelection,
     moveListItemUp,
+    onElementContentChange,
+    readSelectedListItemIndentSnapshot,
+    restoreSelectedListItemIndentSnapshot,
     runOrActivateTextEditor,
+    syncActiveEditorContentAfterCommand,
   ]);
 
   const toggleBlockquoteForElementOrSelection = useCallback(() => {

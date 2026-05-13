@@ -185,13 +185,9 @@ export const BackyEditor = ({
 
         const sourceParentPath = sourcePath.slice(0, -1);
         const targetParentPath = targetPath.slice(0, -1);
-        if (sourceParentPath.join('.') !== targetParentPath.join('.')) {
-            return false;
-        }
-
         const sourceIndex = sourcePath[sourcePath.length - 1] ?? -1;
         const targetIndex = targetPath[targetPath.length - 1] ?? -1;
-        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+        if (sourceIndex < 0 || targetIndex < 0) {
             return false;
         }
 
@@ -202,6 +198,55 @@ export const BackyEditor = ({
                 : typeof sourceIndent === 'number'
                   ? sourceIndent
                   : undefined;
+            if (sourceParentPath.join('.') !== targetParentPath.join('.')) {
+                if (
+                    sourceParentPath.length !== 1 ||
+                    targetParentPath.length !== 1 ||
+                    Math.abs(sourceParentPath[0] - targetParentPath[0]) !== 1 ||
+                    sourceIndex !== 0 ||
+                    targetIndex !== 0
+                ) {
+                    return false;
+                }
+
+                const sourceList = Node.get(slateEditor, sourceParentPath) as unknown as Record<string, unknown>;
+                const targetList = Node.get(slateEditor, targetParentPath) as unknown as Record<string, unknown>;
+                if (!isListContainer(sourceList) || !isListContainer(targetList)) {
+                    return false;
+                }
+
+                const nextChildren = JSON.parse(JSON.stringify(slateEditor.children || []));
+                const sourceListClone = JSON.parse(JSON.stringify(sourceList));
+                const targetListClone = JSON.parse(JSON.stringify(targetList));
+                if (typeof currentIndent === 'number' && currentIndent > 0) {
+                    const sourceListChildren = Array.isArray(sourceListClone.children) ? sourceListClone.children : [];
+                    if (sourceListChildren[0] && typeof sourceListChildren[0] === 'object') {
+                        sourceListChildren[0].indent = currentIndent;
+                    }
+                }
+
+                nextChildren[sourceParentPath[0]] = targetListClone;
+                nextChildren[targetParentPath[0]] = sourceListClone;
+                slateEditor.children = nextChildren;
+                try {
+                    Transforms.select(slateEditor, {
+                        anchor: Editor.start(slateEditor, [...targetParentPath, 0]),
+                        focus: Editor.end(slateEditor, [...targetParentPath, 0]),
+                    });
+                } catch {
+                    // Selection is best-effort after cross-list drag reorder.
+                }
+                slateEditor.onChange?.();
+                if (Array.isArray(slateEditor.children)) {
+                    onChange?.(JSON.parse(JSON.stringify(slateEditor.children)));
+                }
+                return true;
+            }
+
+            if (sourceIndex === targetIndex) {
+                return false;
+            }
+
             const nextChildren = JSON.parse(JSON.stringify(slateEditor.children || []));
             let parentChildren: unknown[] | null = Array.isArray(nextChildren) ? nextChildren : null;
             for (const index of sourceParentPath) {

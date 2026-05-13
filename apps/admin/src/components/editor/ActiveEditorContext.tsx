@@ -2088,6 +2088,43 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     if (!editor) return false;
 
     try {
+      const listItemIndentsBeforeMove = new Map<string, number[]>();
+      for (const [node, path] of Array.from(
+        Editor.nodes(editor as any, {
+          at: [],
+          match: (candidate) => getIsListItemNode(candidate),
+          mode: 'lowest',
+        })
+      ) as [SlateElement, number[]][]) {
+        const itemText = Editor.string(editor as any, path as any).trim();
+        const indent = typeof (node as { indent?: unknown }).indent === 'number'
+          ? (node as { indent?: number }).indent
+          : undefined;
+        if (!itemText || typeof indent !== 'number' || indent <= 0) {
+          continue;
+        }
+
+        const existing = listItemIndentsBeforeMove.get(itemText) || [];
+        listItemIndentsBeforeMove.set(itemText, [...existing, indent]);
+      }
+      if (typeof document !== 'undefined' && typeof window !== 'undefined' && activeEditorElementIdRef.current) {
+        const host = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+          node.getAttribute('data-element-id') === activeEditorElementIdRef.current
+        ));
+        for (const item of Array.from(host?.querySelectorAll('li') || [])) {
+          const itemText = (item.textContent || '').trim();
+          const marginLeft = item instanceof HTMLElement
+            ? Number.parseFloat(window.getComputedStyle(item).marginLeft || '0')
+            : 0;
+          if (!itemText || !Number.isFinite(marginLeft) || marginLeft <= 0) {
+            continue;
+          }
+
+          const indent = Math.max(1, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.round(marginLeft / 24)));
+          const existing = listItemIndentsBeforeMove.get(itemText) || [];
+          listItemIndentsBeforeMove.set(itemText, [...existing, indent]);
+        }
+      }
       debug('moveSelectedListItem.start', {
         direction,
         selection: describeSelection(editor.selection || null),
@@ -2108,15 +2145,103 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       const parentPath = listItemPath.slice(0, -1);
       const parentNode = Node.get(editor as any, parentPath) as { children?: unknown[] };
       const currentListItemNode = Node.get(editor as any, listItemPath) as unknown as Record<string, unknown>;
+      const currentListItemText = Editor.string(editor as any, listItemPath as any).trim();
       const siblingCount = Array.isArray(parentNode?.children) ? parentNode.children.length : 0;
       const currentIndex = listItemPath[listItemPath.length - 1] || 0;
       const targetIndex = currentIndex + direction;
       if (targetIndex < 0 || targetIndex >= siblingCount) {
-        return false;
+        const adjacentListPath = [...parentPath.slice(0, -1), (parentPath[parentPath.length - 1] || 0) + direction];
+        if (!Node.has(editor as any, parentPath as any) || !Node.has(editor as any, adjacentListPath as any)) {
+          return false;
+        }
+
+        const currentListNode = Node.get(editor as any, parentPath as any);
+        const adjacentListNode = Node.get(editor as any, adjacentListPath as any);
+        if (!getIsListNode(currentListNode) || !getIsListNode(adjacentListNode) || siblingCount !== 1) {
+          return false;
+        }
+
+        const cloneNode = (value: unknown) => JSON.parse(JSON.stringify(value));
+        const currentListClone = cloneNode(currentListNode);
+        const adjacentListClone = cloneNode(adjacentListNode);
+        const currentIndent = typeof currentListItemNode.indent === 'number'
+          ? currentListItemNode.indent
+          : listItemIndentsBeforeMove.get(currentListItemText)?.[0];
+        if (typeof currentIndent === 'number') {
+          const currentChildren = Array.isArray(currentListClone.children) ? currentListClone.children : [];
+          if (currentChildren[0] && typeof currentChildren[0] === 'object') {
+            currentChildren[0].indent = currentIndent;
+          }
+        }
+        const insertPath = direction > 0 ? parentPath : adjacentListPath;
+        const replacementNodes = direction > 0
+          ? [adjacentListClone, currentListClone]
+          : [currentListClone, adjacentListClone];
+        const nextCurrentListPath = direction > 0 ? adjacentListPath : adjacentListPath;
+        const nextCurrentItemPath = [...nextCurrentListPath, 0];
+
+        if (parentPath.length === 1 && adjacentListPath.length === 1) {
+          const rootChildren = JSON.parse(JSON.stringify((editor as any).children || []));
+          const currentListIndex = parentPath[0] || 0;
+          const adjacentListIndex = adjacentListPath[0] || 0;
+          rootChildren[currentListIndex] = direction > 0 ? adjacentListClone : currentListClone;
+          rootChildren[adjacentListIndex] = direction > 0 ? currentListClone : adjacentListClone;
+          (editor as any).children = rootChildren;
+          try {
+            (editor as any).onChange?.();
+          } catch {
+          }
+          try {
+            Transforms.select(editor as any, {
+              anchor: Editor.start(editor as any, nextCurrentItemPath),
+              focus: Editor.end(editor as any, nextCurrentItemPath),
+            });
+          } catch {
+            // Selection is best-effort after direct list movement.
+          }
+        } else {
+          if (direction > 0) {
+            Transforms.removeNodes(editor as any, { at: adjacentListPath });
+            Transforms.removeNodes(editor as any, { at: parentPath });
+          } else {
+            Transforms.removeNodes(editor as any, { at: parentPath });
+            Transforms.removeNodes(editor as any, { at: adjacentListPath });
+          }
+          Transforms.insertNodes(editor as any, replacementNodes as any, { at: insertPath });
+        }
+        if (typeof currentIndent === 'number' && Node.has(editor as any, nextCurrentItemPath)) {
+          Transforms.setNodes(editor as any, { indent: currentIndent } as any, {
+            at: nextCurrentItemPath,
+            match: (node) => getIsListItemNode(node),
+          });
+          const nextNode = Node.get(editor as any, nextCurrentItemPath as any) as unknown as { indent?: unknown };
+          if (nextNode && typeof nextNode === 'object') {
+            nextNode.indent = currentIndent;
+          }
+        }
+        try {
+          Transforms.select(editor as any, {
+            anchor: Editor.start(editor as any, nextCurrentItemPath),
+            focus: Editor.end(editor as any, nextCurrentItemPath),
+          });
+        } catch {
+          // Selection is best-effort after adjacent list movement.
+        }
+
+        debug('moveSelectedListItem.success', {
+          direction,
+          action: 'swap-adjacent-lists',
+          selection: describeSelection(editor.selection || null),
+        });
+        setStoredSelection(editor.selection || null);
+        syncActiveEditorContentSoon();
+        return true;
       }
 
       const movedListItem = JSON.parse(JSON.stringify(currentListItemNode));
-      const currentIndent = typeof currentListItemNode.indent === 'number' ? currentListItemNode.indent : undefined;
+      const currentIndent = typeof currentListItemNode.indent === 'number'
+        ? currentListItemNode.indent
+        : listItemIndentsBeforeMove.get(currentListItemText)?.[0];
       if (typeof currentIndent === 'number') {
         movedListItem.indent = currentIndent;
       }
@@ -3057,6 +3182,66 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     const editor = getActiveEditor();
     if (!editor) return;
     try {
+      const readEditorListItemIndents = () => {
+        const entries = new Map<string, number[]>();
+        for (const [node, path] of Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (candidate) => getIsListItemNode(candidate),
+            mode: 'lowest',
+          })
+        ) as [SlateElement, number[]][]) {
+          const indent = typeof (node as { indent?: unknown }).indent === 'number'
+            ? (node as { indent?: number }).indent
+            : undefined;
+          if (typeof indent !== 'number' || indent <= 0) {
+            continue;
+          }
+
+          const itemText = Editor.string(editor as any, path as any).trim();
+          if (!itemText) {
+            continue;
+          }
+
+          const existing = entries.get(itemText) || [];
+          entries.set(itemText, [...existing, indent]);
+        }
+
+        return entries;
+      };
+      const readDomListItemIndents = () => {
+        const entries = new Map<string, number[]>();
+        if (typeof document === 'undefined' || typeof window === 'undefined' || !activeEditorElementIdRef.current) {
+          return entries;
+        }
+
+        const host = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+          node.getAttribute('data-element-id') === activeEditorElementIdRef.current
+        ));
+        for (const item of Array.from(host?.querySelectorAll('li') || [])) {
+          const itemText = (item.textContent || '').trim();
+          if (!itemText) {
+            continue;
+          }
+
+          const marginLeft = Number.parseFloat(window.getComputedStyle(item).marginLeft || '0');
+          if (!Number.isFinite(marginLeft) || marginLeft <= 0) {
+            continue;
+          }
+
+          const indent = Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.round(marginLeft / 24)));
+          if (indent <= 0) {
+            continue;
+          }
+
+          const existing = entries.get(itemText) || [];
+          entries.set(itemText, [...existing, indent]);
+        }
+
+        return entries;
+      };
+      const editorListItemIndents = readEditorListItemIndents();
+      const domListItemIndents = readDomListItemIndents();
       debug('toggleList.start', {
         format,
         selection: describeSelection(editor.selection || null),
@@ -3089,17 +3274,142 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         return;
       }
 
+      if (currentListType) {
+        const startListItemEntry = Editor.above(editor as any, {
+          at: Range.start(editor.selection).path,
+          match: (node) => getIsListItemNode(node),
+        }) as [SlateElement, number[]] | undefined;
+        const endListItemEntry = Editor.above(editor as any, {
+          at: Range.end(editor.selection).path,
+          match: (node) => getIsListItemNode(node),
+        }) as [SlateElement, number[]] | undefined;
+        const sameListItem = !!startListItemEntry && !!endListItemEntry
+          && startListItemEntry[1].length === endListItemEntry[1].length
+          && startListItemEntry[1].every((part, index) => part === endListItemEntry[1][index]);
+
+        if (startListItemEntry && sameListItem) {
+          const [selectedListItemNode, selectedListItemPath] = startListItemEntry;
+          const listEntry = Editor.above(editor as any, {
+            at: selectedListItemPath,
+            match: (node) => getIsListNode(node),
+          }) as [SlateElement, number[]] | undefined;
+
+          if (listEntry) {
+            const [listNode, listPath] = listEntry;
+            const listChildren = Array.isArray((listNode as any).children) ? (listNode as any).children : [];
+            const selectedIndex = selectedListItemPath[selectedListItemPath.length - 1] || 0;
+            const cloneNode = (value: unknown) => JSON.parse(JSON.stringify(value));
+            const selectedItemText = Editor.string(editor as any, selectedListItemPath as any);
+            const selectedItemEditorIndents = editorListItemIndents.get(selectedItemText.trim()) || [];
+            const selectedItemDomIndents = domListItemIndents.get(selectedItemText.trim()) || [];
+            const selectedItemIndent = typeof (selectedListItemNode as { indent?: unknown }).indent === 'number'
+              ? (selectedListItemNode as { indent?: number }).indent
+              : selectedItemEditorIndents[0] ?? selectedItemDomIndents[0];
+            const beforeItems = listChildren.slice(0, selectedIndex).map(cloneNode);
+            const selectedItem = cloneNode(selectedListItemNode);
+            if (typeof selectedItemIndent === 'number' && selectedItemIndent > 0) {
+              selectedItem.indent = selectedItemIndent;
+            }
+            const afterItems = listChildren.slice(selectedIndex + 1).map(cloneNode);
+            const nextListNodes = [
+              ...(beforeItems.length > 0 ? [{ ...cloneNode(listNode), type: currentListType, children: beforeItems }] : []),
+              { ...cloneNode(listNode), type: format, children: [selectedItem] },
+              ...(afterItems.length > 0 ? [{ ...cloneNode(listNode), type: currentListType, children: afterItems }] : []),
+            ] as any[];
+            const selectedListOffset = beforeItems.length > 0 ? 1 : 0;
+            const listParentPath = listPath.slice(0, -1);
+            const listIndex = listPath[listPath.length - 1] || 0;
+            const nextSelectedListPath = [...listParentPath, listIndex + selectedListOffset];
+            const nextSelectedItemPath = [...nextSelectedListPath, 0];
+
+            Transforms.removeNodes(editor as any, { at: listPath });
+            Transforms.insertNodes(editor as any, nextListNodes, { at: listPath });
+            if (typeof selectedItemIndent === 'number' && selectedItemIndent > 0 && Node.has(editor as any, nextSelectedItemPath)) {
+              Transforms.setNodes(editor as any, { indent: selectedItemIndent } as any, {
+                at: nextSelectedItemPath,
+                match: (node) => getIsListItemNode(node),
+              });
+              const insertedItem = Node.get(editor as any, nextSelectedItemPath as any) as { indent?: unknown };
+              if (insertedItem && typeof insertedItem === 'object') {
+                insertedItem.indent = selectedItemIndent;
+              }
+            }
+            try {
+              Transforms.select(editor as any, {
+                anchor: Editor.start(editor as any, nextSelectedItemPath),
+                focus: Editor.end(editor as any, nextSelectedItemPath),
+              });
+            } catch {
+              // Selection is best-effort after list type conversion.
+            }
+            debug('toggleList.success', {
+              format,
+              action: 'convert-selected-item',
+              selection: describeSelection(editor.selection || null),
+            });
+            setStoredSelection(editor.selection || null);
+            syncActiveEditorContentSoon();
+            return;
+          }
+        }
+      }
+
+      const listItemEntriesBeforeTypeChange = Array.from(
+        Editor.nodes(editor as any, {
+          at: [],
+          match: (node) => getIsListItemNode(node),
+          mode: 'lowest',
+        })
+      ) as [SlateElement, number[]][];
+      const listItemIndentsBeforeTypeChange = listItemEntriesBeforeTypeChange.map(([node, path]) => ({
+        itemText: Editor.string(editor as any, path as any),
+        indent: typeof (node as { indent?: unknown }).indent === 'number'
+          ? (node as { indent?: number }).indent
+          : undefined,
+      })).filter((entry): entry is { itemText: string; indent: number } => (
+        typeof entry.indent === 'number' && entry.indent > 0 && entry.itemText.length > 0
+      ));
+
       Transforms.unwrapNodes(editor as any, {
         match: (n) => getIsListNode(n),
         split: true,
-      });
-      Transforms.unsetNodes(editor as any, 'indent' as any, {
-        match: (n) => getIsListItemNode(n),
       });
       Transforms.setNodes(editor as any, { type: 'li' } as any, {
         match: (n) => SlateElement.isElement(n),
       });
       Transforms.wrapNodes(editor as any, { type: format, children: [] } as any);
+      if (listItemIndentsBeforeTypeChange.length > 0) {
+        const restoredIndexes = new Set<number>();
+        for (const [, path] of Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (candidate) => getIsListItemNode(candidate),
+            mode: 'lowest',
+          })
+        ) as [SlateElement, number[]][]) {
+          const itemText = Editor.string(editor as any, path as any);
+          const matchIndex = listItemIndentsBeforeTypeChange.findIndex((entry, index) => (
+            !restoredIndexes.has(index) && entry.itemText === itemText
+          ));
+          const match = matchIndex >= 0 ? listItemIndentsBeforeTypeChange[matchIndex] : null;
+          if (!match) {
+            continue;
+          }
+
+          Transforms.setNodes(editor as any, { indent: match.indent } as any, {
+            at: path,
+            match: (candidate) => getIsListItemNode(candidate),
+          });
+          const restoredNode = Node.get(editor as any, path as any) as { indent?: unknown };
+          if (restoredNode && typeof restoredNode === 'object') {
+            restoredNode.indent = match.indent;
+          }
+          restoredIndexes.add(matchIndex);
+          if (restoredIndexes.size >= listItemIndentsBeforeTypeChange.length) {
+            break;
+          }
+        }
+      }
       debug('toggleList.success', {
         format,
         action: 'apply',

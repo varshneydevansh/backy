@@ -9,10 +9,27 @@ const isListType = (type: unknown): type is RichTextListType => {
   return type === 'ul' || type === 'ol';
 };
 
+const cloneNode = <T>(value: T): T => {
+  return JSON.parse(JSON.stringify(value)) as T;
+};
+
 const emptyListItem = () => ({
   type: 'li',
   children: [{ text: '' }],
 });
+
+const getNodeText = (node: unknown): string => {
+  if (!isRecord(node)) {
+    return '';
+  }
+
+  if (typeof node.text === 'string') {
+    return node.text;
+  }
+
+  const children = Array.isArray(node.children) ? node.children : [];
+  return children.map((child) => getNodeText(child)).join('');
+};
 
 export const getRootListTypeFromNodes = (nodes: unknown[]): RichTextListType | null => {
   if (!nodes.length || !isRecord(nodes[0])) {
@@ -102,6 +119,144 @@ export const applyListTypeToNodes = (
       children: toListItemNodes(nodes),
     }],
   };
+};
+
+export const applyListTypeToSelectedListItemNodes = (
+  nodes: unknown[],
+  format: RichTextListType,
+  selectedText: string
+): { changed: boolean; nodes: unknown[] } => {
+  const needle = selectedText.trim();
+  if (!needle) {
+    return { changed: false, nodes };
+  }
+
+  const patchNodes = (values: unknown[]): { changed: boolean; nodes: unknown[] } => {
+    const nextNodes: unknown[] = [];
+    let didChange = false;
+
+    for (const node of values) {
+      if (didChange || !isRecord(node)) {
+        nextNodes.push(node);
+        continue;
+      }
+
+      const children = Array.isArray(node.children) ? node.children : null;
+      if (isListType(node.type) && children) {
+        const selectedIndex = children.findIndex((child) => (
+          isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle)
+        ));
+
+        if (selectedIndex >= 0) {
+          const beforeItems = children.slice(0, selectedIndex).map((child) => cloneNode(child));
+          const selectedItem = cloneNode(children[selectedIndex]);
+          const afterItems = children.slice(selectedIndex + 1).map((child) => cloneNode(child));
+
+          if (beforeItems.length > 0) {
+            nextNodes.push({ ...cloneNode(node), children: beforeItems });
+          }
+          nextNodes.push({ ...cloneNode(node), type: format, children: [selectedItem] });
+          if (afterItems.length > 0) {
+            nextNodes.push({ ...cloneNode(node), children: afterItems });
+          }
+          didChange = true;
+          continue;
+        }
+      }
+
+      if (children) {
+        const patchedChildren = patchNodes(children);
+        if (patchedChildren.changed) {
+          nextNodes.push({ ...cloneNode(node), children: patchedChildren.nodes });
+          didChange = true;
+          continue;
+        }
+      }
+
+      nextNodes.push(node);
+    }
+
+    return { changed: didChange, nodes: nextNodes };
+  };
+
+  return patchNodes(nodes);
+};
+
+export const moveSelectedListItemNodes = (
+  nodes: unknown[],
+  selectedText: string,
+  direction: -1 | 1
+): { changed: boolean; nodes: unknown[] } => {
+  const needle = selectedText.trim();
+  if (!needle) {
+    return { changed: false, nodes };
+  }
+
+  const patchNodes = (values: unknown[]): { changed: boolean; nodes: unknown[] } => {
+    const listIndex = values.findIndex((node) => (
+      isRecord(node) &&
+      isListType(node.type) &&
+      Array.isArray(node.children) &&
+      node.children.some((child) => isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle))
+    ));
+
+    if (listIndex >= 0) {
+      const listNode = values[listIndex] as Record<string, unknown>;
+      const children = Array.isArray(listNode.children) ? listNode.children.map((child) => cloneNode(child)) : [];
+      const itemIndex = children.findIndex((child) => (
+        isRecord(child) && child.type === 'li' && getNodeText(child).trim().includes(needle)
+      ));
+      const targetIndex = itemIndex + direction;
+
+      if (targetIndex >= 0 && targetIndex < children.length) {
+        const nextChildren = [...children];
+        const selected = nextChildren[itemIndex];
+        nextChildren[itemIndex] = nextChildren[targetIndex];
+        nextChildren[targetIndex] = selected;
+        const nextNodes = values.map((node, index) => index === listIndex
+          ? { ...cloneNode(listNode), children: nextChildren }
+          : node
+        );
+        return { changed: true, nodes: nextNodes };
+      }
+
+      const adjacentIndex = listIndex + direction;
+      if (
+        children.length === 1 &&
+        adjacentIndex >= 0 &&
+        adjacentIndex < values.length &&
+        isRecord(values[adjacentIndex]) &&
+        isListType((values[adjacentIndex] as Record<string, unknown>).type)
+      ) {
+        const nextNodes = values.map((node) => cloneNode(node));
+        const selectedList = nextNodes[listIndex];
+        nextNodes[listIndex] = nextNodes[adjacentIndex];
+        nextNodes[adjacentIndex] = selectedList;
+        return { changed: true, nodes: nextNodes };
+      }
+    }
+
+    const nextNodes: unknown[] = [];
+    let didChange = false;
+    for (const node of values) {
+      if (didChange || !isRecord(node) || !Array.isArray(node.children)) {
+        nextNodes.push(node);
+        continue;
+      }
+
+      const patchedChildren = patchNodes(node.children);
+      if (patchedChildren.changed) {
+        nextNodes.push({ ...cloneNode(node), children: patchedChildren.nodes });
+        didChange = true;
+      } else {
+        nextNodes.push(node);
+      }
+    }
+
+    return { changed: didChange, nodes: nextNodes };
+  };
+
+  return patchNodes(nodes);
 };
 
 export const applyListIndentToNodes = (nodes: unknown[], step: number): unknown[] => {

@@ -3957,6 +3957,72 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedListItemBeforeTypeChange = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+  assert(selectedListItemBeforeTypeChange.selectedText === 'Nested item', `List item reselection failed before list type change: ${JSON.stringify(selectedListItemBeforeTypeChange)}`);
+  let listIndentBeforeTypeChangeState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    listIndentBeforeTypeChangeState = await evaluate(client, `(() => {
+      const host = document.querySelector('[data-element-id="${elementId}"]');
+      const items = Array.from(host?.querySelectorAll('li') || []);
+      const target = items.find((node) => (node.textContent || '').includes('Nested item'));
+      const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+        ? window.__backyReadActiveEditorTableState()
+        : null;
+      const targetNode = slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+      return {
+        targetMarginLeft: target ? getComputedStyle(target).marginLeft : '',
+        targetIndent: targetNode?.indent,
+        slateState,
+      };
+    })()`);
+    if (
+      listIndentBeforeTypeChangeState?.targetMarginLeft === '192px' &&
+      listIndentBeforeTypeChangeState?.targetIndent === 8
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(
+    listIndentBeforeTypeChangeState?.targetMarginLeft === '192px' &&
+      listIndentBeforeTypeChangeState?.targetIndent === 8,
+    `List item indent was not stable before list type change: ${JSON.stringify(listIndentBeforeTypeChangeState)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-list-ol');
+  await sleep(500);
+  await activateTextEditing(client, elementId);
+
+  const listTypeChangeState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const orderedLists = Array.from(host?.querySelectorAll('ol') || []);
+    const unorderedLists = Array.from(host?.querySelectorAll('ul') || []);
+    const items = Array.from(host?.querySelectorAll('li') || []);
+    const target = items.find((node) => (node.textContent || '').includes('Nested item'));
+    const sibling = items.find((node) => (node.textContent || '').includes('Sibling item'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      orderedListCount: orderedLists.length,
+      unorderedListCount: unorderedLists.length,
+      targetMarginLeft: target ? getComputedStyle(target).marginLeft : '',
+      siblingMarginLeft: sibling ? getComputedStyle(sibling).marginLeft : '',
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  const typeChangedNestedItem = listTypeChangeState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Nested item'));
+  const typeChangedSiblingItem = listTypeChangeState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Sibling item'));
+  assert(
+    listTypeChangeState.orderedListCount >= 1 &&
+      listTypeChangeState.targetMarginLeft === '192px' &&
+      listTypeChangeState.siblingMarginLeft !== '192px' &&
+      typeChangedNestedItem?.indent === 8 &&
+      typeChangedSiblingItem?.indent === undefined,
+    `List type change did not preserve selected list item indent: ${JSON.stringify(listTypeChangeState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedListItemBeforeMoveDown = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
   assert(selectedListItemBeforeMoveDown.selectedText === 'Nested item', `List item reselection failed before move-down control: ${JSON.stringify(selectedListItemBeforeMoveDown)}`);
   await mouseDownControlByTestId(client, 'rich-text-list-move-down');
@@ -5268,6 +5334,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     blockquoteState,
     selectedListItem,
     listIndentState,
+    selectedListItemBeforeTypeChange,
+    listIndentBeforeTypeChangeState,
+    listTypeChangeState,
     selectedListItemBeforeMoveDown,
     listMoveDownState,
     selectedListItemBeforeMoveUp,
