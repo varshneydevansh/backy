@@ -828,6 +828,10 @@ const normalizeElementType = (value: string): CanvasElement['type'] => {
     : 'text';
 };
 
+const isEditorGroupElement = (element: CanvasElement | null | undefined): boolean => (
+  element?.props?.editorGroup === true
+);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -2479,6 +2483,7 @@ export function CanvasEditor({
           backgroundColor: 'transparent',
           borderRadius: 0,
           borderWidth: 0,
+          editorGroup: true,
           padding: 0,
         },
         children: selectedSiblings.map((item, index) => ({
@@ -2542,7 +2547,7 @@ export function CanvasEditor({
     }
 
     const entry = findElementEntry(elements, selectedId);
-    if (!entry?.element.children?.length || entry.element.locked) {
+    if (!entry?.element.children?.length || entry.element.locked || !isEditorGroupElement(entry.element)) {
       return;
     }
 
@@ -2650,7 +2655,7 @@ export function CanvasEditor({
     && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
   const canUngroupSelected = selectedEntries.length === 1
     && !selectedEntries[0].element.locked
-    && canAcceptNestedDrop(selectedEntries[0].element.type)
+    && isEditorGroupElement(selectedEntries[0].element)
     && Boolean(selectedEntries[0].element.children?.length);
   const canAlignSelected = !!selectedElement && !selectedElement.locked;
   const canZOrderSelected = selectedEntries.length > 0

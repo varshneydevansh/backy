@@ -2596,6 +2596,20 @@ const dragLayerRow = async (client, fromId, toId) => {
   assert(overResult?.ok, `Unable to drag layer ${fromId} over ${toId}: ${JSON.stringify(overResult)}`);
   await sleep(300);
 
+  const dropResult = await evaluate(client, `(() => {
+    const to = document.querySelector('[data-layer-id="${toId}"]');
+    if (!(to instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-to-layer-row' };
+    }
+
+    const dataTransfer = new DataTransfer();
+    const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer });
+    const dropped = to.dispatchEvent(drop);
+    return { ok: true, dropped };
+  })()`);
+  assert(dropResult?.ok, `Unable to drop layer ${fromId} on ${toId}: ${JSON.stringify(dropResult)}`);
+  await sleep(150);
+
   const endResult = await evaluate(client, `(() => {
     const from = document.querySelector('[data-layer-id="${fromId}"]');
     if (!(from instanceof HTMLElement)) {
@@ -2622,6 +2636,7 @@ const dragLayerRow = async (client, fromId, toId) => {
     toId,
     startResult,
     overResult,
+    dropResult,
     endResult,
     before,
     after,
@@ -7605,6 +7620,36 @@ const testLayerGrouping = async (client, elementIds) => {
   };
 };
 
+const testSemanticContainerCannotUngroup = async (client, elementId) => {
+  await selectLayerIds(client, [elementId]);
+  const state = await evaluate(client, `(() => {
+    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    return {
+      hasSelection: Boolean(selected),
+      selectedText: selected?.textContent || '',
+      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+    };
+  })()`);
+
+  assert(state.hasSelection, `Semantic container ${elementId} was not selected: ${JSON.stringify(state)}`);
+  assert(state.ungroupDisabled === true, `Semantic container ${elementId} exposed Ungroup: ${JSON.stringify(state)}`);
+
+  await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
+  await sleep(200);
+  const after = await readLayerTreeState(client, [elementId, 'smoke-child-button']);
+  assert(
+    after.byId['smoke-child-button'].depth > after.byId[elementId].depth,
+    `Semantic container ${elementId} was flattened by Ungroup shortcut: ${JSON.stringify(after)}`,
+  );
+
+  return {
+    elementId,
+    state,
+    after,
+  };
+};
+
 const waitForPersistedNestedGroup = async (pageId, parentId, childIds) => {
   let lastState = null;
 
@@ -7802,6 +7847,31 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
 
   return {
     selected: elementIds,
+    drag,
+    before,
+    after,
+  };
+};
+
+const testLockedLayerExcludedFromMultiDrag = async (client, lockedId, unlockedId) => {
+  await setLayerLockedState(client, lockedId, true);
+  await selectLayerIds(client, [lockedId, unlockedId]);
+
+  const before = await readEditorElementState(client, [lockedId, unlockedId]);
+  const drag = await dragSelectionHandle(client, unlockedId, 45, 25, { selectFirst: false });
+  const after = await readEditorElementState(client, [lockedId, unlockedId]);
+  const unlockedDeltaX = after[unlockedId].x - before[unlockedId].x;
+  const unlockedDeltaY = after[unlockedId].y - before[unlockedId].y;
+
+  assertElementState({ [lockedId]: after[lockedId] }, { [lockedId]: before[lockedId] }, `${lockedId} locked multi-drag exclusion`);
+  assert(
+    Math.abs(unlockedDeltaX) >= 10 || Math.abs(unlockedDeltaY) >= 10,
+    `${unlockedId} did not move while dragging mixed locked/unlocked selection: ${JSON.stringify({ before, after, drag })}`,
+  );
+
+  return {
+    lockedId,
+    unlockedId,
     drag,
     before,
     after,
@@ -8154,6 +8224,8 @@ const testMultiSelectionControls = async (client, pageId) => {
   const canvasResize = await testMultiSelectionResize(client, ['smoke-image', 'smoke-heading']);
   const distribution = await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
   const grouping = await testLayerGrouping(client, ['smoke-heading', 'smoke-image']);
+  const semanticUngroupGuard = await testSemanticContainerCannotUngroup(client, 'smoke-box');
+  const lockedMultiDrag = await testLockedLayerExcludedFromMultiDrag(client, 'smoke-icon', 'smoke-image');
   const nestedGrouping = await testNestedLayerGroupingPersistence(client, pageId);
 
   return {
@@ -8162,6 +8234,8 @@ const testMultiSelectionControls = async (client, pageId) => {
     canvasResize,
     distribution,
     grouping,
+    semanticUngroupGuard,
+    lockedMultiDrag,
     nestedGrouping,
   };
 };

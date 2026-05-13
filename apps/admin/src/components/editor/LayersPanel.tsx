@@ -41,12 +41,14 @@ interface LayerItemProps {
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
+    isDragTarget: boolean;
     canReorder: boolean;
     canAcceptChildren: boolean;
     selectedIds: string[];
     onSelect: (id: string, multiSelect: boolean) => void;
     onDragStart: (id: string) => void;
     onDragOver: (id: string) => void;
+    onDrop: (id: string) => void;
     onDragEnd: () => void;
     onMove: (id: string, action: LayerMoveAction) => void;
     onNestSelection: (parentId: string) => void;
@@ -155,12 +157,14 @@ function LayerItem({
     isSelected,
     isHidden,
     isLocked,
+    isDragTarget,
     canReorder,
     canAcceptChildren,
     selectedIds,
     onSelect,
     onDragStart,
     onDragOver,
+    onDrop,
     onDragEnd,
     onMove,
     onNestSelection,
@@ -209,11 +213,12 @@ function LayerItem({
                 padding: '8px 12px',
                 paddingLeft: `${12 + depth * 16}px`,
                 gap: '8px',
-                backgroundColor: isSelected ? '#e0e7ff' : 'transparent',
+                backgroundColor: isDragTarget ? '#eef2ff' : isSelected ? '#e0e7ff' : 'transparent',
                 borderBottom: '1px solid #e5e7eb',
+                boxShadow: isDragTarget ? 'inset 0 2px 0 #6366f1' : 'none',
                 cursor: disabled ? 'not-allowed' : 'pointer',
                 opacity: isHidden ? 0.5 : 1,
-                transition: 'background-color 0.15s',
+                transition: 'background-color 0.15s, box-shadow 0.15s',
             }}
             onClick={handleClick}
             onMouseEnter={() => setShowActions(true)}
@@ -226,6 +231,13 @@ function LayerItem({
                 }
                 e.preventDefault();
                 onDragOver(element.id);
+            }}
+            onDrop={(e) => {
+                if (disabled || !canReorder) {
+                    return;
+                }
+                e.preventDefault();
+                onDrop(element.id);
             }}
             onDragEnd={onDragEnd}
         >
@@ -448,6 +460,7 @@ export function LayersPanel({
     hideHeader = false,
 }: LayersPanelProps) {
     const [dragFromId, setDragFromId] = useState<string | null>(null);
+    const [dragTargetId, setDragTargetId] = useState<string | null>(null);
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean) => {
@@ -466,6 +479,7 @@ export function LayersPanel({
 
     const handleDragStart = useCallback((id: string) => {
         setDragFromId(id);
+        setDragTargetId(null);
     }, []);
 
     const handleDragOver = useCallback(
@@ -473,16 +487,28 @@ export function LayersPanel({
             if (disabled) {
                 return;
             }
+            setDragTargetId(dragFromId !== null && dragFromId !== toId ? toId : null);
+        },
+        [disabled, dragFromId]
+    );
+
+    const handleDrop = useCallback(
+        (toId: string) => {
+            if (disabled) {
+                return;
+            }
             if (dragFromId !== null && dragFromId !== toId) {
                 onReorder(dragFromId, toId);
-                setDragFromId(toId);
             }
+            setDragFromId(null);
+            setDragTargetId(null);
         },
         [disabled, dragFromId, onReorder]
     );
 
     const handleDragEnd = useCallback(() => {
         setDragFromId(null);
+        setDragTargetId(null);
     }, []);
 
     const handleVisibilityToggle = useCallback((id: string) => {
@@ -502,6 +528,7 @@ export function LayersPanel({
                         isSelected={selectedIds.includes(element.id)}
                         isHidden={element.visible === false}
                         isLocked={element.locked === true}
+                        isDragTarget={dragTargetId === element.id}
                         canReorder={!disabled && element.locked !== true}
                         canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
                         selectedIds={selectedIds}
@@ -509,6 +536,7 @@ export function LayersPanel({
                         onSelect={handleSelect}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
+                        onDrop={handleDrop}
                         onDragEnd={handleDragEnd}
                         onMove={onMove}
                         onNestSelection={onNestSelection}

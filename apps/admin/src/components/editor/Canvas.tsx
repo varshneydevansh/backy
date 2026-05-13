@@ -1669,7 +1669,7 @@ export function Canvas({
         ? collectDragSnapshots(elementsRef.current, selectedSet, { width: size.width, height: size.height })
         : [];
       const activeSnapshot = allSelectedSnapshots.find((snapshot) => snapshot.id === elementId);
-      const dragSnapshots = activeSnapshot
+      const candidateDragSnapshots = activeSnapshot
         ? allSelectedSnapshots.filter((snapshot) => (
             snapshot.parentId === activeSnapshot.parentId
             && snapshot.boundsWidth === activeSnapshot.boundsWidth
@@ -1677,6 +1677,10 @@ export function Canvas({
           ))
         : [createDragSnapshot(elementsRef.current, elementId, { width: size.width, height: size.height })]
             .filter((snapshot): snapshot is DragSnapshot => !!snapshot);
+      const dragSnapshots = candidateDragSnapshots.filter((snapshot) => {
+        const snapshotElement = findElementById(elementsRef.current, snapshot.id);
+        return snapshotElement?.locked !== true;
+      });
       if (!dragSnapshots.length) {
         return;
       }
