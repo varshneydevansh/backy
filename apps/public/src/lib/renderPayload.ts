@@ -178,6 +178,16 @@ const templateContentCanvas = (
   };
 };
 
+const collectionAuthoredTemplateCanvas = (
+  collection: StoreCollection,
+  kind: CollectionTemplateRenderKind,
+): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+  const metadata = isRecord(collection.metadata) ? collection.metadata : {};
+  const dynamicTemplates = isRecord(metadata.dynamicTemplates) ? metadata.dynamicTemplates : {};
+  const section = isRecord(dynamicTemplates[kind]) ? dynamicTemplates[kind] as JsonObject : {};
+  return templateContentCanvas(section.authoredCanvas);
+};
+
 const collectionTemplateCanvas = (
   site: StoreSite,
   collection: StoreCollection,
@@ -186,7 +196,7 @@ const collectionTemplateCanvas = (
   const template = collectionFrontendDesignTemplate(site, collection);
   const content = cloneJsonObject(template?.content);
   if (!template || !content) {
-    return null;
+    return collectionAuthoredTemplateCanvas(collection, kind);
   }
 
   const candidateKeys = kind === 'list'
@@ -205,7 +215,7 @@ const collectionTemplateCanvas = (
     return rootCanvas;
   }
 
-  return null;
+  return collectionAuthoredTemplateCanvas(collection, kind);
 };
 
 const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {

@@ -240,6 +240,127 @@ const deleteCollection = async (collectionId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, { method: 'DELETE' });
 };
 
+const deletePage = async (pageId) => {
+  if (!pageId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
+};
+
+const createAuthoredTemplatePage = async ({ kind, suffix }) => {
+  const isList = kind === 'list';
+  const rootId = isList ? 'authored-dynamic-list-root' : 'authored-dynamic-item-root';
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Smoke authored ${kind} template ${suffix}`,
+      slug: `smoke-authored-${kind}-template-${suffix}`,
+      description: `Temporary authored ${kind} template for collections smoke.`,
+      status: 'draft',
+      content: {
+        canvasSize: { width: 1200, height: 760 },
+        elements: [
+          {
+            id: rootId,
+            type: 'section',
+            x: 0,
+            y: 0,
+            width: 1200,
+            height: 680,
+            props: { backgroundColor: '#ffffff' },
+            styles: {},
+            actions: [],
+            dataBindings: [],
+            children: isList
+              ? [
+                  {
+                    id: 'authored-dynamic-list-title',
+                    type: 'heading',
+                    x: 72,
+                    y: 72,
+                    width: 720,
+                    height: 72,
+                    props: {
+                      content: 'Authored collection list',
+                      binding: 'collection.name',
+                      level: 1,
+                      fontSize: 48,
+                      fontWeight: 800,
+                    },
+                    styles: {},
+                    actions: [],
+                    dataBindings: [],
+                    children: [],
+                  },
+                  {
+                    id: 'authored-dynamic-list-repeater',
+                    type: 'repeater',
+                    x: 72,
+                    y: 192,
+                    width: 1056,
+                    height: 320,
+                    props: {
+                      binding: 'collection.records',
+                      columns: 3,
+                      gap: 16,
+                    },
+                    styles: {},
+                    actions: [],
+                    dataBindings: [],
+                    children: [],
+                  },
+                ]
+              : [
+                  {
+                    id: 'authored-dynamic-item-title',
+                    type: 'heading',
+                    x: 72,
+                    y: 72,
+                    width: 760,
+                    height: 82,
+                    props: {
+                      content: 'Authored record title',
+                      binding: 'record.title',
+                      level: 1,
+                      fontSize: 48,
+                      fontWeight: 800,
+                    },
+                    styles: {},
+                    actions: [],
+                    dataBindings: [],
+                    children: [],
+                  },
+                  {
+                    id: 'authored-dynamic-item-summary',
+                    type: 'text',
+                    x: 76,
+                    y: 176,
+                    width: 720,
+                    height: 96,
+                    props: {
+                      content: 'Authored record summary',
+                      binding: 'record.summary',
+                      fontSize: 18,
+                      lineHeight: 1.6,
+                    },
+                    styles: {},
+                    actions: [],
+                    dataBindings: [],
+                    children: [],
+                  },
+                ],
+          },
+        ],
+      },
+      meta: {
+        title: `Smoke authored ${kind} template ${suffix}`,
+        description: `Temporary authored ${kind} template for collections smoke.`,
+      },
+    }),
+  });
+  const page = payload.data?.page || payload.page;
+  assert(page?.id, `Create authored ${kind} template page did not return a page: ${JSON.stringify(payload).slice(0, 500)}`);
+  return page;
+};
+
 const createRecord = async ({ collectionId, slug, title }) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records`, {
     method: 'POST',
@@ -458,6 +579,10 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-authoring-copy-item-brief"]')) &&
         Boolean(document.querySelector('[data-testid="collections-authoring-open-list-builder"]')) &&
         Boolean(document.querySelector('[data-testid="collections-authoring-open-item-builder"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-list-authored-template"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-item-authored-template"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-list-authored-template-select"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-item-authored-template-select"]')) &&
         authoringText.includes('Dataset authoring shortcuts') &&
         authoringText.includes(${JSON.stringify(`dataset_${collectionId}`)}) &&
         authoringText.includes('Copy repeater preset') &&
@@ -671,6 +796,114 @@ const attachFrontendTemplateThroughUi = async (client, collectionId) => {
   throw new Error('Captured collection template selection did not persist');
 };
 
+const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPageId, itemPageId }) => {
+  for (const [kind, pageId] of [['list', listPageId], ['item', itemPageId]]) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const captured = await evaluate(client, `(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-capture"]`)});
+        const select = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template-select"]`)});
+        const panel = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template"]`)});
+        if (!(select instanceof HTMLSelectElement)) {
+          return { ok: false, reason: 'select-missing' };
+        }
+        const hasOption = Array.from(select.options).some((option) => option.value === ${JSON.stringify(pageId)});
+        if (!hasOption) {
+          return { ok: false, reason: 'page-option-missing', options: Array.from(select.options).map((option) => option.value) };
+        }
+        if (select.value !== ${JSON.stringify(pageId)}) {
+          select.value = ${JSON.stringify(pageId)};
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return { ok: false, reason: 'select-updated', value: select.value };
+        }
+        if (!(button instanceof HTMLButtonElement)) {
+          return { ok: false, reason: 'capture-button-missing' };
+        }
+        if (button.disabled) {
+          return { ok: false, reason: 'capture-button-disabled', text: panel?.textContent || '' };
+        }
+        button.click();
+        return { ok: true };
+      })()`);
+      if (captured.ok) break;
+      if (attempt === 79) {
+        throw new Error(`Unable to capture ${kind} authored template page: ${JSON.stringify(captured)}`);
+      }
+      await sleep(250);
+    }
+
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const panel = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template"]`)});
+        return { text: panel?.textContent || '' };
+      })()`);
+      if (state.text.includes('Captured') && state.text.includes('root elements')) break;
+      if (attempt === 79) {
+        throw new Error(`${kind} authored template capture did not update panel: ${JSON.stringify(state)}`);
+      }
+      await sleep(250);
+    }
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const form = document.querySelector('#collections-schema');
+    const button = form
+      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+      : null;
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+    if (button.disabled) return { ok: false, reason: 'save-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to save authored template selection: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const collections = await fetchCollections();
+    const collection = collections.find((candidate) => candidate.id === collectionId);
+    const dynamicTemplates = collection?.metadata?.dynamicTemplates;
+    if (
+      dynamicTemplates?.list?.authoredCanvas?.pageId === listPageId &&
+      dynamicTemplates?.item?.authoredCanvas?.pageId === itemPageId &&
+      Array.isArray(dynamicTemplates.list.authoredCanvas.elements) &&
+      Array.isArray(dynamicTemplates.item.authoredCanvas.elements)
+    ) {
+      return collection;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Authored dynamic template selection did not persist');
+};
+
+const assertAuthoredDynamicTemplateRender = async ({ collectionId, collectionSlug, collectionName, recordSlug, recordTitle }) => {
+  const listPayload = await requestApi(`/api/sites/${SITE_ID}/render?path=${encodeURIComponent(`/${collectionSlug}`)}`);
+  const listElements = listPayload.data?.content?.elements || [];
+  const listRoot = listElements.find((element) => element.id === 'authored-dynamic-list-root');
+  const listTitle = listRoot?.children?.find((element) => element.id === 'authored-dynamic-list-title');
+  const listRepeater = listRoot?.children?.find((element) => element.id === 'authored-dynamic-list-repeater');
+  assert(listPayload.data?.route?.type === 'dynamicList', `Authored list route did not render dynamic list: ${JSON.stringify(listPayload.data?.route)}`);
+  assert(listTitle?.props?.content === collectionName, `Authored list title was not bound to collection name: ${JSON.stringify(listTitle)}`);
+  assert(listRepeater?.props?.collectionId === collectionId, `Authored list repeater was not bound to collection id: ${JSON.stringify(listRepeater)}`);
+
+  const itemPayload = await requestApi(`/api/sites/${SITE_ID}/render?path=${encodeURIComponent(`/${collectionSlug}/${recordSlug}`)}`);
+  const itemElements = itemPayload.data?.content?.elements || [];
+  const itemRoot = itemElements.find((element) => element.id === 'authored-dynamic-item-root');
+  const itemTitle = itemRoot?.children?.find((element) => element.id === 'authored-dynamic-item-title');
+  const itemSummary = itemRoot?.children?.find((element) => element.id === 'authored-dynamic-item-summary');
+  assert(itemPayload.data?.route?.type === 'dynamicItem', `Authored item route did not render dynamic item: ${JSON.stringify(itemPayload.data?.route)}`);
+  assert(itemTitle?.props?.content === recordTitle, `Authored item title was not bound to record title: ${JSON.stringify(itemTitle)}`);
+  assert(
+    `${itemSummary?.props?.content || ''} ${itemSummary?.props?.html || ''}`.includes('Record created by the Collections smoke test.'),
+    `Authored item summary was not bound to record summary: ${JSON.stringify(itemSummary)}`,
+  );
+  assert(
+    itemPayload.data?.dataBindings?.datasets?.some((dataset) => (
+      dataset.collectionId === collectionId &&
+      dataset.records?.some((record) => record.slug === recordSlug)
+    )),
+    'Authored item render did not include collection dataset manifest',
+  );
+};
+
 const publishRecordThroughUi = async (client, recordSlug) => {
   const selected = await evaluate(client, `(() => {
     const checkbox = Array.from(document.querySelectorAll('input')).find((input) => (
@@ -753,7 +986,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, collectionIds, originalFrontendDesign }) => {
+const cleanup = async ({ client, childProcess, userDataDir, collectionIds, pageIds, originalFrontendDesign }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -784,6 +1017,16 @@ const cleanup = async ({ client, childProcess, userDataDir, collectionIds, origi
     }
   }
 
+  for (const pageId of pageIds || []) {
+    if (pageId) {
+      try {
+        await deletePage(pageId);
+      } catch {
+        // The smoke creates temporary pages and deletes them best-effort.
+      }
+    }
+  }
+
   if (originalFrontendDesign) {
     try {
       await patchFrontendDesign(originalFrontendDesign);
@@ -801,6 +1044,8 @@ const main = async () => {
   let targetCollectionId;
   let incomingCollectionId;
   let frontendTemplateCollectionId;
+  let authoredListPageId;
+  let authoredItemPageId;
   let originalFrontendDesign;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
@@ -853,6 +1098,10 @@ const main = async () => {
     });
     incomingCollectionId = incomingCollection.id;
     await createRecord({ collectionId, slug: recordSlug, title: recordTitle });
+    const authoredListPage = await createAuthoredTemplatePage({ kind: 'list', suffix });
+    authoredListPageId = authoredListPage.id;
+    const authoredItemPage = await createAuthoredTemplatePage({ kind: 'item', suffix });
+    authoredItemPageId = authoredItemPage.id;
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -871,13 +1120,15 @@ const main = async () => {
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     await assertAuthoringShortcutCopy(client);
+    await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
+    await publishRecordThroughUi(client, recordSlug);
+    await waitForRecordStatus(collectionId, recordSlug, 'published');
+    await assertAuthoredDynamicTemplateRender({ collectionId, collectionSlug, collectionName, recordSlug, recordTitle });
+    await assertPublicRecord(collectionSlug, recordSlug);
     await attachFrontendTemplateThroughUi(client, collectionId);
     const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
     frontendTemplateCollectionId = frontendTemplateCollection.id;
     await navigateToCollections(client, { collectionId, recordSlug });
-    await publishRecordThroughUi(client, recordSlug);
-    await waitForRecordStatus(collectionId, recordSlug, 'published');
-    await assertPublicRecord(collectionSlug, recordSlug);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -891,6 +1142,10 @@ const main = async () => {
     targetCollectionId = null;
     await deleteCollection(frontendTemplateCollectionId);
     frontendTemplateCollectionId = null;
+    await deletePage(authoredListPageId);
+    authoredListPageId = null;
+    await deletePage(authoredItemPageId);
+    authoredItemPageId = null;
     await patchFrontendDesign(originalFrontendDesign);
     originalFrontendDesign = null;
 
@@ -909,6 +1164,7 @@ const main = async () => {
       childProcess,
       userDataDir,
       collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId],
+      pageIds: [authoredListPageId, authoredItemPageId],
       originalFrontendDesign,
     });
   }
