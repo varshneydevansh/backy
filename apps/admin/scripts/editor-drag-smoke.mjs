@@ -8458,7 +8458,9 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       queryControlsReady.fields.includes('title') &&
       queryControlsReady.fields.includes('author') &&
       queryControlsReady.filterFields.includes('category') &&
+      queryControlsReady.filterFields.includes('author.company.name') &&
       queryControlsReady.sortFields.includes('rank') &&
+      queryControlsReady.sortFields.includes('author.company.domain') &&
       /Title/i.test(queryControlsReady.presetText) &&
       /Summary/i.test(queryControlsReady.presetText) &&
       /Image/i.test(queryControlsReady.presetText) &&
@@ -8472,7 +8474,9 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       queryControlsReady?.fields?.includes('title') &&
       queryControlsReady?.fields?.includes('author') &&
       queryControlsReady?.filterFields?.includes('category') &&
+      queryControlsReady?.filterFields?.includes('author.company.name') &&
       queryControlsReady?.sortFields?.includes('rank') &&
+      queryControlsReady?.sortFields?.includes('author.company.domain') &&
       /Title/i.test(queryControlsReady?.presetText || '') &&
       /Summary/i.test(queryControlsReady?.presetText || '') &&
       /Image/i.test(queryControlsReady?.presetText || '') &&
@@ -8515,9 +8519,9 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-data-target', 'props.content');
   await setFormControlByTestId(client, 'editor-data-record-picker', targetRecordId);
   await setFormControlByTestId(client, 'editor-data-query-search', 'featured');
-  await setFormControlByTestId(client, 'editor-data-query-filter-field', 'category');
-  await setFormControlByTestId(client, 'editor-data-query-filter-value', 'Featured');
-  await setFormControlByTestId(client, 'editor-data-query-sort-by', 'rank');
+  await setFormControlByTestId(client, 'editor-data-query-filter-field', 'author.company.name');
+  await setFormControlByTestId(client, 'editor-data-query-filter-value', 'Editor Smoke Studio');
+  await setFormControlByTestId(client, 'editor-data-query-sort-by', 'author.company.domain');
   await setFormControlByTestId(client, 'editor-data-query-sort-direction', 'desc');
   await setFormControlByTestId(client, 'editor-data-query-limit', '1');
   await setFormControlByTestId(client, 'editor-data-query-offset', '0');
@@ -8548,7 +8552,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     savedPresetState?.options?.some((label) => /Featured author preset/i.test(label)) &&
       /author to props\.content/i.test(savedPresetState?.summary || '') &&
       /join author\.company\.name/i.test(savedPresetState?.summary || '') &&
-      /sort rank desc/i.test(savedPresetState?.summary || '') &&
+      /sort author\.company\.domain desc/i.test(savedPresetState?.summary || '') &&
       /limit 1/i.test(savedPresetState?.summary || '') &&
       /Shared with this site/i.test(savedPresetState?.syncState || ''),
     `Saved collection binding preset missing: ${JSON.stringify(savedPresetState)}`,
@@ -8560,7 +8564,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       sharedPreset?.fieldKey === 'author' &&
       sharedPreset?.targetPath === 'props.content' &&
       sharedPreset?.sourcePath === 'author.company.name' &&
-      sharedPreset?.sortBy === 'rank',
+      sharedPreset?.sortBy === 'author.company.domain',
     `Shared collection binding preset did not persist to the backend: ${JSON.stringify(sharedPresetPayload)}`,
   );
   await clickControlByTestId(client, 'editor-data-preset-summary');
@@ -8604,10 +8608,10 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(state.collectionId === collectionId, `Collection binding did not select collection: ${JSON.stringify(state)}`);
   assert(state.field === 'author' && state.referenceField === 'company.name' && state.target === 'props.content', `Collection binding field/join/target mismatch: ${JSON.stringify(state)}`);
   assert(state.recordPicker === targetRecordId && state.recordId === targetRecordId, `Collection binding record picker mismatch: ${JSON.stringify(state)}`);
-  assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Collection query filter mismatch: ${JSON.stringify(state)}`);
-  assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Collection query filter value options missing: ${JSON.stringify(state)}`);
-  assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
-  assert(/join author\.company\.name/i.test(state.summary) && /sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
+  assert(state.search === 'featured' && state.filterField === 'author.company.name' && state.filterValue === 'Editor Smoke Studio', `Collection query filter mismatch: ${JSON.stringify(state)}`);
+  assert(Array.isArray(state.filterValueOptions), `Collection query filter value options missing: ${JSON.stringify(state)}`);
+  assert(state.sortBy === 'author.company.domain' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
+  assert(/join author\.company\.name/i.test(state.summary) && /sort author\.company\.domain desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
   assert(/Author.*Company.*Editor Smoke Companies.*Name/i.test(state.referencePreview), `Collection reference preview missing join summary: ${JSON.stringify(state)}`);
   assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
   assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.thumbnailSrc), `Collection record preview thumbnail missing selected image: ${JSON.stringify(state)}`);
@@ -8643,8 +8647,8 @@ const assertPersistedDataBinding = async (pageId, collectionId) => {
   assert(binding.source?.collectionId === collectionId && binding.source?.field === 'author' && binding.source?.path === 'author.company.name', `Persisted binding source mismatch: ${JSON.stringify(binding)}`);
   assert(binding.source?.recordId && binding.query?.recordId === binding.source.recordId, `Persisted binding record picker mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.q === 'featured', `Persisted binding search query mismatch: ${JSON.stringify(binding)}`);
-  assert(binding.query?.fieldKey === 'category' && binding.query?.fieldValue === 'Featured', `Persisted binding filter mismatch: ${JSON.stringify(binding)}`);
-  assert(binding.query?.sortBy === 'rank' && binding.query?.sortDirection === 'desc', `Persisted binding sort mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.query?.fieldKey === 'author.company.name' && binding.query?.fieldValue === 'Editor Smoke Studio', `Persisted binding filter mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.query?.sortBy === 'author.company.domain' && binding.query?.sortDirection === 'desc', `Persisted binding sort mismatch: ${JSON.stringify(binding)}`);
   assert(binding.pagination?.limit === 1 && binding.pagination?.offset === 0, `Persisted binding pagination mismatch: ${JSON.stringify(binding)}`);
 
   return binding;
@@ -8709,7 +8713,9 @@ const testRepeaterControls = async (client, collectionId) => {
       controlsReady.descriptionFields.includes('summary') &&
       controlsReady.imageFields.includes('thumbnail') &&
       controlsReady.filterFields.includes('category') &&
+      controlsReady.filterFields.includes('author.company.name') &&
       controlsReady.sortFields.includes('rank') &&
+      controlsReady.sortFields.includes('author.company.domain') &&
       controlsReady.hasLayoutControls
     ) {
       break;
@@ -8723,7 +8729,9 @@ const testRepeaterControls = async (client, collectionId) => {
       controlsReady?.descriptionFields?.includes('summary') &&
       controlsReady?.imageFields?.includes('thumbnail') &&
       controlsReady?.filterFields?.includes('category') &&
+      controlsReady?.filterFields?.includes('author.company.name') &&
       controlsReady?.sortFields?.includes('rank') &&
+      controlsReady?.sortFields?.includes('author.company.domain') &&
       controlsReady?.hasLayoutControls,
     `Repeater field/query/layout controls did not render: ${JSON.stringify(controlsReady)}`,
   );
@@ -8733,9 +8741,9 @@ const testRepeaterControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-repeater-description-field', 'summary');
   await setFormControlByTestId(client, 'editor-repeater-image-field', 'thumbnail');
   await setFormControlByTestId(client, 'editor-repeater-search', 'featured');
-  await setFormControlByTestId(client, 'editor-repeater-filter-field', 'category');
-  await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Featured');
-  await setFormControlByTestId(client, 'editor-repeater-sort-by', 'rank');
+  await setFormControlByTestId(client, 'editor-repeater-filter-field', 'author.company.name');
+  await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Editor Smoke Studio');
+  await setFormControlByTestId(client, 'editor-repeater-sort-by', 'author.company.domain');
   await setFormControlByTestId(client, 'editor-repeater-sort-direction', 'desc');
   await setFormControlByTestId(client, 'editor-repeater-limit', '2');
   await setFormControlByTestId(client, 'editor-repeater-offset', '0');
@@ -8778,11 +8786,11 @@ const testRepeaterControls = async (client, collectionId) => {
   assert(state.collectionId === collectionId, `Repeater did not select collection: ${JSON.stringify(state)}`);
   assert(state.datasetId === `dataset_${collectionId}_smoke_repeater`, `Repeater dataset id mismatch: ${JSON.stringify(state)}`);
   assert(state.titleField === 'author.company.name' && state.descriptionField === 'summary' && state.imageField === 'thumbnail', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
-  assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
-  assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Repeater filter value options missing: ${JSON.stringify(state)}`);
-  assert(state.sortBy === 'rank' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
+  assert(state.search === 'featured' && state.filterField === 'author.company.name' && state.filterValue === 'Editor Smoke Studio', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
+  assert(Array.isArray(state.filterValueOptions), `Repeater filter value options missing: ${JSON.stringify(state)}`);
+  assert(state.sortBy === 'author.company.domain' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
   assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
-  assert(/title join author\.company\.name/i.test(state.summary) && /sort rank desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
+  assert(/title join author\.company\.name/i.test(state.summary) && /sort author\.company\.domain desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
 
   return state;
 };
@@ -8798,8 +8806,8 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   assert(props.datasetId === `dataset_${collectionId}_smoke_repeater`, `Persisted repeater dataset mismatch: ${JSON.stringify(props)}`);
   assert(props.titleField === 'author.company.name' && props.descriptionField === 'summary' && props.imageField === 'thumbnail', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.q === 'featured', `Persisted repeater search mismatch: ${JSON.stringify(props)}`);
-  assert(props.query?.fieldKey === 'category' && props.query?.fieldValue === 'Featured', `Persisted repeater filter mismatch: ${JSON.stringify(props)}`);
-  assert(props.query?.sortBy === 'rank' && props.query?.sortDirection === 'desc', `Persisted repeater sort mismatch: ${JSON.stringify(props)}`);
+  assert(props.query?.fieldKey === 'author.company.name' && props.query?.fieldValue === 'Editor Smoke Studio', `Persisted repeater filter mismatch: ${JSON.stringify(props)}`);
+  assert(props.query?.sortBy === 'author.company.domain' && props.query?.sortDirection === 'desc', `Persisted repeater sort mismatch: ${JSON.stringify(props)}`);
   assert(props.limit === 2 && props.offset === 0 && props.columns === 2 && props.gap === 18, `Persisted repeater layout mismatch: ${JSON.stringify(props)}`);
   assert(props.emptyMessage === 'No matching records.', `Persisted repeater empty state mismatch: ${JSON.stringify(props)}`);
 

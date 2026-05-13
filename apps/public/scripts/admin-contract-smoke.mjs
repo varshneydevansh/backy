@@ -5078,7 +5078,12 @@ try {
                     collectionId: createdCollectionId,
                     field: 'author',
                     path: 'author.company.name',
-                    recordId: createdCollectionRecordId,
+                  },
+                  query: {
+                    fieldKey: 'author.company.name',
+                    fieldValue: 'Contract Company',
+                    sortBy: 'author.company.domain',
+                    sortDirection: 'desc',
                   },
                   mode: 'text',
                 },
@@ -5096,10 +5101,14 @@ try {
                 datasetId: 'dataset_contract_repeater',
                 titleField: 'author.company.name',
                 descriptionField: 'summary',
+                query: {
+                  fieldKey: 'author.company.name',
+                  fieldValue: 'Contract Company',
+                  sortBy: 'author.company.domain',
+                  sortDirection: 'desc',
+                },
                 columns: 2,
                 limit: 6,
-                sortBy: 'rank',
-                sortDirection: 'asc',
               },
               children: [],
             },
@@ -5129,7 +5138,9 @@ try {
       boundRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
         dataset.id === 'dataset_contract_repeater'
         && dataset.collectionId === createdCollectionId
-        && dataset.query?.sortBy === 'rank'
+        && dataset.query?.fieldKey === 'author.company.name'
+        && dataset.query?.fieldValue === 'Contract Company'
+        && dataset.query?.sortBy === 'author.company.domain'
         && dataset.records?.some((record) => record.id === createdCollectionRecordId)
       )),
       `${boundRender.url} missing repeater dataset manifest`,

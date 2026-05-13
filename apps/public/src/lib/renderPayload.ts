@@ -520,6 +520,27 @@ const getBoundCollectionRecord = (
     return getCollectionRecordByIdOrSlug(siteId, collectionId, recordId);
   }
 
+  if (fieldKey?.includes('.') || sortBy?.includes('.')) {
+    const collection = getCollectionByIdOrSlug(siteId, collectionId);
+    if (!collection) {
+      return undefined;
+    }
+    const records = listCollectionRecords(siteId, collectionId, {
+      slug: slug || undefined,
+      status: status || undefined,
+      search: search || undefined,
+      limit: 1000,
+      offset: 0,
+    }).records;
+    return sortCollectionRecordsByFieldPath(
+      siteId,
+      collection,
+      filterCollectionRecordsByFieldPath(siteId, collection, records, fieldKey, fieldValue),
+      sortBy,
+      sortDirection,
+    )[0];
+  }
+
   return listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
     status: status || undefined,
@@ -596,6 +617,71 @@ const resolveCollectionRecordFieldPath = (
   return referenceRecord
     ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, depth + 1)
     : undefined;
+};
+
+const collectionRecordQueryValue = (
+  siteId: string,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  fieldKey: string,
+): unknown => {
+  if (fieldKey === 'slug' || fieldKey === 'status' || fieldKey === 'createdAt' || fieldKey === 'updatedAt') {
+    return record[fieldKey];
+  }
+  return fieldKey.includes('.')
+    ? resolveCollectionRecordFieldPath(siteId, collection, record, fieldKey.split('.'))
+    : record.values[fieldKey];
+};
+
+const normalizeQueryComparable = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeQueryComparable(entry)).filter(Boolean).join(' ');
+  }
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value).trim().toLowerCase();
+};
+
+const filterCollectionRecordsByFieldPath = (
+  siteId: string,
+  collection: StoreCollection,
+  records: StoreCollectionRecord[],
+  fieldKey: string | null,
+  fieldValue: unknown,
+) => {
+  if (!fieldKey || fieldValue === undefined || fieldValue === null || normalizeQueryComparable(fieldValue).length === 0) {
+    return records;
+  }
+  const normalizedFieldValue = normalizeQueryComparable(fieldValue);
+  return records.filter((record) => (
+    normalizeQueryComparable(collectionRecordQueryValue(siteId, collection, record, fieldKey)).includes(normalizedFieldValue)
+  ));
+};
+
+const sortCollectionRecordsByFieldPath = (
+  siteId: string,
+  collection: StoreCollection,
+  records: StoreCollectionRecord[],
+  sortBy: string | null,
+  sortDirection: 'asc' | 'desc',
+) => {
+  if (!sortBy) {
+    return records;
+  }
+  const direction = sortDirection === 'desc' ? -1 : 1;
+  return [...records].sort((left, right) => {
+    const leftValue = collectionRecordQueryValue(siteId, collection, left, sortBy);
+    const rightValue = collectionRecordQueryValue(siteId, collection, right, sortBy);
+    const leftNumber = typeof leftValue === 'number' ? leftValue : Number.NaN;
+    const rightNumber = typeof rightValue === 'number' ? rightValue : Number.NaN;
+
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return (leftNumber - rightNumber) * direction;
+    }
+
+    return normalizeQueryComparable(leftValue).localeCompare(normalizeQueryComparable(rightValue)) * direction;
+  });
 };
 
 const valueForBinding = (
@@ -807,6 +893,29 @@ const collectionRecordsForQuery = (
 
   if (recordId) {
     return [getCollectionRecordByIdOrSlug(siteId, collectionId, recordId)].filter((record): record is StoreCollectionRecord => !!record);
+  }
+
+  if (fieldKey?.includes('.') || sortBy?.includes('.')) {
+    const collection = getCollectionByIdOrSlug(siteId, collectionId);
+    if (!collection) {
+      return [];
+    }
+    const records = listCollectionRecords(siteId, collectionId, {
+      slug: slug || undefined,
+      status: status || undefined,
+      search: search || undefined,
+      limit: 1000,
+      offset: 0,
+    }).records;
+    const safeOffset = Number.isInteger(offset) && offset > 0 ? offset : 0;
+    const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 50;
+    return sortCollectionRecordsByFieldPath(
+      siteId,
+      collection,
+      filterCollectionRecordsByFieldPath(siteId, collection, records, fieldKey, fieldValue),
+      sortBy,
+      sortDirection,
+    ).slice(safeOffset, safeOffset + safeLimit);
   }
 
   return listCollectionRecords(siteId, collectionId, {

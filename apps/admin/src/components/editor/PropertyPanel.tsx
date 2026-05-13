@@ -4653,7 +4653,7 @@ function RepeaterDataProperties({
       ? query.search
       : '';
   const selectedFilterField = typeof query.fieldKey === 'string' ? query.fieldKey : '';
-  const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
+  const selectedFilterFieldDefinition = fieldForFieldPath(selectedCollection, collections, selectedFilterField);
   const selectedFilterValue = typeof query.fieldValue === 'string' || typeof query.fieldValue === 'number' || typeof query.fieldValue === 'boolean'
     ? String(query.fieldValue)
     : '';
@@ -4894,8 +4894,8 @@ function RepeaterDataProperties({
                   )}
                 >
                   <option value="">No filter</option>
-                  {selectedCollection.fields.map((field) => (
-                    <option key={field.key} value={field.key}>
+                  {repeaterFieldOptions.map((field) => (
+                    <option key={field.value} value={field.value}>
                       {field.label}
                     </option>
                   ))}
@@ -4920,8 +4920,8 @@ function RepeaterDataProperties({
                   )}
                 >
                   <option value="">Default sort</option>
-                  {selectedCollection.fields.map((field) => (
-                    <option key={field.key} value={field.key}>
+                  {repeaterFieldOptions.map((field) => (
+                    <option key={field.value} value={field.value}>
                       {field.label}
                     </option>
                   ))}
@@ -5080,7 +5080,7 @@ function DataBindingProperties({
   const selectedReferenceFieldOptions = collectionFieldPathOptions(selectedReferenceCollection, collections);
   const selectedReferenceField = fieldForFieldPath(selectedReferenceCollection, collections, selectedReferenceFieldKey);
   const selectedReferenceFieldLabel = selectedReferenceFieldOptions.find((option) => option.value === selectedReferenceFieldKey)?.label || selectedReferenceFieldKey;
-  const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
+  const selectedFilterFieldDefinition = fieldForFieldPath(selectedCollection, collections, selectedFilterField);
   const targetPathOptions = getTargetPathOptions(element.type);
   const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -5739,8 +5739,8 @@ function DataBindingProperties({
                     )}
                   >
                     <option value="">None</option>
-                    {selectedCollection.fields.map((field) => (
-                      <option key={field.key} value={field.key}>
+                    {collectionFieldPathOptions(selectedCollection, collections).map((field) => (
+                      <option key={field.value} value={field.value}>
                         {field.label}
                       </option>
                     ))}
@@ -5775,8 +5775,8 @@ function DataBindingProperties({
                     )}
                   >
                     <option value="">Default</option>
-                    {selectedCollection.fields.map((field) => (
-                      <option key={field.key} value={field.key}>
+                    {collectionFieldPathOptions(selectedCollection, collections).map((field) => (
+                      <option key={field.value} value={field.value}>
                         {field.label}
                       </option>
                     ))}
