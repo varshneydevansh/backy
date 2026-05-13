@@ -46,12 +46,16 @@ export interface CommerceProduct {
     shippingRequired: boolean;
     taxable: boolean;
     weight: number | null;
+    shippingProfile: string;
+    taxClass: string;
+    returnPolicy: string;
     hasDigitalDelivery: boolean;
   };
   checkout: {
     mode: 'external-url' | 'not-configured';
     url: string | null;
     enabled: boolean;
+    discountCode: string;
   };
   design?: {
     templateId?: string;
@@ -476,12 +480,16 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
       shippingRequired: values.shippingRequired !== false && productType === 'physical',
       taxable: values.taxable !== false,
       weight: maybeNumber(values.weight),
+      shippingProfile: normalizeText(values.shippingProfile),
+      taxClass: normalizeText(values.taxClass),
+      returnPolicy: normalizeText(values.returnPolicy),
       hasDigitalDelivery,
     },
     checkout: {
       mode: checkoutUrl ? 'external-url' : 'not-configured',
       url: checkoutUrl || null,
       enabled: checkoutUrl.length > 0,
+      discountCode: normalizeText(values.discountCode),
     },
     design: buildProductDesignContract(values),
     links: {

@@ -107,7 +107,11 @@ interface ProductFormState {
   downloadUrl: string;
   checkoutUrl: string;
   shippingRequired: boolean;
+  shippingProfile: string;
   weight: string;
+  taxClass: string;
+  discountCode: string;
+  returnPolicy: string;
   imageUrl: string;
   galleryImages: string;
   category: string;
@@ -196,16 +200,20 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
   { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
   { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 140 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 150 },
-  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 160, defaultValue: [] },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 180 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 190 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 200 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 210 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 220, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 230, defaultValue: true },
+  { key: 'shippingProfile', label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
+  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
+  { key: 'taxClass', label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
+  { key: 'discountCode', label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: 'returnPolicy', label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
+  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
+  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
+  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
+  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
+  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -233,6 +241,10 @@ const PRODUCT_EXPORT_COLUMNS = [
   'download_url',
   'checkout_url',
   'shipping_required',
+  'shipping_profile',
+  'tax_class',
+  'discount_code',
+  'return_policy',
   'taxable',
   'weight',
   'featured',
@@ -266,7 +278,11 @@ const PRODUCT_IMPORT_COLUMNS = [
   'downloadUrl',
   'checkoutUrl',
   'shippingRequired',
+  'shippingProfile',
   'weight',
+  'taxClass',
+  'discountCode',
+  'returnPolicy',
   'imageUrl',
   'galleryImages',
   'category',
@@ -359,7 +375,11 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   downloadUrl: '',
   checkoutUrl: '',
   shippingRequired: true,
+  shippingProfile: '',
   weight: '',
+  taxClass: '',
+  discountCode: '',
+  returnPolicy: '',
   imageUrl: '',
   galleryImages: '',
   category: '',
@@ -731,7 +751,7 @@ function ProductsRoute() {
       starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
       requiredFields: ['title', 'slug', 'sku', 'price', 'currency', 'inventory', 'productType', 'checkoutUrl'],
-      optionalFields: ['compareAtPrice', 'variants', 'galleryImages', 'downloadUrl', 'category', 'tags', 'vendor', 'seoTitle', 'featured', 'taxable'],
+      optionalFields: ['compareAtPrice', 'variants', 'galleryImages', 'downloadUrl', 'shippingProfile', 'taxClass', 'discountCode', 'returnPolicy', 'category', 'tags', 'vendor', 'seoTitle', 'featured', 'taxable'],
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
@@ -1197,7 +1217,11 @@ function ProductsRoute() {
         downloadUrl: formState.downloadUrl.trim(),
         checkoutUrl: formState.checkoutUrl.trim(),
         shippingRequired: formState.shippingRequired,
+        shippingProfile: formState.shippingProfile.trim(),
         weight: formState.weight ? Number(formState.weight) : null,
+        taxClass: formState.taxClass.trim(),
+        discountCode: formState.discountCode.trim(),
+        returnPolicy: formState.returnPolicy.trim(),
         imageUrl: formState.imageUrl.trim(),
         galleryImages: galleryImageUrls,
         category: formState.category.trim(),
@@ -2336,6 +2360,42 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Tax class">
+                    <input
+                      value={formState.taxClass}
+                      onChange={(event) => setFormState((current) => ({ ...current, taxClass: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="standard, digital, exempt"
+                    />
+                  </Field>
+                  <Field label="Shipping profile">
+                    <input
+                      value={formState.shippingProfile}
+                      onChange={(event) => setFormState((current) => ({ ...current, shippingProfile: event.target.value }))}
+                      disabled={!formState.shippingRequired}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60"
+                      placeholder="standard-box, freight, digital"
+                    />
+                  </Field>
+                  <Field label="Discount code">
+                    <input
+                      value={formState.discountCode}
+                      onChange={(event) => setFormState((current) => ({ ...current, discountCode: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="WELCOME10"
+                    />
+                  </Field>
+                </div>
+                <Field label="Return policy">
+                  <textarea
+                    value={formState.returnPolicy}
+                    onChange={(event) => setFormState((current) => ({ ...current, returnPolicy: event.target.value }))}
+                    rows={3}
+                    className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="30-day returns, final sale, license refund terms..."
+                  />
+                </Field>
                 <Field label="Image URL">
                   <div className="space-y-3">
                     {formState.imageUrl ? (
@@ -2931,7 +2991,11 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   downloadUrl: String(product.values.downloadUrl || ''),
   checkoutUrl: String(product.values.checkoutUrl || ''),
   shippingRequired: product.values.shippingRequired !== false,
+  shippingProfile: String(product.values.shippingProfile || ''),
   weight: product.values.weight === null || product.values.weight === undefined ? '' : String(product.values.weight),
+  taxClass: String(product.values.taxClass || ''),
+  discountCode: String(product.values.discountCode || ''),
+  returnPolicy: String(product.values.returnPolicy || ''),
   imageUrl: String(product.values.imageUrl || ''),
   galleryImages: serializeGalleryImages(formatGalleryImages(product.values.galleryImages)),
   category: String(product.values.category || ''),
@@ -3023,7 +3087,11 @@ const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTempl
       downloadUrl: optionalStringFromRecord(content, 'downloadUrl') || '',
       checkoutUrl: optionalStringFromRecord(content, 'checkoutUrl') || '',
       shippingRequired: optionalBooleanFromRecord(content, 'shippingRequired') ?? productType === 'physical',
+      shippingProfile: optionalStringFromRecord(content, 'shippingProfile') || '',
       weight: optionalNumberFromRecord(content, 'weight') ?? null,
+      taxClass: optionalStringFromRecord(content, 'taxClass') || '',
+      discountCode: optionalStringFromRecord(content, 'discountCode') || '',
+      returnPolicy: optionalStringFromRecord(content, 'returnPolicy') || '',
       imageUrl: optionalStringFromRecord(content, 'imageUrl') || galleryImages[0] || '',
       galleryImages,
       category: optionalStringFromRecord(content, 'category') || '',
@@ -3229,6 +3297,10 @@ const productToExportRecord = (
   download_url: String(product.values.downloadUrl || ''),
   checkout_url: String(product.values.checkoutUrl || ''),
   shipping_required: product.values.shippingRequired !== false,
+  shipping_profile: String(product.values.shippingProfile || ''),
+  tax_class: String(product.values.taxClass || ''),
+  discount_code: String(product.values.discountCode || ''),
+  return_policy: String(product.values.returnPolicy || ''),
   taxable: product.values.taxable !== false,
   weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
   featured: Boolean(product.values.featured),
