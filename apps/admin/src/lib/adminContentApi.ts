@@ -1490,6 +1490,7 @@ export interface SettingsInfrastructureDiagnostic {
 export interface SettingsInfrastructureCheckResult {
   diagnostics: SettingsInfrastructureDiagnostic[];
   generatedAt: string;
+  requestId?: string;
 }
 
 export interface SettingsStorageProvisioningCheck {
@@ -1520,6 +1521,7 @@ export interface SettingsStorageProvisioningResult {
 
 interface ApiSettingsInfrastructureCheckResponse {
   success: boolean;
+  requestId?: string;
   data?: SettingsInfrastructureCheckResult;
   error?: {
     message?: string;
@@ -3206,7 +3208,10 @@ export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInp
     throw new Error(payload.error?.message || 'Unable to validate infrastructure settings');
   }
 
-  return payload.data;
+  return {
+    ...payload.data,
+    requestId: payload.requestId,
+  };
 }
 
 export async function runSettingsStorageProvisioningProbe(): Promise<SettingsStorageProvisioningResult> {

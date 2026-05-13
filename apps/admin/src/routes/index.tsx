@@ -95,6 +95,19 @@ interface DashboardCommerceMetrics {
   currency: string;
 }
 
+interface DashboardDeploymentRun {
+  id: string;
+  siteId: string;
+  siteName: string;
+  createdAt: string;
+  status: 'ready' | 'warning' | 'blocked';
+  blocked: number;
+  warnings: number;
+  ready: number;
+  targetUrl: string;
+  requestId?: string;
+}
+
 interface DashboardIssue {
   id: string;
   label: string;
@@ -770,7 +783,9 @@ function Index() {
   const [selectedSiteId, setSelectedSiteId] = useState(search.siteId || '');
   const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[]>([]);
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
-  const isDashboardBusy = isLoading || isCheckingInfrastructure;
+  const [deploymentRuns, setDeploymentRuns] = useState<DashboardDeploymentRun[]>([]);
+  const [isRunningDeployment, setIsRunningDeployment] = useState(false);
+  const isDashboardBusy = isLoading || isCheckingInfrastructure || isRunningDeployment;
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -1212,6 +1227,49 @@ function Index() {
       setError(checkError instanceof Error ? checkError.message : 'Unable to validate infrastructure settings.');
     } finally {
       setIsCheckingInfrastructure(false);
+    }
+  };
+
+  const runDeploymentPreflight = async () => {
+    if (!dashboard.settings || isRunningDeployment) return;
+
+    setIsRunningDeployment(true);
+    setNotice(null);
+    setError(null);
+
+    try {
+      const result = await validateSettingsInfrastructure({
+        deliveryMode: dashboard.settings.deliveryMode,
+        integrations: dashboard.settings.integrations,
+      });
+      setInfrastructureDiagnostics(result.diagnostics);
+      const blocked = result.diagnostics.filter((item) => item.status === 'blocked').length;
+      const warnings = result.diagnostics.filter((item) => item.status === 'warning').length;
+      const ready = result.diagnostics.filter((item) => item.status === 'ready').length;
+      const status: DashboardDeploymentRun['status'] = blocked > 0 ? 'blocked' : warnings > 0 ? 'warning' : 'ready';
+      const targetUrl = vercel?.url || dashboard.settings.integrations?.vercel?.productionDomain || activeSite?.customDomain || `${activeSite?.slug || activeSiteId}.backy.app`;
+      const run: DashboardDeploymentRun = {
+        id: `deploy_${Date.now().toString(36)}`,
+        siteId: activeSiteId,
+        siteName: activeSite?.name || activeSiteId,
+        createdAt: result.generatedAt || new Date().toISOString(),
+        status,
+        blocked,
+        warnings,
+        ready,
+        targetUrl,
+        requestId: result.requestId,
+      };
+      setDeploymentRuns((current) => [run, ...current].slice(0, 6));
+      setNotice(
+        status === 'ready'
+          ? 'Deployment preflight passed. The current target is ready for deploy handoff.'
+          : `Deployment preflight complete: ${blocked} blocked, ${warnings} warning.`,
+      );
+    } catch (deployError) {
+      setError(deployError instanceof Error ? deployError.message : 'Unable to run deployment preflight.');
+    } finally {
+      setIsRunningDeployment(false);
     }
   };
 
@@ -1657,6 +1715,108 @@ function Index() {
                 search={getDashboardRouteSearch(step.to)}
               />
             ))}
+          </div>
+        </section>
+
+        <section
+          id="dashboard-deployments"
+          className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+          data-testid="dashboard-deployment-history"
+        >
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe className="size-4 text-primary" />
+                <h2 className="font-semibold">Deployment execution and history</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Run the deploy preflight Backy can execute today: it checks storage, database, Supabase, and Vercel readiness, then records the result in this session history.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void runDeploymentPreflight()}
+              disabled={isDashboardBusy || !dashboard.settings}
+              aria-label="Run dashboard deployment preflight"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRunningDeployment ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              Run deployment preflight
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="text-sm font-semibold text-foreground">Current target</div>
+              <dl className="mt-3 grid gap-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Site</dt>
+                  <dd className="font-medium">{activeSite?.name || activeSiteId}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Mode</dt>
+                  <dd>{dashboard.settings?.deliveryMode || 'unknown'}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Vercel</dt>
+                  <dd className={vercel?.configured ? 'text-success' : 'text-warning'}>
+                    {vercel?.configured ? 'Configured' : 'Needs metadata'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Deploy token</dt>
+                  <dd className={vercel?.tokenConfigured ? 'text-success' : 'text-warning'}>
+                    {vercel?.tokenConfigured ? 'Detected' : 'Not detected'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-foreground">Preflight history</div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {deploymentRuns.length} run{deploymentRuns.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {deploymentRuns.length > 0 ? (
+                <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  {deploymentRuns.map((run) => (
+                    <div key={run.id} className="grid gap-2 bg-card px-3 py-3 text-sm md:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={cn(
+                            'rounded-full px-2 py-0.5 text-xs font-semibold capitalize',
+                            run.status === 'ready'
+                              ? 'bg-success/10 text-success'
+                              : run.status === 'warning'
+                                ? 'bg-warning/10 text-warning'
+                                : 'bg-destructive/10 text-destructive',
+                          )}>
+                            {run.status}
+                          </span>
+                          <span className="font-medium">{run.siteName}</span>
+                          <span className="text-xs text-muted-foreground">{formatDate(run.createdAt)}</span>
+                        </div>
+                        <p className="mt-1 break-all text-xs text-muted-foreground">
+                          Target: {run.targetUrl}
+                          {run.requestId ? ` · ${run.requestId}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-md bg-success/10 px-2 py-1 text-success">{run.ready} ready</span>
+                        <span className="rounded-md bg-warning/10 px-2 py-1 text-warning">{run.warnings} warning</span>
+                        <span className="rounded-md bg-destructive/10 px-2 py-1 text-destructive">{run.blocked} blocked</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                  No deployment preflight has run in this dashboard session.
+                </div>
+              )}
+            </div>
           </div>
         </section>
 

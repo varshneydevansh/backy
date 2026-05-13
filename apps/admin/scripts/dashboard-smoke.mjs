@@ -369,6 +369,50 @@ const runDashboardInfrastructureCheck = async (client) => {
   return null;
 };
 
+const runDashboardDeploymentPreflight = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === 'Run dashboard deployment preflight' ||
+      (candidate.textContent || '').includes('Run deployment preflight')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'button-missing', buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent || '').slice(0, 80) };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to run dashboard deployment preflight: ${JSON.stringify(result)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="dashboard-deployment-history"]');
+      const text = panel?.textContent || '';
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '') === 'Run dashboard deployment preflight' ||
+        (candidate.textContent || '').includes('Run deployment preflight')
+      ));
+      return {
+        ready: Boolean(panel) &&
+          text.includes('Deployment execution and history') &&
+          text.includes('Preflight history') &&
+          /ready|warning|blocked/i.test(text),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        text: text.slice(0, 1200),
+      };
+    })()`);
+    if (state.ready && state.disabled === false) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Dashboard deployment preflight did not render history: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const assertDashboardLayout = async (client, siteName) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -381,6 +425,10 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Launch onboarding') &&
       document.body?.innerText?.includes('Create a workspace site') &&
       document.body?.innerText?.includes('Connect APIs and infrastructure'),
+    hasDeploymentHistory: Boolean(document.querySelector('[data-testid="dashboard-deployment-history"]')) &&
+      document.body?.innerText?.includes('Deployment execution and history') &&
+      document.body?.innerText?.includes('Run deployment preflight') &&
+      document.body?.innerText?.includes('Preflight history'),
     hasOperationsSignals: Boolean(document.querySelector('[data-testid="dashboard-operations-signal-board"]')) &&
       document.body?.innerText?.includes('Operations signal board') &&
       document.body?.innerText?.includes('Commerce catalog') &&
@@ -409,6 +457,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSite &&
       layout.hasStats &&
       layout.hasOnboarding &&
+      layout.hasDeploymentHistory &&
       layout.hasOperationsSignals &&
       layout.hasAggregateAnalytics &&
       layout.hasReadiness &&
@@ -533,6 +582,7 @@ const main = async () => {
     await assertDashboardLayout(client, siteName);
     await assertDashboardLinks(client);
     await clickDashboardRefresh(client);
+    await runDashboardDeploymentPreflight(client);
     await runDashboardInfrastructureCheck(client);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
