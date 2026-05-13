@@ -638,14 +638,6 @@ function PageEditorRoute() {
       throw new Error(message);
     }
 
-    const content = serializeCanvasContent(elements, canvasSize, undefined, {
-      documentId: page.id,
-      kind: 'page',
-      title: settings.title,
-      slug: settings.slug,
-      status: settings.status,
-      locale: 'en',
-    });
     try {
       const validationMessage = validatePageSettings(settings);
       if (validationMessage) {
@@ -658,22 +650,37 @@ function PageEditorRoute() {
         throw new Error(publishDisabledReason);
       }
 
+      const shouldPublishThroughWorkflow = settings.status === 'published' && page.status !== 'published';
+      const statusForSave = shouldPublishThroughWorkflow ? 'draft' : settings.status;
+      const content = serializeCanvasContent(elements, canvasSize, undefined, {
+        documentId: page.id,
+        kind: 'page',
+        title: settings.title,
+        slug: settings.slug,
+        status: statusForSave,
+        locale: 'en',
+      });
       const savedPage = await updatePageFromApi(siteId, pageId, {
         title: settings.title,
         slug: settings.slug,
-        status: settings.status,
-        scheduledAt: settings.status === 'scheduled' ? settings.scheduledAt || null : null,
+        status: statusForSave,
+        scheduledAt: statusForSave === 'scheduled' ? settings.scheduledAt || null : null,
         meta: settings.meta,
         content: parseSerializedContent(content),
         revisionNote: 'Before page editor save',
         updatedBy: 'admin',
         expectedUpdatedAt: page.lastUpdated,
       });
-      setPage(savedPage);
-      updatePage(pageId, savedPage);
+      const nextPage = shouldPublishThroughWorkflow
+        ? await publishPage(siteId, pageId)
+        : savedPage;
+      setPage(nextPage);
+      updatePage(pageId, nextPage);
       setSaveConflict(null);
       setSaveWarning(null);
-      setWorkflowNotice('Page saved and revision snapshot recorded.');
+      setWorkflowNotice(shouldPublishThroughWorkflow
+        ? 'Page saved and published through readiness checks.'
+        : 'Page saved and revision snapshot recorded.');
       void loadPageReadiness();
     } catch (error) {
       if (error instanceof AdminContentApiError && error.code === 'PAGE_VERSION_CONFLICT') {
