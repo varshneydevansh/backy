@@ -101,6 +101,7 @@ const createFakeDb = () => {
     mediaFolders: [],
     mediaVersions: [],
   };
+  const queryStats = [];
   const counters = {
     activityLogs: 0,
     cacheInvalidationEvents: 0,
@@ -561,31 +562,109 @@ const createFakeDb = () => {
     return equalities.every(([key, value]) => row[key] === value);
   };
 
-  const queryFor = (name) => {
+  const readOrderTokens = (value, tokens = []) => {
+    if (!value) {
+      return tokens;
+    }
+    if (typeof value === 'string') {
+      tokens.push({ type: 'literal', value });
+      return tokens;
+    }
+    if (typeof value.name === 'string') {
+      tokens.push({ type: 'column', value: camelCaseColumnName(value.name) });
+    }
+    if (Array.isArray(value.value)) {
+      tokens.push(...value.value.map((entry) => ({ type: 'literal', value: String(entry) })));
+    }
+    if (Array.isArray(value.queryChunks)) {
+      for (const chunk of value.queryChunks) {
+        readOrderTokens(chunk, tokens);
+      }
+    }
+    return tokens;
+  };
+
+  const readOrder = (columns) => {
+    const tokens = columns.flatMap((column) => readOrderTokens(column));
+    const literals = tokens.filter((token) => token.type === 'literal').map((token) => token.value);
+    const columnsByName = tokens.filter((token) => token.type === 'column').map((token) => token.value);
+    const direction = literals.join(' ').toLowerCase().includes(' desc') ? -1 : 1;
+
+    if (columnsByName.includes('values')) {
+      const fieldKey = literals.find((value) => !/[>\s()]/.test(value) && value.length > 0);
+      if (fieldKey) {
+        return { key: fieldKey, direction, source: 'values' };
+      }
+    }
+
+    return {
+      key: columnsByName.at(-1) || 'updatedAt',
+      direction,
+      source: 'row',
+    };
+  };
+
+  const compareOrderValue = (left, right) => {
+    if (typeof left === 'number' && typeof right === 'number') {
+      return left - right;
+    }
+    return String(left ?? '').localeCompare(String(right ?? ''), undefined, { numeric: true });
+  };
+
+  const queryFor = (name, projection) => {
     let rows = [...state[name]];
+    let requestedLimit = null;
+    let requestedOffset = 0;
+    const countProjection = Boolean(
+      projection
+        && typeof projection === 'object'
+        && !Array.isArray(projection)
+        && Object.prototype.hasOwnProperty.call(projection, 'total'),
+    );
     const query = {
       where: (condition) => {
         rows = rows.filter((row) => matchesCondition(row, condition));
         return query;
       },
-      orderBy: () => query,
+      orderBy: (...columns) => {
+        const order = readOrder(columns);
+        rows = [...rows].sort((left, right) => {
+          const leftValue = order.source === 'values' ? left.values?.[order.key] : left[order.key];
+          const rightValue = order.source === 'values' ? right.values?.[order.key] : right[order.key];
+          return compareOrderValue(leftValue, rightValue) * order.direction;
+        });
+        return query;
+      },
       limit: (limit) => {
-        rows = rows.slice(0, limit);
+        requestedLimit = limit;
         return query;
       },
       offset: (offset) => {
-        rows = rows.slice(offset);
+        requestedOffset = offset;
         return query;
       },
-      then: (resolve, reject) => Promise.resolve([...rows]).then(resolve, reject),
+      then: (resolve, reject) => {
+        const pagedRows = rows.slice(
+          requestedOffset,
+          requestedLimit === null ? undefined : requestedOffset + requestedLimit,
+        );
+        const result = countProjection ? [{ total: rows.length }] : pagedRows;
+        queryStats.push({
+          table: name,
+          projection: countProjection ? 'count' : 'rows',
+          rows: result.length,
+        });
+        return Promise.resolve(result).then(resolve, reject);
+      },
     };
     return query;
   };
 
   return {
     state,
-    select: () => ({
-      from: (table) => queryFor(tableName(table)),
+    queryStats,
+    select: (projection) => ({
+      from: (table) => queryFor(tableName(table), projection),
     }),
     insert: (table) => ({
       values: (values) => ({
@@ -1021,6 +1100,37 @@ const sortedRecords = await collectionRepository.listRecords({
 });
 assert(sortedRecords.pagination.total === 2, 'Expected collection record pagination total');
 assert(sortedRecords.items.length === 1 && sortedRecords.items[0].id === premiumRecord.id, 'Expected collection record sort and offset');
+const generatedRecords = [];
+for (let index = 0; index < 5; index += 1) {
+  generatedRecords.push((await collectionRepository.createRecord({
+    siteId: site.id,
+    collectionId: collection.id,
+    slug: `bulk-pack-${index}`,
+    status: 'published',
+    values: {
+      title: `Bulk Pack ${index}`,
+      price: 200 + index,
+    },
+  })).item);
+}
+db.queryStats.length = 0;
+const pagedLargeRecords = await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  limit: 3,
+  offset: 2,
+});
+assert(pagedLargeRecords.pagination.total === 7, 'Expected DB collection record count to include rows outside the returned page');
+assert(pagedLargeRecords.pagination.limit === 3 && pagedLargeRecords.pagination.offset === 2, 'Expected DB collection record limit and offset metadata');
+assert(pagedLargeRecords.pagination.hasMore, 'Expected DB collection record page to report more rows');
+assert(pagedLargeRecords.items.length === 3, 'Expected DB collection record query to return only the requested page');
+const pagedRecordQuery = db.queryStats.findLast((entry) => (
+  entry.table === 'contentCollectionRecords' && entry.projection === 'rows'
+));
+assert(pagedRecordQuery?.rows === 3, 'Expected DB collection record repository to apply limit/offset before materializing rows');
+for (const generatedRecord of generatedRecords) {
+  assert(await collectionRepository.deleteRecord(site.id, collection.id, generatedRecord.id), 'Expected generated collection record delete');
+}
 assert(await collectionRepository.deleteRecord(site.id, collection.id, premiumRecord.id), 'Expected extra collection record delete');
 assert(await collectionRepository.deleteRecord(site.id, collection.id, record.id), 'Expected collection record delete');
 assert(await collectionRepository.delete(site.id, updatedCollection.id), 'Expected collection delete');

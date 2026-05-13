@@ -145,19 +145,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         data: {
           collection: publicCollection,
           records,
-          pagination: {
-            ...payload.pagination,
-            total: records.length,
-            hasMore: false,
-          },
+          pagination: payload.pagination,
         },
         collection: publicCollection,
         records,
-        pagination: {
-          ...payload.pagination,
-          total: records.length,
-          hasMore: false,
-        },
+        pagination: payload.pagination,
       }, {
         requestId,
         request,

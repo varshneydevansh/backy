@@ -232,6 +232,20 @@ const recordSqlConditions = (input: BackyCollectionRecordListInput): SQL[] => {
     return conditions;
 };
 
+const normalizeCount = (value: unknown): number => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.max(0, Math.floor(value));
+    }
+    if (typeof value === 'bigint') {
+        return Number(value);
+    }
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+    }
+    return 0;
+};
+
 const slugFromValues = (values: Record<string, BackyJsonValue>): string => {
     const preferred = values.slug || values.title || values.name;
     if (typeof preferred === 'string' && preferred.trim().length > 0) {
@@ -344,12 +358,20 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
 
         async listRecords(input: BackyCollectionRecordListInput): Promise<BackyListResult<BackyCollectionRecord>> {
             const conditions = recordSqlConditions(input);
+            const normalizedLimit = normalizeLimit(input.limit);
+            const normalizedOffset = normalizeOffset(input.offset);
+            const countRows = await database.select({ total: sql<number>`count(*)` })
+                .from(contentCollectionRecords)
+                .where(and(...conditions)) as Array<{ total: unknown }>;
+            const total = normalizeCount(countRows[0]?.total);
             const rows = await database.select()
                 .from(contentCollectionRecords)
                 .where(and(...conditions))
                 .orderBy(input.sortBy
                     ? recordSortColumn(input.sortBy, input.sortDirection)
-                    : desc(contentCollectionRecords.updatedAt)) as CollectionRecordRow[];
+                    : desc(contentCollectionRecords.updatedAt))
+                .limit(normalizedLimit)
+                .offset(normalizedOffset) as CollectionRecordRow[];
             const filtered = rows
                 .map(toCollectionRecord)
                 .filter((record) => input.includeUnpublished || input.status === 'all' || record.status === 'published')
@@ -364,7 +386,15 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                     return String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true }) * direction;
                 })
                 : filtered;
-            return paginate(sorted, input.limit, input.offset);
+            return {
+                items: sorted,
+                pagination: {
+                    total,
+                    limit: normalizedLimit,
+                    offset: normalizedOffset,
+                    hasMore: normalizedOffset + normalizedLimit < total,
+                },
+            };
         },
 
         async getRecordById(siteId: string, collectionId: string, recordId: string): Promise<BackyCollectionRecord | null> {
