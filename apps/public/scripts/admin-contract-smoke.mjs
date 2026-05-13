@@ -2742,6 +2742,7 @@ try {
     assert(visibleBlogRss.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleBlogRss.url} missing public contract version`);
     assert(visibleBlogRss.response.headers.get('x-backy-schema-version') === 'rss.2.0', `${visibleBlogRss.url} missing RSS schema version`);
     assert(visibleBlogRss.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleBlogRss.url} missing RSS site id header`);
+    assert(visibleBlogRss.response.headers.get('x-backy-cache-revision'), `${visibleBlogRss.url} missing RSS cache revision`);
     assert(visibleBlogRss.text.includes('<rss version="2.0"'), `${visibleBlogRss.url} missing RSS root`);
     assert(visibleBlogRss.text.includes(`<title>Admin Contract Post</title>`), `${visibleBlogRss.url} missing post title item`);
     assert(visibleBlogRss.text.includes(`/blog/${postSlug}`), `${visibleBlogRss.url} missing post canonical link`);
@@ -2751,6 +2752,9 @@ try {
     const hostedBlogRss = await request(`/sites/${siteSlug}/blog/rss.xml`);
     assert(hostedBlogRss.response.status === 200, `${hostedBlogRss.url} expected hosted blog RSS feed`);
     assert(hostedBlogRss.response.headers.get('content-type')?.includes('application/rss+xml'), `${hostedBlogRss.url} expected hosted RSS content type`);
+    assert(hostedBlogRss.response.headers.get('x-backy-schema-version') === 'rss.2.0', `${hostedBlogRss.url} missing hosted RSS schema version`);
+    assert(hostedBlogRss.response.headers.get('x-backy-site-id') === createdSiteId, `${hostedBlogRss.url} missing hosted RSS site id header`);
+    assert(hostedBlogRss.response.headers.get('x-backy-cache-revision'), `${hostedBlogRss.url} missing hosted RSS cache revision`);
     assert(hostedBlogRss.text.includes(`/blog/${postSlug}`), `${hostedBlogRss.url} missing hosted RSS post link`);
 
     const capturedBlogTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
