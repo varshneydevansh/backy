@@ -545,6 +545,70 @@ const assertMediaLayout = async (client, expectedText) => {
   return layout;
 };
 
+const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName) => {
+  const modeResult = await evaluate(client, `(() => {
+    const modeButton = document.querySelector('[data-testid="media-upload-mode-file"]');
+    if (!(modeButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'mode-button-not-found' };
+    }
+    if (modeButton.disabled) {
+      return { ok: false, reason: 'mode-button-disabled', text: modeButton.textContent || '' };
+    }
+    modeButton.click();
+    return { ok: true };
+  })()`);
+  assert(modeResult.ok, `Unable to select central file upload mode: ${JSON.stringify(modeResult)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="media-upload-input"]');
+      const selectedButton = document.querySelector('[data-testid="media-upload-mode-file"]');
+      return {
+        hasInput: input instanceof HTMLInputElement,
+        accept: input instanceof HTMLInputElement ? input.accept : '',
+        selected: selectedButton instanceof HTMLButtonElement ? selectedButton.className.includes('bg-primary') : false,
+      };
+    })()`);
+    if (state.hasInput && state.selected && state.accept.includes('.txt')) {
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`Central upload mode did not expose file accept filters: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  await client.send('DOM.enable');
+  const documentResult = await client.send('DOM.getDocument', { depth: 1 });
+  const queryResult = await client.send('DOM.querySelector', {
+    nodeId: documentResult.root.nodeId,
+    selector: '[data-testid="media-upload-input"]',
+  });
+  assert(queryResult.nodeId, `Unable to resolve central upload input node: ${JSON.stringify(queryResult)}`);
+  await client.send('DOM.setFileInputFiles', {
+    nodeId: queryResult.nodeId,
+    files: [uploadPath],
+  });
+
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasUploadName: document.body?.innerText?.includes(${JSON.stringify(uploadName)}) || false,
+      hasSummary: Boolean(document.querySelector('[data-testid="media-upload-summary"]')),
+      uploading: document.body?.innerText?.includes('Uploading files') || false,
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (state.hasUploadName && state.hasSummary && !state.uploading) {
+      return state;
+    }
+    if (attempt === 159) {
+      throw new Error(`Central upload input did not complete: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertProviderRoiDashboard = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -1485,6 +1549,7 @@ const main = async () => {
   let userDataDir;
   let folderId;
   let childFolderId;
+  let centralUploadedFile;
   let originalSettings;
   let restoredSettings = false;
   const mediaIds = [];
@@ -1495,9 +1560,11 @@ const main = async () => {
   const replacementName = `${marker}-replacement.png`;
   const renamedImageName = `${marker}-renamed.png`;
   const privateName = `${marker}.txt`;
+  const centralUploadName = `${marker}-central-upload.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
-  const tempFiles = [replacementPath];
+  const centralUploadPath = path.join(os.tmpdir(), centralUploadName);
+  const tempFiles = [replacementPath, centralUploadPath];
 
   try {
     await loginAdminApi();
@@ -1505,6 +1572,7 @@ const main = async () => {
     await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
+    fs.writeFileSync(centralUploadPath, `Backy central upload UI smoke ${suffix}\n`, 'utf8');
     const existing = await listMedia(marker);
     assert(existing.length === 0, `Temporary media already exists for marker ${marker}`);
 
@@ -1578,6 +1646,13 @@ const main = async () => {
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
     await assertMediaLayout(client, imageName);
+    await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
+    centralUploadedFile = await waitForMedia(marker, (item) => (
+      item.originalName === centralUploadName &&
+      (item.type === 'document' || item.type === 'file') &&
+      item.visibility === 'public'
+    ));
+    mediaIds.push(centralUploadedFile.id);
     await saveMediaStorageSettingsFromUi(client, suffix);
     const savedStorageSettings = await readSettings();
     assert(savedStorageSettings.integrations?.storage?.provider === 'supabase', 'Media storage provider was not persisted through the Media page.');
@@ -1744,6 +1819,14 @@ const main = async () => {
 
     await deleteMedia(publicImage.id);
     mediaIds.splice(mediaIds.indexOf(publicImage.id), 1);
+    if (centralUploadedFile) {
+      await deleteMedia(centralUploadedFile.id);
+      const centralUploadIndex = mediaIds.indexOf(centralUploadedFile.id);
+      if (centralUploadIndex !== -1) {
+        mediaIds.splice(centralUploadIndex, 1);
+      }
+      centralUploadedFile = null;
+    }
     await deleteFolder(childFolderId);
     childFolderId = null;
     await deleteFolder(folderId);

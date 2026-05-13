@@ -59,6 +59,7 @@ type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quarantined';
 type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.provider-analytics.ingest' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
+type MediaUploadMode = 'all' | 'image' | 'font' | 'file';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
 type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
@@ -92,6 +93,36 @@ const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: 
   { value: 'delete', label: 'Deletes' },
 ];
 const MEDIA_AUDIT_PAGE_SIZE = 12;
+const MEDIA_UPLOAD_MODES: Array<{
+  value: MediaUploadMode;
+  label: string;
+  detail: string;
+  accept?: string;
+}> = [
+  {
+    value: 'all',
+    label: 'All files',
+    detail: 'Images, video, audio, fonts, documents, and custom files.',
+  },
+  {
+    value: 'image',
+    label: 'Images',
+    detail: 'Raster and vector image assets for pages, products, and posts.',
+    accept: 'image/*',
+  },
+  {
+    value: 'font',
+    label: 'Fonts',
+    detail: 'Typography files registered for editor font controls and manifests.',
+    accept: '.woff,.woff2,.ttf,.otf,.eot,font/*,application/font-woff,application/font-woff2,application/vnd.ms-fontobject',
+  },
+  {
+    value: 'file',
+    label: 'Files',
+    detail: 'Documents, data files, archives, and private downloads.',
+    accept: '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.zip,.rar,application/pdf,text/*,application/json,application/zip',
+  },
+];
 const MEDIA_IMAGE_OBJECT_FIT_OPTIONS: MediaImageObjectFit[] = ['cover', 'contain'];
 const MEDIA_IMAGE_ASPECT_RATIO_OPTIONS: Array<{ value: MediaImageAspectRatio; label: string; cssValue: string }> = [
   { value: 'original', label: 'Original', cssValue: '1 / 1' },
@@ -671,6 +702,7 @@ function MediaPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(() => folderSelectionFromRoute(routeSearch.folderId));
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
   const [uploadFolderId, setUploadFolderId] = useState<'current' | 'root' | string>('current');
+  const [uploadMode, setUploadMode] = useState<MediaUploadMode>('all');
   const [uploadTags, setUploadTags] = useState('');
   const [recentUploadSummary, setRecentUploadSummary] = useState<MediaUploadSummary | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
@@ -844,6 +876,10 @@ function MediaPage() {
   const uploadTargetFolderLabel = uploadTargetFolderId
     ? getFolderPath(uploadTargetFolderId)
     : 'Root';
+  const activeUploadMode = useMemo(
+    () => MEDIA_UPLOAD_MODES.find((mode) => mode.value === uploadMode) || MEDIA_UPLOAD_MODES[0],
+    [uploadMode],
+  );
   const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const setUploadTagList = useCallback((nextTags: string[]) => {
     setUploadTags(serializeTagValues(nextTags));
@@ -2700,6 +2736,7 @@ function MediaPage() {
             id="header-upload"
             className="hidden"
             multiple
+            accept={activeUploadMode.accept}
             aria-label="Upload media files"
             disabled={isMediaMutationBusy}
             onChange={(e) => {
@@ -2911,9 +2948,11 @@ function MediaPage() {
         >
           <input
             type="file"
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            className="absolute inset-0 z-0 h-full w-full cursor-pointer opacity-0"
             multiple
+            accept={activeUploadMode.accept}
             aria-label="Upload media files"
+            data-testid="media-upload-input"
             disabled={isMediaMutationBusy}
             onChange={(e) => {
               void handleFileUpload(e.target.files);
@@ -2927,8 +2966,31 @@ function MediaPage() {
             {isUploading ? 'Uploading files' : 'Upload files'}
           </h3>
           <p className="pointer-events-none mx-auto max-w-xl text-sm text-muted-foreground">
-            Images, videos, audio, documents, fonts, and other files will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}. Font files are registered for editor font controls and public font manifests.
+            {activeUploadMode.detail} Uploads save as {uploadVisibility} assets into {uploadTargetFolderLabel}. Font files are registered for editor font controls and public font manifests.
           </p>
+          <div className="pointer-events-none relative z-10 mt-5 flex flex-wrap justify-center gap-2">
+            {MEDIA_UPLOAD_MODES.map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                disabled={isMediaMutationBusy}
+                data-testid={`media-upload-mode-${mode.value}`}
+                className={cn(
+                  'pointer-events-auto min-h-9 rounded-lg border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                  uploadMode === mode.value
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isMediaMutationBusy) return;
+                  setUploadMode(mode.value);
+                }}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
           {uploadTagList.length > 0 && (
             <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">
               {uploadTagList.map((tag) => (
