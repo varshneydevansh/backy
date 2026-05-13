@@ -4284,6 +4284,8 @@ function SecuritySettings({
   };
 
   const copyKey = async (scope: 'public' | 'admin', value: string) => {
+    if (scope === 'admin' && !canManageApiKeys) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setCopiedKey(scope);
@@ -4399,7 +4401,13 @@ function SecuritySettings({
               value: adminApiKey,
               detail: 'Use only from trusted server environments for dashboard and management workflows.',
             },
-          ].map((item) => (
+          ].map((item) => {
+            const canShowValue = item.scope !== 'admin' || canManageApiKeys;
+            const displayValue = canShowValue
+              ? item.value || 'Not configured'
+              : 'Hidden without settings.manageKeys';
+
+            return (
             <div key={item.scope} className="rounded-xl border border-border bg-muted/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -4411,14 +4419,14 @@ function SecuritySettings({
                 </span>
               </div>
               <p className="mt-3 break-all rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
-                {item.value || (item.scope === 'admin' && !canManageApiKeys ? 'Hidden without settings.manageKeys' : 'Not configured')}
+                {displayValue}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => void copyKey(item.scope, item.value)}
-                  disabled={!item.value || (item.scope === 'admin' && !canManageApiKeys)}
+                  disabled={!item.value || !canShowValue}
                   title={item.scope === 'admin' ? manageKeysPermissionTitle : undefined}
                 >
                   {copiedKey === item.scope ? 'Copied' : 'Copy'}
@@ -4434,7 +4442,8 @@ function SecuritySettings({
                 </Button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         <div className="mt-3 rounded-xl border border-border p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

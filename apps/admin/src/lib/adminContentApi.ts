@@ -1,4 +1,4 @@
-import { useStore, type BlogPost, type Page, type Site, type User } from '@/stores/mockStore';
+import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import type {
   Comment,
@@ -2475,12 +2475,15 @@ const getPublicApiBase = (): string => (
   getAdminApiBase().replace(/\/api\/admin$/, '/api')
 );
 
-const getAdminApiKey = (): string => (
-  getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
-  getEnvValue('VITE_ADMIN_API_KEY') ||
-  useStore.getState().settings.apiKeys.adminApiKey ||
-  ''
-);
+const getAdminApiKey = (): string => {
+  if (typeof window !== 'undefined') return '';
+
+  return (
+    getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
+    getEnvValue('VITE_ADMIN_API_KEY') ||
+    ''
+  );
+};
 
 const getAdminSessionToken = (): string => {
   if (typeof window === 'undefined') return '';

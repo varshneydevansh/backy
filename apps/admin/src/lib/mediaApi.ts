@@ -377,10 +377,14 @@ const getPublicApiBase = (): string => {
     .replace(/\/$/, '');
 };
 
-const getAdminApiKey = (): string => (
-  getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
-  getEnvValue('VITE_ADMIN_API_KEY')
-);
+const getAdminApiKey = (): string => {
+  if (typeof window !== 'undefined') return '';
+
+  return (
+    getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
+    getEnvValue('VITE_ADMIN_API_KEY')
+  );
+};
 
 const getAdminSessionToken = (): string => {
   if (typeof window === 'undefined') return '';

@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_SETTINGS_CDP_PORT || 9376);
 const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tmpdir(), 'backy-settings-smoke.png');
+const STALE_ADMIN_API_KEY = 'sk_live_stale_settings_smoke_admin_key';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -204,6 +205,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
       issuedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
       authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
+localStorage.setItem('backy-db', ${JSON.stringify(JSON.stringify({
+  state: {
+    settings: {
+      deliveryMode: 'managed-hosting',
+      apiKeys: {
+        publicApiKey: 'pk_live_stale_settings_smoke_public_key',
+        adminApiKey: STALE_ADMIN_API_KEY,
+      },
     },
   },
   version: 0,
@@ -605,6 +618,21 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   await setLabeledControl(client, 'Webhook URL', `https://hooks.example.com/${suffix}`);
 
   await openSettingsTab(client, 'Security', 'tab=security');
+  const securityKeyState = await evaluate(client, `(() => {
+    const body = document.body?.innerText || '';
+    return {
+      hiddenAdminKey: body.includes('Hidden without settings.manageKeys'),
+      leakedStaleAdminKey: body.includes(${JSON.stringify(STALE_ADMIN_API_KEY)}),
+      copyButtons: Array.from(document.querySelectorAll('button')).map((button) => ({
+        text: (button.textContent || '').trim(),
+        disabled: button.disabled,
+      })),
+    };
+  })()`);
+  assert(
+    securityKeyState.hiddenAdminKey && !securityKeyState.leakedStaleAdminKey,
+    `Admin API key should stay hidden from non-key managers even with stale local storage: ${JSON.stringify(securityKeyState)}`,
+  );
   await setLabeledControl(client, 'Require two-factor authentication', true);
   await setLabeledControl(client, 'Invite-only workspace access', true);
   await setLabeledControl(client, 'Minimum password length', '12');
