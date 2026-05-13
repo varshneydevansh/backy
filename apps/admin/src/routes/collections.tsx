@@ -1397,6 +1397,7 @@ function CollectionsPage() {
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const collectionInteractionVersionRef = useRef(0);
+  const recordInteractionVersionRef = useRef(0);
   const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
@@ -2095,6 +2096,25 @@ function CollectionsPage() {
     ));
   };
 
+  const beginNewRecord = () => {
+    if (recordMutationDisabled) return;
+
+    recordInteractionVersionRef.current += 1;
+    setSelectedRecordId(null);
+    setSelectedRecordIds([]);
+    setRecordForm({ slug: '', status: 'published', values: {} });
+    updateCollectionsRouteSearch({ recordId: undefined });
+    setError(null);
+    setValidationDetails([]);
+    setNotice('New record draft ready. Add values, then save the record.');
+    window.requestAnimationFrame(() => {
+      document.getElementById('collections-record-editor')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      window.setTimeout(() => {
+        document.getElementById('collections-record-slug')?.focus();
+      }, 150);
+    });
+  };
+
   const showApiError = (apiError: unknown, fallback: string) => {
     setError(apiError instanceof Error ? apiError.message : fallback);
     setValidationDetails(apiError instanceof AdminContentApiError
@@ -2572,6 +2592,7 @@ function CollectionsPage() {
   const loadCollections = async () => {
     if (isCollectionsBusy) return;
 
+    const loadInteractionVersion = collectionInteractionVersionRef.current;
     setIsLoading(true);
     setError(null);
     setValidationDetails([]);
@@ -2579,6 +2600,9 @@ function CollectionsPage() {
     try {
       const backendCollections = await listCollections(activeSiteId);
       setCollections(backendCollections);
+      if (loadInteractionVersion !== collectionInteractionVersionRef.current) {
+        return;
+      }
       const nextSelected = backendCollections.find((collection) => collection.id === selectedCollectionId)
         || backendCollections.find((collection) => (
           collection.id === routeSearch.collectionId ||
@@ -3033,6 +3057,7 @@ function CollectionsPage() {
     setNotice(null);
 
     try {
+      const saveInteractionVersion = recordInteractionVersionRef.current;
       const values = Object.fromEntries(
         activeCollection.fields.map((field) => [
           field.key,
@@ -3053,8 +3078,10 @@ function CollectionsPage() {
           ? prev.map((record) => (record.id === saved.id ? saved : record))
           : [saved, ...prev];
       });
-      setSelectedRecordId(saved.id);
-      updateCollectionsRouteSearch({ recordId: saved.id });
+      if (saveInteractionVersion === recordInteractionVersionRef.current) {
+        setSelectedRecordId(saved.id);
+        updateCollectionsRouteSearch({ recordId: saved.id });
+      }
       if (activeCollection) {
         void loadRecords(activeCollection.id);
       }
@@ -5278,15 +5305,11 @@ function CollectionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (recordMutationDisabled) return;
-                      setSelectedRecordId(null);
-                      setRecordForm({ slug: '', status: 'published', values: {} });
-                      updateCollectionsRouteSearch({ recordId: undefined });
-                    }}
+                    onClick={beginNewRecord}
                     disabled={recordMutationDisabled}
                     title={editPermissionTitle}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-new-record-button"
                   >
                     <Plus className="h-4 w-4" />
                     New record
@@ -5605,7 +5628,7 @@ function CollectionsPage() {
                   </div>
                 </div>
 
-                <form onSubmit={handleRecordSubmit} className="p-4">
+                <form id="collections-record-editor" onSubmit={handleRecordSubmit} className="p-4 scroll-mt-24" data-testid="collections-record-editor">
                   <fieldset disabled={recordMutationDisabled} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">{selectedRecord ? 'Edit record' : 'Create record'}</h3>
@@ -5619,9 +5642,19 @@ function CollectionsPage() {
                       {isSavingRecord ? 'Saving...' : 'Save'}
                     </button>
                   </div>
+                  {!selectedRecord && (
+                    <div
+                      className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground"
+                      data-testid="collections-record-draft-state"
+                    >
+                      <span className="font-semibold text-foreground">New record draft</span>
+                      <span className="ml-1">Fill the mapped schema fields and save to publish this data through collection APIs.</span>
+                    </div>
+                  )}
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">Slug</span>
                     <input
+                      id="collections-record-slug"
                       value={recordForm.slug}
                       onChange={(event) => setRecordForm((prev) => ({
                         ...prev,

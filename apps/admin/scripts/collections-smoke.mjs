@@ -763,6 +763,100 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
   }
 };
 
+const assertNewRecordButtonReset = async (client, recordSlug) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === ${JSON.stringify(recordSlug)}
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'record-row-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (button.disabled) return { ok: false, reason: 'record-row-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (selected.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to select collection record for edit: ${JSON.stringify(selected)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const slugInput = document.querySelector('#collections-record-slug');
+      return {
+        hasEditMode: document.querySelector('[data-testid="collections-record-editor"]')?.textContent?.includes('Edit record') || false,
+        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
+        recordId: params.get('recordId'),
+      };
+    })()`);
+    if (state.hasEditMode && state.slugValue === recordSlug && state.recordId) break;
+    if (attempt === 39) {
+      throw new Error(`Collection record edit state did not settle: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="collections-new-record-button"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'new-record-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (button.disabled) return { ok: false, reason: 'new-record-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to click New record button: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      const params = new URLSearchParams(window.location.search);
+      const slugInput = document.querySelector('#collections-record-slug');
+      const editor = document.querySelector('[data-testid="collections-record-editor"]');
+      const bulkToolbar = document.querySelector('[data-testid="collections-record-bulk-toolbar"]');
+      return {
+        hasNotice: body.includes('New record draft ready'),
+        hasCreateMode: editor?.textContent?.includes('Create record') || false,
+        hasDraftState: Boolean(document.querySelector('[data-testid="collections-record-draft-state"]')) &&
+          body.includes('New record draft'),
+        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
+        activeElementId: document.activeElement?.id || '',
+        editorTop: editor instanceof HTMLElement ? editor.getBoundingClientRect().top : null,
+        viewportHeight: window.innerHeight,
+        recordId: params.get('recordId'),
+        bulkToolbarVisible: Boolean(bulkToolbar),
+      };
+    })()`);
+    if (
+      state.hasNotice &&
+      state.hasCreateMode &&
+      state.hasDraftState &&
+      state.slugValue === '' &&
+      state.recordId === null &&
+      state.bulkToolbarVisible === false &&
+      (state.activeElementId === 'collections-record-slug' || (state.editorTop !== null && state.editorTop < state.viewportHeight))
+    ) {
+      return state;
+    }
+    if (attempt === 39) {
+      throw new Error(`New record button did not reveal blank record state: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const configureVisitorMutationPolicyThroughUi = async (client, collectionId, token) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const configured = await evaluate(client, `(() => {
@@ -840,19 +934,25 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
     await sleep(100);
   }
 
-  const clicked = await evaluate(client, `(() => {
-    const form = document.querySelector('#collections-schema');
-    const button = form
-      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
-      : null;
-    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
-    if (button.disabled) return { ok: false, reason: 'save-button-disabled' };
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(clicked.ok, `Unable to save visitor mutation policy: ${JSON.stringify(clicked)}`);
-
   for (let attempt = 0; attempt < 80; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const form = document.querySelector('#collections-schema');
+      const button = form
+        ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+        : null;
+      if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+      if (button.disabled || button.matches(':disabled') || (button.textContent || '').includes('Saving')) {
+        return {
+          ok: false,
+          reason: 'save-button-busy',
+          disabled: button.disabled,
+          matchesDisabled: button.matches(':disabled'),
+          text: button.textContent || '',
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
     const collections = await fetchCollections();
     const collection = collections.find((candidate) => candidate.id === collectionId);
     const policy = collection?.metadata?.visitorWritePolicy;
@@ -865,6 +965,9 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       policy.allowedUpdateFields.includes('summary')
     ) {
       return collection;
+    }
+    if (attempt === 79 && !clicked.ok) {
+      throw new Error(`Unable to save visitor mutation policy: ${JSON.stringify(clicked)}`);
     }
     await sleep(250);
   }
@@ -1342,6 +1445,8 @@ const main = async () => {
     await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertNewCollectionButtonReset(client, 'collections-library-new-collection-button');
+    await navigateToCollections(client, { collectionId, recordSlug });
+    await assertNewRecordButtonReset(client, recordSlug);
     await navigateToCollections(client, { collectionId, recordSlug });
     await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
     await publishRecordThroughUi(client, recordSlug);
