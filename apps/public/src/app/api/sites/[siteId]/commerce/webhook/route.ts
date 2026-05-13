@@ -342,6 +342,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           type,
           providerEventId,
           status: 'succeeded',
+          paymentStatus: settlement.status,
           orderId: order.id,
           orderNumber: String(updated.values.ordernumber || ''),
           checkoutSessionId: String(updated.values.checkoutsessionid || ''),
