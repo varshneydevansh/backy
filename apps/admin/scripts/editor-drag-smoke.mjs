@@ -8491,6 +8491,7 @@ const waitForUploadedMediaItem = async (client, filename) => {
         url: item.getAttribute('data-media-url') || '',
         scope: item.getAttribute('data-media-scope') || '',
         scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
+        folderId: item.getAttribute('data-media-folder-id') || '',
       }));
       const uploadZone = document.querySelector('[data-testid="media-upload-dropzone"]');
       return {
@@ -8498,8 +8499,12 @@ const waitForUploadedMediaItem = async (client, filename) => {
         activeTab: modal?.getAttribute('data-active-tab') || '',
         allowedTypes: modal?.getAttribute('data-allowed-types') || '',
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        folderFilter: modal?.getAttribute('data-folder-filter') || '',
+        includeNestedFolders: modal?.getAttribute('data-include-nested-folders') || '',
         isUploading: uploadZone?.getAttribute('data-uploading') === 'true',
         error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
+        hasFolderFilter: Boolean(document.querySelector('[data-testid="media-library-folder-filter"]')),
+        hasNestedFolderToggle: Boolean(document.querySelector('[data-testid="media-library-include-subfolders"]')),
         item: items.find((candidate) => candidate.name === ${JSON.stringify(filename)}) || null,
         itemCount: items.length,
       };
@@ -8539,12 +8544,54 @@ const clickMediaLibraryItemByName = async (client, filename) => {
       url: item.getAttribute('data-media-url') || '',
       scope: item.getAttribute('data-media-scope') || '',
       scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
+      folderId: item.getAttribute('data-media-folder-id') || '',
     };
   })()`);
 
   assert(clicked?.ok && clicked.id && clicked.url, `Unable to select uploaded media item: ${JSON.stringify(clicked)}`);
   await sleep(350);
   return clicked;
+};
+
+const waitForMediaLibraryFolder = async (client, folderName) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const uploadFolder = document.querySelector('[data-testid="media-upload-folder"]');
+      const libraryFolder = document.querySelector('[data-testid="media-library-folder-filter"]');
+      const uploadOptions = uploadFolder instanceof HTMLSelectElement
+        ? Array.from(uploadFolder.options).map((option) => ({ value: option.value, label: option.textContent || '' }))
+        : [];
+      const libraryOptions = libraryFolder instanceof HTMLSelectElement
+        ? Array.from(libraryFolder.options).map((option) => ({ value: option.value, label: option.textContent || '' }))
+        : [];
+      const match = uploadOptions.find((option) => option.label === ${JSON.stringify(folderName)})
+        || libraryOptions.find((option) => option.label === ${JSON.stringify(folderName)});
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        folderFilter: modal?.getAttribute('data-folder-filter') || '',
+        uploadFolderValue: uploadFolder instanceof HTMLSelectElement ? uploadFolder.value : '',
+        libraryFolderValue: libraryFolder instanceof HTMLSelectElement ? libraryFolder.value : '',
+        match: match || null,
+        error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
+      };
+    })()`);
+
+    if (lastState.error) {
+      throw new Error(`Media folder creation reported an error: ${JSON.stringify(lastState)}`);
+    }
+
+    if (lastState.match?.value && lastState.uploadFolderValue === lastState.match.value) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Created media folder did not appear in picker: ${JSON.stringify(lastState)}`);
 };
 
 const waitForImageSourceValue = async (client, expectedUrl) => {
@@ -8749,6 +8796,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
   const videoUploadFile = createSmokeUploadVideoFile();
   const embedUploadFile = createSmokeUploadEmbedFile();
   const fontUploadFile = createSmokeUploadFontFile();
+  const imageUploadFolderName = `Editor Upload ${Date.now().toString(36)}`;
 
   try {
     await selectLayerById(client, 'smoke-image');
@@ -8765,6 +8813,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
         fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
         hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
         hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+        hasCreateFolder: Boolean(document.querySelector('[data-testid="media-library-create-folder"]')),
       };
     })()`);
 
@@ -8775,12 +8824,23 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.uploadFilter === 'image' &&
         opened.fileAccept === 'image/*' &&
         opened.hasVisibility &&
-        opened.hasFolder,
+        opened.hasFolder &&
+        opened.hasCreateFolder,
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
     );
 
+    await setFormControlByTestId(client, 'media-library-create-folder-name', imageUploadFolderName);
+    await clickControlByTestId(client, 'media-library-create-folder');
+    const createdImageFolder = await waitForMediaLibraryFolder(client, imageUploadFolderName);
     await setFileInputByTestId(client, 'media-upload-input', [imageUploadFile.filePath]);
     const uploaded = await waitForUploadedMediaItem(client, imageUploadFile.filename);
+    assert(
+      uploaded.hasFolderFilter &&
+        uploaded.hasNestedFolderToggle &&
+        uploaded.folderFilter === createdImageFolder.match.value &&
+        uploaded.item.folderId === createdImageFolder.match.value,
+      `Uploaded image did not remain organized under the created picker folder: ${JSON.stringify({ createdImageFolder, uploaded })}`,
+    );
     const selected = await clickMediaLibraryItemByName(client, imageUploadFile.filename);
     const imageSource = await waitForImageSourceValue(client, selected.url);
     await clickSave(client);

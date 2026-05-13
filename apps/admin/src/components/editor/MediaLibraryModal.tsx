@@ -11,10 +11,11 @@ import {
   Globe2,
   LockKeyhole,
   FolderOpen,
+  FolderPlus,
   CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
+import { createMediaFolder, getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 
@@ -61,12 +62,16 @@ export function MediaLibraryModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
   const [uploadFolderId, setUploadFolderId] = useState<'root' | string>('root');
+  const [libraryFolderFilter, setLibraryFolderFilter] = useState<'all' | 'root' | string>('all');
+  const [includeNestedFolders, setIncludeNestedFolders] = useState(true);
+  const [newFolderName, setNewFolderName] = useState('');
   const [uploadTags, setUploadTags] = useState('');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<MediaScopeFilter>(mediaContext?.scope || 'all');
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +86,9 @@ export function MediaLibraryModal({
         : 'all'
     );
     setLibraryTypeFilter('all');
+    setLibraryFolderFilter('all');
+    setIncludeNestedFolders(true);
+    setNewFolderName('');
     setSearchQuery('');
   }, [initialTab, initialUploadFilter, isOpen]);
 
@@ -142,10 +150,78 @@ export function MediaLibraryModal({
 
   const uploadTagList = useMemo(() => parseTagInput(uploadTags, 10), [uploadTags]);
 
+  const folderOptions = useMemo(() => {
+    const childrenByParent = new Map<string, MediaFolder[]>();
+    folders.forEach((folder) => {
+      const parentKey = folder.parentId || 'root';
+      const siblings = childrenByParent.get(parentKey) || [];
+      siblings.push(folder);
+      childrenByParent.set(parentKey, siblings);
+    });
+
+    childrenByParent.forEach((siblings) => {
+      siblings.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    });
+
+    const options: Array<MediaFolder & { path: string }> = [];
+    const visit = (parentId: string, prefix: string) => {
+      (childrenByParent.get(parentId) || []).forEach((folder) => {
+        const path = prefix ? `${prefix} / ${folder.name}` : folder.name;
+        options.push({ ...folder, path });
+        visit(folder.id, path);
+      });
+    };
+
+    visit('root', '');
+    return options;
+  }, [folders]);
+
+  const folderPathById = useMemo(
+    () => new Map(folderOptions.map((folder) => [folder.id, folder.path])),
+    [folderOptions]
+  );
+
+  useEffect(() => {
+    if (uploadFolderId !== 'root' && !folderPathById.has(uploadFolderId)) {
+      setUploadFolderId('root');
+    }
+
+    if (libraryFolderFilter !== 'all' && libraryFolderFilter !== 'root' && !folderPathById.has(libraryFolderFilter)) {
+      setLibraryFolderFilter('all');
+    }
+  }, [folderPathById, libraryFolderFilter, uploadFolderId]);
+
   const uploadFolderLabel = useMemo(() => {
     if (uploadFolderId === 'root') return 'Root library';
-    return folders.find((folder) => folder.id === uploadFolderId)?.name || 'Selected folder';
-  }, [folders, uploadFolderId]);
+    return folderPathById.get(uploadFolderId) || 'Selected folder';
+  }, [folderPathById, uploadFolderId]);
+
+  const libraryFolderIds = useMemo(() => {
+    if (libraryFolderFilter === 'all') {
+      return null;
+    }
+
+    if (libraryFolderFilter === 'root') {
+      return new Set<string>();
+    }
+
+    const ids = new Set([libraryFolderFilter]);
+
+    if (includeNestedFolders) {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        folders.forEach((folder) => {
+          if (folder.parentId && ids.has(folder.parentId) && !ids.has(folder.id)) {
+            ids.add(folder.id);
+            changed = true;
+          }
+        });
+      }
+    }
+
+    return ids;
+  }, [folders, includeNestedFolders, libraryFolderFilter]);
 
   const loadMedia = useCallback(async () => {
     setIsLoading(true);
@@ -183,6 +259,10 @@ export function MediaLibraryModal({
       normalized.filter((item) => {
         if (!allowedTypesSet.has(item.type)) return false;
         if (libraryTypeFilter !== 'all' && item.type !== libraryTypeFilter) return false;
+        if (libraryFolderFilter === 'root' && item.folderId) return false;
+        if (libraryFolderFilter !== 'all' && libraryFolderFilter !== 'root') {
+          if (!item.folderId || !libraryFolderIds?.has(item.folderId)) return false;
+        }
         const query = searchQuery.trim().toLowerCase();
         if (query) {
           const haystack = [
@@ -197,7 +277,7 @@ export function MediaLibraryModal({
         }
         return mediaContextFilter(item as MediaAsset & { scope: 'global' | 'page' | 'post'; scopeTargetId: string | null });
       }),
-    [allowedTypesSet, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
+    [allowedTypesSet, libraryFolderFilter, libraryFolderIds, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
   );
 
   const libraryStats = useMemo(() => ({
@@ -294,6 +374,72 @@ export function MediaLibraryModal({
     return undefined;
   };
 
+  const handleCreateFolder = async () => {
+    if (isCreatingFolder || isUploading) return;
+
+    const name = newFolderName.trim();
+    if (!name) {
+      setError('Enter a folder name before creating a media folder.');
+      return;
+    }
+
+    const duplicate = folderOptions.some((folder) => folder.path.toLowerCase() === name.toLowerCase() || folder.name.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setError(`A media folder named "${name}" already exists.`);
+      return;
+    }
+
+    setIsCreatingFolder(true);
+    setError(null);
+
+    try {
+      const folder = await createMediaFolder(name, siteId);
+      setFolders((current) => [...current.filter((item) => item.id !== folder.id), folder]);
+      setUploadFolderId(folder.id);
+      setLibraryFolderFilter(folder.id);
+      setNewFolderName('');
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create media folder');
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  const renderCreateFolderControl = () => (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <FolderPlus className="h-3.5 w-3.5" />
+        Create folder
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          type="text"
+          value={newFolderName}
+          onChange={(event) => setNewFolderName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void handleCreateFolder();
+            }
+          }}
+          disabled={isUploading || isCreatingFolder}
+          data-testid="media-library-create-folder-name"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+          placeholder="Campaign assets"
+        />
+        <button
+          type="button"
+          onClick={() => void handleCreateFolder()}
+          disabled={isUploading || isCreatingFolder || !newFolderName.trim()}
+          data-testid="media-library-create-folder"
+          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isCreatingFolder ? 'Creating' : 'Create'}
+        </button>
+      </div>
+    </div>
+  );
+
   const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
     if (isUploading) return;
     if (!files || files.length === 0) return;
@@ -383,6 +529,8 @@ export function MediaLibraryModal({
       data-allowed-types={allowedTypes}
       data-upload-filter={uploadFilter}
       data-scope-filter={scopeFilter}
+      data-folder-filter={libraryFolderFilter}
+      data-include-nested-folders={includeNestedFolders ? 'true' : 'false'}
     >
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
@@ -513,6 +661,7 @@ export function MediaLibraryModal({
                         data-media-url={item.url}
                         data-media-scope={item.scope || 'global'}
                         data-media-scope-target-id={item.scopeTargetId || ''}
+                        data-media-folder-id={item.folderId || ''}
                         className="group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
                       >
                         <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -593,6 +742,37 @@ export function MediaLibraryModal({
                     </div>
                   </div>
                 ) : null}
+
+                <div className="mt-5 space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">Folder</div>
+                  <select
+                    value={libraryFolderFilter}
+                    onChange={(event) => setLibraryFolderFilter(event.target.value)}
+                    data-testid="media-library-folder-filter"
+                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="all">All folders</option>
+                    <option value="root">Root library</option>
+                    {folderOptions.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.path}</option>
+                    ))}
+                  </select>
+                  <label className="flex items-start gap-2 rounded-lg border border-border bg-background p-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={includeNestedFolders}
+                      onChange={(event) => setIncludeNestedFolders(event.target.checked)}
+                      disabled={libraryFolderFilter === 'all' || libraryFolderFilter === 'root'}
+                      data-testid="media-library-include-subfolders"
+                      className="mt-0.5 h-4 w-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <span>Include nested folders when a parent folder is selected.</span>
+                  </label>
+                </div>
+
+                <div className="mt-5">
+                  {renderCreateFolderControl()}
+                </div>
 
                 <div className="mt-5 rounded-lg border border-border bg-background p-3">
                   <div className="text-xs font-medium text-muted-foreground">Current result</div>
@@ -721,11 +901,13 @@ export function MediaLibraryModal({
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="root">Root library</option>
-                      {folders.map((folder) => (
-                        <option key={folder.id} value={folder.id}>{folder.name}</option>
+                      {folderOptions.map((folder) => (
+                        <option key={folder.id} value={folder.id}>{folderPathById.get(folder.id) || folder.name}</option>
                       ))}
                     </select>
                   </label>
+
+                  {renderCreateFolderControl()}
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
