@@ -1515,6 +1515,11 @@ function CollectionsPage() {
         : isCollectionMutationPending
           ? 'Collection schema operation in progress...'
           : undefined;
+  const isNewCollectionDraftOpen = isCollectionDraftMode && !activeCollection;
+  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Draft open below' : 'New collection';
+  const newCollectionButtonTitle = isNewCollectionDraftOpen
+    ? 'A new collection draft is open below. Add a schema name and fields, then save it.'
+    : schemaActionDisabledTitle;
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -2438,6 +2443,10 @@ function CollectionsPage() {
     setError(null);
     setValidationDetails([]);
     setNotice('New collection draft ready. Add a name and fields, then save the schema.');
+    scrollToCollectionSchema();
+  };
+
+  const scrollToCollectionSchema = () => {
     window.requestAnimationFrame(() => {
       document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
       window.setTimeout(() => {
@@ -3412,13 +3421,13 @@ function CollectionsPage() {
             type="button"
             onClick={beginNewCollection}
             disabled={schemaMutationDisabled}
-            title={schemaActionDisabledTitle}
+            title={newCollectionButtonTitle}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Create new collection"
             data-testid="collections-new-collection-button"
           >
             <Plus className="h-4 w-4" />
-            New collection
+            {newCollectionButtonLabel}
           </button>
         </div>
       }
@@ -3455,10 +3464,7 @@ function CollectionsPage() {
           </div>
           <button
             type="button"
-            onClick={() => {
-              document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-              window.setTimeout(() => document.getElementById('collections-schema-name')?.focus(), 150);
-            }}
+            onClick={scrollToCollectionSchema}
             className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/30 bg-background px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
           >
             <Database className="h-4 w-4" />
@@ -3561,12 +3567,12 @@ function CollectionsPage() {
               type="button"
               onClick={beginNewCollection}
               disabled={schemaMutationDisabled}
-              title={schemaActionDisabledTitle}
+              title={newCollectionButtonTitle}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="collections-library-new-collection-button"
             >
               <Plus className="h-4 w-4" />
-              New collection
+              {newCollectionButtonLabel}
             </button>
           </div>
         </div>
