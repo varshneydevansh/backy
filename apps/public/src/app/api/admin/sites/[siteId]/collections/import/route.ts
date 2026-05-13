@@ -91,8 +91,26 @@ const parseStatus = (value: unknown, fallback: PublishStatus = 'draft'): Publish
     : fallback
 );
 
+const normalizeFieldId = (field: Record<string, unknown>, index: number): string => {
+  const existingId = typeof field.id === 'string' ? field.id.trim() : '';
+  if (existingId) {
+    return existingId;
+  }
+
+  const source = field.key || field.label || index + 1;
+  return `field_${normalizeSlug(String(source)).replace(/-/g, '_') || index + 1}`;
+};
+
 const parseFields = (value: unknown): BackyCollectionField[] => (
-  Array.isArray(value) ? value as BackyCollectionField[] : []
+  Array.isArray(value)
+    ? value.map((field, index) => {
+        const input = isRecord(field) ? field : {};
+        return {
+          ...input,
+          id: normalizeFieldId(input, index),
+        } as BackyCollectionField;
+      })
+    : []
 );
 
 const parsePermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (

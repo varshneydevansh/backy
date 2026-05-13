@@ -612,7 +612,10 @@ const normalizeSlug = (value: string, fallback: string) => {
   return slug || fallback;
 };
 
+const createCollectionFieldId = (seed: string | number) => `field_${normalizeSlug(String(seed), 'field').replace(/-/g, '_')}`;
+
 const createEmptyField = (sortOrder: number): CollectionField => ({
+  id: createCollectionFieldId(sortOrder),
   key: `field_${sortOrder}`,
   label: `Field ${sortOrder}`,
   type: 'text',
@@ -1403,7 +1406,7 @@ function CollectionsPage() {
   const backupImportInputRef = useRef<HTMLInputElement>(null);
   const collectionInteractionVersionRef = useRef(0);
   const recordInteractionVersionRef = useRef(0);
-  const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
+  const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
@@ -1490,7 +1493,7 @@ function CollectionsPage() {
   const canEditCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
   const canExportCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
   const canDeleteCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
-  const schemaMutationDisabled = isCollectionsBusy || !canEditCollections;
+  const schemaMutationDisabled = isLoading || isCollectionMutationPending || !canEditCollections;
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
   const destructiveActionDisabled = isCollectionsBusy || !canDeleteCollections;
@@ -1498,6 +1501,15 @@ function CollectionsPage() {
   const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
   const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
   const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete');
+  const schemaActionDisabledTitle = isPermissionMatrixPending
+    ? 'Loading collection permissions...'
+    : !canEditCollections
+      ? editPermissionTitle
+      : isLoading
+        ? 'Loading collections...'
+        : isCollectionMutationPending
+          ? 'Collection schema operation in progress...'
+          : undefined;
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -3025,7 +3037,7 @@ function CollectionsPage() {
 
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isCollectionsBusy) return;
+    if (isLoading || isCollectionMutationPending) return;
     if (!canEditCollections) {
       showPermissionDenied('collections.edit', 'save collection schemas');
       return;
@@ -3040,6 +3052,7 @@ function CollectionsPage() {
       .filter((field) => field.key.trim() && field.label.trim())
       .map((field, index) => ({
         ...field,
+        id: field.id || createCollectionFieldId(field.key || index + 1),
         key: normalizeSlug(field.key, `field_${index + 1}`).replace(/-/g, '_'),
         label: field.label.trim(),
         sortOrder: (index + 1) * 10,
@@ -3394,7 +3407,7 @@ function CollectionsPage() {
             type="button"
             onClick={beginNewCollection}
             disabled={schemaMutationDisabled}
-            title={editPermissionTitle}
+            title={schemaActionDisabledTitle}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Create new collection"
             data-testid="collections-new-collection-button"
@@ -3543,7 +3556,7 @@ function CollectionsPage() {
               type="button"
               onClick={beginNewCollection}
               disabled={schemaMutationDisabled}
-              title={editPermissionTitle}
+              title={schemaActionDisabledTitle}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="collections-library-new-collection-button"
             >
@@ -4425,7 +4438,7 @@ function CollectionsPage() {
                 <button
                   type="submit"
                   disabled={schemaMutationDisabled}
-                  title={editPermissionTitle}
+                  title={schemaActionDisabledTitle}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save className="h-4 w-4" />

@@ -70,8 +70,28 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const normalizeFieldId = (field: Record<string, unknown>, index: number): string => {
+  const existingId = typeof field.id === 'string' ? field.id.trim() : '';
+  if (existingId) {
+    return existingId;
+  }
+
+  const source = field.key || field.label || index + 1;
+  return `field_${normalizeSlug(String(source)).replace(/-/g, '_') || index + 1}`;
+};
+
 const toCollectionFields = (value: unknown): BackyCollectionField[] | undefined => (
-  Array.isArray(value) ? value as BackyCollectionField[] : undefined
+  Array.isArray(value)
+    ? value.map((field, index) => {
+        const input = field && typeof field === 'object' && !Array.isArray(field)
+          ? field as Record<string, unknown>
+          : {};
+        return {
+          ...input,
+          id: normalizeFieldId(input, index),
+        } as BackyCollectionField;
+      })
+    : undefined
 );
 
 const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
