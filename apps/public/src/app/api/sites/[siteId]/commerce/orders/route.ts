@@ -9,13 +9,16 @@ import { NextRequest } from 'next/server';
 import type { BackyJsonValue } from '@backy-cms/core';
 import {
   PRODUCT_COLLECTION_SLUG,
+  buildCommerceStorefrontContract,
   isCommerceSourceRecord,
   productRecordToCommerceProduct,
   type CommerceProduct,
   type CommerceSourceRecord,
+  type CommerceStorefrontContract,
 } from '@/lib/commerceCatalog';
 import {
   createAdminCollectionRecord,
+  getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
@@ -50,6 +53,7 @@ interface CheckoutOrderInput {
   shippingAddress?: string;
   billingAddress?: string;
   notes?: string;
+  discountCode?: string;
   paymentProvider?: string;
   paymentReference?: string;
   checkoutSessionId?: string;
@@ -112,6 +116,7 @@ const normalizeCheckoutInput = (body: Record<string, unknown>): CheckoutOrderInp
     shippingAddress: textValue(body.shippingAddress),
     billingAddress: textValue(body.billingAddress),
     notes: textValue(body.notes),
+    discountCode: textValue(body.discountCode || body.couponCode || body.promoCode).toUpperCase(),
     paymentProvider: textValue(body.paymentProvider),
     paymentReference: textValue(body.paymentReference),
     checkoutSessionId: textValue(body.checkoutSessionId || body.checkoutSession),
@@ -130,6 +135,7 @@ const orderContract = (siteId: string) => ({
       items: [{ slug: 'product-slug', variantId: 'optional-variant-id', quantity: 1 }],
       shippingAddress: 'Optional shipping address text',
       billingAddress: 'Optional billing address text',
+      discountCode: 'Optional product discount code',
       paymentProvider: 'manual',
       paymentReference: 'optional-provider-reference',
     },
@@ -146,6 +152,11 @@ const orderContract = (siteId: string) => ({
     policy: 'deny rejects carts that request more than available inventory; continue and preorder keep accepting orders while stock floors at zero',
     variants: 'variantId or variantSku reserves the matched variant inventory when that variant has an inventory value',
     errors: ['PRODUCT_OUT_OF_STOCK', 'VARIANT_OUT_OF_STOCK', 'PRODUCT_INSUFFICIENT_STOCK', 'VARIANT_INSUFFICIENT_STOCK'],
+  },
+  pricing: {
+    taxes: 'When enabled in Commerce settings, taxable lines receive a deterministic tax estimate from the product tax class.',
+    shipping: 'When enabled in Commerce settings, physical shippable lines receive a shipping estimate from their shipping profile and weight.',
+    discounts: 'When enabled in Commerce settings, product discount codes apply a percentage inferred from the code suffix, for example SMOKE10 = 10%.',
   },
   relatedEndpoints: {
     catalog: `/api/sites/${siteId}/commerce/catalog`,
@@ -205,6 +216,127 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
     imageUrl: product.imageUrl,
     galleryImages: product.galleryImages,
     checkoutUrl: product.checkout.url,
+    taxable: product.delivery.taxable,
+    taxClass: product.delivery.taxClass,
+    shippingRequired: product.delivery.shippingRequired,
+    shippingProfile: product.delivery.shippingProfile,
+    weight: product.delivery.weight,
+    discountCode: product.checkout.discountCode,
+  };
+};
+
+type CheckoutLineItem = ReturnType<typeof lineItemFromProduct>;
+
+const taxRateForClass = (taxClass: string): number => {
+  const normalized = taxClass.trim().toLowerCase();
+  if (!normalized || normalized === 'standard') return 0.0825;
+  if (normalized.includes('exempt') || normalized.includes('zero')) return 0;
+  if (normalized.includes('reduced')) return 0.04;
+  if (normalized.includes('digital')) return 0.06;
+  if (normalized.includes('service')) return 0.05;
+  return 0.0825;
+};
+
+const shippingBaseForProfile = (profile: string): number => {
+  const normalized = profile.trim().toLowerCase();
+  if (!normalized || normalized === 'standard') return 8;
+  if (normalized.includes('digital') || normalized.includes('pickup') || normalized.includes('free')) return 0;
+  if (normalized.includes('express')) return 15;
+  if (normalized.includes('freight') || normalized.includes('oversize')) return 35;
+  if (normalized.includes('box') || normalized.includes('standard')) return 8;
+  return 10;
+};
+
+const discountPercentFromCode = (code: string): number => {
+  const match = code.match(/(\d{1,2})$/);
+  if (!match) return code ? 10 : 0;
+  return Math.max(0, Math.min(90, Number(match[1]))) / 100;
+};
+
+const calculateCheckoutQuote = (
+  lineItems: CheckoutLineItem[],
+  discountCode: string,
+  commerce: CommerceStorefrontContract,
+) => {
+  const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
+  const normalizedDiscountCode = discountCode.trim().toUpperCase();
+  const discountRate = commerce.pricing.discounts ? discountPercentFromCode(normalizedDiscountCode) : 0;
+  const discountLines = lineItems.map((item) => {
+    const itemDiscountCode = textValue(item.discountCode).toUpperCase();
+    const eligible = Boolean(discountRate && normalizedDiscountCode && itemDiscountCode === normalizedDiscountCode);
+    const amount = eligible ? moneyValue(item.lineTotal * discountRate) : 0;
+    return {
+      productId: item.productId,
+      slug: item.slug,
+      code: eligible ? normalizedDiscountCode : '',
+      rate: eligible ? discountRate : 0,
+      amount,
+    };
+  }).filter((line) => line.amount > 0);
+  const discountAmount = moneyValue(discountLines.reduce((sum, line) => sum + line.amount, 0));
+
+  const lineDiscountByProduct = new Map(discountLines.map((line) => [line.productId, line.amount]));
+  const taxLines = lineItems.map((item) => {
+    if (!commerce.pricing.taxes || !item.taxable) {
+      return {
+        productId: item.productId,
+        slug: item.slug,
+        taxClass: item.taxClass || 'standard',
+        rate: 0,
+        amount: 0,
+      };
+    }
+    const taxableAmount = Math.max(0, item.lineTotal - (lineDiscountByProduct.get(item.productId) || 0));
+    const rate = taxRateForClass(item.taxClass);
+    return {
+      productId: item.productId,
+      slug: item.slug,
+      taxClass: item.taxClass || 'standard',
+      rate,
+      amount: moneyValue(taxableAmount * rate),
+    };
+  }).filter((line) => line.amount > 0 || commerce.pricing.taxes);
+  const taxAmount = moneyValue(taxLines.reduce((sum, line) => sum + line.amount, 0));
+
+  const shippingGroups = new Map<string, { profile: string; base: number; weightTotal: number; slugs: string[] }>();
+  if (commerce.pricing.shipping) {
+    for (const item of lineItems) {
+      if (!item.shippingRequired) continue;
+      const profile = item.shippingProfile || 'standard';
+      const group = shippingGroups.get(profile) || {
+        profile,
+        base: shippingBaseForProfile(profile),
+        weightTotal: 0,
+        slugs: [],
+      };
+      group.weightTotal += Math.max(0, Number(item.weight || 0)) * item.quantity;
+      group.slugs.push(item.slug);
+      shippingGroups.set(profile, group);
+    }
+  }
+  const shippingLines = Array.from(shippingGroups.values()).map((group) => ({
+    profile: group.profile,
+    slugs: group.slugs,
+    base: moneyValue(group.base),
+    weightAmount: moneyValue(group.weightTotal * 1.25),
+    amount: moneyValue(group.base + group.weightTotal * 1.25),
+  }));
+  const shippingAmount = moneyValue(shippingLines.reduce((sum, line) => sum + line.amount, 0));
+  const total = moneyValue(Math.max(0, subtotal - discountAmount + taxAmount + shippingAmount));
+
+  return {
+    subtotal,
+    discountAmount,
+    taxAmount,
+    shippingAmount,
+    total,
+    currency: lineItems[0]?.currency || commerce.currency || 'USD',
+    discountCode: normalizedDiscountCode,
+    discountRate,
+    discountLines,
+    taxLines,
+    shippingLines,
+    pricing: commerce.pricing,
   };
 };
 
@@ -348,9 +480,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const [productsCollection, ordersCollection] = await Promise.all([
+      const [productsCollection, ordersCollection, settings] = await Promise.all([
         repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG),
         repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG),
+        repositories.settings.get(),
       ]);
 
       if (!productsCollection || productsCollection.status !== 'published' || !productsCollection.permissions.publicRead) {
@@ -364,6 +497,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
         return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
       }
+      const commerce = buildCommerceStorefrontContract({
+        siteId: site.id,
+        settings: settings.integrations?.commerce,
+        hasCatalog: true,
+        hasOrderIntake: true,
+      });
 
       const lineItems = [];
       const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
@@ -406,7 +545,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const currency = lineItems[0]?.currency || 'USD';
-      const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
+      const quote = calculateCheckoutQuote(lineItems, input.discountCode || '', commerce);
+      if (lineItems.some((item) => item.currency !== currency)) {
+        return errorResponse(409, 'MIXED_CURRENCY_CART', 'All checkout items must use the same currency', requestId, {
+          currencies: Array.from(new Set(lineItems.map((item) => item.currency))),
+        });
+      }
       const orderNumber = buildOrderNumber();
       let slug = orderNumber.toLowerCase();
       let suffix = 2;
@@ -420,11 +564,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         customername: input.customer?.name || '',
         email: input.customer?.email || '',
         phone: input.customer?.phone || '',
-        total: subtotal,
-        subtotal,
-        taxamount: 0,
-        shippingamount: 0,
-        discountamount: 0,
+        total: quote.total,
+        subtotal: quote.subtotal,
+        taxamount: quote.taxAmount,
+        shippingamount: quote.shippingAmount,
+        discountamount: quote.discountAmount,
         currency,
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
@@ -467,11 +611,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             status: values.orderstatus,
             paymentStatus: values.paymentstatus,
             fulfillmentStatus: values.fulfillmentstatus,
-            total: subtotal,
+            total: quote.total,
+            subtotal: quote.subtotal,
+            taxAmount: quote.taxAmount,
+            shippingAmount: quote.shippingAmount,
+            discountAmount: quote.discountAmount,
             currency,
             itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
             createdAt: order.createdAt,
           },
+          quote,
           lineItems,
         },
       }, {
@@ -499,6 +648,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
       return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
     }
+    const commerce = buildCommerceStorefrontContract({
+      siteId: site.id,
+      settings: getAdminSettings().integrations?.commerce,
+      hasCatalog: true,
+      hasOrderIntake: true,
+    });
 
     const lineItems = [];
     const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
@@ -543,7 +698,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const currency = lineItems[0]?.currency || 'USD';
-    const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
+    const quote = calculateCheckoutQuote(lineItems, input.discountCode || '', commerce);
+    if (lineItems.some((item) => item.currency !== currency)) {
+      return errorResponse(409, 'MIXED_CURRENCY_CART', 'All checkout items must use the same currency', requestId, {
+        currencies: Array.from(new Set(lineItems.map((item) => item.currency))),
+      });
+    }
     const orderNumber = buildOrderNumber();
     let slug = orderNumber.toLowerCase();
     let suffix = 2;
@@ -560,11 +720,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         customername: input.customer?.name || '',
         email: input.customer?.email || '',
         phone: input.customer?.phone || '',
-        total: subtotal,
-        subtotal,
-        taxamount: 0,
-        shippingamount: 0,
-        discountamount: 0,
+        total: quote.total,
+        subtotal: quote.subtotal,
+        taxamount: quote.taxAmount,
+        shippingamount: quote.shippingAmount,
+        discountamount: quote.discountAmount,
         currency,
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
@@ -604,11 +764,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: 'open',
           paymentStatus: 'pending',
           fulfillmentStatus: 'unfulfilled',
-          total: subtotal,
+          total: quote.total,
+          subtotal: quote.subtotal,
+          taxAmount: quote.taxAmount,
+          shippingAmount: quote.shippingAmount,
+          discountAmount: quote.discountAmount,
           currency,
           itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
           createdAt: order.createdAt,
         },
+        quote,
         lineItems,
       },
     }, {

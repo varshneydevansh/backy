@@ -2608,6 +2608,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               shippingAddress: { type: 'string' },
               billingAddress: { type: 'string' },
               notes: { type: 'string' },
+              discountCode: { type: 'string' },
               paymentProvider: { type: 'string' },
               paymentReference: { type: 'string' },
               checkoutSessionId: { type: 'string' },
@@ -2615,21 +2616,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           CommerceOrderContractEnvelope: envelopeSchema({
             type: 'object',
-            required: ['schemaVersion', 'accepts', 'creates', 'inventoryReservation', 'relatedEndpoints'],
+            required: ['schemaVersion', 'accepts', 'creates', 'inventoryReservation', 'pricing', 'relatedEndpoints'],
             properties: {
               schemaVersion: { type: 'string', const: 'backy.commerce-orders.v1' },
               accepts: { type: 'object', additionalProperties: true },
               creates: { type: 'object', additionalProperties: true },
               inventoryReservation: { type: 'object', additionalProperties: true },
+              pricing: { type: 'object', additionalProperties: true },
               relatedEndpoints: { type: 'object', additionalProperties: true },
             },
           }),
           CommerceOrderEnvelope: envelopeSchema({
             type: 'object',
-            required: ['schemaVersion', 'order', 'lineItems'],
+            required: ['schemaVersion', 'order', 'quote', 'lineItems'],
             properties: {
               schemaVersion: { type: 'string', const: 'backy.commerce-orders.v1' },
               order: { type: 'object', additionalProperties: true },
+              quote: { type: 'object', additionalProperties: true },
               lineItems: { type: 'array', items: { type: 'object', additionalProperties: true } },
             },
           }),

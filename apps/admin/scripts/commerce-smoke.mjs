@@ -165,6 +165,41 @@ const patchFrontendDesign = async (frontendDesign) => {
   return updated;
 };
 
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  const settings = payload.data?.settings;
+  assert(settings?.integrations, `Settings response did not include integrations: ${JSON.stringify(payload).slice(0, 500)}`);
+  return JSON.parse(JSON.stringify(settings));
+};
+
+const patchSettingsFromSnapshot = async (settings) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      deliveryMode: settings.deliveryMode,
+      auth: settings.auth,
+      storage: settings.storage,
+      integrations: settings.integrations,
+    }),
+  });
+  return payload.data?.settings;
+};
+
+const enableCommercePricingSettings = async (settings) => {
+  const next = JSON.parse(JSON.stringify(settings));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      mode: 'manual-orders',
+      taxEnabled: true,
+      shippingEnabled: true,
+      discountsEnabled: true,
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
 const smokeFrontendDesignContract = () => ({
   schemaVersion: 'backy.frontend-design.v1',
   status: 'synced',
@@ -926,12 +961,18 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
       paymentProvider: 'manual',
       paymentReference: `manual-${slug}`,
       checkoutSessionId: `cs_${slug}`,
+      discountCode: 'SMOKE10',
     }),
   });
 
   const order = orderPayload.data?.order;
+  const quote = orderPayload.data?.quote;
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
-  assert(order.total === 98, `Order total was unexpected: ${order.total}`);
+  assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.discountAmount === 9.8, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.shippingAmount === 8, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.taxAmount === 7.28, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
+  assert(order.total === 103.48, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
   assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
 
   const updatedProduct = await getCollectionRecordBySlug(productCollection.id, slug);
@@ -940,6 +981,11 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
   assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
   assert(orderRecord.values?.customername === 'Commerce Smoke Buyer', 'Order customer name was not persisted');
+  assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.discountamount === 9.8, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.shippingamount === 8, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.taxamount === 7.28, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.total === 103.48, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   return { productRecord, updatedProduct, order, orderRecord };
 };
@@ -1099,6 +1145,8 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const suffix = Date.now().toString(36);
+  const originalSettings = await getSettings();
+  await enableCommercePricingSettings(originalSettings);
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const originalProductCollection = snapshotCollection(await findCollection(PRODUCT_COLLECTION_SLUG));
@@ -1265,6 +1313,9 @@ const main = async () => {
     }
     await patchFrontendDesign(originalFrontendDesign).catch((error) => {
       console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+    });
+    await patchSettingsFromSnapshot(originalSettings).catch((error) => {
+      console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
     });
 
     await cleanupBrowser({ client, childProcess, userDataDir });
