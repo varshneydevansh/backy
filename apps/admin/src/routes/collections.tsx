@@ -163,7 +163,7 @@ const COLLECTION_CONTROL_AREAS = [
   },
   {
     title: 'Access and activity',
-    detail: 'Permission keys plus recent schema audit events for this site.',
+    detail: 'Permission keys plus recent schema and record audit events for this site.',
     href: '#collections-audit',
   },
 ] as const;
@@ -1639,13 +1639,25 @@ function CollectionsPage() {
     setIsAuditLoading(true);
     setAuditError(null);
     try {
-      const result = await listAdminAuditLogs({
-        siteId: activeSiteId,
-        entity: 'collection',
-        limit: 8,
-        offset: 0,
-      });
-      setCollectionAuditLogs(result.logs);
+      const [schemaResult, recordResult] = await Promise.all([
+        listAdminAuditLogs({
+          siteId: activeSiteId,
+          entity: 'collection',
+          limit: 8,
+          offset: 0,
+        }),
+        listAdminAuditLogs({
+          siteId: activeSiteId,
+          entity: 'collectionRecord',
+          limit: 8,
+          offset: 0,
+        }),
+      ]);
+      setCollectionAuditLogs(
+        [...schemaResult.logs, ...recordResult.logs]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 12),
+      );
     } catch (loadError) {
       setCollectionAuditLogs([]);
       setAuditError(loadError instanceof Error ? loadError.message : 'Unable to load collection activity');
@@ -1817,6 +1829,7 @@ function CollectionsPage() {
       if (activeCollection) {
         void loadRecords(activeCollection.id);
       }
+      void loadCollectionAuditLogs();
     } catch (saveError) {
       showApiError(saveError, 'Unable to save collection record');
     } finally {
@@ -1844,6 +1857,7 @@ function CollectionsPage() {
       setPendingRecordDelete(null);
       setNotice('Collection record deleted.');
       void loadRecords(activeCollection.id);
+      void loadCollectionAuditLogs();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
     } finally {
@@ -1871,6 +1885,7 @@ function CollectionsPage() {
       setSelectedRecordIds([]);
       setNotice(`${result.updated} records moved to ${status}${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
       void loadRecords(activeCollection.id);
+      void loadCollectionAuditLogs();
     } catch (bulkError) {
       showApiError(bulkError, 'Unable to update selected collection records');
     } finally {
@@ -1901,6 +1916,7 @@ function CollectionsPage() {
       setPendingBulkDelete(false);
       setNotice(`${result.deleted} records deleted${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
       void loadRecords(activeCollection.id);
+      void loadCollectionAuditLogs();
     } catch (bulkError) {
       showApiError(bulkError, 'Unable to delete selected collection records');
     } finally {
@@ -2180,7 +2196,7 @@ function CollectionsPage() {
               Collections access and activity
             </div>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Permission keys for collection operations plus request-id-backed schema create, update, and delete audit events.
+              Permission keys for collection operations plus request-id-backed schema and record create, update, bulk status, and delete audit events.
             </p>
           </div>
           <button
@@ -2232,7 +2248,7 @@ function CollectionsPage() {
                 </div>
               ) : collectionAuditLogs.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5 text-sm text-muted-foreground">
-                  No collection audit events recorded yet.
+                  No collection or record audit events recorded yet.
                 </div>
               ) : (
                 collectionAuditLogs.map((log) => (
@@ -3618,13 +3634,21 @@ function CollectionReadinessCheck({ label, detail, ready }: { label: string; det
 }
 
 const collectionAuditMetadataText = (log: AdminAuditLog, key: string): string => {
-  const value = log.metadata?.[key];
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  const sources = [log.metadata, log.after, log.before];
+  for (const source of sources) {
+    const value = source?.[key];
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  }
   return '';
 };
 
 const collectionAuditTitle = (log: AdminAuditLog): string => {
+  if (log.entity === 'collectionRecord') {
+    if (log.action === 'create') return 'Collection record created';
+    if (log.action === 'update') return log.metadata?.bulk ? 'Collection record bulk-updated' : 'Collection record updated';
+    if (log.action === 'delete') return log.metadata?.bulk ? 'Collection record bulk-deleted' : 'Collection record deleted';
+  }
   if (log.action === 'create') return 'Collection created';
   if (log.action === 'update') return 'Collection updated';
   if (log.action === 'delete') return 'Collection deleted';
@@ -3636,6 +3660,30 @@ const collectionAuditPermission = (action: string): string => (
 );
 
 const collectionAuditDescription = (log: AdminAuditLog): string => {
+  if (log.entity === 'collectionRecord') {
+    const collectionName = collectionAuditMetadataText(log, 'collectionName') || collectionAuditMetadataText(log, 'collectionSlug');
+    const collectionSlug = collectionAuditMetadataText(log, 'collectionSlug');
+    const slug = collectionAuditMetadataText(log, 'slug') || log.entityId;
+    const status = collectionAuditMetadataText(log, 'status');
+    const valueCount = collectionAuditMetadataText(log, 'valueCount');
+    const bulkAction = collectionAuditMetadataText(log, 'bulkAction');
+    const requestedCount = collectionAuditMetadataText(log, 'requestedCount');
+    const matchedCount = collectionAuditMetadataText(log, 'matchedCount');
+    const changedFields = Array.isArray(log.metadata?.changedFields)
+      ? log.metadata.changedFields.filter((field): field is string => typeof field === 'string').join(', ')
+      : '';
+
+    return [
+      collectionName,
+      collectionSlug && slug ? `/${collectionSlug}/${slug}` : slug,
+      status || null,
+      valueCount ? `${valueCount} values` : null,
+      changedFields ? `changed ${changedFields}` : null,
+      bulkAction ? `bulk ${bulkAction}` : null,
+      matchedCount && requestedCount ? `${matchedCount}/${requestedCount} matched` : null,
+    ].filter(Boolean).join(' · ');
+  }
+
   const name = collectionAuditMetadataText(log, 'name') || log.entityId;
   const slug = collectionAuditMetadataText(log, 'slug');
   const status = collectionAuditMetadataText(log, 'status');

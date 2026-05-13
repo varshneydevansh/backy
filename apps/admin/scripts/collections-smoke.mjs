@@ -418,6 +418,7 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
         document.body?.innerText?.includes('Collections command center') &&
         document.body?.innerText?.includes('Collections access and activity') &&
         document.body?.innerText?.includes('Collection created') &&
+        document.body?.innerText?.includes('Collection record created') &&
         document.body?.innerText?.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}) &&
         document.body?.innerText?.includes(${JSON.stringify(recordSlug)}),
       body: document.body?.innerText?.slice(0, 1200) || '',
@@ -453,7 +454,8 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         body.includes('Collections access and activity') &&
         body.includes('collections.view') &&
         body.includes('collections.edit') &&
-        body.includes('Collection created'),
+        body.includes('Collection created') &&
+        body.includes('Collection record created'),
       hasBuilder: body.includes('Schema builder') && body.includes('Public read') && body.includes('Visitor create'),
       hasRecords: body.includes('Records') && body.includes('Import CSV') && body.includes('Export CSV') && body.includes('New record'),
       hasCollection: body.includes(${JSON.stringify(collectionName)}) && body.includes(${JSON.stringify(`/${collectionSlug}`)}),
@@ -567,9 +569,11 @@ const publishRecordThroughUi = async (client, recordSlug) => {
         document.body?.innerText?.includes('1 records moved to published') ||
         false,
       hasPublishedBadge: document.body?.innerText?.includes('Published') || false,
+      hasRecordAudit: document.body?.innerText?.includes('Collection record bulk-updated') &&
+        document.body?.innerText?.includes('bulk updateStatus'),
       body: document.body?.innerText?.slice(0, 1000) || '',
     }))()`);
-    if (state.ready || state.hasPublishedBadge) {
+    if ((state.ready || state.hasPublishedBadge) && state.hasRecordAudit) {
       return state;
     }
     if (attempt === 79) {
