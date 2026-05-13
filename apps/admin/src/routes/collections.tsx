@@ -1396,6 +1396,7 @@ function CollectionsPage() {
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const collectionInteractionVersionRef = useRef(0);
   const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
@@ -2269,6 +2270,7 @@ function CollectionsPage() {
   }, [currentAdmin?.id]);
 
   const resetCollectionForm = () => {
+    collectionInteractionVersionRef.current += 1;
     setIsCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
@@ -2933,6 +2935,7 @@ function CollectionsPage() {
       }));
 
     try {
+      const saveInteractionVersion = collectionInteractionVersionRef.current;
       const collectionSlug = normalizeSlug(collectionForm.slug || collectionForm.name, 'collection');
       const currentMetadata = activeCollection?.metadata;
       const selectedFrontendTemplate = collectionForm.frontendDesignTemplateId
@@ -2971,8 +2974,10 @@ function CollectionsPage() {
           ? prev.map((collection) => (collection.id === saved.id ? saved : collection))
           : [saved, ...prev];
       });
-      selectCollection(saved);
-      void loadCollectionAuditLogs();
+      if (saveInteractionVersion === collectionInteractionVersionRef.current) {
+        selectCollection(saved);
+        void loadCollectionAuditLogs();
+      }
     } catch (saveError) {
       showApiError(saveError, 'Unable to save collection');
     } finally {
@@ -3302,6 +3307,31 @@ function CollectionsPage() {
       {notice && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
+        </div>
+      )}
+
+      {isCollectionDraftMode && !activeCollection && canEditCollections && (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground md:flex-row md:items-center md:justify-between"
+          data-testid="collections-draft-banner"
+        >
+          <div>
+            <div className="font-semibold">New collection draft is open</div>
+            <p className="mt-1 text-muted-foreground">
+              Add a schema name and fields, then save it to create a CMS collection for pages, forms, products, or custom frontend APIs.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+              window.setTimeout(() => document.getElementById('collections-schema-name')?.focus(), 150);
+            }}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/30 bg-background px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+          >
+            <Database className="h-4 w-4" />
+            Edit schema
+          </button>
         </div>
       )}
 

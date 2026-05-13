@@ -705,10 +705,10 @@ const assertAuthoringShortcutCopy = async (client) => {
   throw new Error('Authoring shortcut copy action did not surface copied preset feedback');
 };
 
-const assertNewCollectionButtonReset = async (client) => {
+const assertNewCollectionButtonReset = async (client, testId = 'collections-new-collection-button') => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
-      const button = document.querySelector('[data-testid="collections-new-collection-button"]');
+      const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
       if (!(button instanceof HTMLButtonElement)) {
         return { ok: false, reason: 'new-collection-button-missing' };
       }
@@ -728,19 +728,30 @@ const assertNewCollectionButtonReset = async (client) => {
       const body = document.body?.innerText || '';
       const nameInput = document.querySelector('#collections-schema-name');
       const form = document.querySelector('#collections-schema');
+      const params = new URLSearchParams(window.location.search);
       return {
         hasNotice: body.includes('New collection draft ready'),
+        hasDraftBanner: Boolean(document.querySelector('[data-testid="collections-draft-banner"]')) &&
+          body.includes('New collection draft is open') &&
+          body.includes('Edit schema'),
         hasDraftState: Boolean(document.querySelector('[data-testid="collections-new-draft-state"]')),
         nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
         activeElementId: document.activeElement?.id || '',
         formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
         viewportHeight: window.innerHeight,
+        collectionId: params.get('collectionId'),
+        recordId: params.get('recordId'),
+        search: params.get('search'),
       };
     })()`);
     if (
       state.hasNotice &&
+      state.hasDraftBanner &&
       state.hasDraftState &&
       state.nameValue === '' &&
+      state.collectionId === null &&
+      state.recordId === null &&
+      state.search === null &&
       (state.activeElementId === 'collections-schema-name' || (state.formTop !== null && state.formTop < state.viewportHeight))
     ) {
       return;
@@ -1328,7 +1339,9 @@ const main = async () => {
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     await assertAuthoringShortcutCopy(client);
     await configureVisitorMutationPolicyThroughUi(client, collectionId, `smoke-public-write-${suffix}`);
-    await assertNewCollectionButtonReset(client);
+    await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
+    await navigateToCollections(client, { collectionId, recordSlug });
+    await assertNewCollectionButtonReset(client, 'collections-library-new-collection-button');
     await navigateToCollections(client, { collectionId, recordSlug });
     await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
     await publishRecordThroughUi(client, recordSlug);
