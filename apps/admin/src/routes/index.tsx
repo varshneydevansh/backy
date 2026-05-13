@@ -214,6 +214,11 @@ const DASHBOARD_CONTROL_AREAS = [
     href: '#dashboard-readiness',
   },
   {
+    title: 'Launch onboarding',
+    detail: 'Resume the setup checklist for site, content, media, data, forms, commerce, users, and APIs.',
+    href: '#dashboard-onboarding',
+  },
+  {
     title: 'Creation workflows',
     detail: 'Start the core builder flows: site, page, post, files, collections, and API setup.',
     href: '#dashboard-workflows',
@@ -536,6 +541,54 @@ function AnalyticsBar({ label, value, total }: { label: string; value: number; t
         <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
       </div>
     </div>
+  );
+}
+
+function DashboardOnboardingStep({
+  index,
+  label,
+  detail,
+  ready,
+  to,
+  search,
+}: {
+  index: number;
+  label: string;
+  detail: string;
+  ready: boolean;
+  to: '/sites' | '/sites/new' | '/pages' | '/pages/new' | '/media' | '/collections' | '/forms' | '/products' | '/users' | '/settings';
+  search?: { siteId: string };
+}) {
+  const Icon = ready ? CheckCircle2 : ArrowRight;
+
+  return (
+    <Link
+      to={to}
+      search={search}
+      className={cn(
+        'flex min-w-0 items-start gap-3 rounded-lg border bg-background px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5',
+        ready ? 'border-success/25' : 'border-border',
+      )}
+    >
+      <span className={cn(
+        'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+        ready ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary',
+      )}>
+        {ready ? <Icon className="size-4" /> : index}
+      </span>
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+          {label}
+          <span className={cn(
+            'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+            ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+          )}>
+            {ready ? 'Done' : 'Next'}
+          </span>
+        </span>
+        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{detail}</span>
+      </span>
+    </Link>
   );
 }
 
@@ -1207,6 +1260,92 @@ function Index() {
     dashboard.posts,
     dashboard.readiness,
   ]);
+  const onboardingSteps = useMemo(() => ([
+    {
+      label: 'Create a workspace site',
+      detail: dashboard.sites.length > 0
+        ? `${dashboard.sites.length} site${dashboard.sites.length === 1 ? '' : 's'} available for Backy content.`
+        : 'Create the first website container before adding pages or frontend contracts.',
+      ready: dashboard.sites.length > 0,
+      to: dashboard.sites.length > 0 ? '/sites' as const : '/sites/new' as const,
+    },
+    {
+      label: 'Publish editable content',
+      detail: aggregateAnalytics.publishedContent > 0
+        ? `${aggregateAnalytics.publishedContent} published content objects are ready for hosted or headless delivery.`
+        : 'Create and publish at least one page, blog post, or collection-backed route.',
+      ready: aggregateAnalytics.publishedContent > 0,
+      to: dashboard.pages.length > 0 ? '/pages' as const : '/pages/new' as const,
+    },
+    {
+      label: 'Upload media assets',
+      detail: dashboard.media.length > 0
+        ? `${dashboard.media.length} media assets are available for pages, posts, products, and custom frontends.`
+        : 'Upload images, fonts, downloads, or files to the central media library.',
+      ready: dashboard.media.length > 0,
+      to: '/media' as const,
+    },
+    {
+      label: 'Model dynamic data',
+      detail: dashboard.collections.length > 0
+        ? `${dashboard.collections.length} collections are available for datasets and public APIs.`
+        : 'Create collections for structured CMS records, repeaters, listings, and dynamic routes.',
+      ready: dashboard.collections.length > 0,
+      to: '/collections' as const,
+    },
+    {
+      label: 'Capture leads and registrations',
+      detail: dashboard.forms.length > 0
+        ? `${dashboard.forms.length} forms and ${dashboard.contacts} contacts are connected.`
+        : 'Add contact, lead, registration, or custom submission forms.',
+      ready: dashboard.forms.length > 0,
+      to: '/forms' as const,
+    },
+    {
+      label: 'Prepare commerce',
+      detail: productsCollection && ordersCollection
+        ? `${dashboard.commerce.productCount} products and ${dashboard.commerce.orderCount} orders are represented in Backy commerce.`
+        : 'Sync product and private order schemas before selling from a storefront.',
+      ready: Boolean(productsCollection && ordersCollection),
+      to: productsCollection ? '/products' as const : '/collections' as const,
+    },
+    {
+      label: 'Invite admins',
+      detail: dashboard.users.length > 0
+        ? `${dashboard.users.length} admin user${dashboard.users.length === 1 ? '' : 's'} can access the workspace.`
+        : 'Invite at least one owner or admin before production use.',
+      ready: dashboard.users.length > 0,
+      to: '/users' as const,
+    },
+    {
+      label: 'Connect APIs and infrastructure',
+      detail: apiKeysConfigured && (database?.configured || supabase?.configured) && storage?.configured
+        ? 'API keys, persistence, and media storage are configured.'
+        : 'Configure API keys, persistence, media storage, Supabase, and deployment integrations.',
+      ready: Boolean(apiKeysConfigured && (database?.configured || supabase?.configured) && storage?.configured),
+      to: '/settings' as const,
+    },
+  ]), [
+    aggregateAnalytics.publishedContent,
+    apiKeysConfigured,
+    dashboard.collections.length,
+    dashboard.commerce.orderCount,
+    dashboard.commerce.productCount,
+    dashboard.contacts,
+    dashboard.forms.length,
+    dashboard.media.length,
+    dashboard.pages.length,
+    dashboard.sites.length,
+    dashboard.users.length,
+    database?.configured,
+    ordersCollection,
+    productsCollection,
+    storage?.configured,
+    supabase?.configured,
+  ]);
+  const onboardingReadyCount = onboardingSteps.filter((step) => step.ready).length;
+  const onboardingProgress = Math.round((onboardingReadyCount / onboardingSteps.length) * 100);
+  const nextOnboardingStep = onboardingSteps.find((step) => !step.ready) || onboardingSteps[onboardingSteps.length - 1];
 
   const stats = [
     {
@@ -1471,6 +1610,53 @@ function Index() {
                 </Link>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section
+          id="dashboard-onboarding"
+          className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+          data-testid="dashboard-onboarding-state"
+        >
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">Launch onboarding</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  onboardingProgress >= 80 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}>
+                  {onboardingProgress}% complete
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Tracks the concrete setup state needed for a multi-site CMS, Canva-style page builder, media library, custom frontend APIs, forms, commerce, and team access.
+              </p>
+            </div>
+            <Link
+              to={nextOnboardingStep.to}
+              search={getDashboardRouteSearch(nextOnboardingStep.to)}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+            >
+              {nextOnboardingStep.ready ? 'Review setup' : `Continue: ${nextOnboardingStep.label}`}
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn('h-full rounded-full', onboardingProgress >= 80 ? 'bg-success' : 'bg-warning')}
+              style={{ width: `${onboardingProgress}%` }}
+            />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {onboardingSteps.map((step, index) => (
+              <DashboardOnboardingStep
+                key={step.label}
+                index={index + 1}
+                {...step}
+                search={getDashboardRouteSearch(step.to)}
+              />
+            ))}
           </div>
         </section>
 

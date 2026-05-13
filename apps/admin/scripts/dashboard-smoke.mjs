@@ -377,6 +377,10 @@ const assertDashboardLayout = async (client, siteName) => {
     hasSiteSelector: Boolean(document.querySelector('#dashboard-active-site')),
     hasSite: Array.from(document.querySelectorAll('#dashboard-active-site option')).some((option) => option.textContent?.includes(${JSON.stringify(siteName)})),
     hasStats: Boolean(document.querySelector('#dashboard-stats')),
+    hasOnboarding: Boolean(document.querySelector('[data-testid="dashboard-onboarding-state"]')) &&
+      document.body?.innerText?.includes('Launch onboarding') &&
+      document.body?.innerText?.includes('Create a workspace site') &&
+      document.body?.innerText?.includes('Connect APIs and infrastructure'),
     hasOperationsSignals: Boolean(document.querySelector('[data-testid="dashboard-operations-signal-board"]')) &&
       document.body?.innerText?.includes('Operations signal board') &&
       document.body?.innerText?.includes('Commerce catalog') &&
@@ -404,6 +408,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSiteSelector &&
       layout.hasSite &&
       layout.hasStats &&
+      layout.hasOnboarding &&
       layout.hasOperationsSignals &&
       layout.hasAggregateAnalytics &&
       layout.hasReadiness &&
