@@ -198,6 +198,27 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestRaw = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  let payload = null;
+
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
+
+  return { response, payload, text };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -2988,6 +3009,63 @@ const readPersistedElement = async (pageId, elementId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const elements = payload.data?.page?.content?.elements || [];
   return findCanvasElement(elements, elementId);
+};
+
+const flattenPayloadElements = (elements = []) => (
+  elements.flatMap((element) => [
+    element,
+    ...flattenPayloadElements(Array.isArray(element.children) ? element.children : []),
+  ])
+);
+
+const assertSavedPagePublishesAndRenders = async (pageId, expectedState) => {
+  const savedPagePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const savedPage = savedPagePayload.data?.page;
+  assert(savedPage?.slug, `Saved page was missing slug before publish: ${JSON.stringify(savedPagePayload).slice(0, 500)}`);
+
+  const publicPath = `/${savedPage.slug}`;
+  const publicRenderEndpoint = `/api/sites/${SITE_ID}/render?path=${encodeURIComponent(publicPath)}`;
+  const hiddenBeforePublish = await requestRaw(publicRenderEndpoint);
+  assert(
+    hiddenBeforePublish.response.status === 404,
+    `Draft editor page rendered publicly before publish: ${JSON.stringify(hiddenBeforePublish.payload || hiddenBeforePublish.text).slice(0, 500)}`,
+  );
+
+  const publishPayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}/publish`, {
+    method: 'POST',
+    headers: {
+      'x-backy-actor': 'editor-save-smoke',
+    },
+  });
+  const publishedPage = publishPayload.data?.page;
+  assert(publishedPage?.status === 'published', `Publish did not return published page: ${JSON.stringify(publishPayload).slice(0, 500)}`);
+  assert(publishedPage?.publishedAt, `Publish did not stamp publishedAt: ${JSON.stringify(publishedPage).slice(0, 500)}`);
+
+  const publicPagePayload = await requestApi(`/api/sites/${SITE_ID}/pages?slug=${encodeURIComponent(savedPage.slug)}`);
+  assert(publicPagePayload.data?.page?.id === pageId, `Public page endpoint returned wrong page: ${JSON.stringify(publicPagePayload).slice(0, 500)}`);
+  assert(publicPagePayload.data?.page?.status === 'published', `Public page endpoint did not expose published status: ${JSON.stringify(publicPagePayload).slice(0, 500)}`);
+
+  const renderPayload = await requestApi(publicRenderEndpoint);
+  const renderedElements = flattenPayloadElements(renderPayload.data?.content?.elements || []);
+  const expectedElementIds = Object.keys(expectedState);
+  const missingElementIds = expectedElementIds.filter((elementId) => !renderedElements.some((element) => element.id === elementId));
+
+  assert(renderPayload.data?.route?.type === 'page', `Public render did not resolve a page route: ${JSON.stringify(renderPayload).slice(0, 500)}`);
+  assert(renderPayload.data?.route?.status === 'published', `Public render did not expose published route status: ${JSON.stringify(renderPayload.data?.route).slice(0, 500)}`);
+  assert(renderPayload.data?.route?.path === publicPath, `Public render path mismatch: ${JSON.stringify(renderPayload.data?.route).slice(0, 500)}`);
+  assert(renderPayload.data?.content?.id === pageId, `Public render returned wrong content id: ${JSON.stringify(renderPayload.data?.content).slice(0, 500)}`);
+  assert(missingElementIds.length === 0, `Public render missed saved editor elements: ${JSON.stringify({ missingElementIds, renderedElementIds: renderedElements.map((element) => element.id) }).slice(0, 1000)}`);
+
+  return {
+    publicPath,
+    hiddenBeforePublishStatus: hiddenBeforePublish.response.status,
+    publishStatus: publishedPage.status,
+    publishedAt: publishedPage.publishedAt,
+    publicPageStatus: publicPagePayload.data?.page?.status,
+    renderRoute: renderPayload.data?.route,
+    renderedElementCount: renderedElements.length,
+    renderedElementIds: renderedElements.map((element) => element.id),
+  };
 };
 
 const assertResponsiveBreakpointEditing = async (client, pageId, elementId, options = {}) => {
@@ -6208,6 +6286,8 @@ const testSaveEditingControls = async (client, pageId, editorPath) => {
     }
   }
 
+  const publishRender = await assertSavedPagePublishesAndRenders(pageId, afterShortcutNudge);
+
   return {
     elementId,
     initialStatus,
@@ -6218,6 +6298,7 @@ const testSaveEditingControls = async (client, pageId, editorPath) => {
     shortcutSavedStatus,
     persistedAfterShortcut,
     reloadedState,
+    publishRender,
   };
 };
 
