@@ -5438,6 +5438,14 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     (node.type === 'td' || node.type === 'th') &&
     collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Column 2'))
   ));
+  const multiCellValueOneCell = elements.find((node) => (
+    (node.type === 'td' || node.type === 'th') &&
+    collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Value 1'))
+  ));
+  const multiCellValueTwoCell = elements.find((node) => (
+    (node.type === 'td' || node.type === 'th') &&
+    collectSlateLeaves(node).some((leaf) => (leaf.text || '').includes('Value 2'))
+  ));
   assert(alignedColumnOneBlock?.align === 'center', `Persisted table cell text alignment missing: ${JSON.stringify({ alignedColumnOneBlock, content })}`);
   assert(filledColumnOneCell?.backgroundColor === '#c9daf8', `Persisted table cell fill missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
   assert(unfilledColumnTwoCell?.backgroundColor !== '#c9daf8', `Persisted table cell fill leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
@@ -5445,6 +5453,9 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   assert(unfilledColumnTwoCell?.borderColor !== '#f4cccc', `Persisted table cell border color leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
   assert(filledColumnOneCell?.verticalAlign === 'bottom', `Persisted table cell vertical alignment missing: ${JSON.stringify({ filledColumnOneCell, content })}`);
   assert(unfilledColumnTwoCell?.verticalAlign !== 'bottom', `Persisted table cell vertical alignment leaked into adjacent cell: ${JSON.stringify({ unfilledColumnTwoCell, content })}`);
+  assert(multiCellValueOneCell?.backgroundColor === '#d9ead3' && multiCellValueTwoCell?.backgroundColor === '#d9ead3', `Persisted multi-cell table fill missing: ${JSON.stringify({ multiCellValueOneCell, multiCellValueTwoCell, content })}`);
+  assert(multiCellValueOneCell?.borderColor === '#b6d7a8' && multiCellValueTwoCell?.borderColor === '#b6d7a8', `Persisted multi-cell table border color missing: ${JSON.stringify({ multiCellValueOneCell, multiCellValueTwoCell, content })}`);
+  assert(multiCellValueOneCell?.verticalAlign === 'middle' && multiCellValueTwoCell?.verticalAlign === 'middle', `Persisted multi-cell table vertical alignment missing: ${JSON.stringify({ multiCellValueOneCell, multiCellValueTwoCell, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
   assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
@@ -5460,6 +5471,8 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
     headerCellCount,
     alignedColumnOneBlock,
     filledColumnOneCell,
+    multiCellValueOneCell,
+    multiCellValueTwoCell,
     listItems,
     text,
   };

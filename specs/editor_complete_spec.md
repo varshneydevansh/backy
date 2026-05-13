@@ -137,7 +137,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Selected table cells can receive an independent border color from the rich-text toolbar, render on the cell border, and persist without leaking to adjacent cells.
     - Table cell fill and border color controls can clear previously applied selected-cell colors and persist the removed metadata.
     - Selected table cells can receive independent vertical alignment from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
-    - Selected multi-cell table ranges can receive fill color, border color, and vertical alignment metadata across the selected rectangle without leaking into unselected cells.
+    - Selected multi-cell table ranges can receive persisted fill color, border color, and vertical alignment metadata across the selected rectangle without leaking into unselected cells.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
     - Added applied-change feedback in both standalone and embedded inspector layouts.
 
@@ -261,7 +261,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text alignment controls render and persist paragraph alignment inside selected table cells.
   - Right-panel rich-text controls can set and clear selected table cell fill and border colors without leaking metadata to adjacent cells.
   - Right-panel rich-text controls can set selected table cell vertical alignment without leaking metadata to adjacent cells.
-  - Right-panel rich-text controls can apply fill, border, and vertical alignment to a selected multi-cell table range without leaking metadata into unselected cells.
+  - Right-panel rich-text controls can apply and persist fill, border, and vertical alignment to a selected multi-cell table range without leaking metadata into unselected cells.
   - Right-panel rich-text controls can set table captions that render outside the editable cell flow and persist on the Slate table node.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
