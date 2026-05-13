@@ -74,6 +74,36 @@ async function request(pathOrUrl, init) {
   return result;
 }
 
+async function requestWithSession(pathOrUrl, sessionToken, init) {
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
+  const headers = new Headers(init?.headers || {});
+  const pathname = pathOrUrl.startsWith('http') ? new URL(pathOrUrl).pathname : pathOrUrl;
+  headers.set('authorization', `Bearer ${sessionToken}`);
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  });
+  const text = await response.text();
+  let json = null;
+
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // Keep raw text for diagnostics below.
+  }
+
+  const result = {
+    response,
+    text,
+    json,
+    url,
+  };
+  if (pathname.startsWith('/api/admin/') && init?.method !== 'OPTIONS') {
+    assertAdminContract(result);
+  }
+  return result;
+}
+
 function withAdminAuth(headers = {}) {
   const nextHeaders = new Headers(headers);
   if (!nextHeaders.has('authorization') && !nextHeaders.has('x-backy-admin-key')) {
@@ -138,6 +168,23 @@ async function loginAdminApi() {
   if (settingsResponse.ok && typeof settingsAdminKey === 'string' && settingsAdminKey.trim()) {
     adminRequestApiKey = settingsAdminKey.trim();
   }
+}
+
+async function loginAdminCredentials(email, password) {
+  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const json = await response.json().catch(() => ({}));
+
+  if (!response.ok || json.success === false || !json.data?.session?.token) {
+    throw new Error(`Unable to create admin session for ${email}: ${JSON.stringify(json).slice(0, 500)}`);
+  }
+
+  return json.data.session.token;
 }
 
 async function cleanup() {
@@ -4449,6 +4496,62 @@ try {
     assert(adminCsvExport.response.headers.get('content-disposition')?.includes(`${collectionSlug}-records.csv`), `${adminCsvExport.url} missing CSV filename`);
     assert(adminCsvExport.text.startsWith('id,slug,status,createdAt,updatedAt,publishedAt,scheduledAt,title,summary,rank,category,labels'), `${adminCsvExport.url} missing CSV header`);
     assert(adminCsvExport.text.includes(collectionRecordSlug) && adminCsvExport.text.includes('Collection Record'), `${adminCsvExport.url} missing exported collection record`);
+
+    const editorSessionToken = await loginAdminCredentials('jane@backy.io', process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123');
+    const editorListCollections = await requestWithSession(`/api/admin/sites/${createdSiteId}/collections`, editorSessionToken);
+    assert(editorListCollections.response.status === 200, `${editorListCollections.url} expected editor collection view access`);
+    assert(editorListCollections.json?.data?.collections?.some((collection) => collection.id === createdCollectionId), `${editorListCollections.url} missing editor-visible collection`);
+
+    const editorCsvExport = await requestWithSession(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records?format=csv`, editorSessionToken);
+    assert(editorCsvExport.response.status === 403, `${editorCsvExport.url} expected editor export denial, got ${editorCsvExport.response.status}`);
+    assert(editorCsvExport.json?.error?.code === 'FORBIDDEN_PERMISSION', `${editorCsvExport.url} expected FORBIDDEN_PERMISSION for collection export`);
+
+    const editorDeleteRecord = await requestWithSession(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, editorSessionToken, { method: 'DELETE' });
+    assert(editorDeleteRecord.response.status === 403, `${editorDeleteRecord.url} expected editor delete denial, got ${editorDeleteRecord.response.status}`);
+    assert(editorDeleteRecord.json?.error?.code === 'FORBIDDEN_PERMISSION', `${editorDeleteRecord.url} expected FORBIDDEN_PERMISSION for collection record delete`);
+
+    const denyEditorCollectionEdit = await request('/api/admin/users/user-editor/permissions', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        overrides: {
+          'collections.edit': 'deny',
+        },
+      }),
+    });
+    assert(denyEditorCollectionEdit.response.status === 200, `${denyEditorCollectionEdit.url} expected editor edit-deny override`);
+    try {
+      const blockedEditorRecordCreate = await requestWithSession(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, editorSessionToken, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          slug: `${collectionRecordSlug}-editor-denied`,
+          status: 'draft',
+          values: {
+            title: 'Editor Denied Record',
+          },
+        }),
+      });
+      assert(blockedEditorRecordCreate.response.status === 403, `${blockedEditorRecordCreate.url} expected denied editor create, got ${blockedEditorRecordCreate.response.status}`);
+      assert(blockedEditorRecordCreate.json?.error?.code === 'FORBIDDEN_PERMISSION', `${blockedEditorRecordCreate.url} expected FORBIDDEN_PERMISSION for denied collection edit`);
+    } finally {
+      const restoreEditorCollectionEdit = await request('/api/admin/users/user-editor/permissions', {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          overrides: {
+            'collections.edit': null,
+          },
+        }),
+      });
+      assert(restoreEditorCollectionEdit.response.status === 200, `${restoreEditorCollectionEdit.url} expected editor edit override restore`);
+    }
 
     const importedCollectionRecordSlug = `${collectionRecordSlug}-imported`;
     const importCsv = [
