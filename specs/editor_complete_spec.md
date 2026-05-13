@@ -488,7 +488,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence plus thresholded editor visual geometry are covered for heading and image elements by responsive smoke; still needs broader pixel-level comparison across templates/components.
+  - Mobile and tablet persistence plus thresholded editor visual geometry are covered for heading, image, and box/nested-container elements by responsive smoke; still needs broader pixel-level comparison across templates/components.
 - ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates
