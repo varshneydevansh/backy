@@ -1746,6 +1746,7 @@ function OrdersRoute() {
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
+                      onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
                       onDelete={() => {
                         if (isOrdersBusy) return;
@@ -2306,6 +2307,7 @@ function OrderCard({
   onEdit,
   onPaid,
   onFulfilled,
+  onRefunded,
   onCancelled,
   onDelete,
 }: {
@@ -2315,6 +2317,7 @@ function OrderCard({
   onEdit: () => void;
   onPaid: () => void;
   onFulfilled: () => void;
+  onRefunded: () => void;
   onCancelled: () => void;
   onDelete: () => void;
 }) {
@@ -2430,6 +2433,7 @@ function OrderCard({
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
+        <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Refund/Return</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Cancel</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
@@ -2585,7 +2589,27 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.fulfilledAt !== undefined ? { fulfilledat: updates.fulfilledAt || null } : {}),
   ...(updates.refundAmount !== undefined ? { refundamount: updates.refundAmount ? Number(updates.refundAmount) : null } : {}),
   ...(updates.refundReason !== undefined ? { refundreason: updates.refundReason } : {}),
+  ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
 });
+
+const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
+  const total = toNumber(readOrderValue(order.values, 'total', 0));
+  const currency = normalizeCurrency(String(readOrderValue(order.values, 'currency', 'USD')));
+  const currentRefundAmount = toNumber(readOrderValue(order.values, 'refundamount', 0));
+  const refundAmount = currentRefundAmount > 0 ? currentRefundAmount : total;
+  const currentReason = String(readOrderValue(order.values, 'refundreason', '') || '').trim();
+  const currentNotes = String(readOrderValue(order.values, 'notes', '') || '').trim();
+  const workflowNote = `Refund/return workflow processed ${new Date().toISOString()} for ${formatMoney(refundAmount, currency)}.`;
+
+  return {
+    orderStatus: 'refunded',
+    paymentStatus: 'refunded',
+    fulfillmentStatus: 'cancelled',
+    refundAmount: String(refundAmount),
+    refundReason: currentReason || 'Customer return/refund processed from order workflow.',
+    notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
+  };
+};
 
 const orderToForm = (order: CollectionRecord): OrderFormState => ({
   orderNumber: String(readOrderValue(order.values, 'ordernumber', '')),

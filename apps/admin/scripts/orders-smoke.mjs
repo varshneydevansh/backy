@@ -14,6 +14,7 @@ const SCREENSHOT_PATH = process.env.BACKY_ORDERS_SCREENSHOT || path.join(os.tmpd
 
 const ORDERS_COLLECTION_SLUG = 'orders';
 const ORDER_REQUIRED_FIELD_COUNT = 29;
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -47,6 +48,9 @@ const requestApi = async (endpoint, options = {}) => {
   if (options.body && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -59,6 +63,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const listCollections = async () => {
@@ -210,8 +235,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -815,6 +851,7 @@ const main = async () => {
   let collectionId;
   let orderRecordId;
   let importedOrderRecordId;
+  await loginAdminApi();
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
   const suffix = Date.now().toString(36);
 
@@ -831,7 +868,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     const readyState = await ensureOrdersReady(client);
     const ordersCollection = await findCollection(ORDERS_COLLECTION_SLUG);
@@ -869,6 +906,21 @@ const main = async () => {
       slug,
       (values) => values.orderstatus === 'fulfilled' && values.fulfillmentstatus === 'fulfilled' && Boolean(values.fulfilledat),
       'Fulfill did not persist fulfillment workflow fields',
+    );
+
+    await clickOrderCardButton(client, orderNumber, 'Refund/Return');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'refunded' &&
+        values.paymentstatus === 'refunded' &&
+        values.fulfillmentstatus === 'cancelled' &&
+        Number(values.refundamount) === 85 &&
+        values.refundreason === 'Customer return/refund processed from order workflow.' &&
+        /Refund\/return workflow processed/.test(String(values.notes || ''))
+      ),
+      'Refund/Return did not persist refund workflow fields',
     );
 
     await editOrderAfterWorkflow(client, orderNumber);
