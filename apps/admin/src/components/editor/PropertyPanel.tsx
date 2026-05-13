@@ -4435,6 +4435,64 @@ const collectionBindingPresetOptions = (
   ));
 };
 
+interface SavedCollectionBindingPreset {
+  id: string;
+  name: string;
+  collectionId: string;
+  fieldKey: string;
+  targetPath: string;
+  search: string;
+  filterField: string;
+  filterValue: string;
+  sortBy: string;
+  sortDirection: 'asc' | 'desc';
+  limit: string;
+  offset: string;
+  updatedAt: string;
+}
+
+const COLLECTION_BINDING_PRESET_STORAGE_KEY = 'backy.editor.collectionBindingPresets.v1';
+
+const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollectionBindingPreset[] => (
+  Array.isArray(value)
+    ? value
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)))
+        .map((item, index) => ({
+          id: typeof item.id === 'string' && item.id.trim() ? item.id : `preset_${index}`,
+          name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : `Preset ${index + 1}`,
+          collectionId: typeof item.collectionId === 'string' ? item.collectionId : '',
+          fieldKey: typeof item.fieldKey === 'string' ? item.fieldKey : '',
+          targetPath: typeof item.targetPath === 'string' ? item.targetPath : 'props.content',
+          search: typeof item.search === 'string' ? item.search : '',
+          filterField: typeof item.filterField === 'string' ? item.filterField : '',
+          filterValue: typeof item.filterValue === 'string' ? item.filterValue : '',
+          sortBy: typeof item.sortBy === 'string' ? item.sortBy : '',
+          sortDirection: item.sortDirection === 'desc' ? 'desc' : 'asc',
+          limit: typeof item.limit === 'string' ? item.limit : '',
+          offset: typeof item.offset === 'string' ? item.offset : '',
+          updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
+        }))
+        .filter((item) => item.collectionId && item.fieldKey)
+    : []
+);
+
+const loadSavedCollectionBindingPresets = (): SavedCollectionBindingPreset[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    return normalizeSavedCollectionBindingPresets(
+      JSON.parse(window.localStorage.getItem(COLLECTION_BINDING_PRESET_STORAGE_KEY) || '[]'),
+    );
+  } catch {
+    return [];
+  }
+};
+
+const persistSavedCollectionBindingPresets = (presets: SavedCollectionBindingPreset[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(COLLECTION_BINDING_PRESET_STORAGE_KEY, JSON.stringify(presets));
+};
+
 function CollectionFilterValueControl({
   testId,
   field,
@@ -4944,6 +5002,9 @@ function DataBindingProperties({
   const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
+  const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>(() => loadSavedCollectionBindingPresets());
+  const [savedPresetName, setSavedPresetName] = useState('');
+  const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
 
   useEffect(() => {
     if (!siteId || !selectedCollectionId) {
@@ -4993,6 +5054,24 @@ function DataBindingProperties({
   const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
   const selectedRecordPreviewMedia = selectedRecordPreviewImage(selectedRecordPreview, selectedCollection, siteId);
   const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
+  const savedPresetsForCollection = savedBindingPresets.filter((preset) => (
+    preset.collectionId === selectedCollectionId
+    && fieldExists(selectedCollection, preset.fieldKey)
+    && targetPathOptions.some((option) => option.value === preset.targetPath)
+  ));
+  const selectedSavedPreset = savedPresetsForCollection.find((preset) => preset.id === selectedSavedPresetId)
+    || savedPresetsForCollection[0]
+    || null;
+
+  useEffect(() => {
+    if (!selectedSavedPresetId && savedPresetsForCollection[0]) {
+      setSelectedSavedPresetId(savedPresetsForCollection[0].id);
+      return;
+    }
+    if (selectedSavedPresetId && !savedPresetsForCollection.some((preset) => preset.id === selectedSavedPresetId)) {
+      setSelectedSavedPresetId(savedPresetsForCollection[0]?.id || '');
+    }
+  }, [savedPresetsForCollection, selectedSavedPresetId]);
 
   const updateBinding = (updates: {
     collectionId?: string;
@@ -5082,6 +5161,62 @@ function DataBindingProperties({
     });
   };
 
+  const saveCurrentBindingPreset = () => {
+    if (!selectedCollection || !selectedFieldKey) return;
+    const name = savedPresetName.trim() || `${selectedCollection.name} ${selectedField?.label || selectedFieldKey}`;
+    const now = new Date().toISOString();
+    const existing = savedBindingPresets.find((preset) => (
+      preset.collectionId === selectedCollection.id
+      && preset.name.toLowerCase() === name.toLowerCase()
+    ));
+    const preset: SavedCollectionBindingPreset = {
+      id: existing?.id || `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      collectionId: selectedCollection.id,
+      fieldKey: selectedFieldKey,
+      targetPath: selectedTargetPath,
+      search: selectedSearch,
+      filterField: selectedFilterField,
+      filterValue: selectedFilterValue,
+      sortBy: selectedSortBy,
+      sortDirection: selectedSortDirection,
+      limit: selectedLimit,
+      offset: selectedOffset,
+      updatedAt: now,
+    };
+    const nextPresets = [
+      preset,
+      ...savedBindingPresets.filter((item) => item.id !== preset.id),
+    ].slice(0, 24);
+    setSavedBindingPresets(nextPresets);
+    persistSavedCollectionBindingPresets(nextPresets);
+    setSavedPresetName('');
+    setSelectedSavedPresetId(preset.id);
+  };
+
+  const applySavedBindingPreset = () => {
+    if (!selectedSavedPreset) return;
+    updateBinding({
+      fieldKey: selectedSavedPreset.fieldKey,
+      targetPath: selectedSavedPreset.targetPath,
+      search: selectedSavedPreset.search,
+      filterField: selectedSavedPreset.filterField,
+      filterValue: selectedSavedPreset.filterValue,
+      sortBy: selectedSavedPreset.sortBy,
+      sortDirection: selectedSavedPreset.sortDirection,
+      limit: selectedSavedPreset.limit,
+      offset: selectedSavedPreset.offset,
+    });
+  };
+
+  const deleteSavedBindingPreset = () => {
+    if (!selectedSavedPreset) return;
+    const nextPresets = savedBindingPresets.filter((preset) => preset.id !== selectedSavedPreset.id);
+    setSavedBindingPresets(nextPresets);
+    persistSavedCollectionBindingPresets(nextPresets);
+    setSelectedSavedPresetId(nextPresets.find((preset) => preset.collectionId === selectedCollectionId)?.id || '');
+  };
+
   if (collectionsError) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -5156,6 +5291,78 @@ function DataBindingProperties({
               </div>
             </div>
           )}
+
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-saved-binding-presets">
+            <div className="mb-2 text-xs font-medium text-foreground">Saved presets</div>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={savedPresetName}
+                  onChange={(event) => setSavedPresetName(event.target.value)}
+                  data-testid="editor-data-saved-preset-name"
+                  className={cn(
+                    'min-w-0 flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="Preset name"
+                />
+                <button
+                  type="button"
+                  onClick={saveCurrentBindingPreset}
+                  disabled={!selectedFieldKey}
+                  data-testid="editor-data-save-preset"
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </div>
+
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+                <select
+                  value={selectedSavedPreset?.id || ''}
+                  onChange={(event) => setSelectedSavedPresetId(event.target.value)}
+                  data-testid="editor-data-saved-preset-select"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="">No saved presets</option>
+                  {savedPresetsForCollection.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={applySavedBindingPreset}
+                  disabled={!selectedSavedPreset}
+                  data-testid="editor-data-apply-saved-preset"
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteSavedBindingPreset}
+                  disabled={!selectedSavedPreset}
+                  data-testid="editor-data-delete-saved-preset"
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+              {selectedSavedPreset && (
+                <div className="text-xs text-muted-foreground" data-testid="editor-data-saved-preset-summary">
+                  {selectedSavedPreset.fieldKey} to {selectedSavedPreset.targetPath}
+                  {selectedSavedPreset.sortBy ? ` • sort ${selectedSavedPreset.sortBy} ${selectedSavedPreset.sortDirection}` : ''}
+                  {selectedSavedPreset.limit ? ` • limit ${selectedSavedPreset.limit}` : ''}
+                </div>
+              )}
+            </div>
+          </div>
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">

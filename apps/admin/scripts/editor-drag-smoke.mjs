@@ -8414,6 +8414,34 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-data-query-sort-direction', 'desc');
   await setFormControlByTestId(client, 'editor-data-query-limit', '1');
   await setFormControlByTestId(client, 'editor-data-query-offset', '0');
+  await setFormControlByTestId(client, 'editor-data-saved-preset-name', 'Featured title preset');
+  await clickControlByTestId(client, 'editor-data-save-preset');
+  let savedPresetState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    savedPresetState = await evaluate(client, `(() => {
+      const select = document.querySelector('[data-testid="editor-data-saved-preset-select"]');
+      return {
+        selected: select instanceof HTMLSelectElement ? select.value : '',
+        options: select instanceof HTMLSelectElement
+          ? Array.from(select.options).map((option) => option.textContent || '')
+          : [],
+        summary: document.querySelector('[data-testid="editor-data-saved-preset-summary"]')?.textContent || '',
+      };
+    })()`);
+    if (savedPresetState.options.some((label) => /Featured title preset/i.test(label))) {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(
+    savedPresetState?.options?.some((label) => /Featured title preset/i.test(label)) &&
+      /title to props\.content/i.test(savedPresetState?.summary || '') &&
+      /sort rank desc/i.test(savedPresetState?.summary || '') &&
+      /limit 1/i.test(savedPresetState?.summary || ''),
+    `Saved collection binding preset missing: ${JSON.stringify(savedPresetState)}`,
+  );
+  await clickControlByTestId(client, 'editor-data-preset-summary');
+  await clickControlByTestId(client, 'editor-data-apply-saved-preset');
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
