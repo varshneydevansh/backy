@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
 import { recordAdminAudit } from '@/lib/adminAudit';
@@ -53,13 +54,35 @@ const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonV
   value as Record<string, BackyJsonValue>
 );
 
-const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+const parseJsonBody = (rawBody: string): Record<string, unknown> => {
   try {
-    const body = await request.json();
+    const body = JSON.parse(rawBody);
     return isRecord(body) ? body : {};
   } catch {
     return {};
   }
+};
+
+const signatureHeaderValue = (request: NextRequest): string => (
+  textValue(request.headers.get('x-backy-webhook-signature') || request.headers.get('x-commerce-webhook-signature'))
+);
+
+const signatureDigest = (rawBody: string, secret: string): string => (
+  createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
+);
+
+const signatureCandidate = (header: string): string => {
+  const signatures = header.split(',').map((part) => part.trim()).filter(Boolean);
+  const prefixed = signatures.find((part) => part.toLowerCase().startsWith('sha256='));
+  return (prefixed ? prefixed.slice('sha256='.length) : signatures[0] || '').trim().toLowerCase();
+};
+
+const verifyWebhookSignature = (rawBody: string, secret: string, header: string): boolean => {
+  if (!secret) return true;
+  const actual = signatureCandidate(header);
+  if (!/^[a-f0-9]{64}$/.test(actual)) return false;
+  const expected = signatureDigest(rawBody, secret);
+  return timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
 };
 
 const eventObject = (payload: Record<string, unknown>): Record<string, unknown> => {
@@ -152,9 +175,20 @@ const appendSettlementNote = (notes: unknown, type: string, eventIdValue: string
   return existing ? `${existing}\n${entry}` : entry;
 };
 
+const hasProcessedEvent = (notes: unknown, eventIdValue: string): boolean => (
+  Boolean(eventIdValue) && textValue(notes).includes(`(${eventIdValue})`)
+);
+
 const eventAllowed = (allowlist: string[], type: string): boolean => (
   allowlist.length === 0 || allowlist.includes(type)
 );
+
+const commerceWebhookSecret = (settings: unknown): string => {
+  if (!isRecord(settings)) return '';
+  const integrations = isRecord(settings.integrations) ? settings.integrations : {};
+  const commerce = isRecord(integrations.commerce) ? integrations.commerce : {};
+  return textValue(commerce.providerWebhookSecretId);
+};
 
 const findRepositoryOrder = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -212,7 +246,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const payload = await parseJsonBody(request);
+    const rawBody = await request.text();
+    const payload = parseJsonBody(rawBody);
     const type = eventType(payload);
     const object = eventObject(payload);
     const providerEventId = eventId(payload);
@@ -245,6 +280,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!commerce.webhooks.eventsEnabled) {
         return errorResponse(409, 'COMMERCE_WEBHOOKS_DISABLED', 'Commerce webhook events are disabled in Settings.', requestId);
       }
+      const webhookSecret = commerceWebhookSecret(settings);
+      if (webhookSecret && !verifyWebhookSignature(rawBody, webhookSecret, signatureHeaderValue(request))) {
+        return errorResponse(401, 'COMMERCE_WEBHOOK_SIGNATURE_INVALID', 'Commerce webhook signature is missing or invalid.', requestId);
+      }
       if (!eventAllowed(commerce.webhooks.eventAllowlist, type)) {
         return errorResponse(409, 'COMMERCE_WEBHOOK_EVENT_NOT_ALLOWED', 'Commerce webhook event is not in the configured allowlist.', requestId, {
           type,
@@ -256,6 +295,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const order = await findRepositoryOrder(repositories, site.id, ordersCollection.id, { sessionId, orderNumber, orderSlug, paymentReference });
       if (!order) {
         return errorResponse(404, 'COMMERCE_WEBHOOK_ORDER_NOT_FOUND', 'No private order matched the provider webhook event.', requestId, { sessionId, orderNumber, orderSlug, paymentReference });
+      }
+      if (hasProcessedEvent(order.values.notes, providerEventId)) {
+        return publicContractJson({
+          success: true,
+          requestId,
+          data: {
+            schemaVersion: EVENT_SCHEMA_VERSION,
+            event: { id: providerEventId, type, status: 'duplicate' },
+            order: {
+              id: order.id,
+              slug: order.slug,
+              orderNumber: order.values.ordernumber,
+              orderStatus: order.values.orderstatus,
+              paymentStatus: order.values.paymentstatus,
+              paymentReference: order.values.paymentreference,
+            },
+          },
+        }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
       }
       const settlement = settlementForEvent(type, object, order.values);
       if (!settlement) {
@@ -326,6 +383,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!commerce.webhooks.eventsEnabled) {
       return errorResponse(409, 'COMMERCE_WEBHOOKS_DISABLED', 'Commerce webhook events are disabled in Settings.', requestId);
     }
+    const webhookSecret = commerceWebhookSecret(settings);
+    if (webhookSecret && !verifyWebhookSignature(rawBody, webhookSecret, signatureHeaderValue(request))) {
+      trackWebhookEvent({
+        kind: 'commerce-webhook',
+        siteId: site.id,
+        target: `commerce:${type || 'unknown'}`,
+        status: 'failed',
+        requestId,
+        reason: 'signature-invalid',
+        actor: 'commerce-webhook',
+        metadata: { type, providerEventId },
+        error: 'Commerce webhook signature is missing or invalid.',
+      });
+      return errorResponse(401, 'COMMERCE_WEBHOOK_SIGNATURE_INVALID', 'Commerce webhook signature is missing or invalid.', requestId);
+    }
     if (!eventAllowed(commerce.webhooks.eventAllowlist, type)) {
       return errorResponse(409, 'COMMERCE_WEBHOOK_EVENT_NOT_ALLOWED', 'Commerce webhook event is not in the configured allowlist.', requestId, {
         type,
@@ -348,6 +420,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         error: 'No private order matched the provider webhook event.',
       });
       return errorResponse(404, 'COMMERCE_WEBHOOK_ORDER_NOT_FOUND', 'No private order matched the provider webhook event.', requestId, { sessionId, orderNumber, orderSlug, paymentReference });
+    }
+    if (hasProcessedEvent(order.values.notes, providerEventId)) {
+      trackWebhookEvent({
+        kind: 'commerce-webhook',
+        siteId: site.id,
+        target: `commerce:${type}`,
+        status: 'succeeded',
+        requestId,
+        actor: 'commerce-webhook',
+        metadata: {
+          type,
+          providerEventId,
+          orderId: order.id,
+          duplicate: true,
+        },
+      });
+      return publicContractJson({
+        success: true,
+        requestId,
+        data: {
+          schemaVersion: EVENT_SCHEMA_VERSION,
+          event: { id: providerEventId, type, status: 'duplicate' },
+          order: {
+            id: order.id,
+            slug: order.slug,
+            orderNumber: order.values.ordernumber,
+            orderStatus: order.values.orderstatus,
+            paymentStatus: order.values.paymentstatus,
+            paymentReference: order.values.paymentreference,
+          },
+        },
+      }, { status: 200, requestId, request, cache: 'private', siteId: site.id });
     }
     const settlement = settlementForEvent(type, object, order.values);
     if (!settlement) {

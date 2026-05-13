@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +20,7 @@ const PRODUCT_REQUIRED_FIELD_COUNT = 27;
 const ORDER_REQUIRED_FIELD_COUNT = 29;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
+const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 let apiAdminSessionToken = '';
 
 const PRODUCT_SCHEMA_FIELDS = [
@@ -128,6 +130,20 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const commerceWebhookSignature = (body) => `sha256=${createHmac('sha256', COMMERCE_WEBHOOK_SECRET).update(body, 'utf8').digest('hex')}`;
+
+const postCommerceWebhook = async (body, headers = {}) => {
+  const rawBody = JSON.stringify(body);
+  return requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'x-backy-webhook-signature': commerceWebhookSignature(rawBody),
+    },
+    body: rawBody,
+  });
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -198,7 +214,7 @@ const enableCommercePricingSettings = async (settings) => {
       checkoutSuccessPath: '/checkout/success',
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
-      providerWebhookSecretId: 'smoke-commerce-webhook-secret',
+      providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET,
       providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
@@ -1027,26 +1043,36 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId === order.id, `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`);
 
   const webhookRequestId = `commerce-webhook-${slug}`;
-  const webhookPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
-    method: 'POST',
-    headers: { 'x-request-id': webhookRequestId },
-    body: JSON.stringify({
-      id: `evt_${slug}`,
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: checkoutSession.id,
-          payment_intent: `pi_${slug}`,
-          amount_total: Math.round(checkoutSession.amountTotal * 100),
-          currency: checkoutSession.currency.toLowerCase(),
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderSlug: order.slug,
-          },
+  const webhookBody = {
+    id: `evt_${slug}`,
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        id: checkoutSession.id,
+        payment_intent: `pi_${slug}`,
+        amount_total: Math.round(checkoutSession.amountTotal * 100),
+        currency: checkoutSession.currency.toLowerCase(),
+        metadata: {
+          orderNumber: order.orderNumber,
+          orderSlug: order.slug,
         },
       },
-    }),
+    },
+  };
+  const invalidSignatureResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/webhook`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': `${webhookRequestId}-invalid-signature`,
+      'x-backy-webhook-signature': 'sha256=0000000000000000000000000000000000000000000000000000000000000000',
+    },
+    body: JSON.stringify(webhookBody),
   });
+  const invalidSignaturePayload = await invalidSignatureResponse.json().catch(() => ({}));
+  assert(invalidSignatureResponse.status === 401, `Invalid commerce webhook signature should be rejected: ${invalidSignatureResponse.status} ${JSON.stringify(invalidSignaturePayload)}`);
+  assert(invalidSignaturePayload?.error?.code === 'COMMERCE_WEBHOOK_SIGNATURE_INVALID', `Invalid commerce webhook signature returned wrong code: ${JSON.stringify(invalidSignaturePayload)}`);
+
+  const webhookPayload = await postCommerceWebhook(webhookBody, { 'x-request-id': webhookRequestId });
   assert(webhookPayload.data?.event?.status === 'paid', `Commerce webhook did not mark payment paid: ${JSON.stringify(webhookPayload)}`);
   assert(webhookPayload.data?.order?.paymentStatus === 'paid', `Commerce webhook order response was unexpected: ${JSON.stringify(webhookPayload)}`);
 
@@ -1056,6 +1082,12 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(settledOrderRecord.values?.paymentreference === `pi_${slug}`, `Webhook did not persist payment reference: ${JSON.stringify(settledOrderRecord.values)}`);
   assert(Boolean(settledOrderRecord.values?.paidat), `Webhook did not persist paid timestamp: ${JSON.stringify(settledOrderRecord.values)}`);
   assert(String(settledOrderRecord.values?.notes || '').includes('checkout.session.completed'), `Webhook settlement note missing: ${JSON.stringify(settledOrderRecord.values)}`);
+
+  const duplicateWebhookPayload = await postCommerceWebhook(webhookBody, { 'x-request-id': `${webhookRequestId}-duplicate` });
+  assert(duplicateWebhookPayload.data?.event?.status === 'duplicate', `Duplicate commerce webhook was not idempotent: ${JSON.stringify(duplicateWebhookPayload)}`);
+  const duplicateOrderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+  const settlementNoteMatches = String(duplicateOrderRecord.values?.notes || '').match(/checkout\.session\.completed/g) || [];
+  assert(settlementNoteMatches.length === 1, `Duplicate commerce webhook appended a second settlement note: ${JSON.stringify(duplicateOrderRecord.values)}`);
 
   const commerceEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-webhook&requestId=${encodeURIComponent(webhookRequestId)}`);
   const commerceEvents = commerceEventsPayload.data?.events || commerceEventsPayload.events || [];
