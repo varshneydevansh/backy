@@ -28,6 +28,7 @@ import {
 import {
   createSite as createSiteFromApi,
   deleteSite as deleteSiteFromApi,
+  getSettings,
   getUserPermissions,
   listAdminAuditLogs,
   listPages,
@@ -35,6 +36,7 @@ import {
   updateSite as updateSiteFromApi,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
+  type SiteSettingsInput,
 } from '@/lib/adminContentApi';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type Site } from '@/stores/mockStore';
@@ -274,6 +276,7 @@ const getPublicPreviewHref = (site: Site) => {
 };
 
 type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
+type SiteVercelDeployment = NonNullable<NonNullable<Site['settings']>['vercelDeployment']>;
 
 const domainVerificationStatusClass: Record<SiteDomainVerification['status'], string> = {
   not_started: 'bg-muted text-muted-foreground',
@@ -311,6 +314,71 @@ const getDomainVerification = (site: Site): SiteDomainVerification => {
     checkedAt: current?.checkedAt || null,
     verifiedAt: current?.verifiedAt || null,
     lastError: current?.lastError || null,
+  };
+};
+
+const vercelDeploymentStatusClass: Record<SiteVercelDeployment['status'], string> = {
+  not_started: 'bg-muted text-muted-foreground',
+  preview_queued: 'bg-sky-50 text-sky-700',
+  preview_ready: 'bg-blue-50 text-blue-700',
+  production_ready: 'bg-emerald-50 text-emerald-700',
+  rolled_back: 'bg-amber-50 text-amber-700',
+  blocked: 'bg-red-50 text-red-700',
+};
+
+const vercelDeploymentStatusLabel: Record<SiteVercelDeployment['status'], string> = {
+  not_started: 'Not started',
+  preview_queued: 'Preview queued',
+  preview_ready: 'Preview ready',
+  production_ready: 'Production ready',
+  rolled_back: 'Rolled back',
+  blocked: 'Blocked',
+};
+
+const getPlatformVercelSettings = (settings: SiteSettingsInput | null | undefined) => ({
+  projectId: settings?.integrations?.vercel?.projectId || settings?.runtimeVercel?.projectId || '',
+  teamSlug: settings?.integrations?.vercel?.teamSlug || settings?.runtimeVercel?.teamId || '',
+  productionDomain: settings?.integrations?.vercel?.productionDomain || settings?.runtimeVercel?.url || '',
+  tokenConfigured: settings?.runtimeVercel?.tokenConfigured === true,
+  runtimeConfigured: settings?.runtimeVercel?.configured === true,
+});
+
+const buildVercelDeployCommand = (production: boolean): string => (
+  production
+    ? 'vercel pull --yes --environment=production && vercel build --prod && vercel deploy --prebuilt --prod'
+    : 'vercel pull --yes --environment=preview && vercel build && vercel deploy --prebuilt'
+);
+
+const getVercelDeployment = (
+  site: Site,
+  platformSettings?: SiteSettingsInput | null,
+): SiteVercelDeployment => {
+  const current = site.settings?.vercelDeployment;
+  const platform = getPlatformVercelSettings(platformSettings);
+  const productionDomain = current?.productionDomain || site.customDomain || platform.productionDomain || `${site.slug}.backy.app`;
+  const projectId = current?.projectId || platform.projectId || '';
+  const missing = [
+    ...(projectId ? [] : ['Vercel project metadata']),
+    ...(platform.tokenConfigured ? [] : ['Server-side Vercel token']),
+  ];
+
+  return {
+    status: current?.status || 'not_started',
+    projectId,
+    teamSlug: current?.teamSlug || platform.teamSlug || '',
+    productionDomain,
+    previewUrl: current?.previewUrl || '',
+    productionUrl: current?.productionUrl || (productionDomain ? `https://${productionDomain.replace(/^https?:\/\//, '')}` : ''),
+    deploymentId: current?.deploymentId || '',
+    environment: current?.environment || 'preview',
+    lastAction: current?.lastAction || null,
+    requestedAt: current?.requestedAt || null,
+    completedAt: current?.completedAt || null,
+    promotedAt: current?.promotedAt || null,
+    rolledBackAt: current?.rolledBackAt || null,
+    command: current?.command || buildVercelDeployCommand(false),
+    missing: current?.missing || missing,
+    history: current?.history || [],
   };
 };
 
@@ -456,6 +524,8 @@ function SitesListView() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [platformSettings, setPlatformSettings] = useState<SiteSettingsInput | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [siteAuditLogs, setSiteAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -528,10 +598,27 @@ function SitesListView() {
     }
   }, [canViewSites, setSites, viewPermissionTitle]);
 
+  const loadPlatformSettings = useCallback(async () => {
+    if (!canViewSites) {
+      setPlatformSettings(null);
+      return;
+    }
+
+    try {
+      const settings = await getSettings();
+      setPlatformSettings(settings);
+      setSettingsError(null);
+    } catch (error) {
+      setPlatformSettings(null);
+      setSettingsError(error instanceof Error ? error.message : 'Unable to load deployment settings');
+    }
+  }, [canViewSites]);
+
   useEffect(() => {
     void loadSites();
+    void loadPlatformSettings();
     void loadSiteAuditLogs();
-  }, [loadSiteAuditLogs, loadSites]);
+  }, [loadPlatformSettings, loadSiteAuditLogs, loadSites]);
 
   useEffect(() => {
     let cancelled = false;
@@ -609,6 +696,9 @@ function SitesListView() {
   const selectedDomainVerification = useMemo(() => (
     selectedApiSite ? getDomainVerification(selectedApiSite) : null
   ), [selectedApiSite]);
+  const selectedVercelDeployment = useMemo(() => (
+    selectedApiSite ? getVercelDeployment(selectedApiSite, platformSettings) : null
+  ), [platformSettings, selectedApiSite]);
   const siteLaunchReadiness = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
     const draft = sites.filter((site) => site.status === 'draft').length;
@@ -729,6 +819,85 @@ function SitesListView() {
       void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update domain verification');
+    } finally {
+      setUpdatingSiteId(null);
+    }
+  };
+
+  const handleVercelDeploymentAction = async (
+    site: Site,
+    action: NonNullable<SiteVercelDeployment['lastAction']>,
+  ) => {
+    if (isSitesBusy) return;
+    if (!canConfigureSites) {
+      setNotice(`Your account needs sites.configure to update deployment workflow. ${configurePermissionTitle}`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const current = getVercelDeployment(site, platformSettings);
+    const isProductionAction = action === 'promote-production' || action === 'rollback-production';
+    const status: SiteVercelDeployment['status'] = action === 'prepare-preview'
+      ? 'preview_queued'
+      : action === 'record-preview'
+        ? 'preview_ready'
+        : action === 'promote-production'
+          ? 'production_ready'
+          : 'rolled_back';
+    const previewUrl = current.previewUrl || `https://${site.slug}-${Date.now().toString(36)}.vercel.app`;
+    const productionUrl = current.productionUrl || `https://${(site.customDomain || current.productionDomain || `${site.slug}.backy.app`).replace(/^https?:\/\//, '')}`;
+    const command = buildVercelDeployCommand(isProductionAction && action !== 'rollback-production');
+    const nextRun = {
+      id: `deploy_${Date.now().toString(36)}`,
+      action,
+      status,
+      environment: isProductionAction ? 'production' as const : 'preview' as const,
+      targetUrl: isProductionAction ? productionUrl : previewUrl,
+      command,
+      requestedAt: now,
+      completedAt: action === 'prepare-preview' ? null : now,
+      missing: current.missing || [],
+    };
+    const nextDeployment: SiteVercelDeployment = {
+      ...current,
+      status,
+      environment: nextRun.environment,
+      lastAction: action,
+      requestedAt: current.requestedAt || now,
+      completedAt: action === 'prepare-preview' ? current.completedAt || null : now,
+      promotedAt: action === 'promote-production' ? now : current.promotedAt || null,
+      rolledBackAt: action === 'rollback-production' ? now : current.rolledBackAt || null,
+      previewUrl,
+      productionUrl,
+      deploymentId: current.deploymentId || nextRun.id,
+      command,
+      history: [nextRun, ...(current.history || [])].slice(0, 8),
+    };
+
+    setUpdatingSiteId(site.id);
+    setNotice(null);
+
+    try {
+      const saved = await updateSiteFromApi(site.publicSiteId || site.id, {
+        settings: {
+          ...(site.settings || {}),
+          vercelDeployment: nextDeployment,
+        },
+      });
+      const savedWithPageCount = { ...saved, pageCount: site.pageCount };
+      setSites(sites.map((item) => (item.id === site.id ? savedWithPageCount : item)));
+      setNotice(
+        action === 'prepare-preview'
+          ? `${site.name} preview deploy handoff is queued.`
+          : action === 'promote-production'
+            ? `${site.name} production deploy has been recorded.`
+            : action === 'rollback-production'
+              ? `${site.name} rollback has been recorded.`
+              : `${site.name} preview deploy has been recorded.`,
+      );
+      void loadSiteAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update deployment workflow');
     } finally {
       setUpdatingSiteId(null);
     }
@@ -985,6 +1154,7 @@ function SitesListView() {
     if (isSitesBusy) return;
 
     void loadSites();
+    void loadPlatformSettings();
     void loadSiteAuditLogs();
   };
 
@@ -1384,6 +1554,143 @@ function SitesListView() {
                     {selectedDomainVerification.lastError}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+        </PanelContent>
+      </Panel>
+
+      <Panel id="sites-vercel-deployment" className="scroll-mt-24" data-testid="sites-vercel-deployment">
+        <PanelHeader
+          title="Vercel deployment workflow"
+          description="Track preview deploy handoffs, production promotion, rollback state, and required runtime metadata per site."
+          icon={<Server className="size-4" />}
+          action={
+            selectedApiSite && selectedVercelDeployment ? (
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                vercelDeploymentStatusClass[selectedVercelDeployment.status],
+              )}
+              >
+                {vercelDeploymentStatusLabel[selectedVercelDeployment.status]}
+              </span>
+            ) : null
+          }
+        />
+        <PanelContent>
+          {!selectedApiSite || !selectedVercelDeployment ? (
+            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
+              Create a site to prepare Vercel deployment handoff state.
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">{selectedApiSite.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Backy stores non-secret project metadata, generated CLI handoff commands, selected target URLs, and deploy history. Tokens stay in server environment variables.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                    {selectedVercelDeployment.environment || 'preview'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <SiteApiSnippet label="Preview deploy command" value={buildVercelDeployCommand(false)} />
+                  <SiteApiSnippet label="Production deploy command" value={buildVercelDeployCommand(true)} />
+                  <SiteApiSnippet label="Preview URL" value={selectedVercelDeployment.previewUrl || 'Prepared after preview handoff'} />
+                  <SiteApiSnippet label="Production URL" value={selectedVercelDeployment.productionUrl || `https://${getDisplayDomain(selectedApiSite)}`} />
+                </div>
+
+                {settingsError && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {settingsError}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites}
+                    title={configurePermissionTitle}
+                    onClick={() => void handleVercelDeploymentAction(selectedApiSite, 'prepare-preview')}
+                    iconStart={<RefreshCw className="size-3.5" />}
+                    aria-label={`Prepare Vercel preview deploy for ${selectedApiSite.name}`}
+                  >
+                    Prepare preview
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites}
+                    title={configurePermissionTitle}
+                    onClick={() => void handleVercelDeploymentAction(selectedApiSite, 'record-preview')}
+                    iconStart={<CheckCircle2 className="size-3.5" />}
+                    aria-label={`Record Vercel preview deploy for ${selectedApiSite.name}`}
+                  >
+                    Record preview
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites}
+                    title={configurePermissionTitle}
+                    onClick={() => void handleVercelDeploymentAction(selectedApiSite, 'promote-production')}
+                    iconStart={<Globe className="size-3.5" />}
+                    aria-label={`Record Vercel production deploy for ${selectedApiSite.name}`}
+                  >
+                    Record production
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites}
+                    title={configurePermissionTitle}
+                    onClick={() => void handleVercelDeploymentAction(selectedApiSite, 'rollback-production')}
+                    iconStart={<Archive className="size-3.5" />}
+                    aria-label={`Record Vercel rollback for ${selectedApiSite.name}`}
+                  >
+                    Record rollback
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Deploy state</h3>
+                <div className="mt-3 grid gap-2">
+                  <SiteApiStat label="Project" value={selectedVercelDeployment.projectId || 'Metadata missing'} />
+                  <SiteApiStat label="Team" value={selectedVercelDeployment.teamSlug || 'Default account'} />
+                  <SiteApiStat label="Token" value={getPlatformVercelSettings(platformSettings).tokenConfigured ? 'Detected server-side' : 'Environment missing'} />
+                  <SiteApiStat label="Last action" value={selectedVercelDeployment.lastAction || 'None'} />
+                </div>
+                {selectedVercelDeployment.missing && selectedVercelDeployment.missing.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    Missing deployment runtime: {selectedVercelDeployment.missing.join(', ')}
+                  </div>
+                )}
+                <div className="mt-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent runs</h4>
+                  <div className="mt-2 grid gap-2">
+                    {(selectedVercelDeployment.history || []).length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-center text-xs text-muted-foreground">
+                        No deploy handoff recorded yet.
+                      </div>
+                    ) : (
+                      selectedVercelDeployment.history?.slice(0, 4).map((run) => (
+                        <div key={run.id} className="rounded-lg border border-border bg-card px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-foreground">{run.action.replace(/-/g, ' ')}</span>
+                            <span className="text-[11px] text-muted-foreground">{formatDate(run.requestedAt)}</span>
+                          </div>
+                          <div className="mt-1 truncate text-[11px] text-muted-foreground">{run.targetUrl || run.command}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

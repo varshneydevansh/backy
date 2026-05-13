@@ -307,6 +307,9 @@ export interface SiteSettings {
   /** Custom-domain DNS verification state for managed and custom frontend delivery */
   domainVerification?: SiteDomainVerificationSettings;
 
+  /** Per-site Vercel deployment workflow state and non-secret deploy handoff history */
+  vercelDeployment?: SiteVercelDeploymentSettings;
+
   /** Captured custom frontend design contract used to seed new Backy pages, posts, forms, products, and reusable sections */
   frontendDesign?: SiteFrontendDesignContract;
 
@@ -329,6 +332,37 @@ export interface SiteDomainVerificationSettings {
   checkedAt?: string | null;
   verifiedAt?: string | null;
   lastError?: string | null;
+}
+
+export interface SiteVercelDeploymentSettings {
+  status: 'not_started' | 'preview_queued' | 'preview_ready' | 'production_ready' | 'rolled_back' | 'blocked';
+  projectId?: string;
+  teamSlug?: string;
+  productionDomain?: string;
+  previewUrl?: string;
+  productionUrl?: string;
+  deploymentId?: string;
+  environment?: 'preview' | 'production';
+  lastAction?: 'prepare-preview' | 'record-preview' | 'promote-production' | 'rollback-production' | null;
+  requestedAt?: string | null;
+  completedAt?: string | null;
+  promotedAt?: string | null;
+  rolledBackAt?: string | null;
+  command?: string;
+  missing?: string[];
+  history?: SiteVercelDeploymentRun[];
+}
+
+export interface SiteVercelDeploymentRun {
+  id: string;
+  action: 'prepare-preview' | 'record-preview' | 'promote-production' | 'rollback-production';
+  status: SiteVercelDeploymentSettings['status'];
+  environment: 'preview' | 'production';
+  targetUrl?: string;
+  command?: string;
+  requestedAt: string;
+  completedAt?: string | null;
+  missing?: string[];
 }
 
 export interface SiteEditorCollectionBindingPreset {

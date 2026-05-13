@@ -22,6 +22,8 @@ import { emptyFrontendDesignContract, normalizeFrontendDesignContract } from '@/
 
 export const runtime = 'nodejs';
 
+type SiteVercelDeploymentRun = NonNullable<NonNullable<SiteSettings['vercelDeployment']>['history']>[number];
+
 interface RouteParams {
   params: Promise<{
     siteId: string;
@@ -109,6 +111,31 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
   const domainVerificationStatus = domainVerificationInput && ['not_started', 'pending', 'verified', 'failed'].includes(String(domainVerificationInput.status))
     ? domainVerificationInput.status as NonNullable<SiteSettings['domainVerification']>['status']
     : currentDomainVerification.status;
+  const vercelDeploymentInput = isRecord(input.vercelDeployment) ? input.vercelDeployment : null;
+  const currentVercelDeployment = current.vercelDeployment || {
+    status: 'not_started',
+    projectId: '',
+    teamSlug: '',
+    productionDomain: '',
+    previewUrl: '',
+    productionUrl: '',
+    deploymentId: '',
+    environment: 'preview',
+    lastAction: null,
+    requestedAt: null,
+    completedAt: null,
+    promotedAt: null,
+    rolledBackAt: null,
+    command: '',
+    missing: [],
+    history: [],
+  } satisfies NonNullable<SiteSettings['vercelDeployment']>;
+  const vercelDeploymentStatus = vercelDeploymentInput && ['not_started', 'preview_queued', 'preview_ready', 'production_ready', 'rolled_back', 'blocked'].includes(String(vercelDeploymentInput.status))
+    ? vercelDeploymentInput.status as NonNullable<SiteSettings['vercelDeployment']>['status']
+    : currentVercelDeployment.status;
+  const vercelDeploymentAction = vercelDeploymentInput && ['prepare-preview', 'record-preview', 'promote-production', 'rollback-production'].includes(String(vercelDeploymentInput.lastAction))
+    ? vercelDeploymentInput.lastAction as NonNullable<SiteSettings['vercelDeployment']>['lastAction']
+    : currentVercelDeployment.lastAction || null;
 
   return {
     ...current,
@@ -156,6 +183,34 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
           checkedAt: sanitizeString(domainVerificationInput.checkedAt) || null,
           verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
           lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
+        },
+    vercelDeployment: input.vercelDeployment === undefined || !vercelDeploymentInput
+      ? currentVercelDeployment
+      : {
+          ...currentVercelDeployment,
+          ...vercelDeploymentInput,
+          status: vercelDeploymentStatus,
+          projectId: sanitizeString(vercelDeploymentInput.projectId),
+          teamSlug: sanitizeString(vercelDeploymentInput.teamSlug),
+          productionDomain: sanitizeString(vercelDeploymentInput.productionDomain),
+          previewUrl: sanitizeString(vercelDeploymentInput.previewUrl),
+          productionUrl: sanitizeString(vercelDeploymentInput.productionUrl),
+          deploymentId: sanitizeString(vercelDeploymentInput.deploymentId),
+          environment: vercelDeploymentInput.environment === 'production' ? 'production' : 'preview',
+          lastAction: vercelDeploymentAction,
+          requestedAt: sanitizeString(vercelDeploymentInput.requestedAt) || null,
+          completedAt: sanitizeString(vercelDeploymentInput.completedAt) || null,
+          promotedAt: sanitizeString(vercelDeploymentInput.promotedAt) || null,
+          rolledBackAt: sanitizeString(vercelDeploymentInput.rolledBackAt) || null,
+          command: sanitizeString(vercelDeploymentInput.command),
+          missing: Array.isArray(vercelDeploymentInput.missing)
+            ? vercelDeploymentInput.missing.filter((item): item is string => typeof item === 'string')
+            : [],
+          history: Array.isArray(vercelDeploymentInput.history)
+            ? vercelDeploymentInput.history.filter((item): item is SiteVercelDeploymentRun => (
+                isRecord(item) && typeof item.id === 'string' && typeof item.action === 'string'
+              )).slice(0, 10)
+            : [],
         },
     frontendDesign: input.frontendDesign === undefined
       ? (current.frontendDesign || emptyFrontendDesignContract())

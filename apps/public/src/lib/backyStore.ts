@@ -58,6 +58,8 @@ interface PageMeta {
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
 }
 
+type SiteVercelDeploymentRun = NonNullable<NonNullable<SiteSettings['vercelDeployment']>['history']>[number];
+
 interface CanvasElement {
   id: string;
   type: string;
@@ -481,6 +483,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     footer: [],
   },
   domainVerification: { ...DEFAULT_SITE_SETTINGS.domainVerification },
+  vercelDeployment: { ...DEFAULT_SITE_SETTINGS.vercelDeployment, missing: [], history: [] },
   frontendDesign: emptyFrontendDesignContract(),
   contacts: { savedLists: [] },
   editor: { collectionBindingPresets: [] },
@@ -3983,6 +3986,25 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
   const domainVerificationStatus = ['not_started', 'pending', 'verified', 'failed'].includes(String(domainVerificationInput.status))
     ? domainVerificationInput.status as NonNullable<SiteSettings['domainVerification']>['status']
     : baseDomainVerification.status;
+  const vercelDeploymentInput = toRecord(settingsInput.vercelDeployment);
+  const defaultVercelDeployment: NonNullable<SiteSettings['vercelDeployment']> = {
+    ...DEFAULT_SITE_SETTINGS.vercelDeployment,
+    missing: [],
+    history: [],
+  };
+  const baseVercelDeployment: NonNullable<SiteSettings['vercelDeployment']> = {
+    ...defaultVercelDeployment,
+    ...(base.vercelDeployment || {}),
+    missing: [...(base.vercelDeployment?.missing || [])],
+    history: [...(base.vercelDeployment?.history || [])],
+  };
+  const vercelDeploymentStatus = ['not_started', 'preview_queued', 'preview_ready', 'production_ready', 'rolled_back', 'blocked'].includes(String(vercelDeploymentInput.status))
+    ? vercelDeploymentInput.status as NonNullable<SiteSettings['vercelDeployment']>['status']
+    : baseVercelDeployment.status;
+  const vercelDeploymentAction = ['prepare-preview', 'record-preview', 'promote-production', 'rollback-production'].includes(String(vercelDeploymentInput.lastAction))
+    ? vercelDeploymentInput.lastAction as NonNullable<SiteSettings['vercelDeployment']>['lastAction']
+    : baseVercelDeployment.lastAction || null;
+  const vercelDeploymentEnvironment = vercelDeploymentInput.environment === 'production' ? 'production' : 'preview';
 
   return {
     ...base,
@@ -4024,6 +4046,34 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
           checkedAt: sanitizeString(domainVerificationInput.checkedAt) || null,
           verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
           lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
+        },
+    vercelDeployment: settingsInput.vercelDeployment === undefined
+      ? { ...baseVercelDeployment, missing: [...(baseVercelDeployment.missing || [])], history: [...(baseVercelDeployment.history || [])] }
+      : {
+          ...baseVercelDeployment,
+          ...vercelDeploymentInput,
+          status: vercelDeploymentStatus,
+          projectId: sanitizeString(vercelDeploymentInput.projectId) || '',
+          teamSlug: sanitizeString(vercelDeploymentInput.teamSlug) || '',
+          productionDomain: sanitizeString(vercelDeploymentInput.productionDomain) || '',
+          previewUrl: sanitizeString(vercelDeploymentInput.previewUrl) || '',
+          productionUrl: sanitizeString(vercelDeploymentInput.productionUrl) || '',
+          deploymentId: sanitizeString(vercelDeploymentInput.deploymentId) || '',
+          environment: vercelDeploymentEnvironment,
+          lastAction: vercelDeploymentAction,
+          requestedAt: sanitizeString(vercelDeploymentInput.requestedAt) || null,
+          completedAt: sanitizeString(vercelDeploymentInput.completedAt) || null,
+          promotedAt: sanitizeString(vercelDeploymentInput.promotedAt) || null,
+          rolledBackAt: sanitizeString(vercelDeploymentInput.rolledBackAt) || null,
+          command: sanitizeString(vercelDeploymentInput.command) || '',
+          missing: Array.isArray(vercelDeploymentInput.missing)
+            ? vercelDeploymentInput.missing.filter((item): item is string => typeof item === 'string')
+            : [],
+          history: Array.isArray(vercelDeploymentInput.history)
+            ? vercelDeploymentInput.history.filter((item): item is SiteVercelDeploymentRun => (
+                isObjectRecord(item) && typeof item.id === 'string' && typeof item.action === 'string'
+              )).slice(0, 10)
+            : [],
         },
     frontendDesign: settingsInput.frontendDesign === undefined
       ? (base.frontendDesign || emptyFrontendDesignContract())
