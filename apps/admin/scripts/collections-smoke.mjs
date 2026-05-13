@@ -556,6 +556,25 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     const body = document.body?.innerText || '';
     const relationshipText = document.querySelector('[data-testid="collections-relationship-browser"]')?.textContent || '';
     const authoringText = document.querySelector('[data-testid="collections-authoring-shortcuts"]')?.textContent || '';
+    const listTemplateHistoryText = document.querySelector('[data-testid="collections-list-template-history"]')?.textContent || '';
+    const itemTemplateHistoryText = document.querySelector('[data-testid="collections-item-template-history"]')?.textContent || '';
+    const dynamicTemplateChecks = {
+      hasControls: Boolean(document.querySelector('[data-testid="collections-dynamic-template-controls"]')),
+      hasFrontendControl: Boolean(document.querySelector('[data-testid="collections-frontend-template-control"]')),
+      hasFrontendSelect: Boolean(document.querySelector('[data-testid="collections-frontend-template-select"]')),
+      hasPreviewControls: Boolean(document.querySelector('[data-testid="collections-template-preview-controls"]')),
+      hasPreviewRecordSelect: Boolean(document.querySelector('[data-testid="collections-template-preview-record-select"]')),
+      hasPreviewCopy: Boolean(document.querySelector('[data-testid="collections-template-preview-copy-render"]')),
+      hasListHistory: Boolean(document.querySelector('[data-testid="collections-list-template-history"]')),
+      hasItemHistory: Boolean(document.querySelector('[data-testid="collections-item-template-history"]')),
+      hasCapturedTemplateText: body.includes('Captured frontend template'),
+      hasPreviewRecordText: body.includes('Template preview record'),
+      hasHistoryText: listTemplateHistoryText.includes('Template capture history') &&
+        itemTemplateHistoryText.includes('Template capture history'),
+      hasRenderItemText: body.includes('Render item API'),
+      hasGeneratedTemplateText: body.includes('Use generated Backy templates'),
+      hasFrontendTemplateName: body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
+    };
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -602,17 +621,7 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         relationshipText.includes(${JSON.stringify(incomingCollectionName)}) &&
         relationshipText.includes('related_target') &&
         relationshipText.includes('Directory reference'),
-      hasDynamicTemplateControl: Boolean(document.querySelector('[data-testid="collections-dynamic-template-controls"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-frontend-template-control"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-frontend-template-select"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-template-preview-controls"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-template-preview-record-select"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-template-preview-copy-render"]')) &&
-        body.includes('Captured frontend template') &&
-        body.includes('Template preview record') &&
-        body.includes('Render item API') &&
-        body.includes('Use generated Backy templates') &&
-        body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
+      hasDynamicTemplateControl: Object.values(dynamicTemplateChecks).every(Boolean),
       hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
         Boolean(document.querySelector('[data-testid="collections-permission-contract"]')) &&
         Boolean(document.querySelector('[data-testid="collections-audit-list"]')) &&
@@ -631,6 +640,7 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       ))),
       relationshipText,
       authoringText,
+      dynamicTemplateChecks,
     };
   })()`);
 
@@ -912,7 +922,11 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
       dynamicTemplates?.list?.authoredCanvas?.pageId === listPageId &&
       dynamicTemplates?.item?.authoredCanvas?.pageId === itemPageId &&
       Array.isArray(dynamicTemplates.list.authoredCanvas.elements) &&
-      Array.isArray(dynamicTemplates.item.authoredCanvas.elements)
+      Array.isArray(dynamicTemplates.item.authoredCanvas.elements) &&
+      Array.isArray(dynamicTemplates.list.authoredHistory) &&
+      Array.isArray(dynamicTemplates.item.authoredHistory) &&
+      dynamicTemplates.list.authoredHistory.some((entry) => entry?.pageId === listPageId && entry?.version >= 1) &&
+      dynamicTemplates.item.authoredHistory.some((entry) => entry?.pageId === itemPageId && entry?.version >= 1)
     ) {
       return collection;
     }

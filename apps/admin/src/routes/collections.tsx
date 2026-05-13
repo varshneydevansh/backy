@@ -473,6 +473,12 @@ interface CollectionAuthoredDynamicTemplate {
   elements: unknown[];
 }
 
+interface CollectionAuthoredDynamicTemplateVersion extends CollectionAuthoredDynamicTemplate {
+  id: string;
+  version: number;
+  elementCount: number;
+}
+
 interface CollectionDynamicTemplatesForm {
   list: {
     variant: CollectionDynamicListVariant;
@@ -484,6 +490,7 @@ interface CollectionDynamicTemplatesForm {
     authoredPageTitle: string;
     authoredCapturedAt: string;
     authoredCanvas: CollectionAuthoredDynamicTemplate | null;
+    authoredHistory: CollectionAuthoredDynamicTemplateVersion[];
   };
   item: {
     variant: CollectionDynamicItemVariant;
@@ -495,6 +502,7 @@ interface CollectionDynamicTemplatesForm {
     authoredPageTitle: string;
     authoredCapturedAt: string;
     authoredCanvas: CollectionAuthoredDynamicTemplate | null;
+    authoredHistory: CollectionAuthoredDynamicTemplateVersion[];
   };
 }
 
@@ -514,6 +522,7 @@ const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
     authoredPageTitle: '',
     authoredCapturedAt: '',
     authoredCanvas: null,
+    authoredHistory: [],
   },
   item: {
     variant: 'split',
@@ -525,6 +534,7 @@ const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
     authoredPageTitle: '',
     authoredCapturedAt: '',
     authoredCanvas: null,
+    authoredHistory: [],
   },
 });
 
@@ -846,6 +856,56 @@ const normalizeAuthoredDynamicTemplate = (value: unknown): CollectionAuthoredDyn
   };
 };
 
+const normalizeAuthoredDynamicTemplateHistory = (
+  value: unknown,
+): CollectionAuthoredDynamicTemplateVersion[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(isPlainRecord)
+    .map((entry, index): CollectionAuthoredDynamicTemplateVersion | null => {
+      const authoredTemplate = normalizeAuthoredDynamicTemplate(entry);
+      if (!authoredTemplate) return null;
+      const version = typeof entry.version === 'number' && Number.isFinite(entry.version)
+        ? Math.max(1, Math.floor(entry.version))
+        : index + 1;
+      const fallbackId = `${authoredTemplate.pageId || 'template'}-${authoredTemplate.capturedAt || version}`;
+
+      return {
+        ...authoredTemplate,
+        id: optionalStringFromRecord(entry, 'id') || normalizeSlug(fallbackId, `template-version-${version}`),
+        version,
+        elementCount: typeof entry.elementCount === 'number' && Number.isFinite(entry.elementCount)
+          ? Math.max(0, Math.floor(entry.elementCount))
+          : authoredTemplate.elements.length,
+      };
+    })
+    .filter((entry): entry is CollectionAuthoredDynamicTemplateVersion => Boolean(entry))
+    .sort((left, right) => right.version - left.version)
+    .slice(0, 8);
+};
+
+const appendAuthoredDynamicTemplateHistory = (
+  history: CollectionAuthoredDynamicTemplateVersion[],
+  authoredCanvas: CollectionAuthoredDynamicTemplate,
+): CollectionAuthoredDynamicTemplateVersion[] => {
+  const nextVersion = history.reduce((maxVersion, entry) => Math.max(maxVersion, entry.version), 0) + 1;
+  const id = normalizeSlug(
+    `${authoredCanvas.pageId || 'template'}-${authoredCanvas.capturedAt || Date.now()}-${nextVersion}`,
+    `template-version-${nextVersion}`,
+  );
+
+  return [
+    {
+      ...authoredCanvas,
+      id,
+      version: nextVersion,
+      elementCount: authoredCanvas.elements.length,
+    },
+    ...history.filter((entry) => entry.id !== id),
+  ].slice(0, 8);
+};
+
 const parsePageContentRecord = (page: Page): Record<string, unknown> | null => {
   if (!page.content) return null;
   if (isPlainRecord(page.content)) return page.content;
@@ -921,6 +981,7 @@ const normalizeDynamicTemplates = (
       authoredPageTitle: optionalStringFromRecord(list, 'authoredPageTitle') || defaults.list.authoredPageTitle,
       authoredCapturedAt: optionalStringFromRecord(list, 'authoredCapturedAt') || defaults.list.authoredCapturedAt,
       authoredCanvas: normalizeAuthoredDynamicTemplate(list.authoredCanvas),
+      authoredHistory: normalizeAuthoredDynamicTemplateHistory(list.authoredHistory),
     },
     item: {
       variant: dynamicItemVariantFromValue(item.variant),
@@ -932,6 +993,7 @@ const normalizeDynamicTemplates = (
       authoredPageTitle: optionalStringFromRecord(item, 'authoredPageTitle') || defaults.item.authoredPageTitle,
       authoredCapturedAt: optionalStringFromRecord(item, 'authoredCapturedAt') || defaults.item.authoredCapturedAt,
       authoredCanvas: normalizeAuthoredDynamicTemplate(item.authoredCanvas),
+      authoredHistory: normalizeAuthoredDynamicTemplateHistory(item.authoredHistory),
     },
   };
 };
@@ -1151,6 +1213,7 @@ function CollectionsPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(routeSearch.recordId || null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [isCollectionDraftMode, setIsCollectionDraftMode] = useState(false);
   const [dynamicTemplatePreviewRecordId, setDynamicTemplatePreviewRecordId] = useState('');
   const [collectionForm, setCollectionForm] = useState({
     name: '',
@@ -2058,6 +2121,7 @@ function CollectionsPage() {
   }, [currentAdmin?.id]);
 
   const resetCollectionForm = () => {
+    setIsCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
@@ -2096,6 +2160,7 @@ function CollectionsPage() {
   const beginNewCollection = () => {
     if (schemaMutationDisabled) return;
     resetCollectionForm();
+    navigate({ to: '/collections', search: { siteId: activeSiteId }, replace: true });
     setError(null);
     setValidationDetails([]);
     setNotice('New collection draft ready. Add a name and fields, then save the schema.');
@@ -2110,6 +2175,7 @@ function CollectionsPage() {
   const resetCollectionsWorkspace = () => {
     setCollections([]);
     resetCollectionForm();
+    setIsCollectionDraftMode(false);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -2183,6 +2249,13 @@ function CollectionsPage() {
       resetCollectionsWorkspace();
     }
 
+    if (isCollectionDraftMode) {
+      if (routeSearch.collectionId) {
+        navigate({ to: '/collections', search: { siteId: nextSiteId }, replace: true });
+      }
+      return;
+    }
+
     setSelectedCollectionId(routeSearch.collectionId || null);
     setSelectedRecordId(routeSearch.recordId || null);
     setSelectedRecordIds([]);
@@ -2211,6 +2284,8 @@ function CollectionsPage() {
     routeSearch.sortBy,
     routeSearch.sortDirection,
     routeSearch.status,
+    isCollectionDraftMode,
+    navigate,
     selectedSiteId,
     sites,
   ]);
@@ -2222,6 +2297,7 @@ function CollectionsPage() {
       return;
     }
 
+    setIsCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
@@ -2307,6 +2383,7 @@ function CollectionsPage() {
   };
 
   const selectCollection = (collection: Collection, preserveRouteState = false) => {
+    setIsCollectionDraftMode(false);
     setSelectedCollectionId(collection.id);
     setSelectedRecordId(preserveRouteState ? routeSearch.recordId || null : null);
     setSelectedRecordIds([]);
@@ -2596,6 +2673,7 @@ function CollectionsPage() {
           authoredPageTitle: page.title,
           authoredCapturedAt: authoredCanvas.capturedAt,
           authoredCanvas,
+          authoredHistory: appendAuthoredDynamicTemplateHistory(collectionForm.dynamicTemplates.list.authoredHistory, authoredCanvas),
         });
       } else {
         updateDynamicItemTemplate({
@@ -2603,6 +2681,7 @@ function CollectionsPage() {
           authoredPageTitle: page.title,
           authoredCapturedAt: authoredCanvas.capturedAt,
           authoredCanvas,
+          authoredHistory: appendAuthoredDynamicTemplateHistory(collectionForm.dynamicTemplates.item.authoredHistory, authoredCanvas),
         });
       }
 
@@ -2629,6 +2708,39 @@ function CollectionsPage() {
       authoredCapturedAt: '',
       authoredCanvas: null,
     });
+  };
+
+  const restoreAuthoredDynamicTemplateVersion = (
+    kind: 'list' | 'item',
+    version: CollectionAuthoredDynamicTemplateVersion,
+  ) => {
+    const restoredCanvas: CollectionAuthoredDynamicTemplate = {
+      pageId: version.pageId,
+      pageTitle: version.pageTitle,
+      pageSlug: version.pageSlug,
+      capturedAt: version.capturedAt,
+      ...(version.canvasSize ? { canvasSize: version.canvasSize } : {}),
+      ...(version.customCSS ? { customCSS: version.customCSS } : {}),
+      elements: version.elements,
+    };
+
+    if (kind === 'list') {
+      updateDynamicListTemplate({
+        authoredPageId: version.pageId,
+        authoredPageTitle: version.pageTitle,
+        authoredCapturedAt: version.capturedAt,
+        authoredCanvas: restoredCanvas,
+      });
+    } else {
+      updateDynamicItemTemplate({
+        authoredPageId: version.pageId,
+        authoredPageTitle: version.pageTitle,
+        authoredCapturedAt: version.capturedAt,
+        authoredCanvas: restoredCanvas,
+      });
+    }
+
+    setNotice(`${kind === 'list' ? 'List' : 'Item'} template restored to version ${version.version}. Save schema to publish it.`);
   };
 
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -4436,6 +4548,32 @@ function CollectionsPage() {
                           ? `Captured ${collectionForm.dynamicTemplates.list.authoredPageTitle || 'page'} with ${collectionForm.dynamicTemplates.list.authoredCanvas.elements.length} root elements.`
                           : pagesError || (isPagesLoading ? 'Loading pages...' : 'No authored list canvas captured.')}
                       </p>
+                      <div className="space-y-2 border-t border-cyan-200 pt-2" data-testid="collections-list-template-history">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-cyan-950">Template capture history</div>
+                        {collectionForm.dynamicTemplates.list.authoredHistory.length > 0 ? (
+                          <div className="grid gap-2">
+                            {collectionForm.dynamicTemplates.list.authoredHistory.map((version) => (
+                              <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-200 bg-white/80 px-3 py-2 text-xs">
+                                <span className="min-w-0">
+                                  <span className="block font-medium text-cyan-950">Version {version.version} · {version.pageTitle || 'Untitled page'}</span>
+                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {version.elementCount} root elements</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => restoreAuthoredDynamicTemplateVersion('list', version)}
+                                  disabled={schemaMutationDisabled}
+                                  className="inline-flex items-center gap-1 rounded-md border border-cyan-200 px-2 py-1 font-medium text-cyan-900 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <History className="h-3 w-3" />
+                                  Restore
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4548,6 +4686,32 @@ function CollectionsPage() {
                           ? `Captured ${collectionForm.dynamicTemplates.item.authoredPageTitle || 'page'} with ${collectionForm.dynamicTemplates.item.authoredCanvas.elements.length} root elements.`
                           : pagesError || (isPagesLoading ? 'Loading pages...' : 'No authored item canvas captured.')}
                       </p>
+                      <div className="space-y-2 border-t border-cyan-200 pt-2" data-testid="collections-item-template-history">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-cyan-950">Template capture history</div>
+                        {collectionForm.dynamicTemplates.item.authoredHistory.length > 0 ? (
+                          <div className="grid gap-2">
+                            {collectionForm.dynamicTemplates.item.authoredHistory.map((version) => (
+                              <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-200 bg-white/80 px-3 py-2 text-xs">
+                                <span className="min-w-0">
+                                  <span className="block font-medium text-cyan-950">Version {version.version} · {version.pageTitle || 'Untitled page'}</span>
+                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {version.elementCount} root elements</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => restoreAuthoredDynamicTemplateVersion('item', version)}
+                                  disabled={schemaMutationDisabled}
+                                  className="inline-flex items-center gap-1 rounded-md border border-cyan-200 px-2 py-1 font-medium text-cyan-900 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <History className="h-3 w-3" />
+                                  Restore
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2 text-sm md:col-span-2">
                       <span className="font-medium">Detail fields</span>
