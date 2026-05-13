@@ -1141,6 +1141,57 @@ function CollectionsPage() {
     fieldHealth.missingReferenceTargets,
     fieldHealth.missingSelectOptions,
   ]);
+  const relationshipBrowser = useMemo(() => {
+    const activeId = activeCollection?.id || '';
+    const activeName = activeCollection?.name || collectionForm.name || 'Draft schema';
+    const activeSlug = activeCollection?.slug || collectionForm.slug || 'draft';
+    const outgoing = activeSchemaFields
+      .filter((field) => RELATION_FIELD_TYPES.includes(field.type))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((field) => {
+        const target = field.referenceCollectionId
+          ? collections.find((collection) => collection.id === field.referenceCollectionId) || null
+          : null;
+        return {
+          field,
+          target,
+          route: target ? buildCollectionListRoutePath(target) : '',
+        };
+      });
+    const incoming = activeId
+      ? collections.flatMap((sourceCollection) => (
+          sourceCollection.fields
+            .filter((field) => RELATION_FIELD_TYPES.includes(field.type) && field.referenceCollectionId === activeId)
+            .map((field) => ({
+              collection: sourceCollection,
+              field,
+              route: buildCollectionListRoutePath(sourceCollection),
+            }))
+        ))
+      : [];
+    const unmapped = collections.flatMap((sourceCollection) => (
+      sourceCollection.fields
+        .filter((field) => RELATION_FIELD_TYPES.includes(field.type) && !field.referenceCollectionId)
+        .map((field) => ({
+          collection: sourceCollection,
+          field,
+        }))
+    ));
+    const relatedCollectionIds = Array.from(new Set([
+      ...outgoing.map((relationship) => relationship.target?.id).filter((id): id is string => Boolean(id)),
+      ...incoming.map((relationship) => relationship.collection.id),
+    ]));
+
+    return {
+      activeId,
+      activeName,
+      activeSlug,
+      outgoing,
+      incoming,
+      unmapped,
+      relatedCollectionIds,
+    };
+  }, [activeCollection, activeSchemaFields, collectionForm.name, collectionForm.slug, collections]);
   const collectionMetrics = useMemo(() => {
     const published = collections.filter((collection) => collection.status === 'published').length;
     const fields = collections.reduce((total, collection) => total + collection.fields.length, 0);
@@ -3035,6 +3086,153 @@ function CollectionsPage() {
         </section>
 
         <div className="space-y-6">
+          <section className="rounded-lg border border-border bg-card" data-testid="collections-relationship-browser">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold">Relationship browser</h2>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Inspect outgoing reference fields, incoming reverse references, unmapped relationship fields, and route targets before using this schema in repeaters or dynamic pages.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {relationshipBrowser.relatedCollectionIds.length} linked schema{relationshipBrowser.relatedCollectionIds.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Outgoing references</h3>
+                  <span className="text-xs text-muted-foreground" data-testid="collections-relationship-outgoing-count">
+                    {relationshipBrowser.outgoing.length} field{relationshipBrowser.outgoing.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {relationshipBrowser.outgoing.length > 0 ? (
+                  <div className="space-y-2" data-testid="collections-relationship-outgoing">
+                    {relationshipBrowser.outgoing.map(({ field, target, route }) => (
+                      <div
+                        key={`${field.key}-${target?.id || 'missing'}`}
+                        className={cn(
+                          'rounded-lg border px-3 py-2 text-sm',
+                          target ? 'border-border bg-background' : 'border-amber-200 bg-amber-50 text-amber-950',
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">
+                              {field.label || field.key}
+                              <span className="ml-1 font-mono text-xs text-muted-foreground">({field.key})</span>
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {field.type} to {target ? target.name : 'unmapped target'}
+                            </div>
+                            {target && (
+                              <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{route}</div>
+                            )}
+                          </div>
+                          {target ? (
+                            <button
+                              type="button"
+                              onClick={() => selectCollection(target)}
+                              disabled={isCollectionsBusy}
+                              className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Open
+                            </button>
+                          ) : (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground" data-testid="collections-relationship-outgoing-empty">
+                    Add a reference or multi-reference field to connect this schema to another collection.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex min-h-36 flex-col justify-center rounded-xl border border-primary/20 bg-primary/5 p-4 text-center" data-testid="collections-relationship-active-node">
+                <Database className="mx-auto mb-2 h-8 w-8 text-primary" aria-hidden="true" />
+                <div className="text-sm font-semibold text-foreground">{relationshipBrowser.activeName}</div>
+                <div className="mt-1 truncate font-mono text-xs text-muted-foreground">/{relationshipBrowser.activeSlug}</div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-background px-2 py-1">
+                    {activeSchemaFields.length} fields
+                  </div>
+                  <div className="rounded-md bg-background px-2 py-1">
+                    {fieldHealth.relational} relation{fieldHealth.relational === 1 ? '' : 's'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Incoming references</h3>
+                  <span className="text-xs text-muted-foreground" data-testid="collections-relationship-incoming-count">
+                    {relationshipBrowser.incoming.length} field{relationshipBrowser.incoming.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {relationshipBrowser.incoming.length > 0 ? (
+                  <div className="space-y-2" data-testid="collections-relationship-incoming">
+                    {relationshipBrowser.incoming.map(({ collection, field, route }) => (
+                      <div key={`${collection.id}-${field.key}`} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">
+                              {collection.name}
+                              <span className="ml-1 font-mono text-xs text-muted-foreground">/{collection.slug}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {field.label || field.key} ({field.type})
+                            </div>
+                            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{route}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => selectCollection(collection)}
+                            disabled={isCollectionsBusy}
+                            className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Open
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground" data-testid="collections-relationship-incoming-empty">
+                    No saved collections currently point at this schema.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {relationshipBrowser.unmapped.length > 0 && (
+              <div className="border-t border-border px-4 py-3" data-testid="collections-relationship-unmapped">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  <span className="font-medium">Unmapped relationship fields:</span>
+                  {relationshipBrowser.unmapped.slice(0, 6).map(({ collection, field }) => (
+                    <button
+                      key={`${collection.id}-${field.key}`}
+                      type="button"
+                      onClick={() => selectCollection(collection)}
+                      disabled={isCollectionsBusy}
+                      className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {collection.name}.{field.key}
+                    </button>
+                  ))}
+                  {relationshipBrowser.unmapped.length > 6 && (
+                    <span className="text-muted-foreground">+{relationshipBrowser.unmapped.length - 6} more</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
           <form id="collections-schema" onSubmit={handleCollectionSubmit} className="rounded-lg border border-border bg-card scroll-mt-24">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold">Schema builder</h2>
@@ -3675,7 +3873,7 @@ function CollectionsPage() {
               </div>
 
               {selectedRecordIds.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm" data-testid="collections-record-bulk-toolbar">
                   <span className="font-medium">
                     {selectedRecordIds.length} selected
                   </span>
@@ -3685,6 +3883,7 @@ function CollectionsPage() {
                       onClick={() => void handleBulkUpdateStatus('published')}
                       disabled={recordMutationDisabled}
                       title={editPermissionTitle}
+                      data-testid="collections-record-bulk-publish"
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Publish
@@ -3694,6 +3893,7 @@ function CollectionsPage() {
                       onClick={() => void handleBulkUpdateStatus('draft')}
                       disabled={recordMutationDisabled}
                       title={editPermissionTitle}
+                      data-testid="collections-record-bulk-draft"
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Draft
@@ -3703,6 +3903,7 @@ function CollectionsPage() {
                       onClick={() => void handleBulkUpdateStatus('archived')}
                       disabled={recordMutationDisabled}
                       title={editPermissionTitle}
+                      data-testid="collections-record-bulk-archive"
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Archive

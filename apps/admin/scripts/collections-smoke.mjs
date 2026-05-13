@@ -167,7 +167,7 @@ const smokeFrontendDesignContract = () => ({
   updatedAt: new Date().toISOString(),
 });
 
-const createCollection = async ({ name, slug }) => {
+const createCollection = async ({ name, slug, extraFields = [] }) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
     method: 'POST',
     body: JSON.stringify({
@@ -226,6 +226,7 @@ const createCollection = async ({ name, slug }) => {
           unique: false,
           sortOrder: 50,
         },
+        ...extraFields,
       ],
     }),
   });
@@ -429,9 +430,10 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
   );
 };
 
-const assertCollectionsLayout = async (client, { collectionName, collectionSlug, recordSlug }) => {
+const assertCollectionsLayout = async (client, { collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName }) => {
   const layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
+    const relationshipText = document.querySelector('[data-testid="collections-relationship-browser"]')?.textContent || '';
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -448,6 +450,16 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         body.includes('Editor data-binding contract') &&
         body.includes('Repeater/list sections') &&
         body.includes('Public write flows'),
+      hasRelationshipBrowser: Boolean(document.querySelector('[data-testid="collections-relationship-browser"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-relationship-outgoing"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-relationship-incoming"]')) &&
+        relationshipText.includes('Relationship browser') &&
+        relationshipText.includes('Outgoing references') &&
+        relationshipText.includes('Incoming references') &&
+        relationshipText.includes(${JSON.stringify(targetCollectionName)}) &&
+        relationshipText.includes(${JSON.stringify(incomingCollectionName)}) &&
+        relationshipText.includes('related_target') &&
+        relationshipText.includes('Directory reference'),
       hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
         Boolean(document.querySelector('[data-testid="collections-permission-contract"]')) &&
         Boolean(document.querySelector('[data-testid="collections-audit-list"]')) &&
@@ -464,6 +476,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
       hasSelectionControl: Boolean(Array.from(document.querySelectorAll('input')).find((input) => (
         (input.getAttribute('aria-label') || '') === ${JSON.stringify(`Select record ${recordSlug}`)}
       ))),
+      relationshipText,
     };
   })()`);
 
@@ -476,6 +489,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     layout.hasApiContract &&
       layout.hasFrontendContract &&
       layout.hasBindingContract &&
+      layout.hasRelationshipBrowser &&
       layout.hasAuditPanel &&
       layout.hasBuilder &&
       layout.hasRecords &&
@@ -541,7 +555,8 @@ const publishRecordThroughUi = async (client, recordSlug) => {
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const state = await evaluate(client, `(() => ({
-      ready: document.body?.innerText?.includes('1 selected') || false,
+      ready: Boolean(document.querySelector('[data-testid="collections-record-bulk-toolbar"]')) &&
+        (document.querySelector('[data-testid="collections-record-bulk-toolbar"]')?.textContent || '').includes('1 selected'),
       body: document.body?.innerText?.slice(0, 800) || '',
     }))()`);
     if (state.ready) break;
@@ -552,10 +567,14 @@ const publishRecordThroughUi = async (client, recordSlug) => {
   }
 
   const clicked = await evaluate(client, `(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const button = buttons.find((candidate) => (candidate.textContent || '').trim() === 'Publish');
+    const button = document.querySelector('[data-testid="collections-record-bulk-publish"]');
     if (!(button instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'publish-button-missing', buttons: buttons.map((candidate) => candidate.textContent?.trim()).filter(Boolean).slice(0, 80) };
+      return {
+        ok: false,
+        reason: 'publish-button-missing',
+        toolbar: document.querySelector('[data-testid="collections-record-bulk-toolbar"]')?.textContent || '',
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent?.trim()).filter(Boolean).slice(0, 100),
+      };
     }
     if (button.disabled) return { ok: false, reason: 'publish-button-disabled' };
     button.click();
@@ -648,11 +667,17 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let collectionId;
+  let targetCollectionId;
+  let incomingCollectionId;
   let frontendTemplateCollectionId;
   let originalFrontendDesign;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
   const collectionSlug = `smoke-directory-${suffix}`;
+  const targetCollectionName = `Smoke Target ${suffix}`;
+  const targetCollectionSlug = `smoke-target-${suffix}`;
+  const incomingCollectionName = `Smoke Related ${suffix}`;
+  const incomingCollectionSlug = `smoke-related-${suffix}`;
   const recordSlug = `smoke-record-${suffix}`;
   const recordTitle = `Smoke record ${suffix}`;
 
@@ -661,8 +686,41 @@ const main = async () => {
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());
 
-    const collection = await createCollection({ name: collectionName, slug: collectionSlug });
+    const targetCollection = await createCollection({ name: targetCollectionName, slug: targetCollectionSlug });
+    targetCollectionId = targetCollection.id;
+
+    const collection = await createCollection({
+      name: collectionName,
+      slug: collectionSlug,
+      extraFields: [
+        {
+          key: 'related_target',
+          label: 'Related target',
+          type: 'reference',
+          required: false,
+          unique: false,
+          sortOrder: 60,
+          referenceCollectionId: targetCollection.id,
+        },
+      ],
+    });
     collectionId = collection.id;
+    const incomingCollection = await createCollection({
+      name: incomingCollectionName,
+      slug: incomingCollectionSlug,
+      extraFields: [
+        {
+          key: 'directory_ref',
+          label: 'Directory reference',
+          type: 'reference',
+          required: false,
+          unique: false,
+          sortOrder: 60,
+          referenceCollectionId: collection.id,
+        },
+      ],
+    });
+    incomingCollectionId = incomingCollection.id;
     await createRecord({ collectionId, slug: recordSlug, title: recordTitle });
 
     ({ childProcess, userDataDir } = launchChrome());
@@ -680,7 +738,7 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToCollections(client, { collectionId, recordSlug });
-    await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug });
+    await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
     frontendTemplateCollectionId = frontendTemplateCollection.id;
     await navigateToCollections(client, { collectionId, recordSlug });
@@ -692,8 +750,12 @@ const main = async () => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
 
+    await deleteCollection(incomingCollectionId);
+    incomingCollectionId = null;
     await deleteCollection(collectionId);
     collectionId = null;
+    await deleteCollection(targetCollectionId);
+    targetCollectionId = null;
     await deleteCollection(frontendTemplateCollectionId);
     frontendTemplateCollectionId = null;
     await patchFrontendDesign(originalFrontendDesign);
@@ -713,7 +775,7 @@ const main = async () => {
       client,
       childProcess,
       userDataDir,
-      collectionIds: [collectionId, frontendTemplateCollectionId],
+      collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId],
       originalFrontendDesign,
     });
   }
