@@ -806,6 +806,91 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/collections/{collectionId}/records/{recordId}`]: {
+          patch: {
+            tags: ['Interactions'],
+            summary: 'Update a collection record when public update and write-token policy allow it',
+            operationId: 'updateBackyCollectionRecord',
+            parameters: [
+              {
+                name: 'collectionId',
+                in: 'path',
+                required: true,
+                schema: { type: 'string', enum: collectionIds.length > 0 ? collectionIds : undefined },
+              },
+              pathParameter('recordId', 'Collection record ID or slug'),
+              {
+                name: 'x-backy-public-write-token',
+                in: 'header',
+                required: false,
+                schema: { type: 'string' },
+                description: 'Collection-scoped public write token configured in visitorWritePolicy.',
+              },
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      values: { type: 'object', additionalProperties: true },
+                      fields: { type: 'object', additionalProperties: true },
+                      publicWriteToken: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              '200': {
+                description: 'Private updated record response',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CollectionRecordEnvelope' },
+                  },
+                },
+              },
+              '403': {
+                description: 'Public update disabled or public write token missing/invalid',
+              },
+            },
+          },
+          delete: {
+            tags: ['Interactions'],
+            summary: 'Delete a collection record when public delete and write-token policy allow it',
+            operationId: 'deleteBackyCollectionRecord',
+            parameters: [
+              {
+                name: 'collectionId',
+                in: 'path',
+                required: true,
+                schema: { type: 'string', enum: collectionIds.length > 0 ? collectionIds : undefined },
+              },
+              pathParameter('recordId', 'Collection record ID or slug'),
+              {
+                name: 'x-backy-public-write-token',
+                in: 'header',
+                required: false,
+                schema: { type: 'string' },
+                description: 'Collection-scoped public write token configured in visitorWritePolicy.',
+              },
+            ],
+            responses: {
+              '200': {
+                description: 'Private deleted record response',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/PublicDeleteEnvelope' },
+                  },
+                },
+              },
+              '403': {
+                description: 'Public delete disabled or public write token missing/invalid',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/reusable-sections`]: {
           get: {
             tags: ['Content'],
@@ -2198,6 +2283,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   ignoredFields: { type: 'array', items: { type: 'string' } },
                 },
               },
+            },
+          }),
+          PublicDeleteEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['deleted', 'recordId'],
+            properties: {
+              deleted: { type: 'boolean' },
+              recordId: { type: 'string' },
+              slug: { type: 'string' },
             },
           }),
           CollectionSchema: {

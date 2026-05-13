@@ -3656,9 +3656,116 @@ try {
     assert(publicCreateRecord.json?.data?.record?.values?.category === 'Standard', `${publicCreateRecord.url} expected validated option value`);
     assert(publicCreateRecord.json?.data?.record?.values?.rank === undefined, `${publicCreateRecord.url} expected visitor policy to ignore disallowed rank field`);
     assert(publicCreateRecord.json?.data?.visitorWritePolicy?.ignoredFields?.includes('rank'), `${publicCreateRecord.url} expected ignored rank field in visitor policy response`);
+    const publicCreatedRecordId = publicCreateRecord.json?.data?.record?.id;
+    assert(publicCreatedRecordId, `${publicCreateRecord.url} missing public created record id`);
 
     const hiddenPublicCreatedRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${publicCreatedRecordSlug}`);
     assert(hiddenPublicCreatedRecord.response.status === 404, `${hiddenPublicCreatedRecord.url} expected draft public-created record to stay hidden`);
+
+    const blockedPublicUpdate = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records/${publicCreatedRecordId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: {
+          summary: 'Blocked public update',
+        },
+      }),
+    });
+    assert(blockedPublicUpdate.response.status === 403, `${blockedPublicUpdate.url} expected public update to be disabled`);
+    assertBackyContract(blockedPublicUpdate, 'error');
+    assert(blockedPublicUpdate.json?.error?.code === 'PUBLIC_UPDATE_DISABLED', `${blockedPublicUpdate.url} expected PUBLIC_UPDATE_DISABLED`);
+
+    const publicWriteToken = `public-write-${unique}`;
+    const enablePublicMutations = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        permissions: {
+          publicRead: true,
+          publicCreate: true,
+          publicUpdate: true,
+          publicDelete: true,
+        },
+        metadata: {
+          ...(enablePublicCreate.json?.data?.collection?.metadata || {}),
+          visitorWritePolicy: {
+            ...(enablePublicCreate.json?.data?.collection?.metadata?.visitorWritePolicy || {}),
+            publicWriteToken,
+            updateFieldMode: 'selected',
+            allowedUpdateFields: ['summary', 'category'],
+          },
+        },
+      }),
+    });
+    assert(enablePublicMutations.response.status === 200, `${enablePublicMutations.url} expected public mutation policy update`);
+    assert(enablePublicMutations.json?.data?.collection?.permissions?.publicUpdate === true, `${enablePublicMutations.url} expected publicUpdate true`);
+    assert(enablePublicMutations.json?.data?.collection?.permissions?.publicDelete === true, `${enablePublicMutations.url} expected publicDelete true`);
+    const publicMutationCollectionDetail = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}`);
+    assert(publicMutationCollectionDetail.response.status === 200, `${publicMutationCollectionDetail.url} expected public mutation collection detail`);
+    assert(publicMutationCollectionDetail.json?.data?.collection?.metadata?.visitorWritePolicy?.publicWriteToken === undefined, `${publicMutationCollectionDetail.url} leaked public write token`);
+    assert(publicMutationCollectionDetail.json?.data?.collection?.metadata?.visitorWritePolicy?.updateToken === undefined, `${publicMutationCollectionDetail.url} leaked update token`);
+    assert(publicMutationCollectionDetail.json?.data?.collection?.metadata?.visitorWritePolicy?.deleteToken === undefined, `${publicMutationCollectionDetail.url} leaked delete token`);
+
+    const unauthPublicUpdate = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records/${publicCreatedRecordId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: {
+          summary: 'Unauthed public update',
+        },
+      }),
+    });
+    assert(unauthPublicUpdate.response.status === 403, `${unauthPublicUpdate.url} expected update token requirement`);
+    assertBackyContract(unauthPublicUpdate, 'error');
+    assert(unauthPublicUpdate.json?.error?.code === 'PUBLIC_UPDATE_AUTH_REQUIRED', `${unauthPublicUpdate.url} expected PUBLIC_UPDATE_AUTH_REQUIRED`);
+
+    const publicUpdateRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records/${publicCreatedRecordId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-public-write-token': publicWriteToken,
+      },
+      body: JSON.stringify({
+        values: {
+          summary: 'Visitor updated structured content',
+          category: 'Featured',
+          rank: 99,
+        },
+      }),
+    });
+    assert(publicUpdateRecord.response.status === 200, `${publicUpdateRecord.url} expected public update success`);
+    assertBackyContract(publicUpdateRecord, 'private');
+    assert(publicUpdateRecord.json?.data?.record?.values?.summary === 'Visitor updated structured content', `${publicUpdateRecord.url} expected public summary update`);
+    assert(publicUpdateRecord.json?.data?.record?.values?.category === 'Featured', `${publicUpdateRecord.url} expected public category update`);
+    assert(publicUpdateRecord.json?.data?.record?.values?.rank === undefined, `${publicUpdateRecord.url} expected public update field policy to ignore rank`);
+    assert(publicUpdateRecord.json?.data?.visitorWritePolicy?.ignoredFields?.includes('rank'), `${publicUpdateRecord.url} expected ignored rank in update policy response`);
+    assert(publicUpdateRecord.json?.data?.visitorWritePolicy?.allowedUpdateFields?.includes('summary'), `${publicUpdateRecord.url} expected allowed update fields in response`);
+
+    const unauthPublicDelete = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records/${publicCreatedRecordId}`, {
+      method: 'DELETE',
+    });
+    assert(unauthPublicDelete.response.status === 403, `${unauthPublicDelete.url} expected delete token requirement`);
+    assertBackyContract(unauthPublicDelete, 'error');
+    assert(unauthPublicDelete.json?.error?.code === 'PUBLIC_DELETE_AUTH_REQUIRED', `${unauthPublicDelete.url} expected PUBLIC_DELETE_AUTH_REQUIRED`);
+
+    const publicDeleteRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records/${publicCreatedRecordId}`, {
+      method: 'DELETE',
+      headers: {
+        'x-backy-public-write-token': publicWriteToken,
+      },
+    });
+    assert(publicDeleteRecord.response.status === 200, `${publicDeleteRecord.url} expected public delete success`);
+    assertBackyContract(publicDeleteRecord, 'private');
+    assert(publicDeleteRecord.json?.data?.deleted === true, `${publicDeleteRecord.url} expected deleted true`);
+    assert(publicDeleteRecord.json?.data?.recordId === publicCreatedRecordId, `${publicDeleteRecord.url} expected deleted public record id`);
+    const deletedPublicRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${publicCreatedRecordSlug}`);
+    assert(!deletedPublicRecord.json?.data?.records?.some((record) => record.id === publicCreatedRecordId), `${deletedPublicRecord.url} expected public-deleted record to be removed`);
 
     let formWritePageId = null;
     let manifestReusableSectionId = null;
@@ -4383,6 +4490,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get, `${publicOpenApi.url} missing media file operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/transform`]?.get, `${publicOpenApi.url} missing media transform operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records`]?.post, `${publicOpenApi.url} missing public collection create operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records/{recordId}`]?.patch, `${publicOpenApi.url} missing public collection update operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records/{recordId}`]?.delete, `${publicOpenApi.url} missing public collection delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections`]?.get, `${publicOpenApi.url} missing reusable sections list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections/{sectionId}`]?.get, `${publicOpenApi.url} missing reusable section detail operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}`]?.get, `${publicOpenApi.url} missing form detail operation`);
