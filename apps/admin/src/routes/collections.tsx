@@ -27,6 +27,7 @@ import {
   deleteCollection,
   deleteCollectionRecord,
   exportCollectionRecordsCsv,
+  getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
   listAdminAuditLogs,
@@ -40,11 +41,13 @@ import {
   type CollectionPermissions,
   type CollectionRecord,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { cn, formatDate } from '@/lib/utils';
 import type { SiteSettings } from '@backy-cms/core';
 
@@ -174,6 +177,15 @@ const COLLECTION_PERMISSION_CONTRACT = [
   { key: 'collections.export', label: 'Export records', detail: 'Required for backend CSV exports from filtered record lists.' },
   { key: 'collections.delete', label: 'Delete schemas or records', detail: 'Required for destructive schema, record, and selected-record deletes.' },
 ] as const;
+
+type CollectionPermissionKey = (typeof COLLECTION_PERMISSION_CONTRACT)[number]['key'];
+
+const COLLECTION_PERMISSION_ROLE_DEFAULTS: Record<CollectionPermissionKey, Array<'owner' | 'admin' | 'editor' | 'viewer'>> = {
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'collections.edit': ['owner', 'admin', 'editor'],
+  'collections.export': ['owner', 'admin'],
+  'collections.delete': ['owner', 'admin'],
+};
 
 interface CollectionTemplate {
   id: string;
@@ -760,8 +772,45 @@ const formatValidationDetails = (details: unknown): string[] => {
     .filter(Boolean);
 };
 
+const collectionPermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: CollectionPermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isCollectionPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: CollectionPermissionKey,
+): boolean => {
+  const matrixRule = collectionPermissionRule(permissionMatrix, key);
+  if (matrixRule) {
+    return matrixRule.allowed;
+  }
+  return Boolean(currentAdmin && COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const collectionPermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: CollectionPermissionKey,
+): string => {
+  const matrixRule = collectionPermissionRule(permissionMatrix, key);
+  if (matrixRule) {
+    return matrixRule.reason;
+  }
+  if (!currentAdmin) {
+    return 'Sign in with an admin account to use this capability.';
+  }
+  return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
+
 function CollectionsPage() {
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
@@ -812,6 +861,9 @@ function CollectionsPage() {
   const [collectionAuditLogs, setCollectionAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -868,6 +920,19 @@ function CollectionsPage() {
   const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
   const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
   const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
+  const canEditCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
+  const canExportCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
+  const canDeleteCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
+  const schemaMutationDisabled = isCollectionsBusy || !canEditCollections;
+  const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
+  const recordExportDisabled = isCollectionsBusy || !canExportCollections;
+  const destructiveActionDisabled = isCollectionsBusy || !canDeleteCollections;
+  const viewPermissionTitle = canViewCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
+  const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
+  const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
+  const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete');
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -1243,6 +1308,12 @@ function CollectionsPage() {
       : []);
   };
 
+  const showPermissionDenied = (key: CollectionPermissionKey, action: string) => {
+    setNotice(null);
+    setValidationDetails([]);
+    setError(`Your account needs ${key} to ${action}. ${collectionPermissionReason(permissionMatrix, currentAdmin, key)}`);
+  };
+
   const copyCollectionApiText = async (value: string, label: string) => {
     if (isCollectionsBusy) return;
 
@@ -1334,6 +1405,45 @@ function CollectionsPage() {
       cancelled = true;
     };
   }, [activeSiteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load collection permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    setPermissionError(null);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+        }
+      })
+      .catch((permissionLoadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionLoadError instanceof Error
+            ? permissionLoadError.message
+            : 'Unable to load collection permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   const resetCollectionForm = () => {
     setSelectedCollectionId(null);
@@ -1458,6 +1568,10 @@ function CollectionsPage() {
 
   const applyCollectionTemplate = (template: CollectionTemplate) => {
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'prepare a collection template');
+      return;
+    }
 
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
@@ -1501,6 +1615,10 @@ function CollectionsPage() {
     blueprint: FrontendCollectionTemplateBlueprint,
   ) => {
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'create a collection from a frontend template');
+      return;
+    }
 
     setIsCreatingFrontendTemplateId(template.id);
     setIsSavingCollection(true);
@@ -1719,6 +1837,10 @@ function CollectionsPage() {
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'save collection schemas');
+      return;
+    }
 
     setIsSavingCollection(true);
     setError(null);
@@ -1766,6 +1888,10 @@ function CollectionsPage() {
 
   const handleDeleteCollection = async (collection: Collection) => {
     if (isCollectionsBusy) return;
+    if (!canDeleteCollections) {
+      showPermissionDenied('collections.delete', 'delete collection schemas');
+      return;
+    }
 
     setIsSavingCollection(true);
     setError(null);
@@ -1797,6 +1923,10 @@ function CollectionsPage() {
     event.preventDefault();
     if (!activeCollection) return;
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'save collection records');
+      return;
+    }
 
     setIsSavingRecord(true);
     setError(null);
@@ -1842,6 +1972,10 @@ function CollectionsPage() {
       return;
     }
     if (isCollectionsBusy) return;
+    if (!canDeleteCollections) {
+      showPermissionDenied('collections.delete', 'delete collection records');
+      return;
+    }
 
     setIsSavingRecord(true);
     setError(null);
@@ -1868,6 +2002,10 @@ function CollectionsPage() {
   const handleBulkUpdateStatus = async (status: CollectionRecord['status']) => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'bulk update collection records');
+      return;
+    }
 
     setIsSavingRecord(true);
     setError(null);
@@ -1896,6 +2034,10 @@ function CollectionsPage() {
   const handleBulkDeleteRecords = async () => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
     if (isCollectionsBusy) return;
+    if (!canDeleteCollections) {
+      showPermissionDenied('collections.delete', 'bulk delete collection records');
+      return;
+    }
 
     setIsSavingRecord(true);
     setError(null);
@@ -1927,6 +2069,10 @@ function CollectionsPage() {
   const handleExportRecords = async () => {
     if (!activeCollection) return;
     if (isCollectionsBusy) return;
+    if (!canExportCollections) {
+      showPermissionDenied('collections.export', 'export collection records');
+      return;
+    }
 
     setIsExportingRecords(true);
     setError(null);
@@ -1961,6 +2107,11 @@ function CollectionsPage() {
   const handleImportRecords = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!activeCollection) return;
     if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'import collection records');
+      event.target.value = '';
+      return;
+    }
 
     const file = event.target.files?.[0];
     if (!file) return;
@@ -2006,7 +2157,8 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={resetCollectionForm}
-            disabled={isCollectionsBusy}
+            disabled={schemaMutationDisabled}
+            title={editPermissionTitle}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Create new collection"
           >
@@ -2032,6 +2184,12 @@ function CollectionsPage() {
       {notice && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
+        </div>
+      )}
+
+      {!canViewCollections && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {viewPermissionTitle}
         </div>
       )}
 
@@ -2091,7 +2249,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={resetCollectionForm}
-              disabled={isCollectionsBusy}
+              disabled={schemaMutationDisabled}
+              title={editPermissionTitle}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
@@ -2212,20 +2371,51 @@ function CollectionsPage() {
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="rounded-lg border border-border bg-background p-4" data-testid="collections-permission-contract">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">Permission contract</h3>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Permission contract</h3>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                Effective role {permissionMatrix?.role || currentAdmin?.role || 'unknown'}
+              </span>
             </div>
+            {permissionError && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {permissionError}
+              </div>
+            )}
             <div className="mt-3 grid gap-2">
-              {COLLECTION_PERMISSION_CONTRACT.map((permission) => (
-                <div key={permission.key} className="rounded-lg border border-border bg-card px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{permission.label}</span>
-                    <code className="rounded bg-muted px-2 py-1 text-xs">{permission.key}</code>
+              {COLLECTION_PERMISSION_CONTRACT.map((permission) => {
+                const allowed = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key);
+                const pending = isPermissionsLoading && !permissionMatrix;
+
+                return (
+                  <div key={permission.key} className="rounded-lg border border-border bg-card px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{permission.label}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          pending
+                            ? 'bg-muted text-muted-foreground'
+                            : allowed
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-amber-50 text-amber-700',
+                        )}
+                        >
+                          {pending ? 'Loading' : allowed ? 'Allowed' : 'Blocked'}
+                        </span>
+                        <code className="rounded bg-muted px-2 py-1 text-xs">{permission.key}</code>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{permission.detail}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {pending ? 'Loading current admin permission matrix.' : collectionPermissionReason(permissionMatrix, currentAdmin, permission.key)}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{permission.detail}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -2348,7 +2538,8 @@ function CollectionsPage() {
                         <button
                           type="button"
                           onClick={() => void createCollectionFromFrontendTemplate(template, blueprint)}
-                          disabled={isCollectionsBusy}
+                          disabled={schemaMutationDisabled}
+                          title={editPermissionTitle}
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`collections-frontend-template-${template.id}`}
                         >
@@ -2398,7 +2589,8 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => applyCollectionTemplate(template)}
-                disabled={isCollectionsBusy}
+                disabled={schemaMutationDisabled}
+                title={editPermissionTitle}
                 className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Use template
@@ -2660,8 +2852,12 @@ function CollectionsPage() {
                 {activeCollection && (
                   <button
                     type="button"
-                    onClick={() => setPendingCollectionDelete(activeCollection)}
-                    disabled={isCollectionsBusy}
+                    onClick={() => {
+                      if (destructiveActionDisabled) return;
+                      setPendingCollectionDelete(activeCollection);
+                    }}
+                    disabled={destructiveActionDisabled}
+                    title={deletePermissionTitle}
                     className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -2670,7 +2866,8 @@ function CollectionsPage() {
                 )}
                 <button
                   type="submit"
-                  disabled={isCollectionsBusy}
+                  disabled={schemaMutationDisabled}
+                  title={editPermissionTitle}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save className="h-4 w-4" />
@@ -2679,7 +2876,7 @@ function CollectionsPage() {
               </div>
             </div>
 
-            <fieldset disabled={isCollectionsBusy} className="min-w-0">
+            <fieldset disabled={schemaMutationDisabled} className="min-w-0">
             <div className="grid gap-4 p-4 lg:grid-cols-4">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Name</span>
@@ -2763,7 +2960,7 @@ function CollectionsPage() {
                     label="Public read"
                     description="Frontend pages can list and render records."
                     checked={collectionForm.permissions.publicRead}
-                    disabled={isCollectionsBusy}
+                    disabled={schemaMutationDisabled}
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -2776,7 +2973,7 @@ function CollectionsPage() {
                     label="Visitor create"
                     description="Public POST creates draft records."
                     checked={collectionForm.permissions.publicCreate}
-                    disabled={isCollectionsBusy}
+                    disabled={schemaMutationDisabled}
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -2821,7 +3018,8 @@ function CollectionsPage() {
                     ...prev,
                     fields: [...prev.fields, createEmptyField((prev.fields.length + 1) * 10)],
                   }))}
-                  disabled={isCollectionsBusy}
+                  disabled={schemaMutationDisabled}
+                  title={editPermissionTitle}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Plus className="h-4 w-4" />
@@ -2919,7 +3117,8 @@ function CollectionsPage() {
                           <button
                             type="button"
                             onClick={() => removeField(index)}
-                            disabled={collectionForm.fields.length === 1 || isCollectionsBusy}
+                            disabled={collectionForm.fields.length === 1 || schemaMutationDisabled}
+                            title={collectionForm.fields.length === 1 ? 'At least one field is required.' : editPermissionTitle}
                             className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -2972,7 +3171,8 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => importInputRef.current?.click()}
-                    disabled={isCollectionsBusy}
+                    disabled={recordMutationDisabled}
+                    title={editPermissionTitle}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Import collection records CSV"
                   >
@@ -2982,7 +3182,8 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => void handleExportRecords()}
-                    disabled={isCollectionsBusy}
+                    disabled={recordExportDisabled}
+                    title={exportPermissionTitle}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Download className="h-4 w-4" />
@@ -2991,12 +3192,13 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (isCollectionsBusy) return;
+                      if (recordMutationDisabled) return;
                       setSelectedRecordId(null);
                       setRecordForm({ slug: '', status: 'published', values: {} });
                       updateCollectionsRouteSearch({ recordId: undefined });
                     }}
-                    disabled={isCollectionsBusy}
+                    disabled={recordMutationDisabled}
+                    title={editPermissionTitle}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="h-4 w-4" />
@@ -3102,7 +3304,8 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('published')}
-                      disabled={isCollectionsBusy}
+                      disabled={recordMutationDisabled}
+                      title={editPermissionTitle}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Publish
@@ -3110,7 +3313,8 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('draft')}
-                      disabled={isCollectionsBusy}
+                      disabled={recordMutationDisabled}
+                      title={editPermissionTitle}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Draft
@@ -3118,7 +3322,8 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('archived')}
-                      disabled={isCollectionsBusy}
+                      disabled={recordMutationDisabled}
+                      title={editPermissionTitle}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Archive
@@ -3134,10 +3339,11 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (isCollectionsBusy) return;
+                        if (destructiveActionDisabled) return;
                         setPendingBulkDelete(true);
                       }}
-                      disabled={isCollectionsBusy}
+                      disabled={destructiveActionDisabled}
+                      title={deletePermissionTitle}
                       className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Delete
@@ -3226,10 +3432,11 @@ function CollectionsPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (isCollectionsBusy) return;
+                                  if (destructiveActionDisabled) return;
                                   setPendingRecordDelete(record);
                                 }}
-                                disabled={isCollectionsBusy}
+                                disabled={destructiveActionDisabled}
+                                title={deletePermissionTitle}
                                 className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -3309,12 +3516,13 @@ function CollectionsPage() {
                 </div>
 
                 <form onSubmit={handleRecordSubmit} className="p-4">
-                  <fieldset disabled={isCollectionsBusy} className="space-y-4">
+                  <fieldset disabled={recordMutationDisabled} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">{selectedRecord ? 'Edit record' : 'Create record'}</h3>
                     <button
                       type="submit"
-                      disabled={isCollectionsBusy}
+                      disabled={recordMutationDisabled}
+                      title={editPermissionTitle}
                       className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Save className="h-4 w-4" />
@@ -3458,7 +3666,8 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteCollection(pendingCollectionDelete)}
-                disabled={isCollectionsBusy}
+                disabled={destructiveActionDisabled}
+                title={deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingCollection ? 'Deleting...' : 'Delete collection'}
@@ -3494,7 +3703,8 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteRecord(pendingRecordDelete)}
-                disabled={isCollectionsBusy}
+                disabled={destructiveActionDisabled}
+                title={deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingRecord ? 'Deleting...' : 'Delete record'}
@@ -3530,7 +3740,8 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleBulkDeleteRecords()}
-                disabled={isCollectionsBusy}
+                disabled={destructiveActionDisabled}
+                title={deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingRecord ? 'Deleting...' : 'Delete records'}
