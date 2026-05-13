@@ -368,6 +368,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const updated = await repositories.media.update(site.id, mediaId, {
         filename: typeof body.filename === 'string' ? body.filename : undefined,
+        originalName: typeof body.originalName === 'string' ? body.originalName : undefined,
         folderId,
         altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
         caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,

@@ -1493,6 +1493,7 @@ const main = async () => {
   const folderName = `Media Smoke ${suffix}`;
   const imageName = `${marker}.png`;
   const replacementName = `${marker}-replacement.png`;
+  const renamedImageName = `${marker}-renamed.png`;
   const privateName = `${marker}.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
@@ -1651,6 +1652,7 @@ const main = async () => {
     ));
     assert(transformedImage.metadata.generatedTransforms.preparedBy === 'admin', 'UI transform preparation did not record the admin actor.');
     await assertMediaLibraryActivity(client, imageName);
+    await setDetailsField(client, 'File name', renamedImageName);
     await setDetailsField(client, 'Focal X', 28);
     await setDetailsField(client, 'Focal Y', 72);
     await setDetailsField(client, 'Crop fit', 'contain');
@@ -1658,8 +1660,14 @@ const main = async () => {
     await setDetailsField(client, 'Alt text', updatedAltText);
     await setDetailsField(client, 'Visibility', 'private');
     await saveDetails(client);
-    const updatedImage = await waitForMedia(marker, (item) => item.id === publicImage.id && item.altText === updatedAltText && item.visibility === 'private');
+    const updatedImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.originalName === renamedImageName &&
+      item.altText === updatedAltText &&
+      item.visibility === 'private'
+    ));
     assert(updatedImage.folderId === folderId, 'Media metadata save lost the folder assignment.');
+    assert(updatedImage.filename === publicImage.filename, 'Media metadata rename should not rewrite the stored file path.');
     assert(Array.isArray(updatedImage.metadata?.replacementVersions) && updatedImage.metadata.replacementVersions.length === 1, 'Media metadata save lost replacement history.');
     assert(Array.isArray(updatedImage.metadata?.generatedTransforms?.variants) && updatedImage.metadata.generatedTransforms.variants.length > 0, 'Media metadata save lost generated transforms.');
     assert(updatedImage.metadata?.imagePresentation?.focalPoint?.x === 28, 'Media metadata save did not persist focal X.');
