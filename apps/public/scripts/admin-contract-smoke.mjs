@@ -4497,6 +4497,59 @@ try {
     assert(adminCsvExport.text.startsWith('id,slug,status,createdAt,updatedAt,publishedAt,scheduledAt,title,summary,rank,category,labels'), `${adminCsvExport.url} missing CSV header`);
     assert(adminCsvExport.text.includes(collectionRecordSlug) && adminCsvExport.text.includes('Collection Record'), `${adminCsvExport.url} missing exported collection record`);
 
+    const collectionBackupExport = await request(`/api/admin/sites/${createdSiteId}/collections/export?ids=${createdCollectionId}`);
+    assert(collectionBackupExport.response.status === 200, `${collectionBackupExport.url} expected collection backup export 200`);
+    assert(collectionBackupExport.response.headers.get('content-disposition')?.includes('collections-backup.json'), `${collectionBackupExport.url} missing backup filename`);
+    assert(collectionBackupExport.json?.data?.backup?.schemaVersion === 'backy.collections.backup.v1', `${collectionBackupExport.url} missing backup schema version`);
+    assert(collectionBackupExport.json?.data?.backup?.collectionCount === 1, `${collectionBackupExport.url} expected one exported collection`);
+    assert(collectionBackupExport.json?.data?.backup?.recordCount >= 1, `${collectionBackupExport.url} expected exported records`);
+    const exportedCollection = collectionBackupExport.json?.data?.collections?.[0];
+    assert(exportedCollection?.slug === collectionSlug, `${collectionBackupExport.url} exported wrong collection slug`);
+    assert(exportedCollection?.records?.some((record) => record.slug === collectionRecordSlug), `${collectionBackupExport.url} missing exported collection record`);
+
+    const backupCollectionSlug = `${collectionSlug}-backup`;
+    const backupRecordSlug = `${collectionRecordSlug}-backup`;
+    const backupImportCollection = {
+      ...exportedCollection,
+      name: 'Backup Restored Collection',
+      slug: backupCollectionSlug,
+      listRoutePattern: `/directory-backup-${unique}`,
+      routePattern: `/directory-backup-${unique}/:recordSlug`,
+      records: exportedCollection.records
+        .filter((record) => record.slug === collectionRecordSlug)
+        .map((record) => ({
+          ...record,
+          slug: backupRecordSlug,
+          values: {
+            ...record.values,
+            title: 'Backup Restored Record',
+          },
+        })),
+    };
+    const backupImport = await request(`/api/admin/sites/${createdSiteId}/collections/import?upsert=true`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        collections: [backupImportCollection],
+      }),
+    });
+    assert(backupImport.response.status === 200, `${backupImport.url} expected collection backup import 200`);
+    assert(backupImport.json?.data?.import?.createdCollections === 1, `${backupImport.url} expected one imported collection`);
+    assert(backupImport.json?.data?.import?.createdRecords === 1, `${backupImport.url} expected one imported record`);
+    const backupCollectionId = backupImport.json?.data?.collections?.[0]?.id;
+    const backupRecordId = backupImport.json?.data?.records?.[0]?.id;
+    assert(backupCollectionId && backupRecordId, `${backupImport.url} missing imported collection or record id`);
+    const backupImportedRecords = await request(`/api/admin/sites/${createdSiteId}/collections/${backupCollectionId}/records?slug=${backupRecordSlug}`);
+    assert(backupImportedRecords.response.status === 200, `${backupImportedRecords.url} expected imported record readback 200`);
+    assert(backupImportedRecords.json?.data?.records?.[0]?.values?.title === 'Backup Restored Record', `${backupImportedRecords.url} missing restored record values`);
+    const backupImportAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collection&entityId=${backupCollectionId}&action=collection.import&requestId=${backupImport.json.requestId}`);
+    assert(backupImportAudit.response.status === 200, `${backupImportAudit.url} expected collection import audit readback`);
+    assert(backupImportAudit.json?.data?.logs?.[0]?.metadata?.createdCollections === 1, `${backupImportAudit.url} missing collection import audit metadata`);
+    await request(`/api/admin/sites/${createdSiteId}/collections/${backupCollectionId}/records/${backupRecordId}`, { method: 'DELETE' });
+    await request(`/api/admin/sites/${createdSiteId}/collections/${backupCollectionId}`, { method: 'DELETE' });
+
     const editorSessionToken = await loginAdminCredentials('jane@backy.io', process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123');
     const editorListCollections = await requestWithSession(`/api/admin/sites/${createdSiteId}/collections`, editorSessionToken);
     assert(editorListCollections.response.status === 200, `${editorListCollections.url} expected editor collection view access`);
