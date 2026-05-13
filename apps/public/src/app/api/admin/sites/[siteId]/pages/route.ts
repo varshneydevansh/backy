@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   canvasElementsToBackyContentDocument,
   isBackyContentDocument,
+  type BackyJsonObject,
   type BackyContentDocument,
   type BackyPage,
 } from '@backy-cms/core';
@@ -24,6 +25,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 export const runtime = 'nodejs';
 
@@ -133,6 +135,24 @@ const adminPageFromRepositoryPage = (page: BackyPage, includeContent = true) => 
     },
   };
 };
+
+const pageAuditMetadata = (page: {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  scheduledAt?: string | null;
+  isHomepage?: boolean;
+  parentId?: string | null;
+}): BackyJsonObject => ({
+  pageId: page.id,
+  title: page.title,
+  slug: page.slug,
+  status: page.status,
+  scheduledAt: page.scheduledAt || null,
+  isHomepage: page.isHomepage === true,
+  parentId: page.parentId || null,
+});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -278,6 +298,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'page-created',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'page',
+        entityId: created.item.id,
+        action: 'create',
+        after: pageAuditMetadata(created.item),
+        metadata: pageAuditMetadata(created.item),
+        requestId,
+      });
 
       return NextResponse.json(
         {
@@ -336,6 +366,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ...seeded.body,
       title,
       slug,
+    });
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'page',
+      entityId: page.id,
+      action: 'create',
+      after: pageAuditMetadata(page),
+      metadata: pageAuditMetadata(page),
+      requestId,
     });
 
     return NextResponse.json(

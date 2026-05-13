@@ -1042,6 +1042,10 @@ try {
     assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
     assert(create.json?.data?.page?.slug === pageSlug, `${create.url} returned wrong page slug`);
     createdPageId = create.json.data.page.id;
+    const pageCreateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=page&entityId=${createdPageId}&action=create&requestId=${create.json.requestId}`);
+    assert(pageCreateAudit.response.status === 200, `${pageCreateAudit.url} expected page create audit readback`);
+    assert(pageCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === pageSlug, `${pageCreateAudit.url} missing page create audit metadata`);
+    assert(pageCreateAudit.json?.data?.logs?.[0]?.after?.status === 'draft', `${pageCreateAudit.url} missing page create audit after snapshot`);
 
     const list = await request(`/api/admin/sites/${createdSiteId}/pages?includeUnpublished=true`);
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
@@ -1309,7 +1313,11 @@ try {
     assert(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.templateId === 'captured-page-template', `${publicCapturedTemplatePage.url} missing normalized captured frontend design`);
     assert(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.routePattern === '/captured/{slug}', `${publicCapturedTemplatePage.url} missing normalized captured route pattern`);
     assert(Array.isArray(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.bindingHints) && publicCapturedTemplatePage.json.data.page.frontendDesign.bindingHints.length === 2, `${publicCapturedTemplatePage.url} missing normalized captured binding hints`);
-    await request(`/api/admin/sites/${createdSiteId}/pages/${capturedTemplatePageId}`, { method: 'DELETE' });
+    const deleteCapturedTemplatePage = await request(`/api/admin/sites/${createdSiteId}/pages/${capturedTemplatePageId}`, { method: 'DELETE' });
+    assert(deleteCapturedTemplatePage.response.status === 200, `${deleteCapturedTemplatePage.url} expected captured template page delete`);
+    const pageDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=page&entityId=${capturedTemplatePageId}&action=delete&requestId=${deleteCapturedTemplatePage.json.requestId}`);
+    assert(pageDeleteAudit.response.status === 200, `${pageDeleteAudit.url} expected page delete audit readback`);
+    assert(pageDeleteAudit.json?.data?.logs?.[0]?.metadata?.slug === `${pageSlug}-captured-design`, `${pageDeleteAudit.url} missing page delete audit metadata`);
     capturedTemplatePageId = null;
 
     const pageFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
@@ -1342,6 +1350,11 @@ try {
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.page?.title === 'Updated Admin Contract Page', `${update.url} expected updated title`);
     assert(update.json?.data?.page?.status === 'published', `${update.url} expected published status`);
+    const pageUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=page&entityId=${createdPageId}&action=update&requestId=${update.json.requestId}`);
+    assert(pageUpdateAudit.response.status === 200, `${pageUpdateAudit.url} expected page update audit readback`);
+    assert(pageUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('title'), `${pageUpdateAudit.url} missing page update changedFields metadata`);
+    assert(pageUpdateAudit.json?.data?.logs?.[0]?.before?.title === 'Admin Contract Page', `${pageUpdateAudit.url} missing page update before snapshot`);
+    assert(pageUpdateAudit.json?.data?.logs?.[0]?.after?.title === 'Updated Admin Contract Page', `${pageUpdateAudit.url} missing page update after snapshot`);
 
     const invalidNavigation = await request(`/api/admin/sites/${createdSiteId}/navigation`, {
       method: 'PATCH',

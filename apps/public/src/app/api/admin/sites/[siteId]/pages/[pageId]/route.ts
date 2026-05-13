@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   canvasElementsToBackyContentDocument,
   isBackyContentDocument,
+  type BackyJsonObject,
   type BackyContentDocument,
   type BackyPage,
 } from '@backy-cms/core';
@@ -26,6 +27,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { recordAdminAudit } from '@/lib/adminAudit';
 
 export const runtime = 'nodejs';
 
@@ -129,6 +131,29 @@ const adminPageFromRepositoryPage = (page: BackyPage) => {
     },
   };
 };
+
+const pageAuditMetadata = (page: {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  scheduledAt?: string | null;
+  isHomepage?: boolean;
+  parentId?: string | null;
+}): BackyJsonObject => ({
+  pageId: page.id,
+  title: page.title,
+  slug: page.slug,
+  status: page.status,
+  scheduledAt: page.scheduledAt || null,
+  isHomepage: page.isHomepage === true,
+  parentId: page.parentId || null,
+});
+
+const updateAuditMetadata = (page: Parameters<typeof pageAuditMetadata>[0], body: Record<string, unknown>): BackyJsonObject => ({
+  ...pageAuditMetadata(page),
+  changedFields: Object.keys(body).filter((key) => key !== 'expectedUpdatedAt'),
+});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -278,6 +303,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: 'page-updated',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'page',
+        entityId: page.id,
+        action: 'update',
+        before: pageAuditMetadata(page),
+        after: pageAuditMetadata(updated.item),
+        metadata: updateAuditMetadata(updated.item, body),
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -341,6 +377,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'page',
+      entityId: page.id,
+      action: 'update',
+      before: pageAuditMetadata(page),
+      after: pageAuditMetadata(updated),
+      metadata: updateAuditMetadata(updated, body),
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
@@ -372,6 +418,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
+      const page = await repositories.pages.getById(site.id, pageId);
+      if (!page) {
+        return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+      }
+
       await repositories.contentWorkflows.deletePreviewTokensForTarget(site.id, 'page', pageId);
       const deleted = await repositories.pages.delete(site.id, pageId);
 
@@ -384,6 +435,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         entity: 'page',
         entityId: pageId,
         reason: 'page-deleted',
+        requestId,
+      });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'page',
+        entityId: pageId,
+        action: 'delete',
+        before: pageAuditMetadata(page),
+        metadata: pageAuditMetadata(page),
         requestId,
       });
 
@@ -404,11 +465,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const page = getAdminPageById(site.id, pageId);
+    if (!page) {
+      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+    }
+
     const deleted = deleteAdminPage(site.id, pageId);
 
     if (!deleted) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'page',
+      entityId: pageId,
+      action: 'delete',
+      before: pageAuditMetadata(page),
+      metadata: pageAuditMetadata(page),
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
