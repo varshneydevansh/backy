@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
+  Activity,
   AlertTriangle,
   Archive,
   CheckCircle2,
@@ -27,9 +28,11 @@ import {
 import {
   createSite as createSiteFromApi,
   deleteSite as deleteSiteFromApi,
+  listAdminAuditLogs,
   listPages,
   listSites,
   updateSite as updateSiteFromApi,
+  type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
@@ -104,6 +107,11 @@ const SITE_LIST_CONTROL_AREAS = [
     title: 'Feature systems',
     detail: 'Jump into pages, blog, commerce, forms, files, and delivery setup.',
     href: '#sites-workflows',
+  },
+  {
+    title: 'Audit trail',
+    detail: 'Review request-id-backed site create, update, archive, duplicate, and delete events.',
+    href: '#sites-audit',
   },
   {
     title: 'Library controls',
@@ -254,6 +262,26 @@ const csvEscape = (value: unknown): string => {
 
 const getSiteApiId = (site: Site) => site.publicSiteId || site.id;
 
+const auditText = (record: Record<string, unknown> | undefined, key: string): string => {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const getSiteAuditLabel = (log: AdminAuditLog): string => (
+  auditText(log.after, 'name') || auditText(log.before, 'name') || auditText(log.metadata, 'slug') || log.entityId
+);
+
+const getSiteAuditStatus = (log: AdminAuditLog): string => (
+  auditText(log.after, 'status') || auditText(log.before, 'status') || auditText(log.metadata, 'status') || 'recorded'
+);
+
+const formatSiteAuditAction = (action: string): string => (
+  action
+    .replace(/^site\./, '')
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+);
+
 const getSiteEndpointMap = (site: Site, publicApiBase: string, adminApiBase: string) => {
   const siteApiId = encodeURIComponent(getSiteApiId(site));
 
@@ -339,12 +367,30 @@ function SitesListView() {
   const [domainFilter, setDomainFilter] = useState<SiteDomainFilter>('all');
   const [pageCoverageFilter, setPageCoverageFilter] = useState<SitePageCoverageFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
+  const [siteAuditLogs, setSiteAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const isSiteMutationBusy = updatingSiteId !== null;
   const isSitesBusy = isLoading || isSiteMutationBusy;
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
   const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
+
+  const loadSiteAuditLogs = useCallback(async () => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+
+    try {
+      const result = await listAdminAuditLogs({ entity: 'site', limit: 8 });
+      setSiteAuditLogs(result.logs);
+    } catch (loadError) {
+      setSiteAuditLogs([]);
+      setAuditError(loadError instanceof Error ? loadError.message : 'Unable to load site audit events');
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
 
   const loadSites = useCallback(async () => {
     setIsLoading(true);
@@ -372,7 +418,8 @@ function SitesListView() {
 
   useEffect(() => {
     void loadSites();
-  }, [loadSites]);
+    void loadSiteAuditLogs();
+  }, [loadSiteAuditLogs, loadSites]);
 
   const metrics = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
@@ -475,6 +522,7 @@ function SitesListView() {
       const saved = await updateSiteFromApi(site.publicSiteId || site.id, { status });
       setSites(sites.map((item) => (item.id === site.id ? saved : item)));
       setNotice(`${saved.name} is now ${status}.`);
+      void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update site status');
     } finally {
@@ -504,6 +552,7 @@ function SitesListView() {
       setDomainFilter('all');
       setPageCoverageFilter('all');
       setNotice(`${site.name} duplicated as ${duplicated.name}. Add domains, pages, and publish settings before going live.`);
+      void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to duplicate site');
     } finally {
@@ -529,6 +578,7 @@ function SitesListView() {
       deleteSite(pendingDelete.id);
       setPendingDelete(null);
       setDeleteConfirmationText('');
+      void loadSiteAuditLogs();
     } catch (deleteError) {
       setNotice(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
     } finally {
@@ -714,6 +764,13 @@ function SitesListView() {
 
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all' || domainFilter !== 'all' || pageCoverageFilter !== 'all';
 
+  const refreshSitesWorkspace = () => {
+    if (isSitesBusy) return;
+
+    void loadSites();
+    void loadSiteAuditLogs();
+  };
+
   const handleExportSites = () => {
     if (data.length === 0 || isSitesBusy) return;
 
@@ -878,7 +935,7 @@ function SitesListView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void loadSites()}
+              onClick={refreshSitesWorkspace}
               disabled={isSitesBusy}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -932,7 +989,7 @@ function SitesListView() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Sites control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to health, frontend APIs, feature systems, library controls, and site records.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {SITE_LIST_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -1169,6 +1226,66 @@ function SitesListView() {
         </PanelContent>
       </Panel>
 
+      <Panel id="sites-audit" className="scroll-mt-24" data-testid="sites-audit-panel">
+        <PanelHeader
+          title="Site audit trail"
+          description="Request-id-backed create, update, archive, duplicate, and delete events for site workspaces."
+          icon={<Activity className="size-4" />}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isAuditLoading}
+              onClick={() => void loadSiteAuditLogs()}
+              iconStart={<RefreshCw className={cn('size-3.5', isAuditLoading && 'animate-spin')} />}
+            >
+              Refresh activity
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Audit coverage</h3>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Site create, status changes, duplicate-as-draft, archive, settings update, and delete operations now write queryable admin audit records.
+              </p>
+              <div className="mt-4 grid gap-2">
+                <SiteApiStat label="Loaded events" value={`${siteAuditLogs.length}`} />
+                <SiteApiStat label="Entity filter" value="site" />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4" data-testid="sites-audit-list">
+              {auditError && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {auditError}
+                </div>
+              )}
+              {isAuditLoading && siteAuditLogs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
+                  Loading site activity...
+                </div>
+              ) : siteAuditLogs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
+                  No site audit events recorded yet.
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {siteAuditLogs.map((log) => (
+                    <SiteAuditLogRow key={log.id} log={log} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
       <div id="sites-controls" className="rounded-lg border border-border bg-card p-4 shadow-sm scroll-mt-24">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 lg:max-w-md">
@@ -1253,7 +1370,7 @@ function SitesListView() {
 
             <button
               type="button"
-              onClick={() => void loadSites()}
+              onClick={refreshSitesWorkspace}
               disabled={isSitesBusy}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               aria-label="Refresh sites"
@@ -1380,6 +1497,33 @@ function SitesListView() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function SiteAuditLogRow({ log }: { log: AdminAuditLog }) {
+  const label = getSiteAuditLabel(log);
+  const status = getSiteAuditStatus(log);
+  const requestId = log.requestId || auditText(log.metadata, 'requestId') || 'no request id';
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-3" data-testid="sites-audit-row">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">{formatSiteAuditAction(log.action)}</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {status}
+            </span>
+          </div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">
+            {label} - actor {log.actorId || 'admin'} - {formatDate(log.createdAt)}
+          </div>
+        </div>
+        <code className="max-w-full overflow-x-auto rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+          {requestId}
+        </code>
+      </div>
+    </div>
   );
 }
 

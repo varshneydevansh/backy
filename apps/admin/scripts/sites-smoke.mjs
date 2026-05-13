@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_SITES_CDP_PORT || 9383);
 const SCREENSHOT_PATH = process.env.BACKY_SITES_SCREENSHOT || path.join(os.tmpdir(), 'backy-sites-smoke.png');
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -39,12 +40,17 @@ const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) =>
 });
 
 const requestApi = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
   });
   const payload = await response.json().catch(() => ({}));
 
@@ -53,6 +59,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const listSites = async () => {
@@ -68,6 +95,11 @@ const getSite = async (siteId) => {
 const listSitePages = async (siteId) => {
   const payload = await requestApi(`/api/admin/sites/${siteId}/pages?includeUnpublished=true`);
   return payload.data?.pages || payload.pages || [];
+};
+
+const listSiteAuditLogs = async (siteId) => {
+  const payload = await requestApi(`/api/admin/audit-logs?entity=site&entityId=${encodeURIComponent(siteId)}&limit=20`);
+  return payload.data?.logs || payload.logs || [];
 };
 
 const deleteSite = async (siteId) => {
@@ -179,8 +211,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -538,14 +581,51 @@ const assertLayout = async (client, siteName) => {
     hasFrontendApi: document.body?.innerText?.includes('Site frontend API') || false,
     hasFeatureContract: document.body?.innerText?.includes('Website feature contract') || false,
     hasRequiredControls: document.body?.innerText?.includes('What Backy still needs here') || false,
+    hasAuditPanel: Boolean(document.querySelector('[data-testid="sites-audit-panel"]')),
     hasLibrary: Boolean(document.querySelector('input[aria-label="Search sites"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Sites page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasLibrary,
+    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
     `Sites page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const assertSiteAuditTrail = async (client, { siteId, siteName }) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const logs = await listSiteAuditLogs(siteId);
+    const actions = new Set(logs.map((log) => log.action));
+    if (actions.has('site.created') && actions.has('site.updated')) {
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`Site audit API did not record create/update actions: ${JSON.stringify(logs).slice(0, 900)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="sites-audit-panel"]');
+      const text = panel?.textContent || '';
+      return {
+        hasPanel: Boolean(panel),
+        hasRows: document.querySelectorAll('[data-testid="sites-audit-row"]').length > 0,
+        hasSite: text.includes(${JSON.stringify(siteName)}),
+        hasUpdate: text.includes('Updated') || text.includes('Created'),
+        text: text.slice(0, 1000),
+      };
+    })()`);
+    if (state.hasPanel && state.hasRows && state.hasSite && state.hasUpdate) {
+      return;
+    }
+    await evaluate(client, `document.querySelector('[data-testid="sites-audit-panel"] button')?.click()`);
+    if (attempt === 39) {
+      throw new Error(`Site audit panel did not render site activity: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
 };
 
 const launchChrome = () => {
@@ -608,6 +688,7 @@ const main = async () => {
   const customDomain = `${slug}.example.com`;
 
   try {
+    await loginAdminApi();
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
 
@@ -623,7 +704,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToCreateSite(client);
     const { site: created, pages } = await createSiteThroughUi(client, { siteName, slug, customDomain });
@@ -648,6 +729,7 @@ const main = async () => {
 
     await archiveSiteThroughUi(client, siteName, slug);
     assert((await getSite(createdSiteId)).status === 'archived', 'Archive action did not persist through the admin API.');
+    await assertSiteAuditTrail(client, { siteId: createdSiteId, siteName });
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));

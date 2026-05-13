@@ -63,6 +63,10 @@ const adminSiteFromRepositorySite = (site: Site | null) => {
   };
 };
 
+const statusForRepositorySite = (site: Site) => (
+  site.isPublished ? 'published' : 'draft'
+);
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -230,6 +234,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
           requestId,
         });
+      } else {
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          teamId: site.teamId,
+          actorId: access.session?.user.id,
+          entity: 'site',
+          entityId: site.id,
+          action: 'site.updated',
+          before: adminSiteFromRepositorySite(site) || {},
+          after: adminSiteFromRepositorySite(updated.item) || {},
+          metadata: {
+            slug: updated.item.slug,
+            status: statusForRepositorySite(updated.item),
+            source: 'admin-site-update',
+          },
+          requestId,
+        });
       }
 
       return NextResponse.json({
@@ -266,6 +288,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
         requestId,
       });
+    } else {
+      await recordAdminAudit({
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'site.updated',
+        before: site,
+        after: updated,
+        metadata: {
+          slug: updated.slug,
+          status: updated.status,
+          source: 'admin-site-update',
+        },
+        requestId,
+      });
     }
 
     return NextResponse.json({
@@ -298,6 +336,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        teamId: site.teamId,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'site.deleted',
+        before: adminSiteFromRepositorySite(site) || {},
+        metadata: {
+          slug: site.slug,
+          status: statusForRepositorySite(site),
+          source: 'admin-site-delete',
+        },
+        requestId,
+      });
       await repositories.sites.delete(site.id);
 
       return NextResponse.json({
@@ -316,6 +370,20 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'site.deleted',
+      before: site,
+      metadata: {
+        slug: site.slug,
+        status: site.status,
+        source: 'admin-site-delete',
+      },
+      requestId,
+    });
     deleteAdminSite(site.id);
 
     return NextResponse.json({

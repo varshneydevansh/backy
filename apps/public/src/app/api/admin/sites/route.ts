@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createAdminSite, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -147,6 +148,22 @@ export async function POST(request: NextRequest) {
         customDomain: typeof body.customDomain === 'string' ? body.customDomain : null,
         status: body.status === 'published' ? 'published' : 'draft',
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: created.item.id,
+        teamId,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: created.item.id,
+        action: 'site.created',
+        after: adminSiteFromRepositorySite(created.item) || {},
+        metadata: {
+          slug,
+          status: body.status === 'published' ? 'published' : 'draft',
+          source: 'admin-sites-create',
+        },
+        requestId,
+      });
 
       return NextResponse.json(
         {
@@ -168,6 +185,20 @@ export async function POST(request: NextRequest) {
       ...body,
       name,
       slug,
+    });
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'site.created',
+      after: site,
+      metadata: {
+        slug: site.slug,
+        status: site.status,
+        source: 'admin-sites-create',
+      },
+      requestId,
     });
 
     return NextResponse.json(
