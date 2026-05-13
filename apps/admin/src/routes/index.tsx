@@ -2441,10 +2441,10 @@ function Index() {
                         type="button"
                         onClick={() => void copyDashboardText(frontendContractUrls[contract.key], `${contract.label} endpoint`)}
                         disabled={isDashboardBusy}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`Copy ${contract.label} endpoint`}
                       >
-                        <Copy className="size-3.5" />
+                        <Copy className="size-4" />
                       </button>
                     </div>
                     <p className="mt-1 break-all font-mono text-[0.7rem] text-primary">{frontendContractUrls[contract.key]}</p>

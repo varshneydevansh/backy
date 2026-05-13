@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_DASHBOARD_CDP_PORT || 9385);
 const SCREENSHOT_PATH = process.env.BACKY_DASHBOARD_SCREENSHOT || path.join(os.tmpdir(), 'backy-dashboard-smoke.png');
+const MOBILE_SCREENSHOT_PATH = process.env.BACKY_DASHBOARD_MOBILE_SCREENSHOT || path.join(os.tmpdir(), 'backy-dashboard-smoke-mobile.png');
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -221,6 +222,16 @@ const navigateToDashboard = (client) => navigate(
   }))()`,
   'Dashboard',
 );
+
+const captureScreenshot = async (client, screenshotPath) => {
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: true,
+  });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
 
 const waitForDashboardSite = async (client, siteName) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -473,6 +484,100 @@ const assertDashboardLayout = async (client, siteName) => {
   return layout;
 };
 
+const assertDashboardVisualState = async (client, label, screenshotPath, siteName) => {
+  await evaluate(client, `(() => {
+    window.scrollTo(0, 0);
+    return true;
+  })()`);
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const bodyText = document.body?.innerText || '';
+    const regionSelectors = [
+      ['commandCenter', '[data-testid="dashboard-command-center"]'],
+      ['stats', '#dashboard-stats'],
+      ['onboarding', '[data-testid="dashboard-onboarding-state"]'],
+      ['deploymentHistory', '[data-testid="dashboard-deployment-history"]'],
+      ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
+      ['aggregateAnalytics', '[data-testid="dashboard-aggregate-analytics"]'],
+      ['readiness', '#dashboard-readiness'],
+      ['infrastructureDiagnostics', '[data-testid="dashboard-infrastructure-diagnostics"]'],
+      ['workflows', '#dashboard-workflows'],
+      ['attention', '#dashboard-attention'],
+      ['activity', '#dashboard-activity'],
+      ['api', '#dashboard-api'],
+    ];
+    const viewportWidth = window.innerWidth;
+    const minRegionWidth = Math.min(300, Math.max(240, viewportWidth - 48));
+    const regions = Object.fromEntries(regionSelectors.map(([key, selector]) => {
+      const node = document.querySelector(selector);
+      const rect = node?.getBoundingClientRect();
+      return [key, {
+        exists: Boolean(node),
+        width: rect?.width || 0,
+        height: rect?.height || 0,
+        visible: Boolean(rect && rect.width >= minRegionWidth && rect.height > 40),
+      }];
+    }));
+    const controls = Array.from(document.querySelectorAll('button, select'))
+      .filter((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          tag: node.tagName,
+          text: (node.textContent || node.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+          width: rect.width,
+          height: rect.height,
+          disabled: node.disabled === true,
+        };
+      });
+    const visibleTinyControls = controls.filter((control) => !control.disabled && (control.width < 28 || control.height < 28));
+    const missingRegions = Object.entries(regions)
+      .filter(([, region]) => !region.visible)
+      .map(([key, region]) => ({ key, ...region }));
+
+    return {
+      label: ${JSON.stringify(label)},
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      documentWidth: document.documentElement.scrollWidth,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      hasSite: bodyText.includes(${JSON.stringify(siteName)}),
+      hasPreflightRun: bodyText.includes('Deployment execution and history') &&
+        bodyText.includes('Preflight history') &&
+        /ready|warning|blocked/i.test(bodyText),
+      hasInfrastructureRun: bodyText.includes('Infrastructure diagnostics') &&
+        bodyText.includes('Database runtime') &&
+        bodyText.includes('Vercel deployment'),
+      hasWorkflowLinks: bodyText.includes('Build and manage') &&
+        bodyText.includes('Registration page') &&
+        bodyText.includes('Product catalog'),
+      hasApiHandoff: bodyText.includes('API control plane') &&
+        bodyText.includes('/api/sites/'),
+      hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+      regions,
+      missingRegions,
+      controls: controls.slice(0, 80),
+      visibleTinyControls,
+      body: bodyText.slice(0, 4000),
+    };
+  })()`);
+
+  assert(state.horizontalOverflow <= 8, `${label} dashboard has horizontal overflow: ${JSON.stringify(state)}`);
+  assert(state.missingRegions.length === 0, `${label} dashboard has missing or collapsed regions: ${JSON.stringify(state)}`);
+  assert(state.hasSite, `${label} dashboard lost the selected smoke site: ${JSON.stringify(state)}`);
+  assert(state.hasPreflightRun, `${label} dashboard deployment preflight history was not visually represented: ${JSON.stringify(state)}`);
+  assert(state.hasInfrastructureRun, `${label} dashboard infrastructure diagnostics were not visually represented: ${JSON.stringify(state)}`);
+  assert(state.hasWorkflowLinks && state.hasApiHandoff, `${label} dashboard workflow/API handoff regions were incomplete: ${JSON.stringify(state)}`);
+  assert(state.visibleTinyControls.length === 0, `${label} dashboard has visibly undersized controls: ${JSON.stringify(state)}`);
+  assert(!state.hasFrameworkOverlay, `${label} dashboard rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+
+  await captureScreenshot(client, screenshotPath);
+  return { ...state, screenshotPath };
+};
+
 const assertDashboardLinks = async (client) => {
   const links = await evaluate(client, `(() => {
     const hrefs = Array.from(document.querySelectorAll('a')).map((anchor) => ({
@@ -584,10 +689,16 @@ const main = async () => {
     await clickDashboardRefresh(client);
     await runDashboardDeploymentPreflight(client);
     await runDashboardInfrastructureCheck(client);
+    const desktopVisualState = await assertDashboardVisualState(client, 'desktop', SCREENSHOT_PATH, siteName);
 
-    await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
-      fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: 390,
+      height: 960,
+      deviceScaleFactor: 2,
+      mobile: true,
     });
+    await sleep(250);
+    const mobileVisualState = await assertDashboardVisualState(client, 'mobile', MOBILE_SCREENSHOT_PATH, siteName);
 
     await deleteSite(siteId);
     siteId = null;
@@ -596,7 +707,8 @@ const main = async () => {
       ok: true,
       siteName,
       slug,
-      screenshot: SCREENSHOT_PATH,
+      screenshot: desktopVisualState.screenshotPath,
+      mobileScreenshot: mobileVisualState.screenshotPath,
     }, null, 2));
   } finally {
     await cleanup({ client, childProcess, userDataDir, siteId });
