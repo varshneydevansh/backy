@@ -21,7 +21,7 @@ import {
     jsonb,
     index,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ==========================================================================
 // ENUMS (Stored as text for cross-DB compatibility)
@@ -414,6 +414,10 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
         table.updatedAt,
     ),
     siteCollectionSlugIdx: index('content_collection_records_site_collection_slug_idx').on(table.siteId, table.collectionId, table.slug),
+    valuesGinIdx: index('idx_content_collection_records_values_gin').on(table.values).using(sql`gin`),
+    publicUpdatedIdx: index('content_collection_records_public_updated_idx')
+        .on(table.siteId, table.collectionId, table.updatedAt)
+        .where(sql`${table.status} = 'published'`),
 }));
 
 // ==========================================================================
