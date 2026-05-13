@@ -4297,6 +4297,11 @@ try {
     assert(createRecord.json?.data?.record?.slug === collectionRecordSlug, `${createRecord.url} returned wrong record slug`);
     assert(createRecord.json?.data?.record?.values?.rank === 1, `${createRecord.url} expected numeric rank`);
     createdCollectionRecordId = createRecord.json.data.record.id;
+    const recordCreateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${createdCollectionRecordId}&action=create&requestId=${createRecord.json.requestId}`);
+    assert(recordCreateAudit.response.status === 200, `${recordCreateAudit.url} expected collection record create audit readback`);
+    assert(recordCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionRecordSlug, `${recordCreateAudit.url} missing record create slug metadata`);
+    assert(recordCreateAudit.json?.data?.logs?.[0]?.metadata?.collectionSlug === collectionSlug, `${recordCreateAudit.url} missing record create collection metadata`);
+    assert(recordCreateAudit.json?.data?.logs?.[0]?.after?.status === 'published', `${recordCreateAudit.url} missing record create after snapshot`);
 
     const duplicateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
@@ -4642,6 +4647,11 @@ try {
     assert(updateRecord.response.status === 200, `${updateRecord.url} expected 200, got ${updateRecord.response.status}`);
     assert(updateRecord.json?.data?.record?.values?.summary === 'Updated structured content', `${updateRecord.url} expected updated summary`);
     assert(updateRecord.json?.data?.record?.values?.title === 'Collection Record', `${updateRecord.url} expected partial update to preserve title`);
+    const recordUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${createdCollectionRecordId}&action=update&requestId=${updateRecord.json.requestId}`);
+    assert(recordUpdateAudit.response.status === 200, `${recordUpdateAudit.url} expected collection record update audit readback`);
+    assert(recordUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('values'), `${recordUpdateAudit.url} missing record update changedFields metadata`);
+    assert(recordUpdateAudit.json?.data?.logs?.[0]?.before?.slug === collectionRecordSlug, `${recordUpdateAudit.url} missing record update before snapshot`);
+    assert(recordUpdateAudit.json?.data?.logs?.[0]?.after?.valueKeys?.includes('summary'), `${recordUpdateAudit.url} missing record update after value keys`);
 
     const hideCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
       method: 'PATCH',
@@ -4675,6 +4685,10 @@ try {
     const removeRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, { method: 'DELETE' });
     assert(removeRecord.response.status === 200, `${removeRecord.url} expected 200, got ${removeRecord.response.status}`);
     assert(removeRecord.json?.data?.deleted === true, `${removeRecord.url} expected deleted record`);
+    const recordDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${createdCollectionRecordId}&action=delete&requestId=${removeRecord.json.requestId}`);
+    assert(recordDeleteAudit.response.status === 200, `${recordDeleteAudit.url} expected collection record delete audit readback`);
+    assert(recordDeleteAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionRecordSlug, `${recordDeleteAudit.url} missing record delete slug metadata`);
+    assert(recordDeleteAudit.json?.data?.logs?.[0]?.before?.collectionSlug === collectionSlug, `${recordDeleteAudit.url} missing record delete before snapshot`);
     createdCollectionRecordId = null;
 
     const removeCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' });

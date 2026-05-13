@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollection, BackyCollectionRecord, BackyJsonValue, PublishStatus } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyJsonObject, BackyJsonValue, PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -19,6 +19,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedCollectionRecordInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -30,6 +31,22 @@ interface RouteParams {
     siteId: string;
     collectionId: string;
   }>;
+}
+
+interface CollectionAuditSource {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface CollectionRecordAuditSource {
+  id: string;
+  collectionId: string;
+  slug: string;
+  status: string;
+  values?: Record<string, unknown> | null;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -76,6 +93,25 @@ const parseStatus = (value: unknown): PublishStatus | undefined => (
     ? value
     : undefined
 );
+
+const collectionRecordAuditMetadata = (
+  collection: CollectionAuditSource,
+  record: CollectionRecordAuditSource,
+): BackyJsonObject => {
+  const valueKeys = Object.keys(toRecord(record.values)).sort();
+  return {
+    collectionId: collection.id,
+    collectionName: collection.name,
+    collectionSlug: collection.slug,
+    recordId: record.id,
+    slug: record.slug,
+    status: record.status,
+    valueKeys,
+    valueCount: valueKeys.length,
+    scheduledAt: record.scheduledAt || null,
+    publishedAt: record.publishedAt || null,
+  };
+};
 
 const toCsvCell = (value: unknown): string => {
   let text = '';
@@ -338,6 +374,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'collection-record-created',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'collectionRecord',
+        entityId: record.id,
+        action: 'create',
+        after: collectionRecordAuditMetadata(collection, record),
+        metadata: collectionRecordAuditMetadata(collection, record),
+        requestId,
+      });
 
       return NextResponse.json(
         { success: true, requestId, data: { record, cacheInvalidation } },
@@ -391,6 +437,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!record) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'collectionRecord',
+      entityId: record.id,
+      action: 'create',
+      after: collectionRecordAuditMetadata(collection, record),
+      metadata: collectionRecordAuditMetadata(collection, record),
+      requestId,
+    });
 
     return NextResponse.json(
       { success: true, requestId, data: { record } },
