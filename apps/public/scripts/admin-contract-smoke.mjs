@@ -2563,6 +2563,28 @@ try {
       `${readiness.url} missing post title readiness check`,
     );
 
+    const previewRequestId = `contract-blog-preview-${unique}`;
+    const preview = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}/preview`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': previewRequestId,
+      },
+      body: JSON.stringify({ ttlSeconds: 900 }),
+    });
+    assert(preview.response.status === 200, `${preview.url} expected preview token response`);
+    assert(preview.json?.data?.previewToken, `${preview.url} missing preview token`);
+    assert(preview.json?.data?.postApiUrl?.includes('previewToken='), `${preview.url} missing preview post API URL`);
+    const previewAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=post&entityId=${createdPostId}&action=previewToken.create&requestId=${previewRequestId}`);
+    assert(previewAudit.response.status === 200, `${previewAudit.url} expected preview audit readback`);
+    const previewAuditEntry = previewAudit.json?.data?.logs?.[0];
+    assert(previewAuditEntry?.action === 'previewToken.create', `${previewAudit.url} missing preview token audit action`);
+    assert(previewAuditEntry?.metadata?.targetType === 'post', `${previewAudit.url} missing preview target type`);
+    assert(previewAuditEntry?.metadata?.ttlSeconds === 900, `${previewAudit.url} missing preview TTL metadata`);
+    assert(previewAuditEntry?.metadata?.slug === postSlug, `${previewAudit.url} missing preview slug metadata`);
+    assert(previewAuditEntry?.metadata?.tokenStored === false, `${previewAudit.url} should record that preview token is redacted`);
+    assert(!JSON.stringify(previewAuditEntry?.metadata || {}).includes(preview.json.data.previewToken), `${previewAudit.url} leaked preview token into audit metadata`);
+
     const invalidPost = await request(`/api/admin/sites/${createdSiteId}/blog`, {
       method: 'POST',
       headers: {

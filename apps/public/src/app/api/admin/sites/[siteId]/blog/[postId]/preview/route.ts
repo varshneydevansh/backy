@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createPreviewToken, getAdminBlogPostById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
@@ -62,6 +63,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}?previewToken=${encodedToken}`;
       const postApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}&previewToken=${encodedToken}`;
 
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+        entity: 'post',
+        entityId: post.id,
+        action: 'previewToken.create',
+        metadata: {
+          targetType: preview.targetType,
+          targetId: preview.targetId,
+          slug: post.slug,
+          ttlSeconds: body.ttlSeconds || null,
+          expiresAt: preview.expiresAt,
+          hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}`,
+          postApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}`,
+          tokenStored: false,
+        },
+        requestId,
+      });
+
       return NextResponse.json({
         success: true,
         requestId,
@@ -99,6 +120,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const encodedSlug = encodePath(post.slug);
     const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}?previewToken=${encodedToken}`;
     const postApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}&previewToken=${encodedToken}`;
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id || request.headers.get('x-backy-actor') || 'admin-api',
+      entity: 'post',
+      entityId: post.id,
+      action: 'previewToken.create',
+      metadata: {
+        targetType: preview.targetType,
+        targetId: preview.targetId,
+        slug: post.slug,
+        ttlSeconds: body.ttlSeconds || null,
+        expiresAt: preview.expiresAt,
+        hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}`,
+        postApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}`,
+        tokenStored: false,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
