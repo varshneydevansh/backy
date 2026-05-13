@@ -419,6 +419,7 @@ type WebhookEventKind =
   | 'contact-shared'
   | 'contact-sync'
   | 'contact-status'
+  | 'commerce-webhook'
   | 'comment-submitted'
   | 'comment-status'
   | 'comment-reported';

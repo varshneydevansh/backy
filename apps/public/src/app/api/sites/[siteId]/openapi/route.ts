@@ -681,6 +681,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/commerce/webhook`]: {
+          post: {
+            tags: ['Interactions'],
+            summary: 'Receive a commerce provider webhook and settle a private order',
+            operationId: 'receiveBackyCommerceWebhook',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CommerceWebhookRequest' },
+                },
+              },
+            },
+            responses: {
+              '200': {
+                description: 'Commerce webhook processed',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommerceWebhookEnvelope' },
+                  },
+                },
+              },
+              '404': {
+                description: 'Site, private order queue, or matching order not found',
+              },
+              '409': {
+                description: 'Commerce webhooks disabled or event type not allowed',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/collections/{collectionId}/records`]: {
           get: {
             tags: ['Content'],
@@ -2656,6 +2687,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
               quote: { type: 'object', additionalProperties: true },
               lineItems: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            },
+          }),
+          CommerceWebhookRequest: {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string', examples: ['checkout.session.completed', 'charge.refunded', 'payment_intent.payment_failed'] },
+              data: {
+                type: 'object',
+                properties: {
+                  object: { type: 'object', additionalProperties: true },
+                },
+                additionalProperties: true,
+              },
+              metadata: { type: 'object', additionalProperties: true },
+            },
+            additionalProperties: true,
+          },
+          CommerceWebhookEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'event', 'order'],
+            properties: {
+              schemaVersion: { type: 'string', const: 'backy.commerce-webhook.v1' },
+              event: { type: 'object', additionalProperties: true },
+              order: { type: 'object', additionalProperties: true },
             },
           }),
         },

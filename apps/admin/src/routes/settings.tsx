@@ -427,7 +427,7 @@ const PLATFORM_RESPONSIBILITIES: ResponsibilityArea[] = [
 const PLATFORM_BACKLOG = [
   {
     item: 'Checkout/provider orchestration',
-    status: 'product and order control surfaces exist; payment-provider sessions, taxes, shipping rates, and webhook settlement still need deeper backend workflows',
+    status: 'product/order controls, checkout-session handoff, quote totals, and webhook settlement exist; provider API execution and reconciliation workers still need deeper backend workflows',
   },
   {
     item: 'Supabase auth adapter',
@@ -464,9 +464,9 @@ const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
   {
     area: 'Commerce and selling',
     status: 'partial',
-    contract: 'commerce catalog, order-intake contract, private orders collection, product records',
+    contract: 'commerce catalog, order-intake contract, checkout-session handoff, provider webhook settlement, private orders collection, product records',
     controls: 'Products, Orders, collections, media galleries',
-    stillNeeded: 'Provider checkout sessions, taxes, shipping rates, refunds, discounts, subscriptions, and fulfillment automation.',
+    stillNeeded: 'Provider API execution, reconciliation workers, provider-grade taxes/shipping rates, automated refunds, subscriptions, and fulfillment automation.',
   },
   {
     area: 'Forms, contacts, comments, registration',

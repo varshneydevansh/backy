@@ -332,6 +332,7 @@ const orderContract = (siteId: string) => ({
   relatedEndpoints: {
     catalog: `/api/sites/${siteId}/commerce/catalog`,
     checkoutSession: `/api/sites/${siteId}/commerce/orders`,
+    providerWebhook: `/api/sites/${siteId}/commerce/webhook`,
     rawOrdersBlocked: `/api/sites/${siteId}/collections/${ORDERS_COLLECTION_SLUG}/records`,
   },
 });

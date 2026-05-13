@@ -415,6 +415,36 @@ export interface BackyCommerceOrderSummary {
   [key: string]: unknown;
 }
 
+export interface BackyCommerceWebhookInput {
+  id?: string;
+  type: string;
+  data?: {
+    object?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceWebhookResult {
+  schemaVersion: 'backy.commerce-webhook.v1';
+  event: {
+    id: string;
+    type: string;
+    status: string;
+    [key: string]: unknown;
+  };
+  order: {
+    id: string;
+    slug: string;
+    orderNumber?: string;
+    orderStatus?: string;
+    paymentStatus?: string;
+    paymentReference?: string;
+    [key: string]: unknown;
+  };
+}
+
 export interface BackyCommerceCheckoutSession {
   id: string;
   provider: 'manual' | 'stripe';
@@ -1403,6 +1433,14 @@ export class BackyClient {
       method: 'POST',
       body: input,
       requestId: input.requestId,
+    });
+  }
+
+  receiveCommerceWebhook(input: BackyCommerceWebhookInput, siteId = this.requireSiteId(), requestId?: string): Promise<BackyEnvelope<BackyCommerceWebhookResult>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/webhook`, {
+      method: 'POST',
+      body: input,
+      requestId,
     });
   }
 

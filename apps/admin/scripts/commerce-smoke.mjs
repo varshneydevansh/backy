@@ -197,6 +197,11 @@ const enableCommercePricingSettings = async (settings) => {
       providerMode: 'test',
       checkoutSuccessPath: '/checkout/success',
       checkoutCancelPath: '/checkout/cancel',
+      providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
+      providerWebhookSecretId: 'smoke-commerce-webhook-secret',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      webhookEventsEnabled: true,
+      reconciliationMode: 'webhook',
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
@@ -1021,7 +1026,44 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(customerRecord.values?.lastordernumber === order.orderNumber, `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId === order.id, `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`);
 
-  return { productRecord, updatedProduct, order, orderRecord, customersCollection, customerRecord };
+  const webhookRequestId = `commerce-webhook-${slug}`;
+  const webhookPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
+    method: 'POST',
+    headers: { 'x-request-id': webhookRequestId },
+    body: JSON.stringify({
+      id: `evt_${slug}`,
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: checkoutSession.id,
+          payment_intent: `pi_${slug}`,
+          amount_total: Math.round(checkoutSession.amountTotal * 100),
+          currency: checkoutSession.currency.toLowerCase(),
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }),
+  });
+  assert(webhookPayload.data?.event?.status === 'paid', `Commerce webhook did not mark payment paid: ${JSON.stringify(webhookPayload)}`);
+  assert(webhookPayload.data?.order?.paymentStatus === 'paid', `Commerce webhook order response was unexpected: ${JSON.stringify(webhookPayload)}`);
+
+  const settledOrderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+  assert(settledOrderRecord.values?.orderstatus === 'paid', `Webhook did not persist paid order status: ${JSON.stringify(settledOrderRecord.values)}`);
+  assert(settledOrderRecord.values?.paymentstatus === 'paid', `Webhook did not persist paid payment status: ${JSON.stringify(settledOrderRecord.values)}`);
+  assert(settledOrderRecord.values?.paymentreference === `pi_${slug}`, `Webhook did not persist payment reference: ${JSON.stringify(settledOrderRecord.values)}`);
+  assert(Boolean(settledOrderRecord.values?.paidat), `Webhook did not persist paid timestamp: ${JSON.stringify(settledOrderRecord.values)}`);
+  assert(String(settledOrderRecord.values?.notes || '').includes('checkout.session.completed'), `Webhook settlement note missing: ${JSON.stringify(settledOrderRecord.values)}`);
+
+  const commerceEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-webhook&requestId=${encodeURIComponent(webhookRequestId)}`);
+  const commerceEvents = commerceEventsPayload.data?.events || commerceEventsPayload.events || [];
+  const commerceEvent = commerceEvents.find((event) => event.metadata?.providerEventId === `evt_${slug}`);
+  assert(commerceEvent?.status === 'succeeded', `Commerce webhook event was not exposed through /events: ${JSON.stringify(commerceEventsPayload)}`);
+  assert(commerceEvent.metadata?.orderId === order.id, `Commerce webhook event did not include order id: ${JSON.stringify(commerceEvent)}`);
+
+  return { productRecord, updatedProduct, order, orderRecord: settledOrderRecord, customersCollection, customerRecord };
 };
 
 const assertProductCsvImport = async ({ productCollection, suffix }) => {
