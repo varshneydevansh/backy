@@ -986,6 +986,8 @@ try {
         meta: {
           title: 'Admin Contract Page',
           description: 'Admin contract page description.',
+          keywords: ['contract', 'page-api'],
+          ogImage: '/uploads/sites/contract/page-og.jpg',
           jsonLd: [
             {
               '@context': 'https://schema.org',
@@ -1234,12 +1236,30 @@ try {
     assert(visibleScheduledPage.json?.success === true, `${visibleScheduledPage.url} expected success envelope`);
     assert(visibleScheduledPage.json?.data?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page in data envelope`);
     assert(visibleScheduledPage.json?.data?.page?.meta?.frontendDesignTemplateId === 'contract-page-template', `${visibleScheduledPage.url} missing page frontend metadata`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.title === 'Admin Contract Page', `${visibleScheduledPage.url} missing normalized page SEO title`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.description === 'Admin contract page description.', `${visibleScheduledPage.url} missing normalized page SEO description`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.canonical === `/${pageSlug}`, `${visibleScheduledPage.url} missing normalized page canonical path`);
+    assert(
+      typeof visibleScheduledPage.json?.data?.page?.seo?.canonicalUrl === 'string'
+      && visibleScheduledPage.json.data.page.seo.canonicalUrl.startsWith('https://')
+      && visibleScheduledPage.json.data.page.seo.canonicalUrl.endsWith(`/${pageSlug}`),
+      `${visibleScheduledPage.url} missing normalized page canonical URL`,
+    );
+    assert(visibleScheduledPage.json?.data?.page?.seo?.robots?.index === true && visibleScheduledPage.json.data.page.seo.robots.follow === true, `${visibleScheduledPage.url} missing normalized page robots`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.openGraph?.image === '/uploads/sites/contract/page-og.jpg', `${visibleScheduledPage.url} missing normalized page Open Graph image`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.keywords?.includes('page-api'), `${visibleScheduledPage.url} missing normalized page keywords`);
+    assert(visibleScheduledPage.json?.data?.page?.seo?.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Admin Contract Page'), `${visibleScheduledPage.url} missing normalized page JSON-LD`);
     assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.templateId === 'contract-page-template', `${visibleScheduledPage.url} missing normalized page frontend design`);
     assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.routePattern === '/contract-page/{slug}', `${visibleScheduledPage.url} missing normalized page route pattern`);
     assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.chrome?.header?.component === 'ContractPageHeader', `${visibleScheduledPage.url} missing normalized page chrome`);
     assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.tokens?.colors?.primary === '#2563eb', `${visibleScheduledPage.url} missing normalized page tokens`);
     assert(Array.isArray(visibleScheduledPage.json?.data?.page?.frontendDesign?.bindingHints) && visibleScheduledPage.json.data.page.frontendDesign.bindingHints.length === 2, `${visibleScheduledPage.url} missing normalized page binding hints`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
+
+    const publicPageList = await request(`/api/sites/${createdSiteId}/pages?limit=100`);
+    const publicPageListEntry = publicPageList.json?.data?.pages?.find((page) => page.id === createdPageId);
+    assert(publicPageList.response.status === 200, `${publicPageList.url} expected public page list`);
+    assert(publicPageListEntry?.seo?.canonical === `/${pageSlug}`, `${publicPageList.url} missing normalized SEO on page list entries`);
 
     const capturedPageTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
       method: 'POST',
@@ -3946,6 +3966,8 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.FormDefinitionEnvelope, `${publicOpenApi.url} missing form definition schema`);
       assert(publicOpenApi.json?.components?.schemas?.FormDefinition?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing form frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.PageResource?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing page frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.PageResource?.properties?.seo?.$ref === '#/components/schemas/PageSeoMetadata', `${publicOpenApi.url} missing page SEO schema reference`);
+      assert(publicOpenApi.json?.components?.schemas?.PageSeoMetadata?.properties?.canonicalUrl?.type === 'string', `${publicOpenApi.url} missing page SEO canonical URL schema`);
       assert(publicOpenApi.json?.components?.schemas?.BlogPostResource?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing blog post frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.PageListEnvelope?.properties?.data?.properties?.pages?.items?.$ref === '#/components/schemas/PageResource', `${publicOpenApi.url} missing page list resource schema`);
       assert(publicOpenApi.json?.components?.schemas?.BlogPostListEnvelope?.properties?.data?.properties?.posts?.items?.$ref === '#/components/schemas/BlogPostResource', `${publicOpenApi.url} missing blog list resource schema`);

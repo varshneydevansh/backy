@@ -12,6 +12,7 @@ import type { BackyPage } from '@backy-cms/core';
 import { getPageByPath, getPageSummary, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { getHostedRouteUrl } from '@/lib/seoDiscovery';
 
 interface RouteParams {
     params: Promise<{
@@ -70,12 +71,93 @@ const frontendDesignFromMeta = (value: unknown) => {
     };
 };
 
-const publicPage = <TPage extends { meta?: unknown }>(page: TPage) => ({
+const toStringArray = (value: unknown): string[] => (
+    Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : typeof value === 'string' && value.trim().length > 0
+            ? value.split(',').map((item) => item.trim()).filter(Boolean)
+            : []
+);
+
+const jsonLdObjects = (value: unknown): Array<Record<string, unknown>> => (
+    Array.isArray(value)
+        ? value.filter((entry): entry is Record<string, unknown> => isRecord(entry))
+        : []
+);
+
+const normalizeCanonicalPath = (path: string) => {
+    const trimmed = path.trim();
+    if (!trimmed || trimmed === '/') {
+        return '/';
+    }
+
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
+
+const canonicalPathForPage = (page: { slug: string; isHomepage?: boolean; meta?: unknown }) => {
+    const meta = isRecord(page.meta) ? page.meta : {};
+    const canonical = typeof meta.canonical === 'string' ? meta.canonical.trim() : '';
+    if (canonical) {
+        return normalizeCanonicalPath(canonical);
+    }
+
+    if (page.isHomepage || page.slug === 'index') {
+        return '/';
+    }
+
+    return normalizeCanonicalPath(page.slug);
+};
+
+const seoFromPage = (
+    page: { title: string; slug: string; description?: string | null; isHomepage?: boolean; meta?: unknown },
+    site: { slug: string; customDomain?: string | null },
+    origin: string,
+) => {
+    const meta = isRecord(page.meta) ? page.meta : {};
+    const title = typeof meta.title === 'string' && meta.title.trim().length > 0 ? meta.title.trim() : page.title;
+    const description = typeof meta.description === 'string' && meta.description.trim().length > 0
+        ? meta.description.trim()
+        : page.description || '';
+    const canonical = canonicalPathForPage(page);
+    const ogImage = typeof meta.ogImage === 'string' && meta.ogImage.trim().length > 0 ? meta.ogImage.trim() : undefined;
+
+    return {
+        title,
+        description,
+        path: canonical,
+        canonical,
+        canonicalUrl: getHostedRouteUrl(origin, site.slug, canonical, site.customDomain),
+        robots: {
+            index: meta.noIndex !== true,
+            follow: meta.noFollow !== true,
+        },
+        openGraph: {
+            title,
+            description,
+            image: ogImage,
+        },
+        keywords: toStringArray(meta.keywords),
+        jsonLd: jsonLdObjects(meta.jsonLd),
+    };
+};
+
+const publicPage = <
+    TPage extends { title: string; slug: string; description?: string | null; isHomepage?: boolean; meta?: unknown },
+>(
+    page: TPage,
+    site: { slug: string; customDomain?: string | null },
+    origin: string,
+) => ({
     ...page,
     frontendDesign: frontendDesignFromMeta(page.meta),
+    seo: seoFromPage(page, site, origin),
 });
 
-const publicPageFromRepositoryPage = (page: BackyPage) => {
+const publicPageFromRepositoryPage = (
+    page: BackyPage,
+    site: { slug: string; customDomain?: string | null },
+    origin: string,
+) => {
     const canvasSize = isRecord(page.content.metadata?.canvasSize)
         ? page.content.metadata.canvasSize
         : { width: 1200, height: 900 };
@@ -88,7 +170,7 @@ const publicPageFromRepositoryPage = (page: BackyPage) => {
             customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
             contentDocument: page.content,
         },
-    });
+    }, site, origin);
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -101,6 +183,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const previewToken = searchParams.get('previewToken');
         const limit = parseBoundedInteger(searchParams.get('limit'), 50, 1, 100);
         const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+        const origin = new URL(request.url).origin;
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
@@ -121,7 +204,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
                 }
 
-                const responsePage = publicPageFromRepositoryPage(page);
+                const responsePage = publicPageFromRepositoryPage(page, site, origin);
                 const cacheRevision = previewToken
                     ? undefined
                     : await repositories.cacheInvalidations.latestRevision({
@@ -152,7 +235,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 limit,
                 offset,
             });
-            const pages = result.items.filter(isPubliclyReadable).map(publicPageFromRepositoryPage);
+            const pages = result.items.filter(isPubliclyReadable).map((page) => publicPageFromRepositoryPage(page, site, origin));
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
                 scope: 'content',
@@ -203,7 +286,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
             }
 
-            const responsePage = publicPage(page);
+            const responsePage = publicPage(page, site, origin);
 
             return publicContractJson({
                 success: true,
@@ -221,7 +304,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
 
         const pages = getPageSummary(site.id);
-        const paginated = pages.slice(offset, offset + limit).map(publicPage);
+        const paginated = pages.slice(offset, offset + limit).map((page) => publicPage(page, site, origin));
 
         return publicContractJson({
             success: true,

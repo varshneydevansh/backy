@@ -2000,10 +2000,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               isHomepage: { type: 'boolean' },
               parentId: { type: ['string', 'null'] },
               meta: { type: 'object', additionalProperties: true },
+              seo: { $ref: '#/components/schemas/PageSeoMetadata' },
               content: { type: 'object', additionalProperties: true },
               frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
               createdAt: { type: 'string', format: 'date-time' },
               updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          PageSeoMetadata: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['title', 'description', 'path', 'canonical', 'robots', 'openGraph', 'keywords', 'jsonLd'],
+            properties: {
+              title: { type: 'string' },
+              description: { type: 'string' },
+              path: { type: 'string' },
+              canonical: { type: 'string' },
+              canonicalUrl: { type: 'string' },
+              robots: {
+                type: 'object',
+                required: ['index', 'follow'],
+                properties: {
+                  index: { type: 'boolean' },
+                  follow: { type: 'boolean' },
+                },
+              },
+              openGraph: {
+                type: 'object',
+                required: ['title', 'description'],
+                additionalProperties: true,
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  image: { type: 'string' },
+                },
+              },
+              keywords: { type: 'array', items: { type: 'string' } },
+              jsonLd: { type: 'array', items: { type: 'object', additionalProperties: true } },
             },
           },
           BlogPostListEnvelope: envelopeSchema({

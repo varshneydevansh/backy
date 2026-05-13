@@ -558,6 +558,27 @@ export interface BackyFrontendDesignProvenance {
 
 export interface BackyReusableSectionFrontendDesign extends BackyFrontendDesignProvenance {}
 
+export interface BackyPageSeoMetadata {
+  title: string;
+  description: string;
+  path: string;
+  canonical: string;
+  canonicalUrl?: string;
+  robots: {
+    index: boolean;
+    follow: boolean;
+  };
+  openGraph: {
+    title: string;
+    description: string;
+    image?: string;
+    [key: string]: unknown;
+  };
+  keywords: string[];
+  jsonLd: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 export interface BackyPageResource {
   id: string;
   siteId?: string;
@@ -567,6 +588,7 @@ export interface BackyPageResource {
   status?: string;
   path?: string;
   meta?: Record<string, unknown>;
+  seo?: BackyPageSeoMetadata;
   content?: Record<string, unknown>;
   frontendDesign?: BackyFrontendDesignProvenance;
   [key: string]: unknown;
