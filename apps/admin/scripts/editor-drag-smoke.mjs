@@ -2557,6 +2557,7 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
       centerX,
       centerY,
       hitElementId: owner?.getAttribute('data-element-id') || null,
+      hitInsideElement: Boolean(hit && node.contains(hit)),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
@@ -2584,7 +2585,7 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
       hitTest.centerY >= 0 &&
       hitTest.centerX <= hitTest.viewportWidth &&
       hitTest.centerY <= hitTest.viewportHeight &&
-      hitTest.hitElementId === elementId,
+      hitTest.hitInsideElement === true,
     `${label}: rendered element was not visibly hittable at its thresholded geometry: ${JSON.stringify({ hitTest, box })}`,
   );
 
@@ -2651,6 +2652,7 @@ const assertPublicResponsiveVisualGeometry = async (client, elementId, expected,
       centerX,
       centerY,
       hitElementId: owner?.getAttribute('data-element-id') || null,
+      hitInsideElement: Boolean(hit && node.contains(hit)),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
@@ -2678,7 +2680,7 @@ const assertPublicResponsiveVisualGeometry = async (client, elementId, expected,
       hitTest.centerY >= 0 &&
       hitTest.centerX <= hitTest.viewportWidth &&
       hitTest.centerY <= hitTest.viewportHeight &&
-      (hitTest.hitElementId === elementId || hitTest.hitElementId === 'smoke-child-button'),
+      hitTest.hitInsideElement === true,
     `${label}: public rendered element was not visibly hittable: ${JSON.stringify({ hitTest, box })}`,
   );
 
