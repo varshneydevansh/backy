@@ -165,10 +165,10 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = (sessionToken) => `
+const authStorageScript = (sessionToken, user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' }) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    user,
     session: {
       token: sessionToken,
       issuedAt: new Date().toISOString(),
@@ -179,6 +179,42 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const createUser = async (input) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const user = payload.data?.user || payload.user;
+  assert(user?.id, `Create dashboard RBAC user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return user;
+};
+
+const createInviteToken = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/invite-link`, {
+    method: 'POST',
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  const invite = payload.data?.invite || payload.invite;
+  assert(invite?.token, `Invite link endpoint did not return a token: ${JSON.stringify(payload).slice(0, 500)}`);
+  return invite;
+};
+
+const acceptInviteToken = async (token) => {
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  const session = payload.data?.session;
+  const user = payload.data?.user;
+  assert(session?.token && user?.id, `Invite accept did not return a user session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { session, user };
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -436,6 +472,10 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Launch onboarding') &&
       document.body?.innerText?.includes('Create a workspace site') &&
       document.body?.innerText?.includes('Connect APIs and infrastructure'),
+    hasRbacScope: Boolean(document.querySelector('[data-testid="dashboard-rbac-scope"]')) &&
+      document.body?.innerText?.includes('Workspace RBAC scope') &&
+      document.body?.innerText?.includes('Settings') &&
+      document.body?.innerText?.includes('Users'),
     hasDeploymentHistory: Boolean(document.querySelector('[data-testid="dashboard-deployment-history"]')) &&
       document.body?.innerText?.includes('Deployment execution and history') &&
       document.body?.innerText?.includes('Run deployment preflight') &&
@@ -468,6 +508,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSite &&
       layout.hasStats &&
       layout.hasOnboarding &&
+      layout.hasRbacScope &&
       layout.hasDeploymentHistory &&
       layout.hasOperationsSignals &&
       layout.hasAggregateAnalytics &&
@@ -496,6 +537,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
     const regionSelectors = [
       ['commandCenter', '[data-testid="dashboard-command-center"]'],
       ['stats', '#dashboard-stats'],
+      ['rbacScope', '[data-testid="dashboard-rbac-scope"]'],
       ['onboarding', '[data-testid="dashboard-onboarding-state"]'],
       ['deploymentHistory', '[data-testid="dashboard-deployment-history"]'],
       ['operationsSignals', '[data-testid="dashboard-operations-signal-board"]'],
@@ -578,6 +620,74 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
   return { ...state, screenshotPath };
 };
 
+const assertDashboardRbacFiltering = async (client, viewerUser, siteName, preloadScriptIdentifier) => {
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 960,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  if (preloadScriptIdentifier) {
+    await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: preloadScriptIdentifier });
+  }
+  await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: authStorageScript(viewerUser.session.token, viewerUser.user),
+  });
+  await navigateToDashboard(client);
+  await waitForDashboardSite(client, siteName);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const bodyText = document.body?.innerText || '';
+      const rbacPanel = document.querySelector('[data-testid="dashboard-rbac-scope"]');
+      const rbacText = rbacPanel?.textContent || '';
+      const apiText = document.querySelector('#dashboard-api')?.textContent || '';
+      const workflowText = document.querySelector('#dashboard-workflows')?.textContent || '';
+      const moduleText = document.querySelector('[data-testid="dashboard-command-center"]')?.textContent || '';
+      const deploymentButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '') === 'Run dashboard deployment preflight'
+      ));
+      const infrastructureButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '') === 'Run dashboard infrastructure check'
+      ));
+      return {
+        ready: Boolean(rbacPanel) && bodyText.includes(${JSON.stringify(siteName)}),
+        rbacText,
+        apiText,
+        workflowText,
+        moduleText,
+        deploymentDisabled: deploymentButton instanceof HTMLButtonElement ? deploymentButton.disabled : null,
+        infrastructureDisabled: infrastructureButton instanceof HTMLButtonElement ? infrastructureButton.disabled : null,
+        hasSettingsEndpoint: apiText.includes('/settings'),
+        hasUsersEndpoint: apiText.includes('/users'),
+        hasApiSetupAction: workflowText.includes('API setup'),
+        hasNewSiteAction: workflowText.includes('New site'),
+        hasUsersModule: moduleText.includes('Users and roles'),
+        hasInfrastructureModule: moduleText.includes('Infrastructure'),
+        hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+        body: bodyText.slice(0, 2500),
+      };
+    })()`);
+    if (state.ready) {
+      assert(/viewer/i.test(state.rbacText), `Viewer dashboard did not show viewer RBAC scope: ${JSON.stringify(state)}`);
+      assert(state.rbacText.includes('Users') && state.rbacText.includes('Hidden'), `Viewer dashboard did not hide users in RBAC panel: ${JSON.stringify(state)}`);
+      assert(state.rbacText.includes('Settings') && state.rbacText.includes('Hidden'), `Viewer dashboard did not hide settings in RBAC panel: ${JSON.stringify(state)}`);
+      assert(!state.hasSettingsEndpoint && !state.hasUsersEndpoint, `Viewer dashboard leaked privileged admin endpoints: ${JSON.stringify(state)}`);
+      assert(!state.hasApiSetupAction && !state.hasNewSiteAction, `Viewer dashboard showed privileged creation/settings actions: ${JSON.stringify(state)}`);
+      assert(!state.hasUsersModule && !state.hasInfrastructureModule, `Viewer dashboard showed privileged module cards: ${JSON.stringify(state)}`);
+      assert(state.deploymentDisabled === true && state.infrastructureDisabled === true, `Viewer dashboard did not disable settings-backed checks: ${JSON.stringify(state)}`);
+      assert(!state.hasFrameworkOverlay, `Viewer dashboard rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Viewer dashboard RBAC scope did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(200);
+  }
+
+  return null;
+};
+
 const assertDashboardLinks = async (client) => {
   const links = await evaluate(client, `(() => {
     const hrefs = Array.from(document.querySelectorAll('a')).map((anchor) => ({
@@ -623,7 +733,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, siteId, userId }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -651,6 +761,14 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
       // The dashboard smoke creates a temporary site only for selector coverage.
     }
   }
+
+  if (userId) {
+    try {
+      await deleteUser(userId);
+    } catch {
+      // The RBAC smoke creates a temporary viewer account only for scoped dashboard coverage.
+    }
+  }
 };
 
 const main = async () => {
@@ -658,14 +776,25 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let siteId;
+  let viewerUserId;
   const suffix = Date.now().toString(36);
   const siteName = `Dashboard Smoke ${suffix}`;
   const slug = `dashboard-smoke-${suffix}`;
+  const viewerEmail = `dashboard-viewer-${suffix}@example.com`;
 
   try {
     await loginAdminApi();
     const created = await createSite({ name: siteName, slug });
     siteId = created.publicSiteId || created.id;
+    const viewer = await createUser({
+      fullName: `Dashboard Viewer ${suffix}`,
+      email: viewerEmail,
+      role: 'viewer',
+      status: 'invited',
+    });
+    viewerUserId = viewer.id;
+    const invite = await createInviteToken(viewer.id);
+    const viewerSession = await acceptInviteToken(invite.token);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -679,7 +808,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
+    const authPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToDashboard(client);
     await waitForDashboardSite(client, siteName);
@@ -699,9 +828,12 @@ const main = async () => {
     });
     await sleep(250);
     const mobileVisualState = await assertDashboardVisualState(client, 'mobile', MOBILE_SCREENSHOT_PATH, siteName);
+    await assertDashboardRbacFiltering(client, viewerSession, siteName, authPreload.identifier);
 
     await deleteSite(siteId);
     siteId = null;
+    await deleteUser(viewerUserId);
+    viewerUserId = null;
 
     console.log(JSON.stringify({
       ok: true,
@@ -711,7 +843,7 @@ const main = async () => {
       mobileScreenshot: mobileVisualState.screenshotPath,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, siteId });
+    await cleanup({ client, childProcess, userDataDir, siteId, userId: viewerUserId });
   }
 };
 

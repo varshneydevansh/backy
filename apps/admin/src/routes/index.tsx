@@ -32,6 +32,7 @@ import {
 import {
   getSettings,
   getSiteReadiness,
+  getUserPermissions,
   listAdminAuditLogs,
   listBlogPosts,
   listCollections,
@@ -44,6 +45,7 @@ import {
   listUsers,
   validateSettingsInfrastructure,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
   type Collection,
   type CollectionRecord,
   type FormDefinition,
@@ -115,6 +117,71 @@ interface DashboardIssue {
   severity: 'error' | 'warning' | 'info';
   to: '/sites' | '/pages' | '/settings' | '/media' | '/collections' | '/comments' | '/forms' | '/products' | '/orders';
 }
+
+type DashboardPermissionKey =
+  | 'dashboard.view'
+  | 'sites.view'
+  | 'sites.create'
+  | 'pages.view'
+  | 'pages.edit'
+  | 'media.view'
+  | 'collections.view'
+  | 'forms.view'
+  | 'comments.view'
+  | 'commerce.view'
+  | 'users.view'
+  | 'settings.view'
+  | 'settings.configure'
+  | 'activity.export';
+
+const DASHBOARD_PERMISSION_ROLE_DEFAULTS: Record<DashboardPermissionKey, User['role'][]> = {
+  'dashboard.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.create': ['owner', 'admin'],
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'comments.view': ['owner', 'admin', 'editor', 'viewer'],
+  'commerce.view': ['owner', 'admin', 'editor', 'viewer'],
+  'users.view': ['owner', 'admin'],
+  'settings.view': ['owner', 'admin'],
+  'settings.configure': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+};
+
+const dashboardPermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: DashboardPermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key);
+
+const isDashboardPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: Pick<User, 'role'> | null | undefined,
+  key: DashboardPermissionKey,
+) => {
+  const matrixRule = dashboardPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.allowed;
+
+  return Boolean(currentAdmin && DASHBOARD_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const dashboardPermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: Pick<User, 'role'> | null | undefined,
+  key: DashboardPermissionKey,
+) => {
+  const matrixRule = dashboardPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.reason;
+  if (!currentAdmin) return 'Sign in to load dashboard permissions.';
+
+  return DASHBOARD_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Hidden by ${currentAdmin.role} role defaults.`;
+};
 
 const emptyCommerceMetrics = (): DashboardCommerceMetrics => ({
   productCount: 0,
@@ -781,6 +848,8 @@ function Index() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState(search.siteId || '');
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[]>([]);
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
   const [deploymentRuns, setDeploymentRuns] = useState<DashboardDeploymentRun[]>([]);
@@ -792,36 +861,65 @@ function Index() {
     setError(null);
 
     try {
+      const matrix = user?.id
+        ? await getUserPermissions(user.id).catch((permissionsError) => {
+            setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load dashboard permissions.');
+            return null;
+          })
+        : null;
+      setPermissionMatrix(matrix);
+      if (matrix) {
+        setPermissionError(null);
+      }
+
+      const canUseDashboard = isDashboardPermissionAllowed(matrix, user, 'dashboard.view');
+      const canViewSites = isDashboardPermissionAllowed(matrix, user, 'sites.view');
+      const canViewUsers = isDashboardPermissionAllowed(matrix, user, 'users.view');
+      const canViewSettings = isDashboardPermissionAllowed(matrix, user, 'settings.view');
+      const canExportActivity = isDashboardPermissionAllowed(matrix, user, 'activity.export');
+      const canViewPages = isDashboardPermissionAllowed(matrix, user, 'pages.view');
+      const canViewMedia = isDashboardPermissionAllowed(matrix, user, 'media.view');
+      const canViewCollections = isDashboardPermissionAllowed(matrix, user, 'collections.view');
+      const canViewForms = isDashboardPermissionAllowed(matrix, user, 'forms.view');
+      const canViewComments = isDashboardPermissionAllowed(matrix, user, 'comments.view');
+      const canViewCommerce = isDashboardPermissionAllowed(matrix, user, 'commerce.view');
+
+      if (!canUseDashboard) {
+        throw new Error('Your account does not have dashboard.view permission.');
+      }
+
       const [sites, users, settings, auditResult] = await Promise.all([
-        listSites(),
-        listUsers().catch(() => [] as User[]),
-        getSettings(),
-        listAdminAuditLogs({ limit: 8 }),
+        canViewSites ? listSites() : Promise.resolve([] as Site[]),
+        canViewUsers ? listUsers().catch(() => [] as User[]) : Promise.resolve([] as User[]),
+        canViewSettings ? getSettings().catch(() => undefined) : Promise.resolve(undefined),
+        canExportActivity
+          ? listAdminAuditLogs({ limit: 8 }).catch(() => ({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }))
+          : Promise.resolve({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }),
       ]);
       const [pagesBySite, postsBySite, readinessBySite, mediaBySite] = await Promise.all([
-        Promise.all(sites.map((site) => listPages(site.id).catch(() => [] as Page[]))),
-        Promise.all(sites.map((site) => listBlogPosts(site.id).catch(() => [] as BlogPost[]))),
-        Promise.all(sites.map((site) => getSiteReadiness(site.id).catch(() => null))),
-        Promise.all(sites.map((site) => listMedia({ siteId: site.id, limit: 200 }).catch(() => [] as MediaAsset[]))),
+        canViewPages ? Promise.all(sites.map((site) => listPages(site.id).catch(() => [] as Page[]))) : Promise.resolve([] as Page[][]),
+        canViewPages ? Promise.all(sites.map((site) => listBlogPosts(site.id).catch(() => [] as BlogPost[]))) : Promise.resolve([] as BlogPost[][]),
+        canViewSites ? Promise.all(sites.map((site) => getSiteReadiness(site.id).catch(() => null))) : Promise.resolve([]),
+        canViewMedia ? Promise.all(sites.map((site) => listMedia({ siteId: site.id, limit: 200 }).catch(() => [] as MediaAsset[]))) : Promise.resolve([] as MediaAsset[][]),
       ]);
       const [collectionsBySite, formsBySite, commentsBySite] = await Promise.all([
-        Promise.all(sites.map((site) => listCollections(site.id).catch(() => [] as Collection[]))),
-        Promise.all(sites.map((site) => listForms(site.id).catch(() => [] as FormDefinition[]))),
-        Promise.all(sites.map((site) => listComments(site.id, { limit: 100 }).catch(() => null))),
+        canViewCollections ? Promise.all(sites.map((site) => listCollections(site.id).catch(() => [] as Collection[]))) : Promise.resolve([] as Collection[][]),
+        canViewForms ? Promise.all(sites.map((site) => listForms(site.id).catch(() => [] as FormDefinition[]))) : Promise.resolve([] as FormDefinition[][]),
+        canViewComments ? Promise.all(sites.map((site) => listComments(site.id, { limit: 100 }).catch(() => null))) : Promise.resolve([]),
       ]);
       const collections = collectionsBySite.flat();
       const forms = formsBySite.flat();
       const contactCounts = await Promise.all(
-        forms.map((form) => listContactCountForDashboard(form.siteId, form.id)),
+        canViewForms ? forms.map((form) => listContactCountForDashboard(form.siteId, form.id)) : [],
       );
-      const commerce = await loadCommerceMetricsForDashboard(collections);
+      const commerce = canViewCommerce ? await loadCommerceMetricsForDashboard(collections) : emptyCommerceMetrics();
 
       const media = mediaBySite.flat();
       const defaultMediaSiteId = getDefaultMediaSiteId();
       const defaultSiteAlreadyLoaded = sites.some((site) => site.id === defaultMediaSiteId);
-      const defaultSiteMedia = defaultSiteAlreadyLoaded
-        ? []
-        : await listMedia({ siteId: defaultMediaSiteId, limit: 200 }).catch(() => [] as MediaAsset[]);
+      const defaultSiteMedia = canViewMedia && !defaultSiteAlreadyLoaded
+        ? await listMedia({ siteId: defaultMediaSiteId, limit: 200 }).catch(() => [] as MediaAsset[])
+        : [];
 
       setDashboard({
         sites,
@@ -866,7 +964,7 @@ function Index() {
     } finally {
       setIsLoading(false);
     }
-  }, [fallbackStore.media, fallbackStore.pages, fallbackStore.posts, fallbackStore.sites, fallbackStore.users]);
+  }, [fallbackStore.media, fallbackStore.pages, fallbackStore.posts, fallbackStore.sites, fallbackStore.users, user]);
 
   useEffect(() => {
     void loadDashboard();
@@ -907,6 +1005,22 @@ function Index() {
   const apiKeysConfigured = Boolean(
     dashboard.settings?.apiKeys.publicApiKey && dashboard.settings?.apiKeys.adminApiKey
   );
+  const canViewUsers = isDashboardPermissionAllowed(permissionMatrix, user, 'users.view');
+  const canViewSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.view');
+  const canConfigureSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.configure');
+  const canExportActivity = isDashboardPermissionAllowed(permissionMatrix, user, 'activity.export');
+  const canCreateSites = isDashboardPermissionAllowed(permissionMatrix, user, 'sites.create');
+  const canEditPages = isDashboardPermissionAllowed(permissionMatrix, user, 'pages.edit');
+  const canViewMedia = isDashboardPermissionAllowed(permissionMatrix, user, 'media.view');
+  const canViewCollections = isDashboardPermissionAllowed(permissionMatrix, user, 'collections.view');
+  const canViewForms = isDashboardPermissionAllowed(permissionMatrix, user, 'forms.view');
+  const canViewCommerce = isDashboardPermissionAllowed(permissionMatrix, user, 'commerce.view');
+  const rbacSummary = {
+    role: permissionMatrix?.role || user?.role || 'unknown',
+    allowed: permissionMatrix?.summary.allowed ?? null,
+    total: permissionMatrix?.summary.total ?? null,
+    source: permissionMatrix ? 'permission matrix' : 'role defaults',
+  };
   const activeSite = dashboard.sites.find((site) => (
     site.id === selectedSiteId || site.publicSiteId === selectedSiteId
   )) || dashboard.sites[0] || fallbackStore.sites[0];
@@ -939,6 +1053,28 @@ function Index() {
     users: `${adminBaseUrl}/users`,
     settings: `${adminBaseUrl}/settings`,
   };
+  const adminContractUrlEntries = Object.entries(adminContractUrls).filter(([label]) => (
+    label === 'users'
+      ? canViewUsers
+      : label === 'settings'
+        ? canViewSettings
+        : true
+  ));
+  const dashboardWorkflowActions = [
+    { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container', visible: canCreateSites },
+    { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas', visible: canEditPages },
+    { label: 'New post', to: '/blog/new' as const, icon: FileText, detail: 'Blog article', visible: canEditPages },
+    { label: 'Media library', to: '/media' as const, icon: HardDrive, detail: 'Images, files, fonts', visible: canViewMedia },
+    { label: 'Collections', to: '/collections' as const, icon: Database, detail: 'Structured data', visible: canViewCollections },
+    { label: 'API setup', to: '/settings' as const, icon: Settings, detail: 'Frontend control', visible: canViewSettings },
+  ].filter((action) => action.visible);
+  const visibleDashboardModules = DASHBOARD_MODULES.filter((module) => (
+    module.href === '/users'
+      ? canViewUsers
+      : module.href === '/settings'
+        ? canViewSettings
+        : true
+  ));
   const getDashboardRouteSearch = (
     to: '/sites' | '/pages' | '/blog' | '/media' | '/users' | '/settings' | '/collections' | '/forms' | '/comments' | '/products' | '/orders' | '/sites/new' | '/pages/new' | '/blog/new',
   ) => (
@@ -970,7 +1106,7 @@ function Index() {
       readiness: { errors: readinessErrors, warnings: readinessWarnings },
     },
     publicEndpoints: frontendContractUrls,
-    adminEndpoints: adminContractUrls,
+    adminEndpoints: Object.fromEntries(adminContractUrlEntries),
     controlRoutes: {
       sites: '/sites',
       pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
@@ -1006,7 +1142,7 @@ function Index() {
         ? { id: ordersCollection.id, status: ordersCollection.status, publicRead: ordersCollection.permissions.publicRead }
         : null,
     },
-    modules: DASHBOARD_MODULES.map((module) => ({
+    modules: visibleDashboardModules.map((module) => ({
       title: module.title,
       status: module.status,
       adminPath: module.href,
@@ -1028,7 +1164,7 @@ function Index() {
   }), [
     activeSite,
     activeSiteId,
-    adminContractUrls,
+    adminContractUrlEntries,
     backendHealthy,
     dashboard.collections.length,
     dashboard.comments,
@@ -1050,6 +1186,7 @@ function Index() {
     storage,
     supabase,
     vercel,
+    visibleDashboardModules,
   ]);
   const frontendHandoffText = useMemo(() => JSON.stringify(frontendHandoff, null, 2), [frontendHandoff]);
   const infrastructureDiagnosticSummary = useMemo(() => {
@@ -1076,74 +1213,86 @@ function Index() {
         detail: backendHealthy ? 'Admin and public APIs are reachable.' : 'Dashboard is using fallback data.',
         ready: backendHealthy,
         to: '/settings' as const,
+        visible: true,
       },
       {
         label: 'API keys',
         detail: apiKeysConfigured ? 'Public and admin API keys are configured.' : 'Configure API keys before external frontend handoff.',
         ready: apiKeysConfigured,
         to: '/settings' as const,
+        visible: canViewSettings,
       },
       {
         label: 'Database',
         detail: database?.configured ? `${database.provider} is configured.` : 'Configure the runtime database or Supabase connection.',
         ready: Boolean(database?.configured || supabase?.configured),
         to: '/settings' as const,
+        visible: canViewSettings,
       },
       {
         label: 'Storage',
         detail: storage?.configured ? `${storage.provider} storage is ready.` : 'Configure central file storage for media delivery.',
         ready: Boolean(storage?.configured),
         to: '/media' as const,
+        visible: canViewSettings || canViewMedia,
       },
       {
         label: 'Vercel',
         detail: vercel?.configured ? 'Deployment integration is connected.' : 'Connect Vercel when hosted frontend deployment is required.',
         ready: Boolean(vercel?.configured),
         to: '/settings' as const,
+        visible: canViewSettings,
       },
       {
         label: 'Sites and content',
         detail: hasPublicContent ? 'Published site content is available for rendering.' : 'Publish a site and at least one page, post, or collection.',
         ready: hasPublicContent,
         to: '/sites' as const,
+        visible: true,
       },
       {
         label: 'Media library',
         detail: dashboard.media.length > 0 ? `${dashboard.media.length} assets available.` : 'Upload images, files, fonts, or downloads.',
         ready: dashboard.media.length > 0,
         to: '/media' as const,
+        visible: canViewMedia,
       },
       {
         label: 'Dynamic data',
         detail: dashboard.collections.length > 0 ? `${dashboard.collections.length} collections loaded.` : 'Create collections for reusable frontend data.',
         ready: dashboard.collections.length > 0,
         to: '/collections' as const,
+        visible: canViewCollections,
       },
       {
         label: 'Forms and leads',
         detail: dashboard.forms.length > 0 ? `${dashboard.forms.length} forms, ${dashboard.contacts} contacts.` : 'Add lead, registration, or contact forms.',
         ready: dashboard.forms.length > 0,
         to: '/forms' as const,
+        visible: canViewForms,
       },
       {
         label: 'Commerce',
         detail: hasCommerce ? 'Products and orders schemas are present.' : 'Sync product and order schemas for selling workflows.',
         ready: hasCommerce,
         to: hasCommerce ? '/products' as const : '/collections' as const,
+        visible: canViewCommerce,
       },
       {
         label: 'Team access',
         detail: activeAdmins > 0 ? `${activeUsers} active users, ${activeAdmins} active admins.` : 'Keep at least one active owner/admin.',
         ready: activeAdmins > 0,
         to: '/users' as const,
+        visible: canViewUsers,
       },
       {
         label: 'Readiness blockers',
         detail: readinessErrors === 0 ? `${readinessWarnings} readiness warnings.` : `${readinessErrors} errors block publish handoff.`,
         ready: readinessErrors === 0,
         to: '/sites' as const,
+        visible: true,
       },
-    ];
+    ].filter((check) => check.visible);
     const readyCount = checks.filter((check) => check.ready).length;
 
     return {
@@ -1161,6 +1310,12 @@ function Index() {
   }, [
     apiKeysConfigured,
     backendHealthy,
+    canViewCollections,
+    canViewCommerce,
+    canViewForms,
+    canViewMedia,
+    canViewSettings,
+    canViewUsers,
     dashboard.collections.length,
     dashboard.contacts,
     dashboard.forms.length,
@@ -1208,7 +1363,7 @@ function Index() {
   };
 
   const runInfrastructureCheck = async () => {
-    if (!dashboard.settings || isCheckingInfrastructure) return;
+    if (!dashboard.settings || isCheckingInfrastructure || !canConfigureSettings) return;
 
     setIsCheckingInfrastructure(true);
     setNotice(null);
@@ -1231,7 +1386,7 @@ function Index() {
   };
 
   const runDeploymentPreflight = async () => {
-    if (!dashboard.settings || isRunningDeployment) return;
+    if (!dashboard.settings || isRunningDeployment || !canConfigureSettings) return;
 
     setIsRunningDeployment(true);
     setNotice(null);
@@ -1374,6 +1529,7 @@ function Index() {
         : 'Invite at least one owner or admin before production use.',
       ready: dashboard.users.length > 0,
       to: '/users' as const,
+      visible: canViewUsers,
     },
     {
       label: 'Connect APIs and infrastructure',
@@ -1382,10 +1538,13 @@ function Index() {
         : 'Configure API keys, persistence, media storage, Supabase, and deployment integrations.',
       ready: Boolean(apiKeysConfigured && (database?.configured || supabase?.configured) && storage?.configured),
       to: '/settings' as const,
+      visible: canViewSettings,
     },
-  ]), [
+  ].filter((step) => step.visible !== false)), [
     aggregateAnalytics.publishedContent,
     apiKeysConfigured,
+    canViewSettings,
+    canViewUsers,
     dashboard.collections.length,
     dashboard.commerce.orderCount,
     dashboard.commerce.productCount,
@@ -1478,7 +1637,21 @@ function Index() {
       to: '/users' as const,
       tone: 'bg-info/10 text-info',
     },
-  ];
+  ].filter((card) => (
+    card.to === '/users'
+      ? canViewUsers
+      : card.to === '/media'
+        ? canViewMedia
+        : card.to === '/collections'
+          ? canViewCollections
+          : card.to === '/forms'
+            ? canViewForms
+            : card.to === '/comments'
+              ? isDashboardPermissionAllowed(permissionMatrix, user, 'comments.view')
+              : card.to === '/products'
+                ? canViewCommerce
+                : true
+  ));
 
   return (
     <PageShell
@@ -1626,6 +1799,51 @@ function Index() {
             </div>
           </div>
 
+          <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="dashboard-rbac-scope">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Workspace RBAC scope</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Dashboard data, creation actions, admin endpoints, settings, users, and activity panels are filtered by the signed-in account.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+                {rbacSummary.role} · {rbacSummary.source}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <div className="rounded-md border border-border bg-card px-3 py-2">
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Permissions</div>
+                <div className="mt-1 text-sm font-medium">
+                  {rbacSummary.allowed === null ? 'Role defaults' : `${rbacSummary.allowed}/${rbacSummary.total} allowed`}
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-3 py-2">
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Users</div>
+                <div className={cn('mt-1 text-sm font-medium', canViewUsers ? 'text-success' : 'text-muted-foreground')}>
+                  {canViewUsers ? 'Visible' : 'Hidden'}
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-3 py-2">
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Settings</div>
+                <div className={cn('mt-1 text-sm font-medium', canViewSettings ? 'text-success' : 'text-muted-foreground')}>
+                  {canViewSettings ? 'Visible' : 'Hidden'}
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-3 py-2">
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Activity</div>
+                <div className={cn('mt-1 text-sm font-medium', canExportActivity ? 'text-success' : 'text-muted-foreground')}>
+                  {canExportActivity ? 'Visible' : 'Hidden'}
+                </div>
+              </div>
+            </div>
+            {permissionError && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Permission matrix unavailable; using role defaults. {permissionError}
+              </p>
+            )}
+          </div>
+
           <div className="mt-4 rounded-lg border border-border bg-background p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1635,11 +1853,11 @@ function Index() {
                 </p>
               </div>
               <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {DASHBOARD_MODULES.filter((module) => module.status === 'Available').length} available · {DASHBOARD_MODULES.filter((module) => module.status === 'Next').length} next
+                {visibleDashboardModules.filter((module) => module.status === 'Available').length} available · {visibleDashboardModules.filter((module) => module.status === 'Next').length} next
               </span>
             </div>
             <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {DASHBOARD_MODULES.map((module) => (
+              {visibleDashboardModules.map((module) => (
                 <Link
                   key={module.title}
                   to={module.href}
@@ -1736,7 +1954,8 @@ function Index() {
             <button
               type="button"
               onClick={() => void runDeploymentPreflight()}
-              disabled={isDashboardBusy || !dashboard.settings}
+              disabled={isDashboardBusy || !dashboard.settings || !canConfigureSettings}
+              title={dashboardPermissionReason(permissionMatrix, user, 'settings.configure')}
               aria-label="Run dashboard deployment preflight"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -2106,20 +2325,23 @@ function Index() {
                 <button
                   type="button"
                   onClick={runInfrastructureCheck}
-                  disabled={isDashboardBusy || !dashboard.settings}
+                  disabled={isDashboardBusy || !dashboard.settings || !canConfigureSettings}
+                  title={dashboardPermissionReason(permissionMatrix, user, 'settings.configure')}
                   aria-label="Run dashboard infrastructure check"
                   className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isCheckingInfrastructure ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                   Run infrastructure check
                 </button>
-                <Link
-                  to="/settings"
-                  search={{ tab: 'infrastructure' }}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-                >
-                  Open infrastructure <ArrowUpRight className="size-3.5" />
-                </Link>
+                {canViewSettings && (
+                  <Link
+                    to="/settings"
+                    search={{ tab: 'infrastructure' }}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                  >
+                    Open infrastructure <ArrowUpRight className="size-3.5" />
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -2147,20 +2369,15 @@ function Index() {
                     Start the workflows that control hosted pages and custom frontend data.
                   </p>
                 </div>
-                <Link to="/settings" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                  API settings <ArrowUpRight className="size-3.5" />
-                </Link>
+                {canViewSettings && (
+                  <Link to="/settings" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                    API settings <ArrowUpRight className="size-3.5" />
+                  </Link>
+                )}
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {[
-                  { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container' },
-                  { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas' },
-                  { label: 'New post', to: '/blog/new' as const, icon: FileText, detail: 'Blog article' },
-                  { label: 'Media library', to: '/media' as const, icon: HardDrive, detail: 'Images, files, fonts' },
-                  { label: 'Collections', to: '/collections' as const, icon: Database, detail: 'Structured data' },
-                  { label: 'API setup', to: '/settings' as const, icon: Settings, detail: 'Frontend control' },
-                ].map((action) => (
+                {dashboardWorkflowActions.map((action) => (
                   <Link
                     key={action.label}
                     to={action.to}
@@ -2459,7 +2676,7 @@ function Index() {
                   <KeyRound className="size-3.5 text-muted-foreground" />
                 </div>
                 <div className="mt-3 grid gap-2">
-                  {Object.entries(adminContractUrls).map(([label, value]) => (
+                  {adminContractUrlEntries.map(([label, value]) => (
                     <button
                       key={label}
                       type="button"
@@ -2475,13 +2692,15 @@ function Index() {
               </div>
 
               <div className="mt-4 flex flex-col gap-2">
-                <Link
-                  to="/settings"
-                  className="inline-flex min-h-11 items-center justify-between rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-                >
-                  Open API and delivery settings
-                  <ArrowRight className="size-4" />
-                </Link>
+                {canViewSettings && (
+                  <Link
+                    to="/settings"
+                    className="inline-flex min-h-11 items-center justify-between rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                  >
+                    Open API and delivery settings
+                    <ArrowRight className="size-4" />
+                  </Link>
+                )}
                 <Link
                   to="/collections"
                   search={{ siteId: activeSiteId }}
