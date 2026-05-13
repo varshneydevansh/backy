@@ -155,6 +155,14 @@ const deleteCollectionRecord = async (collectionId, recordId) => {
   });
 };
 
+const updateCollectionRecord = async (collectionId, recordId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.record || payload.record;
+};
+
 const csvEscape = (value) => {
   const text = value === null || value === undefined ? '' : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -759,6 +767,37 @@ const editOrderAfterWorkflow = async (client, orderNumber) => {
   return null;
 };
 
+const clickReconcileProvider = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return { ok: false, disabled: button instanceof HTMLButtonElement ? button.disabled : null, text: button?.textContent || '' };
+    }
+    button.click();
+    return { ok: true, text: button.textContent || '' };
+  })()`);
+  assert(result.ok, `Unable to click provider reconciliation control: ${JSON.stringify(result)}`);
+  await sleep(500);
+};
+
+const waitForReconciliationPanel = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="orders-reconciliation-result"]');
+      return {
+        ready: Boolean(panel),
+        text: panel?.textContent || '',
+      };
+    })()`);
+    if (state.ready && /orders updated/.test(state.text)) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Provider reconciliation result panel did not render');
+};
+
 const deleteOrderThroughUi = async (client, orderNumber) => {
   await clickOrderCardButton(client, orderNumber, 'Delete');
   await clickByText(client, 'Delete order', { exact: true });
@@ -929,6 +968,54 @@ const main = async () => {
       slug,
       (values) => values.paymentstatus === 'refunded' && Number(values.refundamount) === 5 && values.refundreason === 'Smoke refund adjustment' && /edited private note/.test(String(values.notes || '')),
       'Order edit did not persist refund and note fields',
+    );
+
+    const staleOrder = await updateCollectionRecord(collectionId, orderRecordId, {
+      status: 'published',
+      values: {
+        ...(await getCollectionRecordBySlug(collectionId, slug)).values,
+        orderstatus: 'open',
+        paymentstatus: 'pending',
+        paymentreference: `pi_reconcile_${suffix}`,
+        paidat: '',
+        notes: 'Order smoke reset to pending before reconciliation.',
+      },
+    });
+    await requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
+      method: 'POST',
+      headers: { 'x-request-id': `orders-reconcile-event-${suffix}` },
+      body: JSON.stringify({
+        id: `evt_orders_reconcile_${suffix}`,
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: staleOrder.values.checkoutsessionid,
+            payment_intent: `pi_reconcile_${suffix}`,
+            metadata: {
+              orderNumber,
+              orderSlug: slug,
+            },
+          },
+        },
+      }),
+    });
+    await updateCollectionRecord(collectionId, orderRecordId, {
+      status: 'published',
+      values: {
+        ...(await getCollectionRecordBySlug(collectionId, slug)).values,
+        orderstatus: 'open',
+        paymentstatus: 'pending',
+        paidat: '',
+        notes: 'Order smoke reset after provider webhook to verify admin reconciliation.',
+      },
+    });
+    await clickReconcileProvider(client);
+    await waitForReconciliationPanel(client);
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.paymentreference === `pi_reconcile_${suffix}` && /Commerce reconciliation applied/.test(String(values.notes || '')),
+      'Provider reconciliation did not repair stale payment state',
     );
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {

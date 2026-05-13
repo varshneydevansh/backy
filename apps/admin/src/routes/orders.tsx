@@ -32,8 +32,10 @@ import {
   importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
+  reconcileCommerceOrders,
   updateCollection,
   updateCollectionRecord,
+  type CommerceReconciliationResult,
   type Collection,
   type CollectionField,
   type CollectionRecord,
@@ -391,7 +393,9 @@ function OrdersRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isImportingOrders, setIsImportingOrders] = useState(false);
-  const isOrdersBusy = isLoading || isSaving || isImportingOrders;
+  const [isReconcilingOrders, setIsReconcilingOrders] = useState(false);
+  const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
+  const isOrdersBusy = isLoading || isSaving || isImportingOrders || isReconcilingOrders;
   const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -1087,6 +1091,33 @@ function OrdersRoute() {
     }
   };
 
+  const reconcileOrders = async () => {
+    if (!ordersCollection) return;
+    if (isOrdersBusy) return;
+
+    setIsReconcilingOrders(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await reconcileCommerceOrders(activeSiteId, 100);
+      setReconciliationResult(result);
+      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+        limit: 100,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      });
+      setOrders(refreshed.records);
+      const updateLabel = `${result.updatedCount} order${result.updatedCount === 1 ? '' : 's'}`;
+      const eventLabel = `${result.eventCount} event${result.eventCount === 1 ? '' : 's'}`;
+      setNotice(`Reconciled ${eventLabel}; updated ${updateLabel}.`);
+    } catch (reconcileError) {
+      setError(reconcileError instanceof Error ? reconcileError.message : 'Unable to reconcile commerce orders');
+    } finally {
+      setIsReconcilingOrders(false);
+    }
+  };
+
   const removeOrder = async (order: CollectionRecord) => {
     if (!ordersCollection) return;
     if (isOrdersBusy) return;
@@ -1450,6 +1481,15 @@ function OrdersRoute() {
                 <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy checkout
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void reconcileOrders()}
+                  disabled={isOrdersBusy || !ordersApiReady}
+                  iconStart={<RefreshCw className="size-4" />}
+                  data-testid="orders-reconcile-provider"
+                >
+                  {isReconcilingOrders ? 'Reconciling...' : 'Reconcile provider'}
+                </Button>
                 <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
                   Products
                 </Button>
@@ -1517,6 +1557,19 @@ function OrdersRoute() {
               {missingOrderFields.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   Missing order fields: {missingOrderFields.join(', ')}. Sync the schema before relying on fulfillment workflows.
+                </div>
+              )}
+              {reconciliationResult && (
+                <div className="rounded-lg border border-border bg-background p-3 text-sm" data-testid="orders-reconciliation-result">
+                  <div className="flex flex-wrap items-center gap-2 font-medium">
+                    <RefreshCw className="size-4" />
+                    Provider reconciliation
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span className="rounded-md border border-border bg-muted px-2 py-1">{reconciliationResult.eventCount} events checked</span>
+                    <span className="rounded-md border border-border bg-muted px-2 py-1">{reconciliationResult.updatedCount} orders updated</span>
+                    <span className="rounded-md border border-border bg-muted px-2 py-1">{reconciliationResult.unmatchedCount} unmatched</span>
+                  </div>
                 </div>
               )}
               <div className="rounded-lg border border-border bg-background p-4">

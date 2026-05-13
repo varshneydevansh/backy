@@ -4623,6 +4623,34 @@ export async function updateCollectionRecord(
   return toCollectionRecord(payload.data.record);
 }
 
+export interface CommerceReconciliationResult {
+  schemaVersion: 'backy.commerce-reconciliation.v1';
+  eventCount: number;
+  updatedCount: number;
+  unmatchedCount: number;
+  updates: Array<{
+    orderId: string;
+    orderNumber?: string;
+    paymentStatus?: string;
+    eventId: string;
+  }>;
+  unmatchedEvents: Array<Record<string, unknown>>;
+}
+
+export async function reconcileCommerceOrders(siteId: string, limit = 100): Promise<CommerceReconciliationResult> {
+  const query = new URLSearchParams();
+  query.set('limit', String(limit));
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/reconcile?${query.toString()}`, {
+    method: 'POST',
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.error?.message || 'Unable to reconcile commerce orders');
+  }
+
+  return payload.data as CommerceReconciliationResult;
+}
+
 export async function bulkUpdateCollectionRecords(
   siteId: string,
   collectionId: string,
