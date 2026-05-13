@@ -965,6 +965,10 @@ export function CanvasEditor({
   ]);
   const historyIndexRef = useRef(0);
   const isApplyingHistoryRef = useRef(false);
+  const coalesceNextHistoryRef = useRef<{
+    selectedIds: string[];
+    elementCount: number;
+  } | null>(null);
 
   useEffect(() => {
     historyRef.current = history;
@@ -1742,6 +1746,17 @@ export function CanvasEditor({
     const baseIndex = Math.max(0, Math.min(historyIndexRef.current, historyRef.current.length - 1));
     const nextHistory = historyRef.current.slice(0, baseIndex + 1);
     const historyTail = nextHistory[nextHistory.length - 1];
+    const pendingCoalesce = coalesceNextHistoryRef.current;
+    const shouldCoalesceTail = Boolean(
+      pendingCoalesce &&
+        previousElements &&
+        historyTail &&
+        historyTail.elements.length === pendingCoalesce.elementCount &&
+        newElements.length === pendingCoalesce.elementCount &&
+        historyElementsEqual(historyTail.elements, previousElements) &&
+        pendingCoalesce.selectedIds.length === nextSelection.selectedIds.length &&
+        pendingCoalesce.selectedIds.every((id, index) => id === nextSelection.selectedIds[index]),
+    );
     const pushHistoryEntry = (entry: EditorHistoryEntry) => {
       const tail = nextHistory[nextHistory.length - 1];
       if (tail && historyElementsEqual(tail.elements, entry.elements)) {
@@ -1752,20 +1767,31 @@ export function CanvasEditor({
       nextHistory.push(entry);
     };
 
-    if (previousElements && historyTail && !historyElementsEqual(historyTail.elements, previousElements)) {
-      const previousSelection = resolveSelectionSnapshot(previousElements, selectedId, selectedIds);
+    if (shouldCoalesceTail) {
+      nextHistory[nextHistory.length - 1] = {
+        elements: newElements,
+        selectedId: nextSelection.selectedId,
+        selectedIds: nextSelection.selectedIds,
+      };
+      coalesceNextHistoryRef.current = null;
+    } else {
+      coalesceNextHistoryRef.current = null;
+
+      if (previousElements && historyTail && !historyElementsEqual(historyTail.elements, previousElements)) {
+        const previousSelection = resolveSelectionSnapshot(previousElements, selectedId, selectedIds);
+        pushHistoryEntry({
+          elements: previousElements,
+          selectedId: previousSelection.selectedId,
+          selectedIds: previousSelection.selectedIds,
+        });
+      }
+
       pushHistoryEntry({
-        elements: previousElements,
-        selectedId: previousSelection.selectedId,
-        selectedIds: previousSelection.selectedIds,
+        elements: newElements,
+        selectedId: nextSelection.selectedId,
+        selectedIds: nextSelection.selectedIds,
       });
     }
-
-    pushHistoryEntry({
-      elements: newElements,
-      selectedId: nextSelection.selectedId,
-      selectedIds: nextSelection.selectedIds,
-    });
 
     // Limit history size to 50
     if (nextHistory.length > 50) {
@@ -1966,6 +1992,16 @@ export function CanvasEditor({
       elementsRef.current = nextElements;
       setElements(nextElements);
       addToHistory(nextElements, firstPastedId, pastedIds, previousElements);
+      const coalesceMarker = {
+        selectedIds: pastedIds,
+        elementCount: nextElements.length,
+      };
+      coalesceNextHistoryRef.current = coalesceMarker;
+      window.setTimeout(() => {
+        if (coalesceNextHistoryRef.current === coalesceMarker) {
+          coalesceNextHistoryRef.current = null;
+        }
+      }, 1000);
       markChanges();
     }
   }, [
