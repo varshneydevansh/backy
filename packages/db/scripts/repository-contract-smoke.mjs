@@ -761,6 +761,127 @@ assert(!(await siteRepository.checkSlug({ slug: site.slug, teamId: site.teamId }
 const siteList = await siteRepository.list({ teamId: site.teamId, status: 'published' });
 assert(siteList.items.length === 1 && siteList.pagination.total === 1, 'Expected published site list result');
 
+const siteControlPlaneSettings = {
+  domainVerification: {
+    status: 'verified',
+    method: 'dns-txt',
+    domain: 'repo-contract.example.com',
+    token: 'backy-repository-contract',
+    txtHost: '_backy.repo-contract.example.com',
+    txtValue: 'backy-site-verification=backy-repository-contract',
+    cnameTarget: 'repo-contract.backy.app',
+    requestedAt: '2026-05-13T00:00:00.000Z',
+    checkedAt: '2026-05-13T00:01:00.000Z',
+    verifiedAt: '2026-05-13T00:01:00.000Z',
+    lastError: null,
+  },
+  vercelDeployment: {
+    status: 'production_ready',
+    projectId: 'prj_repo_contract',
+    teamSlug: 'backy-repo',
+    productionDomain: 'repo-contract.example.com',
+    previewUrl: 'https://repo-contract-preview.vercel.app',
+    productionUrl: 'https://repo-contract.example.com',
+    deploymentId: 'dpl_repo_contract',
+    environment: 'production',
+    lastAction: 'promote-production',
+    requestedAt: '2026-05-13T00:02:00.000Z',
+    completedAt: '2026-05-13T00:03:00.000Z',
+    promotedAt: '2026-05-13T00:03:00.000Z',
+    rolledBackAt: null,
+    command: 'vercel deploy --prebuilt --prod',
+    missing: [],
+    history: [
+      {
+        id: 'deploy_repo_contract',
+        action: 'promote-production',
+        status: 'production_ready',
+        environment: 'production',
+        targetUrl: 'https://repo-contract.example.com',
+        command: 'vercel deploy --prebuilt --prod',
+        requestedAt: '2026-05-13T00:02:00.000Z',
+        completedAt: '2026-05-13T00:03:00.000Z',
+        missing: [],
+      },
+    ],
+  },
+  billingQuota: {
+    plan: 'business',
+    status: 'active',
+    billingOwnerId: 'profiles_1',
+    billingEmail: 'billing@example.com',
+    renewalAt: '2026-06-13T00:00:00.000Z',
+    limits: {
+      pages: 250,
+      mediaGb: 100,
+      bandwidthGb: 1000,
+      forms: 75,
+      products: 5000,
+      collections: 100,
+      teamMembers: 25,
+      customDomains: 20,
+    },
+    usage: {
+      pages: 4,
+      mediaGb: 2,
+      bandwidthGb: 20,
+      forms: 1,
+      products: 12,
+      collections: 2,
+      teamMembers: 3,
+      customDomains: 1,
+      updatedAt: '2026-05-13T00:04:00.000Z',
+    },
+    lastAction: 'refresh-usage',
+    notes: 'Repository persistence smoke',
+    history: [
+      {
+        id: 'quota_repo_contract',
+        action: 'refresh-usage',
+        plan: 'business',
+        status: 'active',
+        requestedAt: '2026-05-13T00:04:00.000Z',
+        usage: {
+          pages: 4,
+          mediaGb: 2,
+          bandwidthGb: 20,
+          forms: 1,
+          products: 12,
+          collections: 2,
+          teamMembers: 3,
+          customDomains: 1,
+          updatedAt: '2026-05-13T00:04:00.000Z',
+        },
+        limits: {
+          pages: 250,
+          mediaGb: 100,
+          bandwidthGb: 1000,
+          forms: 75,
+          products: 5000,
+          collections: 100,
+          teamMembers: 25,
+          customDomains: 20,
+        },
+      },
+    ],
+  },
+};
+const settingsSite = (await siteRepository.update(site.id, {
+  settings: {
+    ...site.settings,
+    ...siteControlPlaneSettings,
+  },
+})).item;
+const reloadedSettingsSite = await siteRepository.getById(site.id);
+assert(settingsSite.settings.domainVerification?.status === 'verified', 'Expected site domain verification settings to return from repository update');
+assert(reloadedSettingsSite?.settings.domainVerification?.txtValue === siteControlPlaneSettings.domainVerification.txtValue, 'Expected site domain verification settings to persist through repository read');
+assert(reloadedSettingsSite?.settings.vercelDeployment?.history?.[0]?.targetUrl === siteControlPlaneSettings.vercelDeployment.productionUrl, 'Expected site Vercel deployment history to persist through repository read');
+assert(reloadedSettingsSite?.settings.billingQuota?.plan === 'business', 'Expected site billing quota plan to persist through repository read');
+assert(reloadedSettingsSite?.settings.billingQuota?.usage.pages === 4, 'Expected site billing quota usage to persist through repository read');
+assert(db.state.sites[0].settings?.domainVerification?.token === siteControlPlaneSettings.domainVerification.token, 'Expected domain verification settings to persist in DB settings JSON');
+assert(db.state.sites[0].settings?.vercelDeployment?.status === 'production_ready', 'Expected Vercel deployment settings to persist in DB settings JSON');
+assert(db.state.sites[0].settings?.billingQuota?.limits?.pages === 250, 'Expected billing quota settings to persist in DB settings JSON');
+
 const contentDocument = createBackyContentDocument({
   id: 'page_contract_doc',
   kind: 'page',
