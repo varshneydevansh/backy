@@ -31,6 +31,8 @@ let createdReusableInstancePageId = null;
 let createdSafeguardUserId = null;
 let originalUserAdminRole = null;
 let originalUserAdminStatus = null;
+let contractOwnerUserId = null;
+let contractOwnerSessionToken = '';
 let capturedTemplatePageId = null;
 let capturedTemplatePostId = null;
 let routeConflictCleanupPageId = null;
@@ -191,6 +193,55 @@ async function loginAdminCredentials(email, password) {
   return json.data.session.token;
 }
 
+async function ensureOwnerSession() {
+  if (contractOwnerSessionToken) return contractOwnerSessionToken;
+
+  const unique = Date.now().toString(36);
+  const createOwner = await request('/api/admin/users', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      fullName: `Contract Owner ${unique}`,
+      email: `contract-owner-${unique}@backy.test`,
+      role: 'owner',
+      status: 'invited',
+    }),
+  });
+  assert(createOwner.response.status === 201, `${createOwner.url} expected owner create 201, got ${createOwner.response.status}`);
+  contractOwnerUserId = createOwner.json?.data?.user?.id;
+  assert(contractOwnerUserId, `${createOwner.url} missing owner user id`);
+
+  const invite = await request(`/api/admin/users/${contractOwnerUserId}/invite-link`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  assert(invite.response.status === 200, `${invite.url} expected owner invite 200, got ${invite.response.status}`);
+  const token = invite.json?.data?.invite?.token;
+  assert(token, `${invite.url} missing owner invite token`);
+
+  const accept = await fetch(`${baseUrl}/api/admin/auth/accept-invite`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ token }),
+  });
+  const acceptJson = await accept.json().catch(() => ({}));
+  assert(accept.ok && acceptJson?.data?.session?.token, `Owner invite accept failed: ${JSON.stringify(acceptJson).slice(0, 500)}`);
+  contractOwnerSessionToken = acceptJson.data.session.token;
+  return contractOwnerSessionToken;
+}
+
+async function requestOwnerOnly(pathOrUrl, init) {
+  const ownerToken = await ensureOwnerSession();
+  return requestWithSession(pathOrUrl, ownerToken, init);
+}
+
 async function cleanup() {
   if (createdSiteId && createdPostId) {
     await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' }).catch(() => {});
@@ -277,11 +328,15 @@ async function cleanup() {
   }
 
   if (createdSiteId) {
-    await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' }).catch(() => {});
+    await requestOwnerOnly(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdUserId) {
     await request(`/api/admin/users/${createdUserId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (contractOwnerUserId) {
+    await request(`/api/admin/users/${contractOwnerUserId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (originalUserAdminRole && originalUserAdminStatus) {
@@ -5437,7 +5492,7 @@ try {
   });
 
   await record('admin sites delete removes temporary site', async () => {
-    const { response, json, url } = await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' });
+    const { response, json, url } = await requestOwnerOnly(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' });
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.deleted === true, `${url} expected deleted true`);
@@ -5792,7 +5847,7 @@ try {
     const oldPublicKey = before.json?.data?.settings?.apiKeys?.publicApiKey;
     const oldAdminKey = before.json?.data?.settings?.apiKeys?.adminApiKey;
 
-    const { response, json, url } = await request('/api/admin/settings', {
+    const { response, json, url } = await requestOwnerOnly('/api/admin/settings', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

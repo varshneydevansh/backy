@@ -178,6 +178,14 @@ export function isAdminPermissionKey(value: string): boolean {
   return PERMISSION_KEYS.has(value);
 }
 
+export function isOwnerOnlyAdminPermission(value: string): boolean {
+  return PERMISSION_GROUPS.some((group) => group.permissions.some((permission) => (
+    permission.key === value
+    && permission.roles.length === 1
+    && permission.roles[0] === 'owner'
+  )));
+}
+
 export function buildUserPermissionMatrix(
   user: Pick<StoreUser, 'id' | 'role' | 'status'>,
   overrides: StoreUserPermissionOverride[] = [],

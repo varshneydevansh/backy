@@ -101,6 +101,23 @@ await record('admin api accepts bearer key', async () => {
   assertCorsAndRequestId(result);
 });
 
+await record('admin api key cannot use owner-only permissions', async () => {
+  const result = await request('/api/admin/settings', {
+    method: 'POST',
+    headers: {
+      origin: adminDevOrigin,
+      'content-type': 'application/json',
+      'x-backy-admin-key': adminApiKey,
+    },
+    body: JSON.stringify({ action: 'regenerate-api-keys', scope: 'public' }),
+  });
+
+  assert(result.response.status === 403, `${result.url} expected 403 for owner-only API key route, got ${result.response.status}`);
+  assert(result.json?.success === false, `${result.url} expected error envelope`);
+  assert(result.json?.error?.code === 'FORBIDDEN_PERMISSION', `${result.url} expected FORBIDDEN_PERMISSION error code`);
+  assertCorsAndRequestId(result);
+});
+
 console.log(`Admin auth smoke passed against ${baseUrl}`);
 for (const check of checks) {
   console.log(`- ${check.name} (${check.ms}ms)`);

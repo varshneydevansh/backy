@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, type AdminSession } from '@/lib/admin-auth/sessionStore';
-import { buildUserPermissionMatrix, isAdminPermissionKey } from '@/lib/adminPermissions';
+import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides } from '@/lib/backyStore';
 
 type AdminRole = AdminSession['user']['role'];
@@ -58,10 +58,16 @@ export function requireAdminAccess(
   } = {},
 ): AdminAccessContext | NextResponse {
   const allowedRoles = options.roles || ['owner', 'admin'];
+  if (options.permission && !isAdminPermissionKey(options.permission)) {
+    return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${options.permission}`, requestId);
+  }
   const providedKey = getProvidedAdminKey(request);
   const expectedKeys = getExpectedAdminKeys();
 
   if (providedKey && expectedKeys.includes(providedKey)) {
+    if (options.permission && isOwnerOnlyAdminPermission(options.permission)) {
+      return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
+    }
     return {
       type: 'api-key',
       session: null,
@@ -74,10 +80,6 @@ export function requireAdminAccess(
   }
 
   if (options.permission) {
-    if (!isAdminPermissionKey(options.permission)) {
-      return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${options.permission}`, requestId);
-    }
-
     const overrides = listAdminUserPermissionOverrides(session.user.id);
     const matrix = buildUserPermissionMatrix(session.user, overrides);
     const permission = matrix.groups
