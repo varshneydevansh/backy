@@ -18,6 +18,13 @@ export const Route = createFileRoute('/reset-password')({
 
 type ResetState = 'ready' | 'reset' | 'error';
 
+const maskToken = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Missing token';
+  if (trimmed.length <= 12) return 'Token present';
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+};
+
 function ResetPasswordPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -150,7 +157,7 @@ function ResetPasswordPage() {
             <div className="mt-6 rounded-lg border border-border bg-background p-3">
               <div className="text-xs font-medium text-muted-foreground">Reset token</div>
               <div className="mt-1 truncate font-mono text-xs font-semibold text-foreground">
-                {token || 'Missing token'}
+                {maskToken(token)}
               </div>
             </div>
 

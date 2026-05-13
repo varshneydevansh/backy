@@ -202,6 +202,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const body = await parseJsonBody(request);
       const values = body.values === undefined ? record.values : toRecord(body.values);
       const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+      const nextScheduledAt = typeof body.scheduledAt === 'string' || body.scheduledAt === null
+        ? body.scheduledAt
+        : undefined;
 
       if (body.slug !== undefined && !nextSlug) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Record slug is required', requestId);
@@ -226,6 +229,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(body.values === undefined ? {} : { values: toJsonRecord(values) }),
         ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
         ...(nextSlug ? { slug: nextSlug } : {}),
+        ...(nextScheduledAt !== undefined ? { scheduledAt: nextScheduledAt } : {}),
       })).item;
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,

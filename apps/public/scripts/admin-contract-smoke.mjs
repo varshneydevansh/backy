@@ -2062,7 +2062,9 @@ try {
     assert(Array.isArray(clearCommentReports.json?.data?.updated?.[0]?.reportReasons) && clearCommentReports.json.data.updated[0].reportReasons.length === 0, `${clearCommentReports.url} did not clear report reasons`);
     assert(clearCommentReports.json?.data?.updated?.[0]?.status === 'approved', `${clearCommentReports.url} changed comment status while clearing reports`);
 
-    const commentReportEvents = await request(`/api/sites/${createdSiteId}/events?kind=comment-reported&requestId=contract-page-comment-report`);
+    const commentReportEvents = await request(`/api/sites/${createdSiteId}/events?kind=comment-reported&requestId=contract-page-comment-report`, {
+      headers: withAdminAuth(),
+    });
     assert(commentReportEvents.response.status === 200, `${commentReportEvents.url} expected 200, got ${commentReportEvents.response.status}`);
     assertBackyContract(commentReportEvents, 'private');
     assert(commentReportEvents.json?.success === true, `${commentReportEvents.url} expected success envelope`);
@@ -5422,12 +5424,14 @@ try {
     assert(removeBoundPage.response.status === 200, `${removeBoundPage.url} expected 200, got ${removeBoundPage.response.status}`);
     createdPageId = null;
 
+    const collectionRecordSchedule = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const updateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, {
       method: 'PATCH',
       headers: {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
+        scheduledAt: collectionRecordSchedule,
         values: {
           summary: 'Updated structured content',
           rank: 2,
@@ -5435,12 +5439,15 @@ try {
       }),
     });
     assert(updateRecord.response.status === 200, `${updateRecord.url} expected 200, got ${updateRecord.response.status}`);
+    assert(updateRecord.json?.data?.record?.scheduledAt === collectionRecordSchedule, `${updateRecord.url} expected updated schedule`);
     assert(updateRecord.json?.data?.record?.values?.summary === 'Updated structured content', `${updateRecord.url} expected updated summary`);
     assert(updateRecord.json?.data?.record?.values?.title === 'Collection Record', `${updateRecord.url} expected partial update to preserve title`);
     const recordUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${createdCollectionRecordId}&action=update&requestId=${updateRecord.json.requestId}`);
     assert(recordUpdateAudit.response.status === 200, `${recordUpdateAudit.url} expected collection record update audit readback`);
     assert(recordUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('values'), `${recordUpdateAudit.url} missing record update changedFields metadata`);
+    assert(recordUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('scheduledAt'), `${recordUpdateAudit.url} missing record schedule changedFields metadata`);
     assert(recordUpdateAudit.json?.data?.logs?.[0]?.before?.slug === collectionRecordSlug, `${recordUpdateAudit.url} missing record update before snapshot`);
+    assert(recordUpdateAudit.json?.data?.logs?.[0]?.after?.scheduledAt === collectionRecordSchedule, `${recordUpdateAudit.url} missing record update after schedule`);
     assert(recordUpdateAudit.json?.data?.logs?.[0]?.after?.valueKeys?.includes('summary'), `${recordUpdateAudit.url} missing record update after value keys`);
 
     const hideCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
@@ -5668,7 +5675,7 @@ try {
     createdUserId = null;
   });
 
-  await record('admin settings read returns delivery mode and keys', async () => {
+  await record('admin settings read returns delivery mode and public keys', async () => {
     const unauthSettings = await fetch(`${baseUrl}/api/admin/settings`);
     const unauthSettingsJson = await unauthSettings.json().catch(() => ({}));
     assert(unauthSettings.status === 401, `Settings admin API should reject missing auth, got ${unauthSettings.status}`);
@@ -5679,7 +5686,7 @@ try {
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.settings?.deliveryMode, `${url} missing deliveryMode`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey, `${url} missing publicApiKey`);
-    assert(json?.data?.settings?.apiKeys?.adminApiKey, `${url} missing adminApiKey`);
+    assert(json?.data?.settings?.apiKeys?.adminApiKey === '', `${url} should not expose adminApiKey to non-owner sessions`);
     assert(json?.data?.settings?.runtimeStorage?.provider, `${url} missing runtime storage provider`);
     assert(typeof json?.data?.settings?.runtimeStorage?.configured === 'boolean', `${url} missing runtime storage configured flag`);
     assert(Array.isArray(json?.data?.settings?.runtimeStorage?.missing), `${url} missing runtime storage missing list`);
@@ -5845,7 +5852,6 @@ try {
   await record('admin settings regenerates API keys', async () => {
     const before = await request('/api/admin/settings');
     const oldPublicKey = before.json?.data?.settings?.apiKeys?.publicApiKey;
-    const oldAdminKey = before.json?.data?.settings?.apiKeys?.adminApiKey;
 
     const { response, json, url } = await requestOwnerOnly('/api/admin/settings', {
       method: 'POST',
@@ -5858,7 +5864,7 @@ try {
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey !== oldPublicKey, `${url} public key did not rotate`);
-    assert(json?.data?.settings?.apiKeys?.adminApiKey !== oldAdminKey, `${url} admin key did not rotate`);
+    assert(json?.data?.settings?.apiKeys?.adminApiKey, `${url} owner key regeneration should return the new admin key`);
     adminRequestApiKey = json.data.settings.apiKeys.adminApiKey;
 
     const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=${encodeURIComponent('settings.api_keys.regenerate')}&requestId=${json.requestId}`);

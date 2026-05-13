@@ -728,18 +728,43 @@ const generateUserDetailInviteLink = async (client, email) => {
       return {
         ready: Boolean(panel),
         hasNotice: text.includes('Local invite link generated') || text.includes('Invite delivery was queued'),
-        hasInviteUrl: text.includes('/accept-invite?token=bit_'),
+        hidesInviteUrl: text.includes('Invite URL hidden') && !text.includes('/accept-invite?token=bit_'),
+        hasMaskedToken: /bit_[a-z0-9]{2}\.\.\.[a-z0-9]{4}/.test(text),
         hasTokenId: text.includes('invite_'),
         hasCopyControls: text.includes('Copy invite URL') && text.includes('Copy invite token'),
-        token: text.match(/bit_[a-z0-9]+/)?.[0] || '',
+        token: '',
         text: text.slice(0, 1800),
       };
     })()`);
-    if (state.ready && state.hasNotice && state.hasInviteUrl && state.hasTokenId && state.hasCopyControls) {
-      return state;
+    if (state.ready && state.hasNotice && state.hidesInviteUrl && state.hasMaskedToken && state.hasTokenId && state.hasCopyControls) {
+      const copied = await evaluate(client, `(async () => {
+        window.__backyUsersSmokeClipboard = '';
+        const clipboard = {
+          writeText: async (value) => {
+            window.__backyUsersSmokeClipboard = String(value || '');
+          },
+        };
+        try {
+          Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
+        } catch {
+          navigator.clipboard.writeText = clipboard.writeText;
+        }
+        const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+        const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
+          (candidate.textContent || '').trim() === 'Copy invite token'
+        ));
+        if (!(button instanceof HTMLButtonElement) || button.disabled) {
+          return { ok: false, reason: 'copy-token-button-unavailable' };
+        }
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: /^bit_[a-z0-9]+$/.test(window.__backyUsersSmokeClipboard || ''), token: window.__backyUsersSmokeClipboard || '' };
+      })()`);
+      assert(copied.ok, `Invite token copy action did not expose a usable token to clipboard: ${JSON.stringify(copied)}`);
+      return { ...state, token: copied.token };
     }
     if (attempt === 99) {
-      throw new Error(`Invite link UI did not render generated token: ${JSON.stringify(state)}`);
+      throw new Error(`Invite link UI did not render masked generated token state: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -808,18 +833,43 @@ const generateUserDetailResetToken = async (client, email) => {
       return {
         ready: Boolean(panel),
         hasNotice: text.includes('Local reset token generated') || text.includes('Password reset delivery was queued'),
-        hasResetUrl: text.includes('/reset-password?token=bpr_'),
+        hidesResetUrl: text.includes('Reset URL hidden') && !text.includes('/reset-password?token=bpr_'),
+        hasMaskedToken: /bpr_[a-z0-9]{2}\.\.\.[a-z0-9]{4}/.test(text),
         hasTokenId: text.includes('reset_'),
         hasCopyControls: text.includes('Copy reset URL') && text.includes('Copy token'),
-        token: text.match(/bpr_[a-z0-9]+/)?.[0] || '',
+        token: '',
         text: text.slice(0, 1800),
       };
     })()`);
-    if (state.ready && state.hasNotice && state.hasResetUrl && state.hasTokenId && state.hasCopyControls) {
-      return state;
+    if (state.ready && state.hasNotice && state.hidesResetUrl && state.hasMaskedToken && state.hasTokenId && state.hasCopyControls) {
+      const copied = await evaluate(client, `(async () => {
+        window.__backyUsersSmokeClipboard = '';
+        const clipboard = {
+          writeText: async (value) => {
+            window.__backyUsersSmokeClipboard = String(value || '');
+          },
+        };
+        try {
+          Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
+        } catch {
+          navigator.clipboard.writeText = clipboard.writeText;
+        }
+        const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+        const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
+          (candidate.textContent || '').trim() === 'Copy token'
+        ));
+        if (!(button instanceof HTMLButtonElement) || button.disabled) {
+          return { ok: false, reason: 'copy-token-button-unavailable' };
+        }
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: /^bpr_[a-z0-9]+$/.test(window.__backyUsersSmokeClipboard || ''), token: window.__backyUsersSmokeClipboard || '' };
+      })()`);
+      assert(copied.ok, `Reset token copy action did not expose a usable token to clipboard: ${JSON.stringify(copied)}`);
+      return { ...state, token: copied.token };
     }
     if (attempt === 99) {
-      throw new Error(`Reset token UI did not render generated token: ${JSON.stringify(state)}`);
+      throw new Error(`Reset token UI did not render masked generated token state: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }

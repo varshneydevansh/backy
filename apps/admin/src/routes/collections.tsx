@@ -2498,11 +2498,19 @@ function CollectionsPage() {
   };
 
   const scrollToCollectionSchema = () => {
+    const revealSchemaBuilder = () => {
+      const form = document.getElementById('collections-schema');
+      const nameInput = document.getElementById('collections-schema-name');
+      form?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (nameInput instanceof HTMLInputElement) {
+        nameInput.focus({ preventScroll: true });
+      }
+    };
+
     window.requestAnimationFrame(() => {
-      document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      window.setTimeout(() => {
-        document.getElementById('collections-schema-name')?.focus();
-      }, 150);
+      revealSchemaBuilder();
+      window.setTimeout(revealSchemaBuilder, 150);
+      window.setTimeout(revealSchemaBuilder, 450);
     });
   };
 
@@ -3566,7 +3574,7 @@ function CollectionsPage() {
       title="Collections"
       description="Build structured CMS data for custom frontends and dynamic Backy pages."
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => void loadCollections()}
@@ -3589,6 +3597,17 @@ function CollectionsPage() {
             <Plus className="h-4 w-4" />
             {newCollectionButtonLabel}
           </button>
+          {isNewCollectionDraftOpen && canEditCollections && (
+            <button
+              type="button"
+              onClick={scrollToCollectionSchema}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
+              data-testid="collections-new-draft-action-state"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Draft ready below
+            </button>
+          )}
         </div>
       }
     >

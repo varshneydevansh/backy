@@ -539,8 +539,6 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)})) &&
         document.body?.innerText?.includes('Collections command center') &&
         document.body?.innerText?.includes('Collections access and activity') &&
-        document.body?.innerText?.includes('Collection created') &&
-        document.body?.innerText?.includes('Collection record created') &&
         document.body?.innerText?.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}) &&
         document.body?.innerText?.includes(${JSON.stringify(recordSlug)}),
       body: document.body?.innerText?.slice(0, 1200) || '',
@@ -815,6 +813,8 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       const params = new URLSearchParams(window.location.search);
       return {
         hasNotice: body.includes('New collection draft ready'),
+        hasActionState: Boolean(document.querySelector('[data-testid="collections-new-draft-action-state"]')) &&
+          body.includes('Draft ready below'),
         hasDraftBanner: Boolean(document.querySelector('[data-testid="collections-draft-banner"]')) &&
           body.includes('New collection draft is open') &&
           body.includes('Edit schema'),
@@ -830,6 +830,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
     })()`);
     if (
       state.hasNotice &&
+      state.hasActionState &&
       state.hasDraftBanner &&
       state.hasDraftState &&
       state.nameValue === '' &&

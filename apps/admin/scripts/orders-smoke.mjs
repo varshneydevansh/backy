@@ -510,9 +510,14 @@ const assertOrdersLayout = async (client) => {
     checkout: document.body?.innerText?.includes('/commerce/orders') || false,
     privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+    adminApiOpensWithButton: (() => {
+      const controls = Array.from(document.querySelectorAll('#orders-api button, #orders-api a'));
+      const control = controls.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Open admin API');
+      return control instanceof HTMLButtonElement;
+    })(),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -968,6 +973,36 @@ const main = async () => {
       slug,
       (values) => values.paymentstatus === 'refunded' && Number(values.refundamount) === 5 && values.refundreason === 'Smoke refund adjustment' && /edited private note/.test(String(values.notes || '')),
       'Order edit did not persist refund and note fields',
+    );
+
+    await updateCollectionRecord(collectionId, orderRecordId, {
+      status: 'published',
+      values: {
+        ...(await getCollectionRecordBySlug(collectionId, slug)).values,
+        orderstatus: 'paid',
+        paymentstatus: 'paid',
+        fulfillmentstatus: 'processing',
+        refundamount: null,
+        refundreason: '',
+        notes: 'Order smoke reset to paid before cancellation.',
+      },
+    });
+    await clickByText(client, 'Refresh', { exact: true });
+    await waitUntilIdle(client, '/orders cancellation refresh');
+    await assertOrderVisible(client, orderNumber, 'Smoke order disappeared before cancellation test');
+    await clickOrderCardButton(client, orderNumber, 'Cancel');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'cancelled' &&
+        values.paymentstatus === 'refunded' &&
+        values.fulfillmentstatus === 'cancelled' &&
+        Number(values.refundamount) === 85 &&
+        values.refundreason === 'Order cancelled from admin workflow.' &&
+        /Cancellation workflow processed/.test(String(values.notes || ''))
+      ),
+      'Cancel did not persist coherent payment and fulfillment workflow fields',
     );
 
     const staleOrder = await updateCollectionRecord(collectionId, orderRecordId, {

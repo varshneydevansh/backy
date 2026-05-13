@@ -95,6 +95,8 @@ type BlogCreatePermissionKey =
   | 'pages.edit'
   | 'pages.publish'
   | 'media.view'
+  | 'media.create'
+  | 'collections.view'
   | 'sites.configure';
 
 const BLOG_CREATE_PERMISSION_ROLE_DEFAULTS: Record<BlogCreatePermissionKey, Array<User['role']>> = {
@@ -102,6 +104,8 @@ const BLOG_CREATE_PERMISSION_ROLE_DEFAULTS: Record<BlogCreatePermissionKey, Arra
   'pages.edit': ['owner', 'admin', 'editor'],
   'pages.publish': ['owner', 'admin', 'editor'],
   'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'media.create': ['owner', 'admin', 'editor'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
   'sites.configure': ['owner', 'admin'],
 };
 
@@ -640,16 +644,22 @@ function NewBlogPostPage() {
     const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'media.create', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'collections.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canConfigureSite = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewMediaPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const createMediaPermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, user, 'media.create', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewCollectionsPermissionTitle = canViewCollections ? undefined : adminPermissionReason(permissionMatrix, user, 'collections.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const configureSitePermissionTitle = canConfigureSite ? undefined : adminPermissionReason(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewBlogDeniedMessage = `Your account needs pages.view to load blog creation data. ${viewBlogPermissionTitle}`;
     const editBlogDeniedMessage = `Your account needs pages.edit to create or change blog drafts. ${editBlogPermissionTitle}`;
     const publishBlogDeniedMessage = `Your account needs pages.publish to create previews, publish posts, or schedule posts. ${publishBlogPermissionTitle}`;
     const viewMediaDeniedMessage = `Your account needs media.view to select featured media. ${viewMediaPermissionTitle}`;
+    const createMediaDeniedMessage = `Your account needs media.create to upload featured media. ${createMediaPermissionTitle}`;
+    const viewCollectionsDeniedMessage = `Your account needs collections.view to bind blog canvas elements to collection data. ${viewCollectionsPermissionTitle}`;
     const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPosts || isPermissionMatrixPending;
     const createFormDisabled = isCreateBusy || !canEditBlog;
 
@@ -1029,7 +1039,8 @@ function NewBlogPostPage() {
         }
 
         const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate);
-        if (appliedSearchTemplateRef.current === selectedFrontendTemplate.id && templateCanvasApplied) {
+        if (templateCanvasApplied) {
+            appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
             return;
         }
 
@@ -2319,6 +2330,17 @@ function NewBlogPostPage() {
                                     hideNavigation={true}
                                     hideSettings={true}
                                     hideSave={true}
+                                    canView={canViewBlog}
+                                    canEdit={canEditBlog}
+                                    canPublish={canPublishBlog}
+                                    canViewMedia={canViewMedia}
+                                    canCreateMedia={canCreateMedia}
+                                    canViewCollections={canViewCollections}
+                                    editDisabledReason={editBlogPermissionTitle}
+                                    publishDisabledReason={publishBlogPermissionTitle}
+                                    mediaViewDisabledReason={viewMediaDeniedMessage}
+                                    mediaCreateDisabledReason={createMediaDeniedMessage}
+                                    collectionsViewDisabledReason={viewCollectionsDeniedMessage}
                                 />
                                 {isCreateBusy && (
                                     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
@@ -2681,6 +2703,10 @@ function NewBlogPostPage() {
                         targetLabel: title || 'New blog post',
                     }}
                     allowScopeSwitcher={true}
+                    canView={canViewMedia}
+                    canCreate={canCreateMedia}
+                    viewDisabledReason={viewMediaDeniedMessage}
+                    createDisabledReason={createMediaDeniedMessage}
                 />
             </div>
         </PageShell>

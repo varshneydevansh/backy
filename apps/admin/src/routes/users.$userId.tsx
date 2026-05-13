@@ -168,6 +168,13 @@ const getInitials = (name: string) => (
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
+const maskSecret = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Missing token';
+  if (trimmed.length <= 12) return 'Hidden';
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+};
+
 function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
@@ -768,7 +775,9 @@ function EditUserPage() {
             id: inviteToken.id,
             expiresAt: inviteToken.expiresAt,
             deliveryConfigured: inviteToken.deliveryConfigured,
-            inviteUrl: inviteToken.inviteUrl,
+            inviteUrlAvailable: Boolean(inviteToken.inviteUrl),
+            rawInviteUrlIncluded: false,
+            note: 'Raw invite URLs are intentionally excluded from copy/download manifests. Use the permission-gated copy action in Account recovery.',
           }
         : null,
       resetTokenEndpoint: `${userDetailUrl}/password-reset`,
@@ -778,7 +787,9 @@ function EditUserPage() {
             id: passwordResetToken.id,
             expiresAt: passwordResetToken.expiresAt,
             deliveryConfigured: passwordResetToken.deliveryConfigured,
-            resetUrl: passwordResetToken.resetUrl,
+            resetUrlAvailable: Boolean(passwordResetToken.resetUrl),
+            rawResetUrlIncluded: false,
+            note: 'Raw reset URLs are intentionally excluded from copy/download manifests. Use the permission-gated copy action in Account recovery.',
           }
         : null,
       lifecycleActions: LIFECYCLE_ACTIONS.map((action) => ({
@@ -1441,7 +1452,7 @@ function EditUserPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Account recovery</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Generate temporary invite or reset handoffs, then copy the URL until transactional email delivery is wired.
+                  Generate temporary invite or reset handoffs, then use permission-gated copy actions until transactional email delivery is wired.
                 </p>
               </div>
             </div>
@@ -1544,8 +1555,10 @@ function EditUserPage() {
                     <dd className="truncate font-medium text-foreground">{inviteToken.email}</dd>
                   </div>
                 </dl>
-                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 font-mono text-[11px] leading-5 text-muted-foreground break-all">
-                  {inviteToken.inviteUrl}
+                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 text-[11px] leading-5 text-muted-foreground">
+                  <div className="font-medium text-foreground">Invite URL hidden</div>
+                  <div className="mt-1 font-mono">{maskSecret(inviteToken.token)}</div>
+                  <div className="mt-1">Use the copy action below for manual delivery.</div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <Button
@@ -1598,8 +1611,10 @@ function EditUserPage() {
                     <dd className="truncate font-medium text-foreground">{passwordResetToken.email}</dd>
                   </div>
                 </dl>
-                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 font-mono text-[11px] leading-5 text-muted-foreground break-all">
-                  {passwordResetToken.resetUrl}
+                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 text-[11px] leading-5 text-muted-foreground">
+                  <div className="font-medium text-foreground">Reset URL hidden</div>
+                  <div className="mt-1 font-mono">{maskSecret(passwordResetToken.token)}</div>
+                  <div className="mt-1">Use the copy action below for manual delivery.</div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <Button

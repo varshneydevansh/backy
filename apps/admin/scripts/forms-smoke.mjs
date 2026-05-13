@@ -876,6 +876,7 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const collectionWriteToggle = Array.from(panel.querySelectorAll('label')).find((label) => (
         (label.textContent || '').includes('Collection write')
       ))?.querySelector('input[type="checkbox"]');
+      const collectionDisabledReason = panel.querySelector('[data-testid="form-collection-target-disabled-reason"]');
       const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
         (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
       ));
@@ -893,6 +894,13 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
             aria: input.getAttribute('aria-label') || '',
           })).slice(-24),
           buttons: Array.from(panel.querySelectorAll('button')).map((button) => button.textContent || '').slice(-10),
+        };
+      }
+      if (collectionWriteToggle.disabled) {
+        return {
+          ok: false,
+          reason: 'collection-toggle-disabled',
+          disabledReason: collectionDisabledReason?.textContent || '',
         };
       }
 
@@ -933,6 +941,14 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const slugSelect = collectionPanel.querySelector('select[aria-label="Collection target slug field"]');
       if (!(collectionSelect instanceof HTMLSelectElement) || !(slugSelect instanceof HTMLSelectElement)) {
         return { ok: false, reason: 'target-selects-missing' };
+      }
+      if (collectionSelect.disabled || Array.from(collectionSelect.options).some((option) => (option.textContent || '').includes('(not public-create)'))) {
+        return {
+          ok: false,
+          reason: 'collection-target-select-not-writable-only',
+          disabled: collectionSelect.disabled,
+          options: Array.from(collectionSelect.options).map((option) => option.textContent || ''),
+        };
       }
 
       selectValue(collectionSelect, ${JSON.stringify(collectionId)});

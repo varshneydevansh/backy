@@ -130,6 +130,8 @@ type BlogEditorPermissionKey =
     | 'pages.publish'
     | 'pages.delete'
     | 'media.view'
+    | 'media.create'
+    | 'collections.view'
     | 'comments.view'
     | 'comments.manage';
 
@@ -139,6 +141,8 @@ const BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<BlogEditorPermissionKey, Arra
     'pages.publish': ['owner', 'admin', 'editor'],
     'pages.delete': ['owner', 'admin'],
     'media.view': ['owner', 'admin', 'editor', 'viewer'],
+    'media.create': ['owner', 'admin', 'editor'],
+    'collections.view': ['owner', 'admin', 'editor', 'viewer'],
     'comments.view': ['owner', 'admin', 'editor', 'viewer'],
     'comments.manage': ['owner', 'admin', 'editor'],
 };
@@ -230,6 +234,8 @@ function EditBlogPostPage() {
     const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canDeleteBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canManageComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
@@ -237,6 +243,8 @@ function EditBlogPostPage() {
     const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const deleteBlogPermissionTitle = canDeleteBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewMediaPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const createMediaPermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const viewCollectionsPermissionTitle = canViewCollections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const commentsViewPermissionTitle = canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const commentsManagePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewBlogDeniedMessage = `Your account needs pages.view to load this blog post. ${viewBlogPermissionTitle}`;
@@ -244,6 +252,8 @@ function EditBlogPostPage() {
     const publishBlogDeniedMessage = `Your account needs pages.publish to preview or publish this blog post. ${publishBlogPermissionTitle}`;
     const deleteBlogDeniedMessage = `Your account needs pages.delete to delete this blog post. ${deleteBlogPermissionTitle}`;
     const viewMediaDeniedMessage = `Your account needs media.view to select featured media. ${viewMediaPermissionTitle}`;
+    const createMediaDeniedMessage = `Your account needs media.create to upload featured media. ${createMediaPermissionTitle}`;
+    const viewCollectionsDeniedMessage = `Your account needs collections.view to bind blog canvas elements to collection data. ${viewCollectionsPermissionTitle}`;
     const manageCommentsDeniedMessage = `Your account needs comments.manage to moderate comments. ${commentsManagePermissionTitle}`;
 
     // Initialize State from Post
@@ -1957,6 +1967,17 @@ function EditBlogPostPage() {
                                     hideNavigation={true}
                                     hideSettings={true}
                                     hideSave={true}
+                                    canView={canViewBlog}
+                                    canEdit={canEditBlog}
+                                    canPublish={canPublishBlog}
+                                    canViewMedia={canViewMedia}
+                                    canCreateMedia={canCreateMedia}
+                                    canViewCollections={canViewCollections}
+                                    editDisabledReason={editBlogPermissionTitle}
+                                    publishDisabledReason={publishBlogPermissionTitle}
+                                    mediaViewDisabledReason={viewMediaDeniedMessage}
+                                    mediaCreateDisabledReason={createMediaDeniedMessage}
+                                    collectionsViewDisabledReason={viewCollectionsDeniedMessage}
                                     mediaContext={{
                                       siteId: activeSiteId,
                                       scope: 'post',
@@ -2546,6 +2567,10 @@ function EditBlogPostPage() {
                         targetLabel: title || post.title,
                     }}
                     allowScopeSwitcher={true}
+                    canView={canViewMedia}
+                    canCreate={canCreateMedia}
+                    viewDisabledReason={viewMediaDeniedMessage}
+                    createDisabledReason={createMediaDeniedMessage}
                 />
 
                 {pendingRestoreRevision && (

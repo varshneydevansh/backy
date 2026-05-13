@@ -545,6 +545,12 @@ function FormsRoute() {
   const writableCollections = useMemo(() => collections.filter((collection) => (
     collection.status === 'published' && collection.permissions.publicCreate
   )), [collections]);
+  const canUseCollectionTargets = canViewCollections && writableCollections.length > 0;
+  const collectionTargetUnavailableReason = !canViewCollections
+    ? 'Collection visibility is not available for your account, so form writes cannot be mapped to collections.'
+    : writableCollections.length === 0
+      ? 'No published public-create collection is available. Create or publish one before enabling collection writes.'
+      : null;
   const frontendFormTemplates = useMemo(
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'form'),
     [frontendDesign?.templates],
@@ -560,6 +566,9 @@ function FormsRoute() {
     if (!formDraft?.collectionTarget?.collectionId) return null;
     return collections.find((collection) => collection.id === formDraft.collectionTarget?.collectionId) || null;
   }, [collections, formDraft?.collectionTarget?.collectionId]);
+  const formDraftTargetCollectionWritable = Boolean(
+    formDraftTargetCollection?.status === 'published' && formDraftTargetCollection.permissions.publicCreate,
+  );
   const selectedFormDefinitionUrl = selectedForm
     ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/definition`
     : '';
@@ -1161,6 +1170,11 @@ function FormsRoute() {
       setNotice(null);
       return;
     }
+    if (template.collectionTarget?.enabled && !canUseCollectionTargets) {
+      setError(collectionTargetUnavailableReason || 'A published public-create collection is required before creating this collection-backed form.');
+      setNotice(null);
+      return;
+    }
 
     setIsCreatingTemplateId(template.id);
     setError(null);
@@ -1205,6 +1219,11 @@ function FormsRoute() {
     if (isFormsBusy) return;
     if (!canCreateForms) {
       setError(createPermissionTitle || 'Your account cannot create forms.');
+      setNotice(null);
+      return;
+    }
+    if (blueprint.collectionTarget?.enabled && !canUseCollectionTargets) {
+      setError(collectionTargetUnavailableReason || 'A published public-create collection is required before creating this collection-backed form.');
       setNotice(null);
       return;
     }
@@ -1442,6 +1461,7 @@ function FormsRoute() {
 
   const patchFormDraftCollectionTarget = (patch: Partial<NonNullable<FormDefinition['collectionTarget']>>) => {
     if (!canEditForms) return;
+    if (patch.enabled === true && !canUseCollectionTargets) return;
     setFormDraft((current) => {
       if (!current) return current;
 
@@ -2386,6 +2406,12 @@ function FormsRoute() {
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {frontendTemplateBlueprints.map(({ template, blueprint }) => {
                     const settings = buildFrontendFormTemplateSettings(template, frontendDesign);
+                    const collectionBackedTemplateUnavailable = Boolean(blueprint.collectionTarget?.enabled && !canUseCollectionTargets);
+                    const createFrontendTemplateTitle = !canCreateForms
+                      ? createPermissionTitle
+                      : collectionBackedTemplateUnavailable
+                        ? collectionTargetUnavailableReason || undefined
+                        : undefined;
                     const manifestText = JSON.stringify({
                       schemaVersion: 'backy.frontend-form-template.v1',
                       template,
@@ -2429,13 +2455,18 @@ function FormsRoute() {
                             size="sm"
                             variant="primary"
                             onClick={() => void createFormFromFrontendTemplate(template, blueprint)}
-                            disabled={isFormsBusy || !canCreateForms}
-                            title={!canCreateForms ? createPermissionTitle : undefined}
+                            disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
+                            title={createFrontendTemplateTitle}
                             iconStart={<FileInput className="size-4" />}
                             data-testid={`forms-frontend-template-${template.id}`}
                           >
                             {isCreatingTemplateId === `frontend:${template.id}` ? 'Creating...' : 'Create form'}
                           </Button>
+                          {collectionBackedTemplateUnavailable ? (
+                            <span className="basis-full text-xs text-amber-700" data-testid={`forms-frontend-template-${template.id}-disabled-reason`}>
+                              {collectionTargetUnavailableReason}
+                            </span>
+                          ) : null}
                           <Button
                             size="sm"
                             variant="outline"
@@ -2462,6 +2493,12 @@ function FormsRoute() {
               const templateManifest = buildTemplateManifest(template);
               const templateText = JSON.stringify(templateManifest, null, 2);
               const payloadText = JSON.stringify(templateManifest.samplePayload, null, 2);
+              const collectionBackedTemplateUnavailable = Boolean(template.collectionTarget?.enabled && !canUseCollectionTargets);
+              const createTemplateTitle = !canCreateForms
+                ? createPermissionTitle
+                : collectionBackedTemplateUnavailable
+                  ? collectionTargetUnavailableReason || undefined
+                  : undefined;
 
               return (
                 <div key={template.id} className="rounded-lg border border-border bg-background p-4">
@@ -2497,12 +2534,17 @@ function FormsRoute() {
                       size="sm"
                       variant="primary"
                       onClick={() => void createFormFromTemplate(template)}
-                      disabled={isFormsBusy || !canCreateForms}
-                      title={!canCreateForms ? createPermissionTitle : undefined}
+                      disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
+                      title={createTemplateTitle}
                       iconStart={<FileInput className="size-4" />}
                     >
                       {isCreatingTemplateId === template.id ? 'Creating...' : 'Create form'}
                     </Button>
+                    {collectionBackedTemplateUnavailable ? (
+                      <span className="basis-full text-xs text-amber-700" data-testid={`forms-template-${template.id}-disabled-reason`}>
+                        {collectionTargetUnavailableReason}
+                      </span>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="outline"
@@ -2959,15 +3001,27 @@ function FormsRoute() {
                             />
                             Contact share
                           </label>
-                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                          <label
+                            className={cn(
+                              'flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium',
+                              (!canEditForms || (!formDraft.collectionTarget?.enabled && !canUseCollectionTargets)) && 'opacity-70',
+                            )}
+                            title={!canEditForms ? editPermissionTitle : collectionTargetUnavailableReason || undefined}
+                          >
                             <input
                               type="checkbox"
                               checked={Boolean(formDraft.collectionTarget?.enabled)}
+                              disabled={!canEditForms || (!formDraft.collectionTarget?.enabled && !canUseCollectionTargets)}
+                              data-testid="form-collection-write-toggle"
                               onChange={(event) => {
-                                const selectedCollection = formDraftTargetCollection || writableCollections[0] || collections[0];
+                                const selectedCollection = formDraftTargetCollectionWritable
+                                  ? formDraftTargetCollection
+                                  : writableCollections[0];
                                 patchFormDraftCollectionTarget({
                                   enabled: event.target.checked,
-                                  collectionId: formDraft.collectionTarget?.collectionId || selectedCollection?.id || '',
+                                  collectionId: formDraftTargetCollectionWritable
+                                    ? formDraft.collectionTarget?.collectionId || selectedCollection?.id || ''
+                                    : selectedCollection?.id || '',
                                   slugField: formDraft.collectionTarget?.slugField || formDraft.fields[0]?.key,
                                   fieldMap: formDraft.collectionTarget?.fieldMap || buildDefaultCollectionFieldMap(formDraft, selectedCollection),
                                 });
@@ -2976,6 +3030,14 @@ function FormsRoute() {
                             Collection write
                           </label>
                         </div>
+                        {collectionTargetUnavailableReason ? (
+                          <div
+                            className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                            data-testid="form-collection-target-disabled-reason"
+                          >
+                            {collectionTargetUnavailableReason}
+                          </div>
+                        ) : null}
 
                         <div data-testid="form-spam-settings-panel" className="rounded-lg border border-border bg-muted/30 p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3139,12 +3201,12 @@ function FormsRoute() {
                               </div>
                               <span className={cn(
                                 'rounded-full px-2.5 py-1 text-xs font-semibold',
-                                formDraftTargetCollection?.permissions.publicCreate && formDraftTargetCollection.status === 'published'
+                                formDraftTargetCollectionWritable
                                   ? 'bg-emerald-50 text-emerald-700'
                                   : 'bg-amber-50 text-amber-700',
                               )}
                               >
-                                {formDraftTargetCollection?.permissions.publicCreate && formDraftTargetCollection.status === 'published'
+                                {formDraftTargetCollectionWritable
                                   ? 'write ready'
                                   : 'needs public create'}
                               </span>
@@ -3155,19 +3217,25 @@ function FormsRoute() {
                                 <select
                                   value={formDraft.collectionTarget.collectionId}
                                   onChange={(event) => {
-                                    const nextCollection = collections.find((collection) => collection.id === event.target.value);
+                                    const nextCollection = writableCollections.find((collection) => collection.id === event.target.value);
                                     patchFormDraftCollectionTarget({
                                       collectionId: event.target.value,
                                       fieldMap: buildDefaultCollectionFieldMap(formDraft, nextCollection),
                                     });
                                   }}
-                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground"
+                                  disabled={!canEditForms || !canUseCollectionTargets}
+                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                   aria-label="Collection target collection"
                                 >
                                   <option value="">Select collection</option>
-                                  {collections.map((collection) => (
+                                  {formDraftTargetCollection && !formDraftTargetCollectionWritable ? (
+                                    <option value={formDraftTargetCollection.id}>
+                                      {formDraftTargetCollection.name} (not public-create)
+                                    </option>
+                                  ) : null}
+                                  {writableCollections.map((collection) => (
                                     <option key={collection.id} value={collection.id}>
-                                      {collection.name} {collection.status === 'published' && collection.permissions.publicCreate ? '' : '(not public-create)'}
+                                      {collection.name}
                                     </option>
                                   ))}
                                 </select>
@@ -3177,7 +3245,8 @@ function FormsRoute() {
                                 <select
                                   value={formDraft.collectionTarget.slugField || ''}
                                   onChange={(event) => patchFormDraftCollectionTarget({ slugField: event.target.value || undefined })}
-                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground"
+                                  disabled={!canEditForms || !formDraftTargetCollectionWritable}
+                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                   aria-label="Collection target slug field"
                                 >
                                   <option value="">Auto generated</option>
@@ -3187,7 +3256,7 @@ function FormsRoute() {
                                 </select>
                               </label>
                             </div>
-                            {formDraftTargetCollection ? (
+                            {formDraftTargetCollectionWritable && formDraftTargetCollection ? (
                               <div className="mt-3 grid gap-2">
                                 {formDraft.fields.map((field) => (
                                   <label key={field.key} className="grid gap-1.5 rounded-lg border border-border bg-card p-3 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(140px,0.8fr)_minmax(180px,1fr)] sm:items-center">
@@ -3200,7 +3269,8 @@ function FormsRoute() {
                                           [field.key]: event.target.value,
                                         },
                                       })}
-                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                                      disabled={!canEditForms}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                       aria-label={`Map ${field.label} to collection field`}
                                     >
                                       <option value="">Do not write</option>
@@ -3215,7 +3285,7 @@ function FormsRoute() {
                               </div>
                             ) : (
                               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                Create or select a published public-create collection before enabling writes.
+                                {collectionTargetUnavailableReason || 'Select a published public-create collection before mapping writes.'}
                               </div>
                             )}
                           </div>

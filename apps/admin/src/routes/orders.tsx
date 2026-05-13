@@ -30,6 +30,7 @@ import {
   createCollectionRecord,
   deleteCollectionRecord,
   getUserPermissions,
+  adminFetch,
   importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
@@ -1301,6 +1302,43 @@ function OrdersRoute() {
       setNotice(value);
     }
   };
+
+  const openAdminOrdersApi = async () => {
+    if (isOrdersBusy || !adminOrdersApiUrl) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot open order endpoints.');
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await adminFetch(adminOrdersApiUrl);
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || payload?.success === false) {
+        const message = payload?.error?.message || payload?.message || `Admin API returned ${response.status}.`;
+        throw new Error(message);
+      }
+
+      const responseText = JSON.stringify(payload, null, 2);
+      const responseUrl = URL.createObjectURL(new Blob([responseText], { type: 'application/json' }));
+      const opened = window.open(responseUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(responseUrl), 60_000);
+
+      if (opened) {
+        setNotice('Authenticated admin API response opened.');
+        return;
+      }
+
+      await navigator.clipboard.writeText(responseText);
+      setNotice('Authenticated admin API response copied.');
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : 'Unable to open admin API response.');
+    }
+  };
+
   const copyOrderHandoff = async () => {
     if (isOrdersBusy) return;
     if (!canExportOrders) {
@@ -1674,22 +1712,15 @@ function OrdersRoute() {
                 <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                   Storefront page
                 </Button>
-                <a
-                  href={adminOrdersApiUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-disabled={isOrdersAccessBusy || !canExportOrders}
-                  onClick={(event) => {
-                    if (isOrdersAccessBusy || !canExportOrders) event.preventDefault();
-                  }}
-                  className={cn(
-                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    (isOrdersAccessBusy || !canExportOrders) && 'pointer-events-none opacity-60',
-                  )}
+                <Button
+                  variant="outline"
+                  onClick={() => void openAdminOrdersApi()}
+                  disabled={isOrdersAccessBusy || !canExportOrders}
+                  title={!canExportOrders ? exportPermissionTitle : 'Fetch with your admin session and open the JSON response.'}
+                  iconStart={<ExternalLink className="size-4" />}
                 >
-                  <ExternalLink className="size-4" />
                   Open admin API
-                </a>
+                </Button>
               </div>
             }
           />
@@ -1978,7 +2009,7 @@ function OrdersRoute() {
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
-                      onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
+                      onCancelled={() => void updateOrderWorkflow(order, buildCancelWorkflowUpdates(order))}
                       onDelete={() => {
                         if (isOrdersBusy) return;
                         if (!canDeleteOrders) {
@@ -2849,6 +2880,32 @@ const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     fulfillmentStatus: 'cancelled',
     refundAmount: String(refundAmount),
     refundReason: currentReason || 'Customer return/refund processed from order workflow.',
+    notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
+  };
+};
+
+const buildCancelWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
+  const total = toNumber(readOrderValue(order.values, 'total', 0));
+  const currency = normalizeCurrency(String(readOrderValue(order.values, 'currency', 'USD')));
+  const currentPaymentStatus = asPaymentStatus(readOrderValue(order.values, 'paymentstatus', undefined));
+  const currentRefundAmount = toNumber(readOrderValue(order.values, 'refundamount', 0));
+  const currentReason = String(readOrderValue(order.values, 'refundreason', '') || '').trim();
+  const currentNotes = String(readOrderValue(order.values, 'notes', '') || '').trim();
+  const shouldRefundPayment = currentPaymentStatus === 'paid' || currentPaymentStatus === 'refunded';
+  const nextPaymentStatus: PaymentStatus = shouldRefundPayment ? 'refunded' : 'failed';
+  const workflowNote = shouldRefundPayment
+    ? `Cancellation workflow processed ${new Date().toISOString()} and marked payment refunded for ${formatMoney(currentRefundAmount > 0 ? currentRefundAmount : total, currency)}.`
+    : `Cancellation workflow processed ${new Date().toISOString()} and marked payment failed before fulfillment.`;
+
+  return {
+    orderStatus: 'cancelled',
+    paymentStatus: nextPaymentStatus,
+    paidAt: shouldRefundPayment ? undefined : '',
+    fulfillmentStatus: 'cancelled',
+    ...(shouldRefundPayment ? {
+      refundAmount: String(currentRefundAmount > 0 ? currentRefundAmount : total),
+      refundReason: currentReason || 'Order cancelled from admin workflow.',
+    } : {}),
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
   };
 };
