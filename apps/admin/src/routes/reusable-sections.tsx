@@ -31,6 +31,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
 import { cn, formatDate } from '@/lib/utils';
+import { normalizeSavedCanvasContent } from '@/components/editor/editorCatalog';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 
 type SectionStatusFilter = ReusableSection['status'] | 'all';
@@ -259,6 +260,28 @@ const contentElementSummary = (content: ReusableSectionContent) => {
   return `${roots} root${roots === 1 ? '' : 's'}${nested ? `, ${nested} nested` : ''}`;
 };
 
+const parseReusableSectionContent = (rawJson: string): ReusableSectionContent => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    throw new Error('Content JSON must be valid JSON.');
+  }
+
+  const normalized = normalizeSavedCanvasContent(rawJson);
+  if (normalized.elements.length === 0) {
+    throw new Error('Reusable section content must include at least one element.');
+  }
+
+  const parsedRecord = isPlainRecord(parsed) ? parsed : {};
+  return {
+    elements: normalized.elements,
+    canvasSize: normalized.canvasSize,
+    customCSS: typeof parsedRecord.customCSS === 'string' ? parsedRecord.customCSS : normalized.customCSS || '',
+    customJS: typeof parsedRecord.customJS === 'string' ? parsedRecord.customJS : '',
+  };
+};
+
 function ReusableSectionsRoute() {
   const { sites } = useStore();
   const navigate = useNavigate();
@@ -280,6 +303,7 @@ function ReusableSectionsRoute() {
   });
   const [contentJson, setContentJson] = useState(JSON.stringify(EMPTY_CONTENT, null, 2));
   const [tagsText, setTagsText] = useState('');
+  const [contentValidationMessage, setContentValidationMessage] = useState<string | null>(null);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
@@ -391,6 +415,7 @@ function ReusableSectionsRoute() {
       });
       setContentJson(JSON.stringify(EMPTY_CONTENT, null, 2));
       setTagsText('');
+      setContentValidationMessage(null);
       return;
     }
 
@@ -408,6 +433,30 @@ function ReusableSectionsRoute() {
     });
     setContentJson(JSON.stringify(section.content, null, 2));
     setTagsText(section.tags.join(', '));
+    setContentValidationMessage(null);
+  };
+
+  const normalizeContentJsonForEditing = () => {
+    try {
+      const content = parseReusableSectionContent(contentJson);
+      setContentJson(JSON.stringify(content, null, 2));
+      setContentValidationMessage(`${content.elements.length} reusable root${content.elements.length === 1 ? '' : 's'} ready.`);
+      setError(null);
+    } catch (validationError) {
+      setContentValidationMessage(null);
+      setError(validationError instanceof Error ? validationError.message : 'Unable to validate content JSON');
+    }
+  };
+
+  const insertStarterContent = () => {
+    const content = defaultSectionContent(
+      formState.name.trim() || 'New reusable section',
+      formState.description || 'Reusable section starter content.',
+      frontendDesign,
+    );
+    setContentJson(JSON.stringify(content, null, 2));
+    setContentValidationMessage('Starter section content inserted.');
+    setError(null);
   };
 
   const selectSection = (section: ReusableSection | null) => {
@@ -509,10 +558,7 @@ function ReusableSectionsRoute() {
     setError(null);
     setNotice(null);
     try {
-      const parsedContent = JSON.parse(contentJson) as ReusableSectionContent;
-      if (!Array.isArray(parsedContent.elements) || parsedContent.elements.length === 0) {
-        throw new Error('Reusable section content must include at least one element.');
-      }
+      const parsedContent = parseReusableSectionContent(contentJson);
       const payload: ReusableSectionInput = {
         ...formState,
         name: formState.name.trim(),
@@ -532,6 +578,7 @@ function ReusableSectionsRoute() {
       setSections((current) => [saved, ...current.filter((section) => section.id !== saved.id)]);
       setSelectedSectionId(saved.id);
       setFormFromSection(saved);
+      setContentValidationMessage(`${saved.content.elements.length} reusable root${saved.content.elements.length === 1 ? '' : 's'} saved.`);
       updateRouteSearch({ sectionId: saved.id });
       setNotice(`${saved.name} saved.`);
     } catch (saveError) {
@@ -862,6 +909,7 @@ function ReusableSectionsRoute() {
                   value={formState.name}
                   onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
                   disabled={isBusy}
+                  data-testid="reusable-section-name"
                   className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   required
                 />
@@ -873,6 +921,7 @@ function ReusableSectionsRoute() {
                     value={formState.slug || ''}
                     onChange={(event) => setFormState((prev) => ({ ...prev, slug: normalizeSlug(event.target.value, '') }))}
                     disabled={isBusy}
+                    data-testid="reusable-section-slug"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
@@ -882,6 +931,7 @@ function ReusableSectionsRoute() {
                     value={formState.category || ''}
                     onChange={(event) => setFormState((prev) => ({ ...prev, category: event.target.value }))}
                     disabled={isBusy}
+                    data-testid="reusable-section-category"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
@@ -892,6 +942,7 @@ function ReusableSectionsRoute() {
                   value={formState.description || ''}
                   onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
                   disabled={isBusy}
+                  data-testid="reusable-section-description"
                   rows={3}
                   className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                 />
@@ -903,6 +954,7 @@ function ReusableSectionsRoute() {
                     value={formState.status || 'active'}
                     onChange={(event) => setFormState((prev) => ({ ...prev, status: event.target.value as ReusableSection['status'] }))}
                     disabled={isBusy}
+                    data-testid="reusable-section-status"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="active">Active</option>
@@ -916,21 +968,41 @@ function ReusableSectionsRoute() {
                     onChange={(event) => setTagsText(event.target.value)}
                     disabled={isBusy}
                     placeholder="hero, pricing, footer"
+                    data-testid="reusable-section-tags"
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
               </div>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Content JSON</span>
+              <div className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">Content JSON</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={insertStarterContent} disabled={isBusy} iconStart={<Sparkles className="size-3.5" />} data-testid="reusable-section-insert-starter">
+                      Insert starter
+                    </Button>
+                    <Button size="sm" onClick={normalizeContentJsonForEditing} disabled={isBusy} iconStart={<Code2 className="size-3.5" />} data-testid="reusable-section-format-json">
+                      Format JSON
+                    </Button>
+                  </div>
+                </div>
                 <textarea
                   value={contentJson}
-                  onChange={(event) => setContentJson(event.target.value)}
+                  onChange={(event) => {
+                    setContentJson(event.target.value);
+                    setContentValidationMessage(null);
+                  }}
                   disabled={isBusy}
                   rows={14}
                   spellCheck={false}
+                  data-testid="reusable-section-content-json"
                   className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 />
-              </label>
+                {contentValidationMessage ? (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700" data-testid="reusable-section-content-validation">
+                    {contentValidationMessage}
+                  </p>
+                ) : null}
+              </div>
               {activeSection?.metadata?.frontendDesignTemplateId ? (
                 <div className="rounded-lg border border-teal-200 bg-teal-50/50 p-3 text-xs text-teal-800">
                   <div className="flex items-center gap-2 font-semibold">
@@ -948,10 +1020,11 @@ function ReusableSectionsRoute() {
                     updateRouteSearch({ sectionId: null });
                   }}
                   disabled={isBusy}
+                  data-testid="reusable-section-reset"
                 >
                   Reset
                 </Button>
-                <Button type="submit" variant="primary" disabled={isBusy || formState.name.trim().length === 0} iconStart={<Save className="size-4" />}>
+                <Button type="submit" variant="primary" disabled={isBusy || formState.name.trim().length === 0} iconStart={<Save className="size-4" />} data-testid="reusable-section-save">
                   {isSaving ? 'Saving...' : 'Save section'}
                 </Button>
               </div>

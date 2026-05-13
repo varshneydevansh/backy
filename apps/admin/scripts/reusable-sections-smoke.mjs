@@ -357,6 +357,100 @@ const assertReusableSectionsLayout = async (client) => {
   return layout;
 };
 
+const setReusableSectionField = async (client, testId, value) => evaluate(client, `(() => {
+  const element = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+    return { ok: false, reason: 'field-missing', testId: ${JSON.stringify(testId)}, body: document.body?.innerText?.slice(0, 1200) || '' };
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
+  descriptor?.set?.call(element, ${JSON.stringify(value)});
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+  return { ok: true };
+})()`);
+
+const clickReusableSectionControl = async (client, testId) => evaluate(client, `(() => {
+  const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+  if (!(button instanceof HTMLButtonElement)) {
+    return { ok: false, reason: 'button-missing', testId: ${JSON.stringify(testId)}, body: document.body?.innerText?.slice(0, 1200) || '' };
+  }
+  if (button.disabled) return { ok: false, reason: 'button-disabled', testId: ${JSON.stringify(testId)} };
+  button.click();
+  return { ok: true };
+})()`);
+
+const waitForPageText = async (client, expectedText, label) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return { found: body.includes(${JSON.stringify(expectedText)}), body: body.slice(0, 1600) };
+    })()`);
+
+    if (state.found) return state;
+    await sleep(100);
+  }
+
+  throw new Error(`Timed out waiting for ${label}: ${expectedText}`);
+};
+
+const createManualReusableSectionThroughUi = async (client) => {
+  const before = await listReusableSections();
+  const beforeIds = new Set(before.map((section) => section.id));
+  const suffix = Date.now().toString(36);
+  const slug = `manual-smoke-section-${suffix}`;
+
+  const reset = await clickReusableSectionControl(client, 'reusable-section-reset');
+  assert(reset.ok, `Unable to reset reusable section form: ${JSON.stringify(reset)}`);
+
+  for (const [testId, value] of [
+    ['reusable-section-name', `Manual smoke section ${suffix}`],
+    ['reusable-section-slug', slug],
+    ['reusable-section-category', 'manual-smoke'],
+    ['reusable-section-description', 'Manual reusable section created by the smoke test.'],
+    ['reusable-section-status', 'active'],
+    ['reusable-section-tags', 'manual, smoke, starter'],
+    ['reusable-section-content-json', '{"elements":[]}'],
+  ]) {
+    const changed = await setReusableSectionField(client, testId, value);
+    assert(changed.ok, `Unable to set ${testId}: ${JSON.stringify(changed)}`);
+  }
+
+  const invalidSave = await clickReusableSectionControl(client, 'reusable-section-save');
+  assert(invalidSave.ok, `Unable to submit invalid reusable section content: ${JSON.stringify(invalidSave)}`);
+  await waitForPageText(client, 'Reusable section content must include at least one element.', 'manual JSON validation error');
+
+  const starter = await clickReusableSectionControl(client, 'reusable-section-insert-starter');
+  assert(starter.ok, `Unable to insert starter reusable section content: ${JSON.stringify(starter)}`);
+  await waitForPageText(client, 'Starter section content inserted.', 'starter content message');
+
+  const formatted = await clickReusableSectionControl(client, 'reusable-section-format-json');
+  assert(formatted.ok, `Unable to format starter reusable section content: ${JSON.stringify(formatted)}`);
+  await waitForPageText(client, '1 reusable root ready.', 'formatted content message');
+
+  const saved = await clickReusableSectionControl(client, 'reusable-section-save');
+  assert(saved.ok, `Unable to save manual reusable section: ${JSON.stringify(saved)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const sections = await listReusableSections();
+    const created = sections.find((section) => !beforeIds.has(section.id) && section.slug === slug);
+
+    if (created) {
+      assert(created.name === `Manual smoke section ${suffix}`, `Manual section name was not saved: ${created.name}`);
+      assert(created.category === 'manual-smoke', `Manual section category was not saved: ${created.category}`);
+      assert(created.tags?.includes('starter'), `Manual section tags were not saved: ${JSON.stringify(created.tags)}`);
+      assert(created.content?.elements?.length === 1, `Manual section starter element was not saved: ${JSON.stringify(created.content)}`);
+      assert(created.content?.canvasSize?.width === 1200 && created.content?.canvasSize?.height === 520, `Manual section canvas size was not normalized: ${JSON.stringify(created.content?.canvasSize)}`);
+      assert(typeof created.content?.customCSS === 'string', `Manual section custom CSS was not persisted: ${JSON.stringify(created.content)}`);
+      return created;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error('Manual reusable section was not created');
+};
+
 const createFrontendTemplateSectionThroughUi = async (client) => {
   const before = await listReusableSections();
   const beforeIds = new Set(before.map((section) => section.id));
@@ -421,7 +515,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, sectionId, originalFrontendDesign }) => {
+const cleanup = async ({ client, childProcess, userDataDir, sectionIds, originalFrontendDesign }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -442,11 +536,13 @@ const cleanup = async ({ client, childProcess, userDataDir, sectionId, originalF
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 
-  if (sectionId) {
-    try {
-      await deleteReusableSection(sectionId);
-    } catch {
-      // Temporary smoke sections are deleted best-effort.
+  for (const sectionId of sectionIds || []) {
+    if (sectionId) {
+      try {
+        await deleteReusableSection(sectionId);
+      } catch {
+        // Temporary smoke sections are deleted best-effort.
+      }
     }
   }
 
@@ -463,7 +559,7 @@ const main = async () => {
   let client;
   let childProcess;
   let userDataDir;
-  let sectionId;
+  const sectionIds = [];
   let originalFrontendDesign;
 
   try {
@@ -487,23 +583,26 @@ const main = async () => {
 
     await navigateToReusableSections(client);
     await assertReusableSectionsLayout(client);
+    const manualSection = await createManualReusableSectionThroughUi(client);
+    sectionIds.push(manualSection.id);
     const section = await createFrontendTemplateSectionThroughUi(client);
-    sectionId = section.id;
+    sectionIds.push(section.id);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
 
-    await deleteReusableSection(sectionId);
-    sectionId = null;
+    await Promise.all(sectionIds.splice(0).map((createdSectionId) => deleteReusableSection(createdSectionId)));
     await patchFrontendDesign(originalFrontendDesign);
     originalFrontendDesign = null;
 
     console.log(JSON.stringify({
       ok: true,
       siteId: SITE_ID,
-      sectionId: section.id,
-      sectionSlug: section.slug,
+      manualSectionId: manualSection.id,
+      manualSectionSlug: manualSection.slug,
+      frontendSectionId: section.id,
+      frontendSectionSlug: section.slug,
       frontendTemplateId: FRONTEND_SECTION_TEMPLATE_ID,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
@@ -512,7 +611,7 @@ const main = async () => {
       client,
       childProcess,
       userDataDir,
-      sectionId,
+      sectionIds,
       originalFrontendDesign,
     });
   }
