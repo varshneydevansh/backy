@@ -171,8 +171,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Tablet/mobile layer hide/show and lock/unlock edits persist into `element.responsive` overrides
 - Active breakpoint override groups show which element areas inherit desktop, and layout/layer/content/style groups can be reset independently
 - Public rendering applies responsive overrides from the rendered container width
-- `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration
-- Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, and reload hydration
+- `test:editor-drag` verifies mobile and tablet layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration across text and image elements
+- Responsive smoke verifies mobile/tablet CSS and canvas-relative visual geometry with thresholds, hit-testing, clipped snapshots, and reload hydration for text and media components
 - **Remaining Improvements Needed:**
     - Broaden pixel-level screenshot comparison across more templates and component types
 - **Implemented Contract:**
@@ -486,7 +486,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence plus thresholded editor visual geometry are covered by responsive smoke; still needs broader pixel-level comparison across templates/components.
+  - Mobile and tablet persistence plus thresholded editor visual geometry are covered for heading and image elements by responsive smoke; still needs broader pixel-level comparison across templates/components.
 - ✅ Media upload modal
 - ✅ Element locking
 - ⚠️ Page templates

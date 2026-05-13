@@ -10454,13 +10454,23 @@ const main = async () => {
           expectedX: 64,
           expectedWidth: 360,
         }),
+        imageMobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-image', {
+          breakpoint: 'mobile',
+          expectedX: 36,
+          expectedWidth: 240,
+        }),
+        imageTablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-image', {
+          breakpoint: 'tablet',
+          expectedX: 96,
+          expectedWidth: 280,
+        }),
       };
 
       let reloadClient = null;
       let reloadedResponsiveEditing = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image']);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
             reloadClient,
@@ -10484,6 +10494,28 @@ const main = async () => {
               expectExistingLayerOverride: true,
             },
           ),
+          imageMobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-image',
+            {
+              breakpoint: 'mobile',
+              expectedX: 36,
+              expectedWidth: 240,
+              expectExistingLayerOverride: true,
+            },
+          ),
+          imageTablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-image',
+            {
+              breakpoint: 'tablet',
+              expectedX: 96,
+              expectedWidth: 280,
+              expectExistingLayerOverride: true,
+            },
+          ),
         };
       } finally {
         if (reloadClient) {
@@ -10500,7 +10532,11 @@ const main = async () => {
         reloadedResponsiveEditing.mobile.breakpointAfter.x === responsiveEditing.mobile.breakpointAfter.x &&
           reloadedResponsiveEditing.mobile.breakpointAfter.width === responsiveEditing.mobile.breakpointAfter.width &&
           reloadedResponsiveEditing.tablet.breakpointAfter.x === responsiveEditing.tablet.breakpointAfter.x &&
-          reloadedResponsiveEditing.tablet.breakpointAfter.width === responsiveEditing.tablet.breakpointAfter.width,
+          reloadedResponsiveEditing.tablet.breakpointAfter.width === responsiveEditing.tablet.breakpointAfter.width &&
+          reloadedResponsiveEditing.imageMobile.breakpointAfter.x === responsiveEditing.imageMobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.imageMobile.breakpointAfter.width === responsiveEditing.imageMobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.imageTablet.breakpointAfter.x === responsiveEditing.imageTablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.imageTablet.breakpointAfter.width === responsiveEditing.imageTablet.breakpointAfter.width,
         `Responsive smoke reload did not hydrate saved overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
 
