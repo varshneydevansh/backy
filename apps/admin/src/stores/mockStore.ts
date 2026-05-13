@@ -58,6 +58,7 @@ export interface BlogPost {
     categoryIds?: string[];
     tagIds?: string[];
     publishedAt: string;
+    updatedAt?: string;
 }
 
 export interface User {

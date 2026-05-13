@@ -269,6 +269,39 @@ const createBlogPost = async (slug) => {
   return post;
 };
 
+const assertBlogUpdateConflict = async (post) => {
+  assert(post.updatedAt, `Created smoke post did not include updatedAt for conflict testing: ${JSON.stringify(post).slice(0, 500)}`);
+  const firstUpdate = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${post.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: `${post.title} conflict baseline`,
+      expectedUpdatedAt: post.updatedAt,
+      revisionNote: 'Smoke conflict baseline',
+    }),
+  });
+  const updatedPost = firstUpdate.data?.post || firstUpdate.post;
+  assert(updatedPost?.updatedAt && updatedPost.updatedAt !== post.updatedAt, `Initial conflict setup did not advance updatedAt: ${JSON.stringify(firstUpdate).slice(0, 500)}`);
+
+  const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/blog/${post.id}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      title: `${post.title} stale overwrite`,
+      expectedUpdatedAt: post.updatedAt,
+      revisionNote: 'Smoke stale overwrite',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 409, `Stale blog update should return 409, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'BLOG_VERSION_CONFLICT', `Stale blog update should return BLOG_VERSION_CONFLICT: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.details?.currentUpdatedAt === updatedPost.updatedAt, `Conflict response missing current updatedAt: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updatedPost;
+};
+
 const deleteBlogPost = async (postId) => {
   if (!postId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`, { method: 'DELETE' });
@@ -520,7 +553,7 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 const main = async () => {
   await loginAdminApi();
   const slug = `blog-editor-smoke-${Date.now().toString(36)}`;
-  const post = await createBlogPost(slug);
+  const post = await assertBlogUpdateConflict(await createBlogPost(slug));
   const { childProcess, userDataDir } = launchChrome();
   let client;
 

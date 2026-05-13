@@ -618,7 +618,9 @@ interface ApiBlogPostResponse {
     post: ApiBlogPost;
   };
   error?: {
+    code?: string;
     message?: string;
+    details?: unknown;
   };
 }
 
@@ -1613,6 +1615,7 @@ export interface BlogPostUpdateInput {
   tagIds?: string[];
   revisionNote?: string;
   updatedBy?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface BlogCategoryInput {
@@ -2576,6 +2579,7 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   categoryIds: post.categoryIds || [],
   tagIds: post.tagIds || [],
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
+  updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
 });
 
 const toBlogCategory = (category: ApiBlogCategory): BlogCategory => ({
@@ -3675,7 +3679,11 @@ export async function updateBlogPost(
   const payload = await readJson<ApiBlogPostResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to save blog post');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to save blog post',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePost(payload.data.post);

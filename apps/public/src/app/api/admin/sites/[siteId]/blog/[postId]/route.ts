@@ -38,7 +38,13 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: Record<string, unknown>,
+) => (
   NextResponse.json(
     {
       success: false,
@@ -46,6 +52,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       error: {
         code,
         message,
+        ...(details ? { details } : {}),
       },
     },
     { status },
@@ -229,6 +236,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+      if (expectedUpdatedAt && expectedUpdatedAt !== post.updatedAt) {
+        return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the editor loaded it', requestId, {
+          postId: post.id,
+          expectedUpdatedAt,
+          currentUpdatedAt: post.updatedAt,
+          currentPost: adminPostFromRepositoryPost(post),
+        });
+      }
+
       const nextSlug = body.slug === undefined ? post.slug : normalizeSlug(body.slug);
 
       if (body.slug !== undefined && !nextSlug) {
@@ -314,6 +331,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+    if (expectedUpdatedAt && expectedUpdatedAt !== post.updatedAt) {
+      return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the editor loaded it', requestId, {
+        postId: post.id,
+        expectedUpdatedAt,
+        currentUpdatedAt: post.updatedAt,
+        currentPost: post,
+      });
+    }
+
     const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
 
     if (body.slug !== undefined && !nextSlug) {

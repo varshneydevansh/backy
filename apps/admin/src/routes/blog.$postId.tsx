@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetState
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
 import {
+    AdminContentApiError,
     archiveBlogPost,
     createBlogPostPreview,
     deleteBlogPost,
@@ -171,6 +172,7 @@ function EditBlogPostPage() {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [saveWarning, setSaveWarning] = useState<string | null>(null);
     const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
+    const [saveConflict, setSaveConflict] = useState<{ expectedUpdatedAt?: string; currentUpdatedAt?: string } | null>(null);
     const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
     const [isPreviewBusy, setIsPreviewBusy] = useState(false);
     const [isCheckingRoutes, setIsCheckingRoutes] = useState(false);
@@ -561,14 +563,25 @@ function EditBlogPostPage() {
                 tagIds: selectedTagIds,
                 revisionNote: 'Before blog editor save',
                 updatedBy: 'admin',
+                expectedUpdatedAt: post.updatedAt,
             });
             syncPostState(savedPost);
+            setSaveConflict(null);
             setWorkflowNotice('Post saved and revision snapshot recorded.');
             void loadPostReadiness();
         } catch (error) {
-            setSaveWarning(error instanceof Error
-                ? `${error.message}. Changes were not persisted.`
-                : 'Backend save failed. Changes were not persisted.');
+            if (error instanceof AdminContentApiError && error.code === 'BLOG_VERSION_CONFLICT') {
+                const details = isRecord(error.details) ? error.details : {};
+                const expectedUpdatedAt = typeof details.expectedUpdatedAt === 'string' ? details.expectedUpdatedAt : post.updatedAt;
+                const currentUpdatedAt = typeof details.currentUpdatedAt === 'string' ? details.currentUpdatedAt : undefined;
+                setSaveConflict({ expectedUpdatedAt, currentUpdatedAt });
+                setSaveWarning('This post changed after the editor loaded it. Reload the latest backend copy before saving again.');
+            } else {
+                setSaveConflict(null);
+                setSaveWarning(error instanceof Error
+                    ? `${error.message}. Changes were not persisted.`
+                    : 'Backend save failed. Changes were not persisted.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -592,6 +605,25 @@ function EditBlogPostPage() {
         setSelectedAuthorId(nextPost.author || 'admin');
         setSelectedCategoryIds(nextPost.categoryIds || []);
         setSelectedTagIds(nextPost.tagIds || []);
+        setSaveConflict(null);
+    };
+
+    const reloadLatestPost = async () => {
+        if (editorActionBusy) return;
+
+        setIsLoadingPost(true);
+        setSaveWarning(null);
+        setWorkflowNotice(null);
+        try {
+            const latestPost = await getBlogPost(activeSiteId, postId);
+            syncPostState(latestPost);
+            setWorkflowNotice('Latest backend post loaded into the editor.');
+            void loadPostReadiness();
+        } catch (error) {
+            setSaveWarning(error instanceof Error ? error.message : 'Unable to reload the latest post.');
+        } finally {
+            setIsLoadingPost(false);
+        }
     };
 
     const toggleSelection = (
@@ -1230,7 +1262,31 @@ function EditBlogPostPage() {
                                     Retry route check
                                 </Button>
                             )}
+                            {saveConflict && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={editorActionBusy}
+                                    onClick={() => void reloadLatestPost()}
+                                    iconStart={<RefreshCw className="size-3.5" />}
+                                >
+                                    Reload latest
+                                </Button>
+                            )}
                         </div>
+                        {saveConflict && (
+                            <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                                <div>
+                                    <dt className="font-medium">Editor loaded</dt>
+                                    <dd className="font-mono">{saveConflict.expectedUpdatedAt || 'unknown'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="font-medium">Backend latest</dt>
+                                    <dd className="font-mono">{saveConflict.currentUpdatedAt || 'unknown'}</dd>
+                                </div>
+                            </dl>
+                        )}
                     </Notice>
                 )}
                 {workflowNotice && (
