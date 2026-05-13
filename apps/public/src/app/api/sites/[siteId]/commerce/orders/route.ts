@@ -227,29 +227,33 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
 
 type CheckoutLineItem = ReturnType<typeof lineItemFromProduct>;
 
-const taxRateForClass = (taxClass: string): number => {
+const taxRateForClass = (taxClass: string, rules: CommerceStorefrontContract['pricing']['rules']): number => {
   const normalized = taxClass.trim().toLowerCase();
-  if (!normalized || normalized === 'standard') return 0.0825;
+  const standardRate = rules.taxRatePercent / 100;
+  if (!normalized || normalized === 'standard') return standardRate;
   if (normalized.includes('exempt') || normalized.includes('zero')) return 0;
-  if (normalized.includes('reduced')) return 0.04;
-  if (normalized.includes('digital')) return 0.06;
-  if (normalized.includes('service')) return 0.05;
-  return 0.0825;
+  if (normalized.includes('reduced')) return standardRate / 2;
+  if (normalized.includes('digital')) return rules.digitalTaxRatePercent / 100;
+  if (normalized.includes('service')) return Math.max(0, standardRate - 0.025);
+  return standardRate;
 };
 
-const shippingBaseForProfile = (profile: string): number => {
+const shippingBaseForProfile = (profile: string, rules: CommerceStorefrontContract['pricing']['rules']): number => {
   const normalized = profile.trim().toLowerCase();
-  if (!normalized || normalized === 'standard') return 8;
+  if (!normalized || normalized === 'standard') return rules.shippingBaseAmount;
   if (normalized.includes('digital') || normalized.includes('pickup') || normalized.includes('free')) return 0;
-  if (normalized.includes('express')) return 15;
-  if (normalized.includes('freight') || normalized.includes('oversize')) return 35;
-  if (normalized.includes('box') || normalized.includes('standard')) return 8;
-  return 10;
+  if (normalized.includes('express')) return moneyValue(rules.shippingBaseAmount * 1.875);
+  if (normalized.includes('freight') || normalized.includes('oversize')) return moneyValue(rules.shippingBaseAmount * 4.375);
+  if (normalized.includes('box') || normalized.includes('standard')) return rules.shippingBaseAmount;
+  return moneyValue(rules.shippingBaseAmount * 1.25);
 };
 
-const discountPercentFromCode = (code: string): number => {
+const discountPercentFromCode = (code: string, rules: CommerceStorefrontContract['pricing']['rules']): number => {
+  if (rules.discountPercent > 0) {
+    return rules.discountPercent / 100;
+  }
   const match = code.match(/(\d{1,2})$/);
-  if (!match) return code ? 10 : 0;
+  if (!match) return code ? 0.1 : 0;
   return Math.max(0, Math.min(90, Number(match[1]))) / 100;
 };
 
@@ -260,7 +264,8 @@ const calculateCheckoutQuote = (
 ) => {
   const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
   const normalizedDiscountCode = discountCode.trim().toUpperCase();
-  const discountRate = commerce.pricing.discounts ? discountPercentFromCode(normalizedDiscountCode) : 0;
+  const pricingRules = commerce.pricing.rules;
+  const discountRate = commerce.pricing.discounts ? discountPercentFromCode(normalizedDiscountCode, pricingRules) : 0;
   const discountLines = lineItems.map((item) => {
     const itemDiscountCode = textValue(item.discountCode).toUpperCase();
     const eligible = Boolean(discountRate && normalizedDiscountCode && itemDiscountCode === normalizedDiscountCode);
@@ -287,7 +292,7 @@ const calculateCheckoutQuote = (
       };
     }
     const taxableAmount = Math.max(0, item.lineTotal - (lineDiscountByProduct.get(item.productId) || 0));
-    const rate = taxRateForClass(item.taxClass);
+    const rate = taxRateForClass(item.taxClass, pricingRules);
     return {
       productId: item.productId,
       slug: item.slug,
@@ -305,7 +310,7 @@ const calculateCheckoutQuote = (
       const profile = item.shippingProfile || 'standard';
       const group = shippingGroups.get(profile) || {
         profile,
-        base: shippingBaseForProfile(profile),
+        base: shippingBaseForProfile(profile, pricingRules),
         weightTotal: 0,
         slugs: [],
       };
@@ -318,8 +323,8 @@ const calculateCheckoutQuote = (
     profile: group.profile,
     slugs: group.slugs,
     base: moneyValue(group.base),
-    weightAmount: moneyValue(group.weightTotal * 1.25),
-    amount: moneyValue(group.base + group.weightTotal * 1.25),
+    weightAmount: moneyValue(group.weightTotal * pricingRules.shippingWeightRate),
+    amount: moneyValue(group.base + group.weightTotal * pricingRules.shippingWeightRate),
   }));
   const shippingAmount = moneyValue(shippingLines.reduce((sum, line) => sum + line.amount, 0));
   const total = moneyValue(Math.max(0, subtotal - discountAmount + taxAmount + shippingAmount));

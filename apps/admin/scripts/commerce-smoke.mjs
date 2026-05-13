@@ -195,6 +195,11 @@ const enableCommercePricingSettings = async (settings) => {
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
+      taxRatePercent: 10,
+      digitalTaxRatePercent: 5,
+      shippingBaseAmount: 12,
+      shippingWeightRate: 2,
+      discountPercent: 12,
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -969,10 +974,11 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const quote = orderPayload.data?.quote;
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.discountAmount === 9.8, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.shippingAmount === 8, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.taxAmount === 7.28, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
-  assert(order.total === 103.48, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
+  assert(quote.discountAmount === 11.76, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.shippingAmount === 12, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.taxAmount === 8.62, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
+  assert(order.total === 106.86, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
+  assert(quote.pricing?.rules?.taxRatePercent === 10, `Quote pricing rules were not exposed: ${JSON.stringify(quote)}`);
   assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
 
   const updatedProduct = await getCollectionRecordBySlug(productCollection.id, slug);
@@ -982,10 +988,10 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
   assert(orderRecord.values?.customername === 'Commerce Smoke Buyer', 'Order customer name was not persisted');
   assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.discountamount === 9.8, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.shippingamount === 8, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.taxamount === 7.28, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.total === 103.48, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.taxamount === 8.62, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.total === 106.86, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   return { productRecord, updatedProduct, order, orderRecord };
 };

@@ -136,6 +136,13 @@ export interface CommerceStorefrontContract {
     taxes: boolean;
     shipping: boolean;
     discounts: boolean;
+    rules: {
+      taxRatePercent: number;
+      digitalTaxRatePercent: number;
+      shippingBaseAmount: number;
+      shippingWeightRate: number;
+      discountPercent: number;
+    };
   };
   inventory: {
     reservations: boolean;
@@ -205,6 +212,14 @@ const normalizeRelativePath = (value: unknown, fallback: string): string => {
   return path.startsWith('/') ? path : fallback;
 };
 
+const normalizePercent = (value: unknown, fallback: number): number => (
+  Math.max(0, Math.min(100, normalizeNumber(value, fallback)))
+);
+
+const normalizeNonNegative = (value: unknown, fallback: number): number => (
+  Math.max(0, normalizeNumber(value, fallback))
+);
+
 const normalizeEventAllowlist = (value: unknown): string[] => {
   const raw = Array.isArray(value) ? value : normalizeText(value).split(',');
   return raw
@@ -263,6 +278,13 @@ export const buildCommerceStorefrontContract = ({
       taxes: normalizeBoolean(commerce.taxEnabled),
       shipping: normalizeBoolean(commerce.shippingEnabled),
       discounts: normalizeBoolean(commerce.discountsEnabled),
+      rules: {
+        taxRatePercent: normalizePercent(commerce.taxRatePercent, 8.25),
+        digitalTaxRatePercent: normalizePercent(commerce.digitalTaxRatePercent, 6),
+        shippingBaseAmount: normalizeNonNegative(commerce.shippingBaseAmount, 8),
+        shippingWeightRate: normalizeNonNegative(commerce.shippingWeightRate, 1.25),
+        discountPercent: normalizePercent(commerce.discountPercent, 10),
+      },
     },
     inventory: {
       reservations: normalizeBoolean(commerce.inventoryReservations, true),

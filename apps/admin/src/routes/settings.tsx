@@ -2258,6 +2258,11 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   taxEnabled: false,
   shippingEnabled: false,
   discountsEnabled: false,
+  taxRatePercent: 8.25,
+  digitalTaxRatePercent: 6,
+  shippingBaseAmount: 8,
+  shippingWeightRate: 1.25,
+  discountPercent: 10,
   inventoryReservations: true,
   reservationMinutes: 15,
   webhookEventsEnabled: false,
@@ -2627,6 +2632,42 @@ function validateSettingsDraft({
       tab: 'commerce',
       label: 'Inventory reservation window is invalid',
       detail: 'Use a reservation window from 1 to 1440 minutes.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.taxRatePercent || 0) < 0 || (commerce.taxRatePercent || 0) > 100) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Standard tax rate is invalid',
+      detail: 'Use a standard tax rate from 0 to 100 percent.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.digitalTaxRatePercent || 0) < 0 || (commerce.digitalTaxRatePercent || 0) > 100) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Digital tax rate is invalid',
+      detail: 'Use a digital tax rate from 0 to 100 percent.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.shippingBaseAmount || 0) < 0 || (commerce.shippingWeightRate || 0) < 0) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Shipping pricing is invalid',
+      detail: 'Use non-negative shipping base and weight-rate amounts.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.discountPercent || 0) < 0 || (commerce.discountPercent || 0) > 100) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Discount percent is invalid',
+      detail: 'Use a discount percent from 0 to 100.',
       severity: 'error',
     });
   }
@@ -3800,6 +3841,83 @@ function CommerceSettings({
                 <span className="shrink-0 text-xs text-muted-foreground">minutes</span>
               </div>
             </label>
+          </div>
+          <div className="mt-5 grid gap-3 border-t border-border pt-4">
+            <div>
+              <h4 className="text-sm font-semibold">Pricing rules</h4>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Non-secret defaults used by public order intake when calculating checkout quotes for custom frontends.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Standard tax rate</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={resolved.taxRatePercent}
+                    onChange={(event) => update({ taxRatePercent: Number(event.target.value) })}
+                    className={inputClassName}
+                  />
+                  <span className="shrink-0 text-xs text-muted-foreground">%</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Digital tax rate</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={resolved.digitalTaxRatePercent}
+                    onChange={(event) => update({ digitalTaxRatePercent: Number(event.target.value) })}
+                    className={inputClassName}
+                  />
+                  <span className="shrink-0 text-xs text-muted-foreground">%</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Shipping base</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={resolved.shippingBaseAmount}
+                  onChange={(event) => update({ shippingBaseAmount: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Shipping weight rate</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={resolved.shippingWeightRate}
+                  onChange={(event) => update({ shippingWeightRate: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                <span className="font-medium">Discount percent</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={resolved.discountPercent}
+                    onChange={(event) => update({ discountPercent: Number(event.target.value) })}
+                    className={inputClassName}
+                  />
+                  <span className="shrink-0 text-xs text-muted-foreground">%</span>
+                </div>
+              </label>
+            </div>
           </div>
         </PanelContent>
       </Panel>

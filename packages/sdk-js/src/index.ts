@@ -446,6 +446,14 @@ export interface BackyCommerceStorefrontContract {
     taxes: boolean;
     shipping: boolean;
     discounts: boolean;
+    rules?: {
+      taxRatePercent?: number;
+      digitalTaxRatePercent?: number;
+      shippingBaseAmount?: number;
+      shippingWeightRate?: number;
+      discountPercent?: number;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   inventory: {

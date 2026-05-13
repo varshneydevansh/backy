@@ -1355,6 +1355,11 @@ export interface SiteSettingsInput {
       taxEnabled?: boolean;
       shippingEnabled?: boolean;
       discountsEnabled?: boolean;
+      taxRatePercent?: number;
+      digitalTaxRatePercent?: number;
+      shippingBaseAmount?: number;
+      shippingWeightRate?: number;
+      discountPercent?: number;
       inventoryReservations?: boolean;
       reservationMinutes?: number;
       webhookEventsEnabled?: boolean;

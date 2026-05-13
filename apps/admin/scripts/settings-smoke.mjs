@@ -546,6 +546,11 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   await setLabeledControl(client, 'Discounts', true);
   await setLabeledControl(client, 'Inventory reservations', true);
   await setLabeledControl(client, 'Reservation window', '30');
+  await setLabeledControl(client, 'Standard tax rate', '9.75');
+  await setLabeledControl(client, 'Digital tax rate', '4.25');
+  await setLabeledControl(client, 'Shipping base', '11.5');
+  await setLabeledControl(client, 'Shipping weight rate', '1.75');
+  await setLabeledControl(client, 'Discount percent', '12.5');
   await setLabeledControl(client, 'Webhook events', true);
   const commerceState = await evaluate(client, `(() => ({
     search: window.location.search,
@@ -617,6 +622,11 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.commerce?.reconciliationWindowHours === 36, 'Commerce reconciliation window was not persisted');
   assert(settings.integrations?.commerce?.taxEnabled === true, 'Commerce tax toggle was not persisted');
   assert(settings.integrations?.commerce?.shippingEnabled === true, 'Commerce shipping toggle was not persisted');
+  assert(settings.integrations?.commerce?.taxRatePercent === 9.75, 'Commerce standard tax rate was not persisted');
+  assert(settings.integrations?.commerce?.digitalTaxRatePercent === 4.25, 'Commerce digital tax rate was not persisted');
+  assert(settings.integrations?.commerce?.shippingBaseAmount === 11.5, 'Commerce shipping base was not persisted');
+  assert(settings.integrations?.commerce?.shippingWeightRate === 1.75, 'Commerce shipping weight rate was not persisted');
+  assert(settings.integrations?.commerce?.discountPercent === 12.5, 'Commerce discount percent was not persisted');
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
   assert(settings.integrations?.notifications?.email?.newUser === true, 'Notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.inApp?.comments === true, 'Notification in-app toggle was not persisted');
