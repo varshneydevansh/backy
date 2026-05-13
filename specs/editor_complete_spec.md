@@ -241,6 +241,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Markdown shortcuts now support `+` and both `1.`/`1)` list triggers.
   - Inline markdown shortcuts now convert wrapper syntax into Slate marks for bold, italic, strike, and code.
   - Right-panel selected-text controls now preserve active Slate selections when focus moves into the panel, with focused smoke coverage for applying and clearing a mark on only the selected range.
+  - Right-panel clear formatting now removes selected-range font size, font family, underline, strikethrough, text color, and highlight marks before later selected-range persistence checks run.
   - Right-panel list indent/outdent controls clamp active list item indentation between depth 0 and 8 while preserving unselected sibling item depth.
   - Right-panel list move controls can move the active list item up/down while preserving item metadata such as indentation.
   - Rich-text editor list items can be drag-reordered within the same list while preserving item metadata such as indentation.
@@ -413,8 +414,6 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added paragraph to text-capable content editing in property panel so paragraph elements open rich-text controls.
 - Expanded rich text inline styling controls in `RichTextFormatting`:
   - selection font family and font size controls
-  - clear-selection formatting action
-  - explicit mark clearing helper for font family/size/ color / background / decoration.
 
 ### ⚠️ Remaining
 - No known editor-completion blockers remain in this spec slice.

@@ -3451,6 +3451,76 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(clearedBetaLeaf?.fontStyle !== 'italic', `Clear formatting did not clear selected range: ${JSON.stringify(clearedState)}`);
 
   await activateTextEditing(client, elementId);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await dispatchMouseDownByTestId(client, 'rich-text-font-size');
+  await setFormControlByTestId(client, 'rich-text-font-size', '28');
+  await sleep(350);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await dispatchMouseDownByTestId(client, 'rich-text-font-family');
+  await setFormControlByTestId(client, 'rich-text-font-family', 'Georgia, serif');
+  await sleep(350);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await mouseDownControlByTestId(client, 'rich-text-underline');
+  await sleep(250);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await mouseDownControlByTestId(client, 'rich-text-strikethrough');
+  await sleep(250);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await selectColorPickerValue(client, 'rich-text-highlight-color', '#ffff00');
+  await sleep(500);
+
+  const clearAllSetupState = await readRichTextLeafState(client, elementId);
+  const clearAllSetupBetaLeaf = clearAllSetupState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(
+    clearAllSetupBetaLeaf?.fontSize === '28px' &&
+      clearAllSetupBetaLeaf?.fontFamily.toLowerCase().includes('georgia') &&
+      clearAllSetupBetaLeaf?.textDecoration.includes('underline') &&
+      clearAllSetupBetaLeaf?.textDecoration.includes('line-through') &&
+      clearAllSetupBetaLeaf?.color === 'rgb(255, 0, 0)' &&
+      clearAllSetupBetaLeaf?.backgroundColor === 'rgb(255, 255, 0)',
+    `Selected range setup before clear formatting did not apply all marks: ${JSON.stringify(clearAllSetupState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  await mouseDownControlByTestId(client, 'rich-text-clear-formatting');
+  await sleep(500);
+
+  const clearAllState = await readRichTextLeafState(client, elementId);
+  const clearAllBetaLeaf = clearAllState.marked.find((leaf) => leaf.text.includes('Beta'));
+  assert(
+    clearAllBetaLeaf?.fontSize !== '28px' &&
+      !clearAllBetaLeaf?.fontFamily.toLowerCase().includes('georgia') &&
+      !clearAllBetaLeaf?.textDecoration.includes('underline') &&
+      !clearAllBetaLeaf?.textDecoration.includes('line-through') &&
+      clearAllBetaLeaf?.color !== 'rgb(255, 0, 0)' &&
+      clearAllBetaLeaf?.backgroundColor !== 'rgb(255, 255, 0)',
+    `Clear formatting did not remove selected range font/decorator/color marks: ${JSON.stringify(clearAllState)}`,
+  );
+
+  const resetAfterClearAll = await evaluate(client, `(() => {
+    if (typeof window.__backySetActiveEditorContent !== 'function') {
+      return { ok: false, reason: 'missing-set-content-helper' };
+    }
+
+    return window.__backySetActiveEditorContent([
+      {
+        type: 'p',
+        children: [
+          { text: 'Alpha', smokeSegment: 'alpha' },
+          { text: ' line ', smokeSegment: 'alpha' },
+          { text: 'Beta', smokeSegment: 'beta' },
+          { text: ' line', smokeSegment: 'beta' }
+        ]
+      }
+    ]);
+  })()`);
+  assert(resetAfterClearAll?.ok, `Unable to reset selected range content after clear-formatting check: ${JSON.stringify(resetAfterClearAll)}`);
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
   await dispatchMouseDownByTestId(client, 'rich-text-font-size');
   await setFormControlByTestId(client, 'rich-text-font-size', '32');
@@ -3462,6 +3532,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(sizedAlphaLeaf?.fontSize === '32px', `Selected range font size was not applied: ${JSON.stringify(sizedState)}`);
   assert(unsizedBetaLeaf?.fontSize !== '32px', `Unselected range unexpectedly received font size: ${JSON.stringify(sizedState)}`);
 
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   await dispatchMouseDownByTestId(client, 'rich-text-font-family');
   await setFormControlByTestId(client, 'rich-text-font-family', 'Georgia, serif');
@@ -3473,6 +3544,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(familyBetaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Selected range font family was not applied: ${JSON.stringify(fontFamilyState)}`);
   assert(!familyAlphaLeaf?.fontFamily.toLowerCase().includes('georgia'), `Unselected range unexpectedly received font family: ${JSON.stringify(fontFamilyState)}`);
 
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   await mouseDownControlByTestId(client, 'rich-text-underline');
   await sleep(500);
@@ -3483,6 +3555,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(underlineBetaLeaf?.textDecoration.includes('underline'), `Selected range underline was not applied: ${JSON.stringify(underlineState)}`);
   assert(!underlineAlphaLeaf?.textDecoration.includes('underline'), `Unselected range unexpectedly received underline: ${JSON.stringify(underlineState)}`);
 
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
   await mouseDownControlByTestId(client, 'rich-text-strikethrough');
   await sleep(500);
@@ -3493,6 +3566,7 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
   assert(strikeAlphaLeaf?.textDecoration.includes('line-through'), `Selected range strikethrough was not applied: ${JSON.stringify(strikethroughState)}`);
   assert(!strikeBetaLeaf?.textDecoration.includes('line-through'), `Unselected range unexpectedly received strikethrough: ${JSON.stringify(strikethroughState)}`);
 
+  await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Alpha', 'Alpha');
   await selectColorPickerValue(client, 'rich-text-text-color', '#ff0000');
   await sleep(500);
@@ -3522,6 +3596,9 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
     selected,
     afterItalic: state,
     afterClear: clearedState,
+    afterClearAllSetup: clearAllSetupState,
+    afterClearAll: clearAllState,
+    resetAfterClearAll,
     afterFontSize: sizedState,
     afterFontFamily: fontFamilyState,
     afterUnderline: underlineState,
@@ -3852,6 +3929,16 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     editedTableState.cellTexts.includes('Column 1') && editedTableState.cellTexts.includes('Value 2'),
     `Table row/column controls lost existing cell content: ${JSON.stringify(editedTableState)}`,
   );
+
+  await activateTextEditing(client, elementId);
+  const selectedInsertedCellBeforeTrim = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCellAt !== 'function') {
+      return { ok: false, reason: 'missing-table-cell-at-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCellAt(1, 1);
+  })()`);
+  assert(selectedInsertedCellBeforeTrim?.ok, `Unable to select inserted blank table cell before trim controls: ${JSON.stringify(selectedInsertedCellBeforeTrim)}`);
 
   await mouseDownControlByTestId(client, 'rich-text-table-remove-column');
   await sleep(250);

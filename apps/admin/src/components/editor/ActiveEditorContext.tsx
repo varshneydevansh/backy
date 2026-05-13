@@ -1067,6 +1067,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       __backyCollapseActiveEditorToEnd?: () => unknown;
       __backyInsertActiveEditorTable?: () => unknown;
       __backySelectActiveEditorTableCell?: (needle: string) => unknown;
+      __backySelectActiveEditorTableCellAt?: (rowIndex: number, cellIndex: number) => unknown;
       __backySetActiveEditorTableCaption?: (caption: string) => unknown;
       __backyReadActiveEditorTableState?: () => unknown;
     };
@@ -1230,6 +1231,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
         return {
           ok: false,
           reason: 'select-table-cell-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
+    };
+
+    targetWindow.__backySelectActiveEditorTableCellAt = (rowIndex: number, cellIndex: number) => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const tableEntry = Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (node) => SlateElement.isElement(node) && (node as any).type === 'table',
+          })
+        ).at(-1) as [unknown, number[]] | undefined;
+
+        if (!tableEntry) {
+          return { ok: false, reason: 'missing-table', text: Editor.string(editor as any, []) };
+        }
+
+        const [tableNode, tablePath] = tableEntry as [SlateElement, number[]];
+        const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
+        const boundedRowIndex = Math.max(0, Math.min(rowIndex, rows.length - 1));
+        const row = rows[boundedRowIndex] as { children?: unknown[] } | undefined;
+        const cells = Array.isArray(row?.children) ? row.children : [];
+        if (rows.length === 0 || cells.length === 0) {
+          return { ok: false, reason: 'empty-table', rowCount: rows.length };
+        }
+
+        const boundedCellIndex = Math.max(0, Math.min(cellIndex, cells.length - 1));
+        const cellPath = [...tablePath, boundedRowIndex, boundedCellIndex];
+        const nextSelection = {
+          anchor: Editor.start(editor as any, cellPath),
+          focus: Editor.end(editor as any, cellPath),
+        };
+        Transforms.select(editor as any, nextSelection);
+        setStoredSelection(nextSelection);
+        return {
+          ok: true,
+          text: Editor.string(editor as any, nextSelection),
+          selection: describeSelection(nextSelection),
+          cellPath,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'select-table-cell-at-failed',
           error: (error as Error)?.message || String(error),
         };
       }
@@ -1435,6 +1486,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
       if (targetWindow.__backySelectActiveEditorTableCell) {
         delete targetWindow.__backySelectActiveEditorTableCell;
+      }
+      if (targetWindow.__backySelectActiveEditorTableCellAt) {
+        delete targetWindow.__backySelectActiveEditorTableCellAt;
       }
       if (targetWindow.__backySetActiveEditorTableCaption) {
         delete targetWindow.__backySetActiveEditorTableCaption;
