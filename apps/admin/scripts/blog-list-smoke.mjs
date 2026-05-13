@@ -674,17 +674,58 @@ const manageTaxonomyInUi = async (client, suffix) => {
 };
 
 const toggleNoIndexInUi = async (client, postId) => {
+  const before = await fetchPostBySlugFromAdminId(postId);
+  assert(before?.updatedAt, `Blog post ${postId} did not expose updatedAt before SEO toggle: ${JSON.stringify(before).slice(0, 500)}`);
+  const nextNoIndex = before.meta?.noIndex !== true;
+
+  const captureInstalled = await evaluate(client, `(() => {
+    window.__backyBlogSeoPatchBodies = [];
+    if (!window.__backyOriginalFetchForBlogSeo) {
+      window.__backyOriginalFetchForBlogSeo = window.fetch.bind(window);
+      window.fetch = async (input, init = {}) => {
+        const url = String(input instanceof Request ? input.url : input || '');
+        const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (method === 'PATCH' && url.includes(${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog/${postId}`)})) {
+          let body = init?.body || '';
+          if (typeof body !== 'string') {
+            body = String(body || '');
+          }
+          let parsed = null;
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            parsed = body;
+          }
+          window.__backyBlogSeoPatchBodies.push({ url, method, body: parsed });
+        }
+        return window.__backyOriginalFetchForBlogSeo(input, init);
+      };
+    }
+    return true;
+  })()`);
+  assert(captureInstalled, 'Unable to install blog SEO PATCH capture');
+
   await clickButtonByTestId(client, `blog-post-seo-noindex-${postId}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const post = await fetchPostBySlugFromAdminId(postId);
-    if (post?.meta?.noIndex === true) {
+    const captured = await evaluate(client, `window.__backyBlogSeoPatchBodies || []`);
+    const seoPatch = captured.find((entry) => entry?.body?.meta && Object.prototype.hasOwnProperty.call(entry.body.meta, 'noIndex'));
+    if (post?.meta?.noIndex === nextNoIndex && seoPatch) {
+      assert(
+        seoPatch.body.expectedUpdatedAt === before.updatedAt,
+        `Blog list row SEO toggle did not send expectedUpdatedAt guard: ${JSON.stringify(seoPatch).slice(0, 500)}`,
+      );
+      assert(
+        seoPatch.body.meta.noIndex === nextNoIndex,
+        `Blog list row SEO toggle sent unexpected noIndex value: ${JSON.stringify(seoPatch).slice(0, 500)}`,
+      );
       return post;
     }
     await sleep(250);
   }
 
-  throw new Error(`Blog post ${postId} did not persist noIndex from list row`);
+  throw new Error(`Blog post ${postId} did not persist guarded noIndex toggle from list row`);
 };
 
 const fetchPostBySlugFromAdminId = async (postId) => {
@@ -750,7 +791,37 @@ const clickPreview = async (client, title) => {
   throw new Error(`Preview action did not open a tokenized blog preview URL: ${JSON.stringify(state)}`);
 };
 
-const bulkPublishPost = async (client, title) => {
+const bulkPublishPost = async (client, title, postId) => {
+  const before = await fetchPostBySlugFromAdminId(postId);
+  assert(before?.updatedAt, `Blog post ${postId} did not expose updatedAt before bulk publish: ${JSON.stringify(before).slice(0, 500)}`);
+
+  const captureInstalled = await evaluate(client, `(() => {
+    window.__backyBlogStatusPostBodies = [];
+    if (!window.__backyOriginalFetchForBlogStatus) {
+      window.__backyOriginalFetchForBlogStatus = window.fetch.bind(window);
+      window.fetch = async (input, init = {}) => {
+        const url = String(input instanceof Request ? input.url : input || '');
+        const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (method === 'POST' && url.includes(${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog/${postId}/publish`)})) {
+          let body = init?.body || '';
+          if (typeof body !== 'string') {
+            body = String(body || '');
+          }
+          let parsed = null;
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            parsed = body;
+          }
+          window.__backyBlogStatusPostBodies.push({ url, method, body: parsed });
+        }
+        return window.__backyOriginalFetchForBlogStatus(input, init);
+      };
+    }
+    return true;
+  })()`);
+  assert(captureInstalled, 'Unable to install blog status POST capture');
+
   const selected = await evaluate(client, `(() => {
     const input = Array.from(document.querySelectorAll('input[type="checkbox"]')).find((candidate) => (
       candidate.getAttribute('aria-label') === ${JSON.stringify(`Select ${title}`)}
@@ -786,6 +857,12 @@ const bulkPublishPost = async (client, title) => {
       body: document.body?.innerText?.slice(0, 600) || '',
     }))()`);
     if (state.publishedBadge || state.notice) {
+      const captured = await evaluate(client, `window.__backyBlogStatusPostBodies || []`);
+      const statusPost = captured.find((entry) => entry?.body && Object.prototype.hasOwnProperty.call(entry.body, 'expectedUpdatedAt'));
+      assert(
+        statusPost?.body?.expectedUpdatedAt === before.updatedAt,
+        `Blog list bulk publish did not send expectedUpdatedAt guard: ${JSON.stringify(captured).slice(0, 500)}`,
+      );
       return state;
     }
     if (attempt === 79) {
@@ -916,7 +993,7 @@ const main = async () => {
     const taxonomyUi = await manageTaxonomyInUi(client, suffix);
     await exerciseFilters(client, { title, categoryId, tagId, authorId });
     const previewUrls = await clickPreview(client, title);
-    await bulkPublishPost(client, title);
+    await bulkPublishPost(client, title, postId);
     const publishedPost = await waitForPostStatus(slug, 'published');
     await assertPublicPost(slug, categoryId, tagId);
     const archiveFeed = await assertPublicSearchAndArchiveFeeds({ slug, title, publishedAt: publishedPost.publishedAt });

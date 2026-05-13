@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare } from 'lucide-react';
 import {
+  AdminContentApiError,
   archiveBlogPost,
   createBlogCategory,
   createBlogTag,
@@ -513,23 +514,30 @@ function BlogListView() {
   const togglePostSeoFlag = async (post: BlogPost, key: 'noIndex' | 'noFollow') => {
     if (isBlogWorkflowBusy) return;
 
+    const currentPost = posts.find((candidate) => candidate.id === post.id) || post;
     setUpdatingSeoPostId(post.id);
     setError(null);
     setNotice(null);
 
     try {
       const nextMeta = {
-        ...(post.meta || {}),
-        [key]: post.meta?.[key] !== true,
+        ...(currentPost.meta || {}),
+        [key]: currentPost.meta?.[key] !== true,
       };
-      const updated = await updateBlogPost(activeSiteId, post.id, {
+      const updated = await updateBlogPost(activeSiteId, currentPost.id, {
         meta: nextMeta,
         revisionNote: `Updated ${key} from blog list row.`,
+        expectedUpdatedAt: currentPost.updatedAt,
       });
-      updatePost(post.id, updated);
-      setNotice(`${post.title} SEO ${key === 'noIndex' ? 'indexing' : 'link following'} updated.`);
+      updatePost(currentPost.id, updated);
+      setNotice(`${updated.title} SEO ${key === 'noIndex' ? 'indexing' : 'link following'} updated.`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to update post SEO controls');
+      if (saveError instanceof AdminContentApiError && saveError.code === 'BLOG_VERSION_CONFLICT') {
+        setError('This post changed before the SEO control saved. Reloaded the latest blog list; try the toggle again.');
+        await refreshPosts(activeSiteId);
+      } else {
+        setError(saveError instanceof Error ? saveError.message : 'Unable to update post SEO controls');
+      }
     } finally {
       setUpdatingSeoPostId('');
     }
@@ -636,13 +644,17 @@ function BlogListView() {
 
     try {
       if (bulkAction === 'publish') {
-        const updatedPosts = await Promise.all(selectedPosts.map((post) => publishBlogPost(activeSiteId, post.id)));
+        const updatedPosts = await Promise.all(selectedPosts.map((post) => publishBlogPost(activeSiteId, post.id, {
+          expectedUpdatedAt: post.updatedAt,
+        })));
         updatedPosts.forEach((post) => updatePost(post.id, post));
         setNotice(`${updatedPosts.length} post${updatedPosts.length === 1 ? '' : 's'} published.`);
       }
 
       if (bulkAction === 'archive') {
-        const updatedPosts = await Promise.all(selectedPosts.map((post) => archiveBlogPost(activeSiteId, post.id)));
+        const updatedPosts = await Promise.all(selectedPosts.map((post) => archiveBlogPost(activeSiteId, post.id, {
+          expectedUpdatedAt: post.updatedAt,
+        })));
         updatedPosts.forEach((post) => updatePost(post.id, post));
         setNotice(`${updatedPosts.length} post${updatedPosts.length === 1 ? '' : 's'} archived.`);
       }
@@ -659,7 +671,13 @@ function BlogListView() {
       setBulkAction('');
       await refreshPosts(activeSiteId);
     } catch (bulkError) {
-      setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
+      if (bulkError instanceof AdminContentApiError && bulkError.code === 'BLOG_VERSION_CONFLICT') {
+        setError('One selected post changed before the status action completed. Reloaded the latest blog list; review the selection and try again.');
+        setSelectedPostIds(new Set());
+        await refreshPosts(activeSiteId);
+      } else {
+        setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
+      }
     } finally {
       setIsBulkBusy(false);
     }

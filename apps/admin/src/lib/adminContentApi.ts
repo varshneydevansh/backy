@@ -1618,6 +1618,10 @@ export interface BlogPostUpdateInput {
   expectedUpdatedAt?: string;
 }
 
+export interface BlogPostStatusMutationInput {
+  expectedUpdatedAt?: string;
+}
+
 export interface BlogCategoryInput {
   name: string;
   slug: string;
@@ -3700,27 +3704,43 @@ export async function listBlogPostRevisions(siteId: string, postId: string): Pro
   return payload.data.revisions.map(toContentRevision);
 }
 
-export async function publishBlogPost(siteId: string, postId: string): Promise<BlogPost> {
+export async function publishBlogPost(siteId: string, postId: string, input: BlogPostStatusMutationInput = {}): Promise<BlogPost> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/publish`, {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
   });
   const payload = await readJson<ApiBlogPostResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to publish blog post');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to publish blog post',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePost(payload.data.post);
 }
 
-export async function archiveBlogPost(siteId: string, postId: string): Promise<BlogPost> {
+export async function archiveBlogPost(siteId: string, postId: string, input: BlogPostStatusMutationInput = {}): Promise<BlogPost> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/archive`, {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
   });
   const payload = await readJson<ApiBlogPostResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to archive blog post');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to archive blog post',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePost(payload.data.post);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { archiveAdminBlogPost, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { archiveAdminBlogPost, getAdminBlogPostById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
@@ -17,13 +17,25 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
+const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
+  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
 );
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  const text = await request.text().catch(() => '');
+  if (!text.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
 
 const adminPostFromRepositoryPost = (post: BackyPost) => {
   const canvasSize = isRecord(post.content.metadata?.canvasSize)
@@ -47,6 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
+    const body = await parseJsonBody(request);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -59,6 +72,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!currentPost) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+      if (expectedUpdatedAt && expectedUpdatedAt !== currentPost.updatedAt) {
+        return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the list loaded it', requestId, {
+          postId: currentPost.id,
+          expectedUpdatedAt,
+          currentUpdatedAt: currentPost.updatedAt,
+          currentPost: adminPostFromRepositoryPost(currentPost),
+        });
       }
 
       await repositories.contentWorkflows.createRevision({
@@ -93,6 +116,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const currentPost = getAdminBlogPostById(site.id, postId);
+
+    if (!currentPost) {
+      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+    }
+
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+    if (expectedUpdatedAt && expectedUpdatedAt !== currentPost.updatedAt) {
+      return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the list loaded it', requestId, {
+        postId: currentPost.id,
+        expectedUpdatedAt,
+        currentUpdatedAt: currentPost.updatedAt,
+        currentPost,
+      });
     }
 
     const post = archiveAdminBlogPost(site.id, postId, request.headers.get('x-backy-actor') || 'admin');

@@ -32,6 +32,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  const text = await request.text().catch(() => '');
+  if (!text.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 const adminPostFromRepositoryPost = (post: BackyPost) => {
   const canvasSize = isRecord(post.content.metadata?.canvasSize)
     ? post.content.metadata.canvasSize
@@ -54,6 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
+    const body = await parseJsonBody(request);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -66,6 +79,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!currentPost) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+      if (expectedUpdatedAt && expectedUpdatedAt !== currentPost.updatedAt) {
+        return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the list loaded it', requestId, {
+          postId: currentPost.id,
+          expectedUpdatedAt,
+          currentUpdatedAt: currentPost.updatedAt,
+          currentPost: adminPostFromRepositoryPost(currentPost),
+        });
       }
 
       const readiness = (await buildRepositorySiteReadiness(repositories, site)).posts.find((item) => item.id === currentPost.id);
@@ -124,6 +147,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!currentPost) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+    }
+
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
+    if (expectedUpdatedAt && expectedUpdatedAt !== currentPost.updatedAt) {
+      return errorResponse(409, 'BLOG_VERSION_CONFLICT', 'Post has changed since the list loaded it', requestId, {
+        postId: currentPost.id,
+        expectedUpdatedAt,
+        currentUpdatedAt: currentPost.updatedAt,
+        currentPost,
+      });
     }
 
     const readiness = buildSiteReadiness(site).posts.find((item) => item.id === currentPost.id);
