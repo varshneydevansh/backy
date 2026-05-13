@@ -842,6 +842,78 @@ const repeaterDatasetForElement = (element: RenderElement): DatasetManifest | nu
   };
 };
 
+const repeaterRecordValueForFieldPath = (
+  siteId: string,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  fieldPath: unknown,
+): unknown => {
+  const path = typeof fieldPath === 'string' ? fieldPath : '';
+  const [referenceKey, joinedKey] = path.split('.');
+  if (!referenceKey || !joinedKey) {
+    return undefined;
+  }
+
+  const referenceField = collection.fields.find((field) => field.key === referenceKey);
+  const referenceCollectionId = typeof referenceField?.referenceCollectionId === 'string'
+    ? referenceField.referenceCollectionId
+    : '';
+  if (!referenceCollectionId) {
+    return undefined;
+  }
+
+  const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
+  if (!referenceCollection) {
+    return undefined;
+  }
+
+  const referenceValue = record.values[referenceKey];
+  if (Array.isArray(referenceValue)) {
+    return referenceValue
+      .map((entry) => (typeof entry === 'string' ? getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry) : null))
+      .filter((entry): entry is StoreCollectionRecord => Boolean(entry))
+      .map((entry) => entry.values[joinedKey])
+      .filter((entry) => entry !== undefined && entry !== null)
+      .join(', ');
+  }
+
+  if (typeof referenceValue !== 'string' || referenceValue.length === 0) {
+    return undefined;
+  }
+
+  return getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, referenceValue)?.values[joinedKey];
+};
+
+const hydrateRepeaterJoinedRecordValues = (
+  siteId: string,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  fieldPaths: unknown[],
+): StoreCollectionRecord => {
+  const joinedValues = fieldPaths.reduce<Record<string, unknown>>((acc, fieldPath) => {
+    if (typeof fieldPath !== 'string' || !fieldPath.includes('.')) {
+      return acc;
+    }
+    const value = repeaterRecordValueForFieldPath(siteId, collection, record, fieldPath);
+    if (value !== undefined) {
+      acc[fieldPath] = value;
+    }
+    return acc;
+  }, {});
+
+  if (Object.keys(joinedValues).length === 0) {
+    return record;
+  }
+
+  return {
+    ...record,
+    values: {
+      ...record.values,
+      ...joinedValues,
+    },
+  };
+};
+
 const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderElement => {
   if (element.type !== 'repeater') {
     return element;
@@ -859,7 +931,6 @@ const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderE
 
   const query = isRecord(dataset.query) ? dataset.query : {};
   const pagination = isRecord(dataset.pagination) ? dataset.pagination : null;
-  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination);
   const titleField = typeof element.props.titleField === 'string'
     ? element.props.titleField
     : typeof element.props.repeaterTitleField === 'string'
@@ -875,6 +946,8 @@ const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderE
     : typeof element.props.repeaterImageField === 'string'
       ? element.props.repeaterImageField
       : 'image';
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination)
+    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, [titleField, descriptionField, imageField]));
 
   return {
     ...element,

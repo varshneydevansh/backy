@@ -8663,6 +8663,7 @@ const testRepeaterControls = async (client, collectionId) => {
     })()`);
     if (
       controlsReady.titleFields.includes('title') &&
+      controlsReady.titleFields.includes('author.name') &&
       controlsReady.descriptionFields.includes('summary') &&
       controlsReady.imageFields.includes('thumbnail') &&
       controlsReady.filterFields.includes('category') &&
@@ -8676,6 +8677,7 @@ const testRepeaterControls = async (client, collectionId) => {
 
   assert(
     controlsReady?.titleFields?.includes('title') &&
+      controlsReady?.titleFields?.includes('author.name') &&
       controlsReady?.descriptionFields?.includes('summary') &&
       controlsReady?.imageFields?.includes('thumbnail') &&
       controlsReady?.filterFields?.includes('category') &&
@@ -8685,7 +8687,7 @@ const testRepeaterControls = async (client, collectionId) => {
   );
 
   await setFormControlByTestId(client, 'editor-repeater-dataset-id', `dataset_${collectionId}_smoke_repeater`);
-  await setFormControlByTestId(client, 'editor-repeater-title-field', 'title');
+  await setFormControlByTestId(client, 'editor-repeater-title-field', 'author.name');
   await setFormControlByTestId(client, 'editor-repeater-description-field', 'summary');
   await setFormControlByTestId(client, 'editor-repeater-image-field', 'thumbnail');
   await setFormControlByTestId(client, 'editor-repeater-search', 'featured');
@@ -8733,12 +8735,12 @@ const testRepeaterControls = async (client, collectionId) => {
 
   assert(state.collectionId === collectionId, `Repeater did not select collection: ${JSON.stringify(state)}`);
   assert(state.datasetId === `dataset_${collectionId}_smoke_repeater`, `Repeater dataset id mismatch: ${JSON.stringify(state)}`);
-  assert(state.titleField === 'title' && state.descriptionField === 'summary' && state.imageField === 'thumbnail', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
+  assert(state.titleField === 'author.name' && state.descriptionField === 'summary' && state.imageField === 'thumbnail', `Repeater field mapping mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Repeater query filter mismatch: ${JSON.stringify(state)}`);
   assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Repeater filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
   assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
-  assert(/sort rank desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
+  assert(/title join author\.name/i.test(state.summary) && /sort rank desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
 
   return state;
 };
@@ -8752,7 +8754,7 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   assert(repeater?.type === 'repeater', `Persisted repeater missing: ${JSON.stringify(repeater)}`);
   assert(props.collectionId === collectionId, `Persisted repeater collection mismatch: ${JSON.stringify(props)}`);
   assert(props.datasetId === `dataset_${collectionId}_smoke_repeater`, `Persisted repeater dataset mismatch: ${JSON.stringify(props)}`);
-  assert(props.titleField === 'title' && props.descriptionField === 'summary' && props.imageField === 'thumbnail', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
+  assert(props.titleField === 'author.name' && props.descriptionField === 'summary' && props.imageField === 'thumbnail', `Persisted repeater field mapping mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.q === 'featured', `Persisted repeater search mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.fieldKey === 'category' && props.query?.fieldValue === 'Featured', `Persisted repeater filter mismatch: ${JSON.stringify(props)}`);
   assert(props.query?.sortBy === 'rank' && props.query?.sortDirection === 'desc', `Persisted repeater sort mismatch: ${JSON.stringify(props)}`);

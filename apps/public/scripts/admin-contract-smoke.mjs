@@ -5037,7 +5037,7 @@ try {
               props: {
                 collectionId: createdCollectionId,
                 datasetId: 'dataset_contract_repeater',
-                titleField: 'title',
+                titleField: 'author.name',
                 descriptionField: 'summary',
                 columns: 2,
                 limit: 6,
@@ -5115,9 +5115,14 @@ try {
         element.id === 'bound_repeater'
         && element.type === 'repeater'
         && element.props?.datasetId === 'dataset_contract_repeater'
-        && element.props?.records?.some((record) => record.id === createdCollectionRecordId && record.href === dynamicItemPath)
+        && element.props?.titleField === 'author.name'
+        && element.props?.records?.some((record) => (
+          record.id === createdCollectionRecordId
+          && record.href === dynamicItemPath
+          && record.values?.['author.name'] === 'Contract Author'
+        ))
       )),
-      `${boundRender.url} did not hydrate repeater records into element props`,
+      `${boundRender.url} did not hydrate joined repeater records into element props`,
     );
     assert(
       boundRender.json?.data?.editableMap?.[`collection.${createdCollectionId}.bound_title.title`]?.scope === 'collectionRecord',

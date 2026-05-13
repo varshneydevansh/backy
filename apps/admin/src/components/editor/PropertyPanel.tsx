@@ -4275,6 +4275,45 @@ const fieldExists = (collection: Collection | null, key: string): boolean => (
   Boolean(collection?.fields.some((field) => field.key === key))
 );
 
+const fieldPathExists = (collection: Collection | null, collections: Collection[], key: string): boolean => {
+  if (!collection || !key) return false;
+  if (fieldExists(collection, key)) return true;
+  const [referenceKey, joinedKey] = key.split('.');
+  if (!referenceKey || !joinedKey) return false;
+  const referenceField = collection.fields.find((field) => field.key === referenceKey);
+  const referenceCollection = referenceField?.referenceCollectionId
+    ? collections.find((candidate) => candidate.id === referenceField.referenceCollectionId)
+    : null;
+  return Boolean(referenceCollection?.fields.some((field) => field.key === joinedKey));
+};
+
+const collectionFieldPathOptions = (
+  collection: Collection | null,
+  collections: Collection[],
+  options: { includeNone?: boolean } = {},
+): Array<{ value: string; label: string }> => {
+  if (!collection) return options.includeNone ? [{ value: '', label: 'None' }] : [];
+  const directOptions = collection.fields.map((field) => ({
+    value: field.key,
+    label: field.label,
+  }));
+  const joinOptions = collection.fields.flatMap((field) => {
+    if (!field.referenceCollectionId) return [];
+    const referenceCollection = collections.find((candidate) => candidate.id === field.referenceCollectionId);
+    if (!referenceCollection) return [];
+    return referenceCollection.fields.map((referenceField) => ({
+      value: `${field.key}.${referenceField.key}`,
+      label: `${field.label} -> ${referenceCollection.name}: ${referenceField.label}`,
+    }));
+  });
+
+  return [
+    ...(options.includeNone ? [{ value: '', label: 'None' }] : []),
+    ...directOptions,
+    ...joinOptions,
+  ];
+};
+
 const defaultFieldKey = (
   collection: Collection | null,
   preferredKeys: string[],
@@ -4602,6 +4641,8 @@ function RepeaterDataProperties({
   const selectedColumns = normalizedNumberInput(props.columns || 3);
   const selectedGap = normalizedNumberInput(props.gap ?? 16);
   const selectedEmptyMessage = typeof props.emptyMessage === 'string' ? props.emptyMessage : 'No records yet.';
+  const repeaterFieldOptions = collectionFieldPathOptions(selectedCollection, collections);
+  const repeaterImageFieldOptions = collectionFieldPathOptions(selectedCollection, collections, { includeNone: true });
 
   const updateRepeater = (updates: {
     collectionId?: string;
@@ -4637,11 +4678,11 @@ function RepeaterDataProperties({
     }
 
     const titleField = updates.titleField
-      ?? (fieldExists(collection, selectedTitleField) ? selectedTitleField : defaultFieldKey(collection, ['title', 'name', 'label'], ['text']));
+      ?? (fieldPathExists(collection, collections, selectedTitleField) ? selectedTitleField : defaultFieldKey(collection, ['title', 'name', 'label'], ['text']));
     const descriptionField = updates.descriptionField
-      ?? (fieldExists(collection, selectedDescriptionField) ? selectedDescriptionField : defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']));
+      ?? (fieldPathExists(collection, collections, selectedDescriptionField) ? selectedDescriptionField : defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text']));
     const imageField = updates.imageField
-      ?? (fieldExists(collection, selectedImageField) ? selectedImageField : defaultFieldKey(collection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false }));
+      ?? (fieldPathExists(collection, collections, selectedImageField) ? selectedImageField : defaultFieldKey(collection, ['image', 'coverImage', 'thumbnail'], ['image'], { fallbackToFirst: false }));
     const datasetId = (updates.datasetId ?? selectedDatasetId) || `dataset_${collection.id}_${element.id}`;
     const search = updates.search ?? selectedSearch;
     const filterField = updates.filterField ?? selectedFilterField;
@@ -4741,7 +4782,7 @@ function RepeaterDataProperties({
                 Title field
               </label>
               <select
-                value={fieldExists(selectedCollection, selectedTitleField) ? selectedTitleField : ''}
+                value={fieldPathExists(selectedCollection, collections, selectedTitleField) ? selectedTitleField : ''}
                 onChange={(event) => updateRepeater({ titleField: event.target.value })}
                 data-testid="editor-repeater-title-field"
                 className={cn(
@@ -4749,8 +4790,8 @@ function RepeaterDataProperties({
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
               >
-                {selectedCollection.fields.map((field) => (
-                  <option key={field.key} value={field.key}>
+                {repeaterFieldOptions.map((field) => (
+                  <option key={field.value} value={field.value}>
                     {field.label}
                   </option>
                 ))}
@@ -4762,7 +4803,7 @@ function RepeaterDataProperties({
                 Description
               </label>
               <select
-                value={fieldExists(selectedCollection, selectedDescriptionField) ? selectedDescriptionField : ''}
+                value={fieldPathExists(selectedCollection, collections, selectedDescriptionField) ? selectedDescriptionField : ''}
                 onChange={(event) => updateRepeater({ descriptionField: event.target.value })}
                 data-testid="editor-repeater-description-field"
                 className={cn(
@@ -4770,8 +4811,8 @@ function RepeaterDataProperties({
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
               >
-                {selectedCollection.fields.map((field) => (
-                  <option key={field.key} value={field.key}>
+                {repeaterFieldOptions.map((field) => (
+                  <option key={field.value} value={field.value}>
                     {field.label}
                   </option>
                 ))}
@@ -4784,7 +4825,7 @@ function RepeaterDataProperties({
               Image field
             </label>
             <select
-              value={fieldExists(selectedCollection, selectedImageField) ? selectedImageField : ''}
+              value={fieldPathExists(selectedCollection, collections, selectedImageField) ? selectedImageField : ''}
               onChange={(event) => updateRepeater({ imageField: event.target.value })}
               data-testid="editor-repeater-image-field"
               className={cn(
@@ -4792,9 +4833,8 @@ function RepeaterDataProperties({
                 'focus:outline-none focus:ring-2 focus:ring-ring'
               )}
             >
-              <option value="">None</option>
-              {selectedCollection.fields.map((field) => (
-                <option key={field.key} value={field.key}>
+              {repeaterImageFieldOptions.map((field) => (
+                <option key={field.value || 'none'} value={field.value}>
                   {field.label}
                 </option>
               ))}
@@ -4951,6 +4991,8 @@ function RepeaterDataProperties({
 
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             Dataset: {selectedDatasetId}
+            {selectedTitleField.includes('.') ? ` • title join ${selectedTitleField}` : ''}
+            {selectedDescriptionField.includes('.') ? ` • description join ${selectedDescriptionField}` : ''}
             {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
             {selectedLimit ? ` • limit ${selectedLimit}` : ''}
             {selectedColumns ? ` • ${selectedColumns} columns` : ''}
