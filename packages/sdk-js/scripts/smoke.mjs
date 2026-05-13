@@ -378,6 +378,7 @@ assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing
 assert(openapi.paths?.[manifest.data.endpoints.blogCategories]?.get, 'openapi() missing manifest-advertised blog categories path');
 assert(openapi.paths?.[manifest.data.endpoints.blogTags]?.get, 'openapi() missing manifest-advertised blog tags path');
 assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() missing manifest-advertised blog authors path');
+assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get, 'openapi() missing manifest-advertised blog RSS path');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
 assert(openapi.components?.schemas?.GoneRoute, 'openapi() missing gone route schema');
 
@@ -412,6 +413,11 @@ assert(revalidatedPageDetail.notModified === true, 'pagesCached() did not return
 
 const blogList = await client.blog({ limit: 5 });
 assert(Array.isArray(blogList.data.posts), 'blog() missing posts array');
+assert(manifest.data.endpoints.blogRss === `/api/sites/${client.getSiteId()}/blog/rss`, 'manifest() missing blog RSS endpoint');
+const blogRssUrl = client.blogRssUrl({ limit: 5 });
+assert(blogRssUrl.includes(`/api/sites/${client.getSiteId()}/blog/rss?limit=5`), 'blogRssUrl() returned wrong URL');
+const blogRss = await client.blogRss({ limit: 5 });
+assert(blogRss.includes('<rss version="2.0"'), 'blogRss() did not return RSS XML');
 const cachedBlogList = await client.blogCached({ limit: 5 });
 assert(cachedBlogList.notModified === false, 'blogCached() first list request should return a body');
 assert(Array.isArray(cachedBlogList.body.data.posts), 'blogCached() missing posts array');
@@ -581,10 +587,18 @@ assert(cachedReportReasons.meta.etag, 'reportReasonsCached() missing response ET
 const revalidatedReportReasons = await client.reportReasonsCached({ etag: cachedReportReasons.meta.etag });
 assert(revalidatedReportReasons.notModified === true, 'reportReasonsCached() did not return notModified for matching ETag');
 
-const comments = await client.siteComments({ limit: 5 });
+await loginAdminApi();
+const privateClient = createBackyClient({
+  baseUrl,
+  siteId: client.getSiteId(),
+  requestIdFactory: () => 'sdk-private-smoke-request',
+  defaultHeaders: adminClientHeaders(),
+});
+
+const comments = await privateClient.siteComments({ limit: 5 });
 assert(Array.isArray(comments.data.comments), 'siteComments() missing comments array');
 
-const events = await client.events({ limit: 5 });
+const events = await privateClient.events({ limit: 5 });
 assert(Array.isArray(events.data.events), 'events() missing events array');
 
 let commerceCatalogChecked = false;
@@ -863,6 +877,8 @@ console.log(JSON.stringify({
     'pages',
     'pagesCached',
     'blog',
+    'blogRss',
+    'blogRssUrl',
     'blogCached',
     'blogCategories',
     'blogCategoriesCached',

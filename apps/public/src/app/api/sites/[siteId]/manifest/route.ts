@@ -280,6 +280,7 @@ const buildRepositoryManifest = (
         mediaTransform: `/api/sites/${input.site.id}/media/{mediaId}/transform?width={width}`,
         pages: `/api/sites/${input.site.id}/pages`,
         blog: `/api/sites/${input.site.id}/blog`,
+        blogRss: `/api/sites/${input.site.id}/blog/rss`,
         blogCategories: `/api/sites/${input.site.id}/blog/categories`,
         blogTags: `/api/sites/${input.site.id}/blog/tags`,
         blogAuthors: `/api/sites/${input.site.id}/blog/authors`,
@@ -339,6 +340,8 @@ const buildRepositoryManifest = (
         },
         blog: {
           count: input.posts.length,
+          rssUrl: `/api/sites/${input.site.id}/blog/rss`,
+          hostedRssPath: '/blog/rss.xml',
           items: input.posts.map((post) => ({
             id: post.id,
             title: post.title,
@@ -595,6 +598,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           mediaTransform: `/api/sites/${site.id}/media/{mediaId}/transform?width={width}`,
           pages: `/api/sites/${site.id}/pages`,
           blog: `/api/sites/${site.id}/blog`,
+          blogRss: `/api/sites/${site.id}/blog/rss`,
           blogCategories: `/api/sites/${site.id}/blog/categories`,
           blogTags: `/api/sites/${site.id}/blog/tags`,
           blogAuthors: `/api/sites/${site.id}/blog/authors`,
@@ -654,6 +658,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           blog: {
             count: posts.length,
+            rssUrl: `/api/sites/${site.id}/blog/rss`,
+            hostedRssPath: '/blog/rss.xml',
             items: posts.map((post) => ({
               id: post.id,
               title: post.title,

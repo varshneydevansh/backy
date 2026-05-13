@@ -390,6 +390,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/blog/rss`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'Fetch the public blog RSS 2.0 feed',
+            operationId: 'getBackyBlogRssFeed',
+            parameters: [
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }, 'Maximum feed item count'),
+            ],
+            responses: {
+              '200': {
+                description: 'RSS 2.0 feed for visible published blog posts',
+                content: {
+                  'application/rss+xml': {
+                    schema: { type: 'string' },
+                  },
+                },
+              },
+              '404': {
+                description: 'Site not found or hidden',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/blog/categories`]: {
           get: {
             tags: ['Content'],

@@ -1227,6 +1227,19 @@ export class BackyClient {
     });
   }
 
+  blogRssUrl(options: { siteId?: string; limit?: number } = {}): string {
+    const siteId = options.siteId ?? this.requireSiteId();
+    const query = options.limit ? `?limit=${encodeURIComponent(String(options.limit))}` : '';
+    return `${this.baseUrl}/api/sites/${encodeURIComponent(siteId)}/blog/rss${query}`;
+  }
+
+  async blogRss(options: { siteId?: string; limit?: number; requestId?: string } = {}): Promise<string> {
+    return this.requestText(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/rss`, {
+      query: { limit: options.limit },
+      requestId: options.requestId,
+    });
+  }
+
   blogCategories(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ categories: BackyBlogCategory[] } & Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/categories`);
   }
@@ -1784,6 +1797,41 @@ export class BackyClient {
       body: json as TBody,
       meta,
     };
+  }
+
+  private async requestText(
+    path: string,
+    options: {
+      method?: string;
+      query?: Record<string, string | number | boolean | undefined>;
+      body?: unknown;
+      requestId?: string;
+    } = {},
+  ): Promise<string> {
+    const url = new URL(path.startsWith('http') ? path : `${this.baseUrl}${path}`);
+    for (const [key, value] of Object.entries(options.query || {})) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+
+    const headers = new Headers(this.defaultHeaders);
+    headers.set('x-request-id', options.requestId ?? this.requestIdFactory());
+    if (options.body !== undefined && !headers.has('content-type')) {
+      headers.set('content-type', 'application/json');
+    }
+
+    const response = await this.fetchImpl(url, {
+      method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backy API request failed with HTTP ${response.status} for ${response.url || path}.`);
+    }
+
+    return response.text();
   }
 
   private async fetchJson(

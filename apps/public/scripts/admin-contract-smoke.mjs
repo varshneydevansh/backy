@@ -2631,6 +2631,11 @@ try {
     const hiddenScheduledPostRender = await request(`/api/sites/${createdSiteId}/render?path=/blog/${postSlug}`);
     assert(hiddenScheduledPostRender.response.status === 404, `${hiddenScheduledPostRender.url} expected future scheduled post render to be hidden`);
 
+    const hiddenScheduledPostRss = await request(`/api/sites/${createdSiteId}/blog/rss`);
+    assert(hiddenScheduledPostRss.response.status === 200, `${hiddenScheduledPostRss.url} expected RSS feed to remain available`);
+    assert(hiddenScheduledPostRss.response.headers.get('content-type')?.includes('application/rss+xml'), `${hiddenScheduledPostRss.url} expected RSS content type`);
+    assert(!hiddenScheduledPostRss.text.includes(postSlug), `${hiddenScheduledPostRss.url} exposed future scheduled post in RSS feed`);
+
     const pastPostSchedule = new Date(Date.now() - 60 * 1000).toISOString();
     const pastScheduledPost = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',
@@ -2664,6 +2669,24 @@ try {
     assert(visibleScheduledPost.json?.data?.post?.frontendDesign?.tokens?.fonts?.heading === 'Newsreader', `${visibleScheduledPost.url} missing normalized blog tokens`);
     assert(Array.isArray(visibleScheduledPost.json?.data?.post?.frontendDesign?.bindingHints) && visibleScheduledPost.json.data.post.frontendDesign.bindingHints.length === 2, `${visibleScheduledPost.url} missing normalized blog binding hints`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
+
+    const visibleBlogRss = await request(`/api/sites/${createdSiteId}/blog/rss?limit=10`);
+    assert(visibleBlogRss.response.status === 200, `${visibleBlogRss.url} expected blog RSS feed`);
+    assert(visibleBlogRss.response.headers.get('content-type')?.includes('application/rss+xml'), `${visibleBlogRss.url} expected RSS content type`);
+    assert(visibleBlogRss.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleBlogRss.url} missing discovery cache scope`);
+    assert(visibleBlogRss.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleBlogRss.url} missing public contract version`);
+    assert(visibleBlogRss.response.headers.get('x-backy-schema-version') === 'rss.2.0', `${visibleBlogRss.url} missing RSS schema version`);
+    assert(visibleBlogRss.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleBlogRss.url} missing RSS site id header`);
+    assert(visibleBlogRss.text.includes('<rss version="2.0"'), `${visibleBlogRss.url} missing RSS root`);
+    assert(visibleBlogRss.text.includes(`<title>Admin Contract Post</title>`), `${visibleBlogRss.url} missing post title item`);
+    assert(visibleBlogRss.text.includes(`/blog/${postSlug}`), `${visibleBlogRss.url} missing post canonical link`);
+    assert(visibleBlogRss.text.includes('Updated Admin Contract Category'), `${visibleBlogRss.url} missing category term`);
+    assert(visibleBlogRss.text.includes('Admin User'), `${visibleBlogRss.url} missing author metadata`);
+
+    const hostedBlogRss = await request(`/sites/${siteSlug}/blog/rss.xml`);
+    assert(hostedBlogRss.response.status === 200, `${hostedBlogRss.url} expected hosted blog RSS feed`);
+    assert(hostedBlogRss.response.headers.get('content-type')?.includes('application/rss+xml'), `${hostedBlogRss.url} expected hosted RSS content type`);
+    assert(hostedBlogRss.text.includes(`/blog/${postSlug}`), `${hostedBlogRss.url} missing hosted RSS post link`);
 
     const capturedBlogTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
       method: 'POST',
@@ -2721,6 +2744,9 @@ try {
     const blogFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
     assert(blogFrontendManifest.response.status === 200, `${blogFrontendManifest.url} expected 200, got ${blogFrontendManifest.response.status}`);
     validateAiFrontendManifest(blogFrontendManifest.json, 'blog frontend design manifest');
+    assert(blogFrontendManifest.json?.data?.endpoints?.blogRss === `/api/sites/${createdSiteId}/blog/rss`, `${blogFrontendManifest.url} missing blog RSS endpoint`);
+    assert(blogFrontendManifest.json?.data?.modules?.blog?.rssUrl === `/api/sites/${createdSiteId}/blog/rss`, `${blogFrontendManifest.url} missing blog RSS module URL`);
+    assert(blogFrontendManifest.json?.data?.modules?.blog?.hostedRssPath === '/blog/rss.xml', `${blogFrontendManifest.url} missing hosted RSS path`);
     assert(blogFrontendManifest.json?.data?.modules?.blog?.items?.some((post) => (
       post.id === createdPostId &&
       post.frontendDesign?.templateId === 'contract-blog-template' &&
@@ -3866,6 +3892,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages/{pageId}/comments`]?.get, `${publicOpenApi.url} missing page comments list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages/{pageId}/comments/{commentId}`]?.patch, `${publicOpenApi.url} missing page comment update operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/{postId}/comments`]?.get, `${publicOpenApi.url} missing blog comments list operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get, `${publicOpenApi.url} missing blog RSS operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.get, `${publicOpenApi.url} missing comment blocklist operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.delete, `${publicOpenApi.url} missing comment blocklist delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
