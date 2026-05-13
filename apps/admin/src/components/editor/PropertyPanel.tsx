@@ -802,9 +802,10 @@ export function PropertyPanel({
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media) => {
+          const mediaPropKey = mediaField === 'video' ? 'src' : mediaField;
           const nextProps = {
             ...element.props,
-            [mediaField]: media.url,
+            [mediaPropKey]: media.url,
             mediaId: media.id,
             mediaScope: media.scope || mediaContext?.scope || 'global',
             mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
@@ -1290,6 +1291,7 @@ function ContentProperties({
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Select from Media Library"
                 onClick={() => onOpenMedia('video')}
+                data-testid="editor-video-select-media"
               >
                 Select
               </button>
@@ -1297,6 +1299,7 @@ function ContentProperties({
                 className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
                 title="Upload video"
                 onClick={() => onOpenMedia('video', 'upload')}
+                data-testid="editor-video-upload-media"
               >
                 Upload
               </button>

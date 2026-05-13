@@ -288,13 +288,13 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 17a. Media Upload Modal
 **File:** `components/editor/MediaLibraryModal.tsx`
-**Current State:** ✅ Working for editor image uploads
+**Current State:** ✅ Working for editor image and video uploads
 - Image elements expose Select and Upload media actions from the property panel.
 - Upload opens the modal directly on the upload tab with image-only filtering and `image/*` file acceptance.
 - Upload defaults include visibility, folder, tags, and the active page/post/global scope context.
 - Uploaded page-scoped images return to the library tab, can be selected, update the image source/preview, and persist `src`, `mediaId`, `mediaScope`, and `mediaScopeTargetId` into the page canvas payload.
 - Focused smoke coverage: `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
-- Remaining: broaden equivalent upload/select coverage for video/embed/font consumers and route-level media management workflows.
+- Remaining: broaden equivalent upload/select coverage for embed/font consumers and route-level media management workflows.
 
 ### 18. Grid/Snap
 **Current State:** ✅ Working
@@ -375,7 +375,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Brought public quote rendering into parity for appearance, typography, border, and citation styles with renderer smoke coverage.
 - Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.
-- Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Added focused editor media upload coverage for image and video upload modal open state, real file upload, library selection, preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.

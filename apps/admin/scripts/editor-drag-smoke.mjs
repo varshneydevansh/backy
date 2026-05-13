@@ -96,6 +96,21 @@ const createSmokeUploadImageFile = () => {
 
   return { filename, filePath };
 };
+const createSmokeUploadVideoFile = () => {
+  const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.mp4`;
+  const filePath = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(
+    filePath,
+    Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+      0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32,
+      0x00, 0x00, 0x00, 0x08, 0x6d, 0x64, 0x61, 0x74,
+    ]),
+  );
+
+  return { filename, filePath };
+};
 const CHECKBOX_BEHAVIOR_SPEC = {
   label: 'Smoke checkbox label',
   name: 'smoke_channels',
@@ -8159,6 +8174,32 @@ const waitForImageSourceValue = async (client, expectedUrl) => {
   throw new Error(`Uploaded media did not update image source: ${JSON.stringify(lastState)}`);
 };
 
+const waitForVideoSourceValue = async (client, expectedUrl) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="editor-video-src"]');
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const node = document.querySelector('[data-element-id="smoke-video"]');
+      const video = node?.querySelector('video');
+      return {
+        value: input instanceof HTMLInputElement ? input.value : '',
+        modalOpen: Boolean(modal),
+        previewSrc: video?.getAttribute('src') || '',
+      };
+    })()`);
+
+    if (!lastState.modalOpen && lastState.value === expectedUrl && lastState.previewSrc === expectedUrl) {
+      return lastState;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Uploaded media did not update video source: ${JSON.stringify(lastState)}`);
+};
+
 const waitForPersistedImageMediaSelection = async (pageId, selectedMedia) => {
   let lastProps = null;
 
@@ -8183,8 +8224,33 @@ const waitForPersistedImageMediaSelection = async (pageId, selectedMedia) => {
   throw new Error(`Persisted uploaded media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
 };
 
+const waitForPersistedVideoMediaSelection = async (pageId, selectedMedia) => {
+  let lastProps = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-video');
+    const props = element?.props || {};
+    lastProps = props;
+
+    if (
+      props.src === selectedMedia.url &&
+      props.mediaId === selectedMedia.id &&
+      props.mediaScope === selectedMedia.scope &&
+      (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
+    ) {
+      return props;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted uploaded video media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+};
+
 const testMediaUploadModalControls = async (client, pageId) => {
-  const uploadFile = createSmokeUploadImageFile();
+  const imageUploadFile = createSmokeUploadImageFile();
+  const videoUploadFile = createSmokeUploadVideoFile();
 
   try {
     await selectLayerById(client, 'smoke-image');
@@ -8215,25 +8281,72 @@ const testMediaUploadModalControls = async (client, pageId) => {
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
     );
 
-    await setFileInputByTestId(client, 'media-upload-input', [uploadFile.filePath]);
-    const uploaded = await waitForUploadedMediaItem(client, uploadFile.filename);
-    const selected = await clickMediaLibraryItemByName(client, uploadFile.filename);
+    await setFileInputByTestId(client, 'media-upload-input', [imageUploadFile.filePath]);
+    const uploaded = await waitForUploadedMediaItem(client, imageUploadFile.filename);
+    const selected = await clickMediaLibraryItemByName(client, imageUploadFile.filename);
     const imageSource = await waitForImageSourceValue(client, selected.url);
     await clickSave(client);
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
 
+    await selectLayerById(client, 'smoke-video');
+    await switchToPropertiesPanel(client);
+    await clickControlByTestId(client, 'editor-video-upload-media');
+
+    const videoOpened = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeTab: modal?.getAttribute('data-active-tab') || '',
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
+        hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+      };
+    })()`);
+
+    assert(
+      videoOpened.hasModal &&
+        videoOpened.activeTab === 'upload' &&
+        videoOpened.allowedTypes === 'video' &&
+        videoOpened.uploadFilter === 'video' &&
+        videoOpened.fileAccept === 'video/*' &&
+        videoOpened.hasVisibility &&
+        videoOpened.hasFolder,
+      `Video upload modal opened with unexpected state: ${JSON.stringify(videoOpened)}`,
+    );
+
+    await setFileInputByTestId(client, 'media-upload-input', [videoUploadFile.filePath]);
+    const videoUploaded = await waitForUploadedMediaItem(client, videoUploadFile.filename);
+    const videoSelected = await clickMediaLibraryItemByName(client, videoUploadFile.filename);
+    const videoSource = await waitForVideoSourceValue(client, videoSelected.url);
+    await clickSave(client);
+    const videoSavedStatus = await waitForEditorMutationReady(client, 'after video media upload smoke save');
+    const videoPersisted = await waitForPersistedVideoMediaSelection(pageId, videoSelected);
+
     return {
-      opened,
-      uploaded,
-      selected,
-      imageSource,
-      savedStatus,
-      persisted,
+      image: {
+        opened,
+        uploaded,
+        selected,
+        imageSource,
+        savedStatus,
+        persisted,
+      },
+      video: {
+        opened: videoOpened,
+        uploaded: videoUploaded,
+        selected: videoSelected,
+        videoSource,
+        savedStatus: videoSavedStatus,
+        persisted: videoPersisted,
+      },
     };
   } finally {
     try {
-      fs.rmSync(uploadFile.filePath, { force: true });
+      fs.rmSync(imageUploadFile.filePath, { force: true });
+      fs.rmSync(videoUploadFile.filePath, { force: true });
     } catch {
       // Temp smoke upload file cleanup is best-effort.
     }
