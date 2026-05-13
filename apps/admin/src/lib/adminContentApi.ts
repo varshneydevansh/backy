@@ -2454,6 +2454,7 @@ const toStoreSite = (site: ApiSite): Site => ({
   description: site.description || '',
   customDomain: site.customDomain || null,
   status: toAdminSiteStatus(site.status, site.isPublished),
+  settings: site.settings,
   publicSiteId: site.id,
   pageCount: 0,
   lastUpdated: site.updatedAt || site.createdAt || new Date().toISOString(),

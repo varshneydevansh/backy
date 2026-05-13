@@ -273,6 +273,47 @@ const getPublicPreviewHref = (site: Site) => {
   return `/sites/${site.slug}`;
 };
 
+type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
+
+const domainVerificationStatusClass: Record<SiteDomainVerification['status'], string> = {
+  not_started: 'bg-muted text-muted-foreground',
+  pending: 'bg-amber-50 text-amber-700',
+  verified: 'bg-emerald-50 text-emerald-700',
+  failed: 'bg-red-50 text-red-700',
+};
+
+const domainVerificationStatusLabel: Record<SiteDomainVerification['status'], string> = {
+  not_started: 'Not started',
+  pending: 'Pending DNS',
+  verified: 'Verified',
+  failed: 'Needs attention',
+};
+
+const buildDomainVerificationToken = (site: Site): string => {
+  const rawId = (site.publicSiteId || site.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+  return `backy-${site.slug}-${rawId}`;
+};
+
+const getDomainVerification = (site: Site): SiteDomainVerification => {
+  const current = site.settings?.domainVerification;
+  const domain = site.customDomain || `${site.slug}.backy.app`;
+  const token = current?.token || buildDomainVerificationToken(site);
+
+  return {
+    status: site.customDomain ? (current?.status || 'not_started') : 'verified',
+    method: 'dns-txt',
+    domain: current?.domain || domain,
+    token,
+    txtHost: current?.txtHost || `_backy.${domain}`,
+    txtValue: current?.txtValue || `backy-site-verification=${token}`,
+    cnameTarget: current?.cnameTarget || `${site.slug}.backy.app`,
+    requestedAt: current?.requestedAt || null,
+    checkedAt: current?.checkedAt || null,
+    verifiedAt: current?.verifiedAt || null,
+    lastError: current?.lastError || null,
+  };
+};
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -383,7 +424,7 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
     })),
     requiredNextControls: [
       'Per-site theme tokens, animations, and component variants',
-      'Domain verification and Vercel deploy orchestration',
+      'Vercel deploy orchestration',
       'Supabase auth/database adapter settings',
       'Commerce checkout provider and tax/shipping rules',
       'Public registration and member account flows',
@@ -565,12 +606,16 @@ function SitesListView() {
     selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
   ), [adminApiBase, publicApiBase, selectedApiSite]);
   const selectedSiteRouteSearch = useMemo(() => getSiteRouteSearch(selectedApiSite), [selectedApiSite]);
+  const selectedDomainVerification = useMemo(() => (
+    selectedApiSite ? getDomainVerification(selectedApiSite) : null
+  ), [selectedApiSite]);
   const siteLaunchReadiness = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
     const draft = sites.filter((site) => site.status === 'draft').length;
     const archived = sites.filter((site) => site.status === 'archived').length;
     const pageTotal = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
     const customDomains = sites.filter((site) => site.customDomain).length;
+    const verifiedCustomDomains = sites.filter((site) => site.customDomain && getDomainVerification(site).status === 'verified').length;
     const checks = [
       {
         label: 'Workspace inventory',
@@ -589,8 +634,10 @@ function SitesListView() {
       },
       {
         label: 'Domain routing',
-        detail: customDomains > 0 ? `${customDomains} custom domain${customDomains === 1 ? '' : 's'} configured` : 'Backy preview domains are available until custom domains are added.',
-        ready: sites.length > 0,
+        detail: customDomains > 0
+          ? `${verifiedCustomDomains}/${customDomains} custom domain${customDomains === 1 ? '' : 's'} verified`
+          : 'Backy preview domains are managed automatically until custom domains are added.',
+        ready: customDomains === 0 ? sites.length > 0 : verifiedCustomDomains === customDomains,
       },
       {
         label: 'API handoff',
@@ -636,6 +683,52 @@ function SitesListView() {
       void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to update site status');
+    } finally {
+      setUpdatingSiteId(null);
+    }
+  };
+
+  const handleDomainVerificationChange = async (
+    site: Site,
+    status: SiteDomainVerification['status'],
+  ) => {
+    if (isSitesBusy) return;
+    if (!canConfigureSites) {
+      setNotice(`Your account needs sites.configure to update domain verification. ${configurePermissionTitle}`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const current = getDomainVerification(site);
+    const nextVerification: SiteDomainVerification = {
+      ...current,
+      status,
+      requestedAt: current.requestedAt || now,
+      checkedAt: status === 'verified' || status === 'failed' ? now : current.checkedAt || null,
+      verifiedAt: status === 'verified' ? now : status === 'pending' ? null : current.verifiedAt || null,
+      lastError: status === 'failed' ? 'Manual DNS confirmation failed in the local workspace.' : null,
+    };
+
+    setUpdatingSiteId(site.id);
+    setNotice(null);
+
+    try {
+      const saved = await updateSiteFromApi(site.publicSiteId || site.id, {
+        settings: {
+          ...(site.settings || {}),
+          domainVerification: nextVerification,
+        },
+      });
+      const savedWithPageCount = { ...saved, pageCount: site.pageCount };
+      setSites(sites.map((item) => (item.id === site.id ? savedWithPageCount : item)));
+      setNotice(
+        status === 'verified'
+          ? `${site.name} domain verification marked verified.`
+          : `${site.name} DNS verification record is ready.`,
+      );
+      void loadSiteAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update domain verification');
     } finally {
       setUpdatingSiteId(null);
     }
@@ -1196,6 +1289,106 @@ function SitesListView() {
           </div>
         ))}
       </div>
+
+      <Panel id="sites-domain-verification" className="scroll-mt-24" data-testid="sites-domain-verification">
+        <PanelHeader
+          title="Domain verification"
+          description="Persist DNS ownership state for the selected site before custom frontend traffic is treated as production-ready."
+          icon={<Server className="size-4" />}
+          action={
+            selectedApiSite && selectedDomainVerification ? (
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                domainVerificationStatusClass[selectedDomainVerification.status],
+              )}
+              >
+                {domainVerificationStatusLabel[selectedDomainVerification.status]}
+              </span>
+            ) : null
+          }
+        />
+        <PanelContent>
+          {!selectedApiSite || !selectedDomainVerification ? (
+            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
+              Create a site to prepare custom-domain DNS verification.
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">{selectedApiSite.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {selectedApiSite.customDomain
+                        ? `Add the TXT record below for ${selectedDomainVerification.domain}, then confirm it once DNS is visible.`
+                        : 'Backy preview domains are managed automatically. Add a custom domain on the site detail page to require DNS verification.'}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                    {selectedDomainVerification.method.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <SiteApiSnippet label="TXT host" value={selectedDomainVerification.txtHost || '_backy'} />
+                  <SiteApiSnippet label="TXT value" value={selectedDomainVerification.txtValue || 'backy-site-verification='} />
+                  <SiteApiSnippet label="CNAME target" value={selectedDomainVerification.cnameTarget || `${selectedApiSite.slug}.backy.app`} />
+                  <SiteApiSnippet label="Verification token" value={selectedDomainVerification.token || buildDomainVerificationToken(selectedApiSite)} />
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites || !selectedApiSite.customDomain}
+                    title={!selectedApiSite.customDomain ? 'Add a custom domain before preparing DNS.' : configurePermissionTitle}
+                    onClick={() => void handleDomainVerificationChange(selectedApiSite, 'pending')}
+                    iconStart={<RefreshCw className="size-3.5" />}
+                    aria-label={`Prepare domain verification for ${selectedApiSite.name}`}
+                  >
+                    Prepare DNS record
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy || !canConfigureSites || !selectedApiSite.customDomain}
+                    title={!selectedApiSite.customDomain ? 'Add a custom domain before confirming DNS.' : configurePermissionTitle}
+                    onClick={() => void handleDomainVerificationChange(selectedApiSite, 'verified')}
+                    iconStart={<CheckCircle2 className="size-3.5" />}
+                    aria-label={`Mark domain verified for ${selectedApiSite.name}`}
+                  >
+                    Mark verified
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSitesBusy}
+                    onClick={() => void copySiteApiText(selectedDomainVerification.txtValue || '', 'Domain TXT value')}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy TXT value
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Verification state</h3>
+                <div className="mt-3 grid gap-2">
+                  <SiteApiStat label="Domain" value={selectedDomainVerification.domain || getDisplayDomain(selectedApiSite)} />
+                  <SiteApiStat label="Status" value={domainVerificationStatusLabel[selectedDomainVerification.status]} />
+                  <SiteApiStat label="Requested" value={selectedDomainVerification.requestedAt ? formatDate(selectedDomainVerification.requestedAt) : 'Not prepared'} />
+                  <SiteApiStat label="Verified" value={selectedDomainVerification.verifiedAt ? formatDate(selectedDomainVerification.verifiedAt) : 'Not verified'} />
+                </div>
+                {selectedDomainVerification.lastError && (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                    {selectedDomainVerification.lastError}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </PanelContent>
+      </Panel>
 
       <Panel id="sites-api" className="scroll-mt-24">
         <PanelHeader

@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { SiteSettings } from '@backy-cms/core';
 import { generateId } from '@/lib/utils';
 
 // ============================================
@@ -20,6 +21,7 @@ export interface Site {
     description: string;
     customDomain: string | null;
     status: 'published' | 'draft' | 'archived';
+    settings?: SiteSettings;
     publicSiteId?: string;
     pageCount: number;
     lastUpdated: string;

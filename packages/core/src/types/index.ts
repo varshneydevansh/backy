@@ -304,6 +304,9 @@ export interface SiteSettings {
   /** Site-level navigation menus for default and custom frontends */
   navigation: SiteNavigationConfig;
 
+  /** Custom-domain DNS verification state for managed and custom frontend delivery */
+  domainVerification?: SiteDomainVerificationSettings;
+
   /** Captured custom frontend design contract used to seed new Backy pages, posts, forms, products, and reusable sections */
   frontendDesign?: SiteFrontendDesignContract;
 
@@ -312,6 +315,20 @@ export interface SiteSettings {
 
   /** Site-scoped editor preferences and presets shared by admins working on this site */
   editor?: SiteEditorSettings;
+}
+
+export interface SiteDomainVerificationSettings {
+  status: 'not_started' | 'pending' | 'verified' | 'failed';
+  method: 'dns-txt';
+  domain?: string | null;
+  token?: string;
+  txtHost?: string;
+  txtValue?: string;
+  cnameTarget?: string;
+  requestedAt?: string | null;
+  checkedAt?: string | null;
+  verifiedAt?: string | null;
+  lastError?: string | null;
 }
 
 export interface SiteEditorCollectionBindingPreset {

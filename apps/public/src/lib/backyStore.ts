@@ -480,6 +480,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     primary: [],
     footer: [],
   },
+  domainVerification: { ...DEFAULT_SITE_SETTINGS.domainVerification },
   frontendDesign: emptyFrontendDesignContract(),
   contacts: { savedLists: [] },
   editor: { collectionBindingPresets: [] },
@@ -3971,6 +3972,17 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
 function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): SiteSettings {
   const settingsInput = toRecord(input);
   const base = current || createDefaultSiteSettings();
+  const domainVerificationInput = toRecord(settingsInput.domainVerification);
+  const defaultDomainVerification: NonNullable<SiteSettings['domainVerification']> = {
+    ...DEFAULT_SITE_SETTINGS.domainVerification,
+  };
+  const baseDomainVerification: NonNullable<SiteSettings['domainVerification']> = {
+    ...defaultDomainVerification,
+    ...(base.domainVerification || {}),
+  };
+  const domainVerificationStatus = ['not_started', 'pending', 'verified', 'failed'].includes(String(domainVerificationInput.status))
+    ? domainVerificationInput.status as NonNullable<SiteSettings['domainVerification']>['status']
+    : baseDomainVerification.status;
 
   return {
     ...base,
@@ -3996,6 +4008,23 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
     navigation: settingsInput.navigation === undefined
       ? base.navigation
       : normalizeNavigationConfig(settingsInput.navigation, base.navigation),
+    domainVerification: settingsInput.domainVerification === undefined
+      ? { ...baseDomainVerification }
+      : {
+          ...baseDomainVerification,
+          ...domainVerificationInput,
+          status: domainVerificationStatus,
+          method: 'dns-txt',
+          domain: domainVerificationInput.domain === null ? null : sanitizeString(domainVerificationInput.domain) || baseDomainVerification.domain || null,
+          token: sanitizeString(domainVerificationInput.token) || baseDomainVerification.token || '',
+          txtHost: sanitizeString(domainVerificationInput.txtHost) || baseDomainVerification.txtHost || '',
+          txtValue: sanitizeString(domainVerificationInput.txtValue) || baseDomainVerification.txtValue || '',
+          cnameTarget: sanitizeString(domainVerificationInput.cnameTarget) || baseDomainVerification.cnameTarget || '',
+          requestedAt: sanitizeString(domainVerificationInput.requestedAt) || null,
+          checkedAt: sanitizeString(domainVerificationInput.checkedAt) || null,
+          verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
+          lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
+        },
     frontendDesign: settingsInput.frontendDesign === undefined
       ? (base.frontendDesign || emptyFrontendDesignContract())
       : normalizeFrontendDesignContract(settingsInput.frontendDesign, {

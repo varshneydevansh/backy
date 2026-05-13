@@ -84,10 +84,31 @@ const toStringRecord = (value: unknown): Record<string, string> => {
   }, {});
 };
 
+const sanitizeString = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
 const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings | undefined => {
   if (!isRecord(input)) {
     return undefined;
   }
+  const domainVerificationInput = isRecord(input.domainVerification) ? input.domainVerification : null;
+  const currentDomainVerification = current.domainVerification || {
+    status: 'not_started',
+    method: 'dns-txt',
+    domain: null,
+    token: '',
+    txtHost: '',
+    txtValue: '',
+    cnameTarget: '',
+    requestedAt: null,
+    checkedAt: null,
+    verifiedAt: null,
+    lastError: null,
+  } satisfies NonNullable<SiteSettings['domainVerification']>;
+  const domainVerificationStatus = domainVerificationInput && ['not_started', 'pending', 'verified', 'failed'].includes(String(domainVerificationInput.status))
+    ? domainVerificationInput.status as NonNullable<SiteSettings['domainVerification']>['status']
+    : currentDomainVerification.status;
 
   return {
     ...current,
@@ -119,6 +140,23 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
     navigation: input.navigation === undefined
       ? current.navigation
       : normalizeNavigationConfig(input.navigation, current.navigation),
+    domainVerification: input.domainVerification === undefined || !domainVerificationInput
+      ? currentDomainVerification
+      : {
+          ...currentDomainVerification,
+          ...domainVerificationInput,
+          status: domainVerificationStatus,
+          method: 'dns-txt',
+          domain: domainVerificationInput.domain === null ? null : sanitizeString(domainVerificationInput.domain) || currentDomainVerification.domain || null,
+          token: sanitizeString(domainVerificationInput.token) || currentDomainVerification.token || '',
+          txtHost: sanitizeString(domainVerificationInput.txtHost) || currentDomainVerification.txtHost || '',
+          txtValue: sanitizeString(domainVerificationInput.txtValue) || currentDomainVerification.txtValue || '',
+          cnameTarget: sanitizeString(domainVerificationInput.cnameTarget) || currentDomainVerification.cnameTarget || '',
+          requestedAt: sanitizeString(domainVerificationInput.requestedAt) || null,
+          checkedAt: sanitizeString(domainVerificationInput.checkedAt) || null,
+          verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
+          lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
+        },
     frontendDesign: input.frontendDesign === undefined
       ? (current.frontendDesign || emptyFrontendDesignContract())
       : normalizeFrontendDesignContract(input.frontendDesign, {
