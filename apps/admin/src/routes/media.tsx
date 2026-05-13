@@ -44,8 +44,10 @@ import {
   updateMediaFolder,
   updateMedia,
   uploadMedia,
+  type MediaListOptions,
   type MediaQuota,
   type MediaFolder,
+  type MediaPagination,
   type MediaVersionRecord,
   type SignedMediaUrl,
 } from '@/lib/mediaApi';
@@ -76,6 +78,11 @@ interface MediaSearch {
   usage?: MediaUsageFilter;
 }
 
+interface MediaLibraryLoadOptions {
+  mode?: 'replace' | 'append' | 'all';
+  offset?: number;
+}
+
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced', 'quarantined'];
@@ -93,6 +100,7 @@ const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: 
   { value: 'delete', label: 'Deletes' },
 ];
 const MEDIA_AUDIT_PAGE_SIZE = 12;
+const MEDIA_LIBRARY_PAGE_SIZE = 100;
 const MEDIA_UPLOAD_MODES: Array<{
   value: MediaUploadMode;
   label: string;
@@ -650,6 +658,12 @@ function MediaPage() {
   const [libraryAuditActionFilter, setLibraryAuditActionFilter] = useState<MediaAuditActionFilter>('all');
   const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
+  const [mediaPagination, setMediaPagination] = useState<MediaPagination>({
+    total: 0,
+    limit: MEDIA_LIBRARY_PAGE_SIZE,
+    offset: 0,
+    hasMore: false,
+  });
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
   const [runtimeMediaScanner, setRuntimeMediaScanner] = useState<SiteSettingsInput['runtimeMediaScanner']>();
@@ -738,6 +752,14 @@ function MediaPage() {
   const setPosts = useStore((state) => state.setPosts);
   const deleteMedia = useStore((state) => state.deleteMedia);
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites, getDefaultMediaSiteId()));
+  const filesRef = useRef<MediaAsset[]>(files);
+  const mediaPaginationRef = useRef<MediaPagination>(mediaPagination);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+  useEffect(() => {
+    mediaPaginationRef.current = mediaPagination;
+  }, [mediaPagination]);
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -1001,6 +1023,9 @@ function MediaPage() {
     () => files.filter((file) => selectedMediaSet.has(file.id)),
     [files, selectedMediaSet],
   );
+  const loadedMediaCount = files.length;
+  const matchingMediaTotal = Math.max(mediaPagination.total, loadedMediaCount);
+  const hasUnloadedMedia = mediaPagination.hasMore || loadedMediaCount < matchingMediaTotal;
   const allVisibleSelected = displayedFiles.length > 0 && displayedFiles.every((file) => selectedMediaSet.has(file.id));
   const hasBulkTagChange = bulkTagMode === 'clear' ||
     ((bulkTagMode === 'merge' || bulkTagMode === 'replace') && bulkTagList.length > 0);
@@ -1371,22 +1396,64 @@ function MediaPage() {
     [runtimeStorage, selectedAsset, storageSettings],
   );
 
-  const loadLibrary = useCallback(async () => {
+  const loadLibrary = useCallback(async (options: MediaLibraryLoadOptions = {}) => {
+    const mode = options.mode || 'replace';
+    const startOffset = options.offset ?? (mode === 'append'
+      ? mediaPaginationRef.current.offset + mediaPaginationRef.current.limit
+      : 0);
     setIsLoading(true);
     setError(null);
 
     try {
-      const library = await listMediaLibrary({
+      const baseOptions: MediaListOptions = {
         siteId,
         scope: 'all',
-        limit: 250,
+        limit: MEDIA_LIBRARY_PAGE_SIZE,
         search: searchQuery.trim() || undefined,
         type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
         folderId: selectedFolderId,
+      };
+      const firstPage = await listMediaLibrary({
+        ...baseOptions,
+        offset: startOffset,
       });
-      setMedia(library.media);
-      setMediaQuota(library.quota);
+      const mergedById = new Map<string, MediaAsset>();
+
+      if (mode === 'append') {
+        filesRef.current.forEach((asset) => mergedById.set(asset.id, asset));
+      }
+      firstPage.media.forEach((asset) => mergedById.set(asset.id, asset));
+
+      let latestPagination = firstPage.pagination || {
+        total: firstPage.media.length,
+        limit: MEDIA_LIBRARY_PAGE_SIZE,
+        offset: startOffset,
+        hasMore: false,
+      };
+      let nextOffset = latestPagination.offset + latestPagination.limit;
+
+      while (mode === 'all' && latestPagination.hasMore) {
+        const nextPage = await listMediaLibrary({
+          ...baseOptions,
+          offset: nextOffset,
+        });
+        nextPage.media.forEach((asset) => mergedById.set(asset.id, asset));
+        latestPagination = nextPage.pagination || {
+          total: mergedById.size,
+          limit: MEDIA_LIBRARY_PAGE_SIZE,
+          offset: nextOffset,
+          hasMore: false,
+        };
+        nextOffset = latestPagination.offset + latestPagination.limit;
+      }
+
+      const nextMedia = Array.from(mergedById.values());
+      filesRef.current = nextMedia;
+      setMedia(nextMedia);
+      setMediaQuota(firstPage.quota);
+      mediaPaginationRef.current = latestPagination;
+      setMediaPagination(latestPagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library.');
     } finally {
@@ -4334,6 +4401,47 @@ function MediaPage() {
         </select>
       </div>
 
+      <div
+        className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+        data-testid="media-library-pagination"
+      >
+        <div>
+          <div className="text-sm font-semibold text-foreground">Loaded media window</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Loaded {loadedMediaCount} of {matchingMediaTotal} matching asset{matchingMediaTotal === 1 ? '' : 's'} from the API. Bulk actions apply to selected loaded assets.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
+            onClick={() => void loadLibrary({ mode: 'append' })}
+          >
+            Load more
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
+            onClick={() => void loadLibrary({ mode: 'all' })}
+          >
+            Load all matching
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isMediaLibraryBusy}
+            onClick={() => void loadLibrary()}
+          >
+            Refresh
+          </Button>
+        </div>
+      </div>
+
       <div id="media-folders" className="mb-6 rounded-xl border border-border bg-card p-4 scroll-mt-24">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-semibold">
@@ -4541,7 +4649,16 @@ function MediaPage() {
                     disabled={isMediaLibraryBusy || allVisibleSelected}
                     onClick={handleSelectVisibleMedia}
                   >
-                    Select visible
+                    Select visible loaded
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={isMediaLibraryBusy || !hasUnloadedMedia}
+                    onClick={() => void loadLibrary({ mode: 'all' })}
+                  >
+                    Load all matching
                   </Button>
                   <Button
                     type="button"
@@ -4553,7 +4670,7 @@ function MediaPage() {
                     Clear
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Selection follows the current search, type, visibility, and folder filters.
+                    Selection follows the current search, type, visibility, and folder filters across loaded matching assets.
                   </p>
                 </div>
 

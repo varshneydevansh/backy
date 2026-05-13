@@ -545,6 +545,37 @@ const assertMediaLayout = async (client, expectedText) => {
   return layout;
 };
 
+const assertMediaPaginationControls = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-library-pagination"]');
+      const text = panel?.textContent || '';
+      const buttons = Array.from(panel?.querySelectorAll('button') || []).map((button) => ({
+        text: button.textContent || '',
+        disabled: button.disabled,
+      }));
+      return {
+        hasPanel: panel instanceof HTMLElement,
+        hasLoadedCount: /Loaded\\s+\\d+\\s+of\\s+\\d+/.test(text),
+        hasLoadMore: buttons.some((button) => button.text.includes('Load more')),
+        hasLoadAll: buttons.some((button) => button.text.includes('Load all matching')),
+        hasRefresh: buttons.some((button) => button.text.includes('Refresh')),
+        hasBulkLoadedCopy: document.body?.innerText?.includes('Select visible loaded') || false,
+        body: text.slice(0, 1200),
+      };
+    })()`);
+    if (state.hasPanel && state.hasLoadedCount && state.hasLoadMore && state.hasLoadAll && state.hasRefresh && state.hasBulkLoadedCopy) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Media pagination controls did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName) => {
   const modeResult = await evaluate(client, `(() => {
     const modeButton = document.querySelector('[data-testid="media-upload-mode-file"]');
@@ -1646,6 +1677,7 @@ const main = async () => {
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
     await assertMediaLayout(client, imageName);
+    await assertMediaPaginationControls(client);
     await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
     centralUploadedFile = await waitForMedia(marker, (item) => (
       item.originalName === centralUploadName &&

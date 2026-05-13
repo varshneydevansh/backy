@@ -30,6 +30,7 @@ interface ApiMediaListResponse {
   data?: {
     media: ApiMediaItem[];
     quota?: ApiMediaQuota;
+    pagination?: MediaPagination;
   };
   error?: {
     message?: string;
@@ -242,6 +243,7 @@ export interface MediaListOptions {
   pageId?: string;
   postId?: string;
   limit?: number;
+  offset?: number;
 }
 
 export interface MediaUpdateInput {
@@ -301,9 +303,17 @@ export interface MediaQuota {
   remainingBytes: number;
 }
 
+export interface MediaPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface MediaLibraryResult {
   media: MediaAsset[];
   quota?: MediaQuota;
+  pagination?: MediaPagination;
 }
 
 export interface SignedMediaUrlInput {
@@ -458,6 +468,7 @@ export async function listMediaLibrary(options: MediaListOptions = {}): Promise<
   if (options.pageId) query.set('pageId', options.pageId);
   if (options.postId) query.set('postId', options.postId);
   if (options.limit) query.set('limit', `${options.limit}`);
+  if (options.offset) query.set('offset', `${options.offset}`);
 
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media?${query.toString()}`);
   const payload = await response.json() as ApiMediaListResponse;
@@ -469,6 +480,7 @@ export async function listMediaLibrary(options: MediaListOptions = {}): Promise<
   return {
     media: payload.data.media.map(toMediaAsset),
     quota: payload.data.quota,
+    pagination: payload.data.pagination,
   };
 }
 
