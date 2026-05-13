@@ -26,7 +26,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
-| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/button-reorder/drag-reorder tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell merge/split, table-cell text alignment, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper table/list editing |
+| 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent/button-reorder/drag-reorder tools, bounded list indent depth, markdown shortcut updates, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell merge/split, table-cell alignment/fill/border/vertical alignment, table captions, whole-table removal, and text-mark rendering fixes; full parity still pending for deeper multi-cell/table/list edge cases |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
@@ -40,8 +40,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 | Element | Property Controls | Canvas Render | Public Render | Current Gaps | Status |
 |---|---|---|---|---|---|
-| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split, table-cell alignment, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
-| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split, table-cell alignment, and header row/column/cell toggles are covered; deeper table/list editing remains | ⚠️ |
+| text | ✅ Content, color, typography, spacing | ✅ | ✅ | Inline markdown, selected-range panel formatting including cross-node mark splits, multi-block blockquote, selected-list item indentation/button-reorder/drag-reorder, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, table captions, color clearing, and header row/column/cell toggles are covered; deeper multi-cell/table/list edge cases remain | ⚠️ |
+| heading | ✅ Similar to text | ✅ | ✅ | Inline markdown, selected-range mark/clear flows including cross-node mark splits, bounded selected-list indentation/button-reorder/drag-reorder, multi-block blockquote, basic table insertion/removal, table row/column growth/duplication/removal/reorder, table-cell merge/split/alignment/fill/border/vertical alignment, table captions, color clearing, and header row/column/cell toggles are covered; deeper multi-cell/table/list edge cases remain | ⚠️ |
 | paragraph | ✅ | ✅ | ✅ | Same deeper rich-text table/list editing gaps as heading | ⚠️ |
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
@@ -126,7 +126,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
-    - Advanced rich text table editing still needs Canva-level controls beyond insertion/removal, row/column add/remove, and header-row toggles
+    - Advanced rich text table editing still needs Canva-level edge-case coverage beyond the current single-cell/table controls, especially multi-cell selections and nested selection behavior
     - Full nested list edge-case parity is not complete
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
@@ -258,6 +258,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can toggle the active table cell between body and semantic header cell without changing sibling cells.
   - Right-panel rich-text controls can merge the active table cell with its right sibling or the cell below, then split spanned cells back into sibling cells with rendered and persisted `colSpan`/`rowSpan` metadata.
   - Right-panel rich-text alignment controls render and persist paragraph alignment inside selected table cells.
+  - Right-panel rich-text controls can set and clear selected table cell fill and border colors without leaking metadata to adjacent cells.
+  - Right-panel rich-text controls can set selected table cell vertical alignment without leaking metadata to adjacent cells.
+  - Right-panel rich-text controls can set table captions that render outside the editable cell flow and persist on the Slate table node.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
   - Shared editor block markdown shortcuts now support `>` for blockquote.
@@ -267,12 +270,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Indent and outdent list entries from the right-panel formatting toolbar.
     - Move the active list item up/down from the right-panel formatting toolbar.
 - **Remaining:**
-  - Full fidelity for deeper table editing controls and remaining edge-case selections beyond selected-range mark splits.
-      key={element.id}  // Forces remount on element change
-      content={element.props.content || ''}
-      onChange={(content) => onChange({ content })}
-    />
-    ```
+  - Full fidelity for deeper multi-cell table operations, nested list edge cases, and remaining edge-case selections beyond selected-range mark splits.
 
 ### 16. Font Selection
 **File:** `PropertyPanel.tsx` (StyleProperties)
@@ -396,6 +394,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel table header-cell toggle controls, with browser smoke coverage proving one selected cell can render as semantic `th` and be restored without affecting sibling cells.
 - Added Property Panel table-cell merge-right/merge-down and split-cell controls, with browser smoke coverage proving selected cells render `colspan="2"`/`rowspan="2"` after merge and return to sibling cells after split.
 - Added Property Panel table-cell alignment coverage, proving selected cell paragraphs render centered and persist `align: "center"` in Slate content.
+- Added Property Panel table caption, selected-cell fill, selected-cell border color, vertical alignment, and color-clearing coverage, proving the controls render and persist only on the intended table/cell metadata.
 - Added Property Panel whole-table removal controls, with browser smoke coverage proving the active table can be removed without deleting surrounding blockquote content.
 - Added Tab and Shift+Tab canvas selection cycling through visible elements, with keyboard shortcut smoke coverage and focused-control guard coverage.
 - Added right-panel rich-text list indent max-depth clamping with browser persistence coverage for selected list items.
