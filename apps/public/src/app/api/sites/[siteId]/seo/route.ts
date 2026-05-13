@@ -113,7 +113,13 @@ const toStringArray = (value: unknown): string[] => (
 );
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-  item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+  item.status === 'published'
+  || (
+    item.status === 'scheduled'
+    && Boolean(item.scheduledAt)
+    && Number.isFinite(Date.parse(item.scheduledAt || ''))
+    && Date.parse(item.scheduledAt || '') <= Date.now()
+  )
 );
 
 const pageCanonical = (page: BackyPage) => {

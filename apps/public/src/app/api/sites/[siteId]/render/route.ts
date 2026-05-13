@@ -60,7 +60,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-  item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+  item.status === 'published'
+  || (
+    item.status === 'scheduled'
+    && Boolean(item.scheduledAt)
+    && Number.isFinite(Date.parse(item.scheduledAt || ''))
+    && Date.parse(item.scheduledAt || '') <= Date.now()
+  )
 );
 
 const repositorySiteToStoreSite = (site: Site): StoreSite => ({

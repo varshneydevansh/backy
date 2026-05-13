@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyPost } from '@backy-cms/core';
 import {
   getBlogPosts,
   getSiteByIdOrSlug,
@@ -30,7 +31,13 @@ const parseLimit = (value: string | null) => {
 };
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-  item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+  item.status === 'published'
+  || (
+    item.status === 'scheduled'
+    && Boolean(item.scheduledAt)
+    && Number.isFinite(Date.parse(item.scheduledAt || ''))
+    && Date.parse(item.scheduledAt || '') <= Date.now()
+  )
 );
 
 const textResponse = (
@@ -65,13 +72,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return textResponse('Not found', 404, requestId, site?.id);
       }
 
-      const [postsResult, categories, tags, authors, cacheRevision] = await Promise.all([
-        repositories.posts.list({
-          siteId: site.id,
-          includeUnpublished: false,
-          limit,
-          offset: 0,
-        }),
+      const [categories, tags, authors, cacheRevision] = await Promise.all([
         repositories.blogTaxonomy.listCategories(site.id),
         repositories.blogTaxonomy.listTags(site.id),
         repositories.blogTaxonomy.listAuthors(site.id),
@@ -80,8 +81,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           scope: 'content',
         }),
       ]);
-      const posts = postsResult.items
+      const repositoryPosts: BackyPost[] = [];
+      let repositoryOffset = 0;
+      let hasMoreRepositoryPosts = true;
+      while (hasMoreRepositoryPosts) {
+        const result = await repositories.posts.list({
+          siteId: site.id,
+          includeUnpublished: true,
+          status: 'all',
+          limit: 100,
+          offset: repositoryOffset,
+        });
+        repositoryPosts.push(...result.items);
+        hasMoreRepositoryPosts = result.pagination.hasMore;
+        repositoryOffset += result.pagination.limit;
+      }
+      const posts = repositoryPosts
         .filter(isPubliclyReadable)
+        .slice(0, limit)
         .map(normalizeRepositoryPostForRss);
       const xml = buildBlogRssXml({ site, posts, categories, tags, authors, origin, feedPath: '/blog/rss.xml' });
       const revision = cacheRevision || createPublicCacheRevision({ site, posts, categories, tags, authors });

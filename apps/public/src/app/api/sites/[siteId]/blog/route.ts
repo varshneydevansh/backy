@@ -63,7 +63,13 @@ const parseArchiveMonth = (value: string | null): number | undefined => {
 };
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-    item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+    item.status === 'published'
+    || (
+        item.status === 'scheduled'
+        && Boolean(item.scheduledAt)
+        && Number.isFinite(Date.parse(item.scheduledAt || ''))
+        && Date.parse(item.scheduledAt || '') <= Date.now()
+    )
 );
 
 const frontendDesignFromMeta = (value: unknown) => {
@@ -175,25 +181,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 ? (await repositories.blogTaxonomy.listAuthors(site.id)).find((item) => item.slug === authorSlug || item.id === authorSlug)
                 : null;
 
-            const result = await repositories.posts.list({
-                siteId: site.id,
-                includeUnpublished: false,
-                status: status === 'published' ? 'published' : 'published',
-                categoryId: searchParams.get('categoryId') || category?.id || undefined,
-                tagId: searchParams.get('tagId') || tag?.id || undefined,
-                authorId: searchParams.get('authorId') || author?.id || undefined,
-                search: search || undefined,
-                year,
-                month,
-                limit,
-                offset,
-            });
-            const posts = result.items.filter(isPubliclyReadable).map(publicPostFromRepositoryPost);
+            const repositoryPosts: BackyPost[] = [];
+            let repositoryOffset = 0;
+            let hasMoreRepositoryPosts = true;
+            while (hasMoreRepositoryPosts) {
+                const result = await repositories.posts.list({
+                    siteId: site.id,
+                    includeUnpublished: true,
+                    status: status || 'all',
+                    categoryId: searchParams.get('categoryId') || category?.id || undefined,
+                    tagId: searchParams.get('tagId') || tag?.id || undefined,
+                    authorId: searchParams.get('authorId') || author?.id || undefined,
+                    search: search || undefined,
+                    year,
+                    month,
+                    limit: 100,
+                    offset: repositoryOffset,
+                });
+                repositoryPosts.push(...result.items);
+                hasMoreRepositoryPosts = result.pagination.hasMore;
+                repositoryOffset += result.pagination.limit;
+            }
+            const visiblePosts = repositoryPosts.filter(isPubliclyReadable);
+            const posts = visiblePosts.slice(offset, offset + limit).map(publicPostFromRepositoryPost);
             const data = {
                 posts,
                 pagination: {
-                    ...result.pagination,
-                    total: posts.length,
+                    total: visiblePosts.length,
+                    limit,
+                    offset,
+                    hasMore: offset + limit < visiblePosts.length,
                 },
                 filters: {
                     q: search || null,

@@ -50,7 +50,13 @@ const parseBoundedInteger = (value: string | null, fallback: number, min: number
 };
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-    item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+    item.status === 'published'
+    || (
+        item.status === 'scheduled'
+        && Boolean(item.scheduledAt)
+        && Number.isFinite(Date.parse(item.scheduledAt || ''))
+        && Date.parse(item.scheduledAt || '') <= Date.now()
+    )
 );
 
 const frontendDesignFromMeta = (value: unknown) => {
@@ -228,14 +234,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 });
             }
 
-            const result = await repositories.pages.list({
-                siteId: site.id,
-                includeUnpublished: false,
-                status: 'published',
-                limit,
-                offset,
-            });
-            const pages = result.items.filter(isPubliclyReadable).map((page) => publicPageFromRepositoryPage(page, site, origin));
+            const repositoryPages: BackyPage[] = [];
+            let repositoryOffset = 0;
+            let hasMoreRepositoryPages = true;
+            while (hasMoreRepositoryPages) {
+                const result = await repositories.pages.list({
+                    siteId: site.id,
+                    includeUnpublished: true,
+                    status: 'all',
+                    limit: 100,
+                    offset: repositoryOffset,
+                });
+                repositoryPages.push(...result.items);
+                hasMoreRepositoryPages = result.pagination.hasMore;
+                repositoryOffset += result.pagination.limit;
+            }
+            const visiblePages = repositoryPages.filter(isPubliclyReadable);
+            const pages = visiblePages.slice(offset, offset + limit).map((page) => publicPageFromRepositoryPage(page, site, origin));
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
                 scope: 'content',
@@ -247,14 +262,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 data: {
                     pages,
                     pagination: {
-                        ...result.pagination,
-                        total: pages.length,
+                        total: visiblePages.length,
+                        limit,
+                        offset,
+                        hasMore: offset + limit < visiblePages.length,
                     },
                 },
                 pages,
                 pagination: {
-                    ...result.pagination,
-                    total: pages.length,
+                    total: visiblePages.length,
+                    limit,
+                    offset,
+                    hasMore: offset + limit < visiblePages.length,
                 },
             }, {
                 requestId,
