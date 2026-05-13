@@ -862,6 +862,33 @@ const buildFrontendCollectionTemplateMetadata = (
   ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
 });
 
+const stripFrontendCollectionTemplateMetadata = (
+  metadata: Record<string, unknown>,
+): Record<string, unknown> => {
+  const {
+    frontendDesignTemplateId,
+    frontendDesignTemplateName,
+    frontendDesignSource,
+    frontendDesignBindingHints,
+    frontendDesignRoutePattern,
+    frontendDesignTokens,
+    frontendDesignChrome,
+    frontendDesignCustomCss,
+    ...rest
+  } = metadata;
+
+  void frontendDesignTemplateId;
+  void frontendDesignTemplateName;
+  void frontendDesignSource;
+  void frontendDesignBindingHints;
+  void frontendDesignRoutePattern;
+  void frontendDesignTokens;
+  void frontendDesignChrome;
+  void frontendDesignCustomCss;
+
+  return rest;
+};
+
 const getCollectionFrontendTemplateId = (collection: Collection): string | undefined => (
   typeof collection.metadata?.frontendDesignTemplateId === 'string'
     ? collection.metadata.frontendDesignTemplateId
@@ -951,6 +978,7 @@ function CollectionsPage() {
     description: '',
     status: 'published' as Collection['status'],
     permissions: DEFAULT_PERMISSIONS,
+    frontendDesignTemplateId: '',
     dynamicTemplates: defaultDynamicTemplates(),
     fields: [createEmptyField(10)],
   });
@@ -1648,6 +1676,7 @@ function CollectionsPage() {
       description: '',
       status: 'published',
       permissions: DEFAULT_PERMISSIONS,
+      frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
       fields: [createEmptyField(10)],
     });
@@ -1776,6 +1805,7 @@ function CollectionsPage() {
       description: template.description,
       status: 'published',
       permissions: { ...template.permissions },
+      frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
       fields: cloneTemplateFields(template.fields),
     });
@@ -1853,6 +1883,7 @@ function CollectionsPage() {
       description: collection.description || '',
       status: collection.status,
       permissions: collection.permissions,
+      frontendDesignTemplateId: getCollectionFrontendTemplateId(collection) || '',
       dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
@@ -2075,6 +2106,18 @@ function CollectionsPage() {
     try {
       const collectionSlug = normalizeSlug(collectionForm.slug || collectionForm.name, 'collection');
       const currentMetadata = activeCollection?.metadata;
+      const selectedFrontendTemplate = collectionForm.frontendDesignTemplateId
+        ? frontendCollectionTemplates.find((template) => template.id === collectionForm.frontendDesignTemplateId) || null
+        : null;
+      const baseMetadata = stripFrontendCollectionTemplateMetadata(
+        collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+      );
+      const metadata = selectedFrontendTemplate
+        ? {
+            ...baseMetadata,
+            ...buildFrontendCollectionTemplateMetadata(selectedFrontendTemplate, frontendDesign),
+          }
+        : baseMetadata;
       const payload = {
         name: collectionForm.name.trim(),
         slug: collectionSlug,
@@ -2083,7 +2126,7 @@ function CollectionsPage() {
         description: collectionForm.description.trim() || null,
         status: collectionForm.status,
         permissions: collectionForm.permissions,
-        metadata: collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+        metadata,
         fields,
       };
       const saved = selectedCollectionId
@@ -2375,6 +2418,9 @@ function CollectionsPage() {
     collectionForm.routePattern,
     collectionForm.slug || 'collection',
   ).replace(':recordSlug', '{recordSlug}');
+  const selectedFrontendCollectionTemplate = collectionForm.frontendDesignTemplateId
+    ? frontendCollectionTemplates.find((template) => template.id === collectionForm.frontendDesignTemplateId) || null
+    : null;
 
   return (
     <PageShell
@@ -3408,6 +3454,60 @@ function CollectionsPage() {
                 <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
                   <div>List {dynamicListRoutePreview}</div>
                   <div>Item {dynamicItemRoutePreview}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="collections-frontend-template-control">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Captured frontend template</h4>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                      Attach a captured collection template from the connected frontend design contract. When selected, public list/item routes use the captured canvas before falling back to generated templates.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    {frontendCollectionTemplates.length} available
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.6fr)]">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Template source</span>
+                    <select
+                      value={collectionForm.frontendDesignTemplateId}
+                      onChange={(event) => setCollectionForm((prev) => ({
+                        ...prev,
+                        frontendDesignTemplateId: event.target.value,
+                      }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2"
+                      data-testid="collections-frontend-template-select"
+                    >
+                      <option value="">Use generated Backy templates</option>
+                      {frontendCollectionTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name || template.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground" data-testid="collections-frontend-template-summary">
+                    {selectedFrontendCollectionTemplate ? (
+                      <>
+                        <div className="font-medium text-foreground">{selectedFrontendCollectionTemplate.name || selectedFrontendCollectionTemplate.id}</div>
+                        <div className="mt-1 font-mono">{selectedFrontendCollectionTemplate.id}</div>
+                        {selectedFrontendCollectionTemplate.routePattern && (
+                          <div className="mt-1 font-mono">{selectedFrontendCollectionTemplate.routePattern}</div>
+                        )}
+                        {(selectedFrontendCollectionTemplate.bindingHints || []).length > 0 && (
+                          <div className="mt-1">{(selectedFrontendCollectionTemplate.bindingHints || []).length} binding hints</div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium text-foreground">Generated route templates</div>
+                        <div className="mt-1">Backy uses the list/item controls below until a captured frontend template is attached.</div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 

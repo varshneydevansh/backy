@@ -460,6 +460,12 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         relationshipText.includes(${JSON.stringify(incomingCollectionName)}) &&
         relationshipText.includes('related_target') &&
         relationshipText.includes('Directory reference'),
+      hasDynamicTemplateControl: Boolean(document.querySelector('[data-testid="collections-dynamic-template-controls"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-frontend-template-control"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-frontend-template-select"]')) &&
+        body.includes('Captured frontend template') &&
+        body.includes('Use generated Backy templates') &&
+        body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
       hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
         Boolean(document.querySelector('[data-testid="collections-permission-contract"]')) &&
         Boolean(document.querySelector('[data-testid="collections-audit-list"]')) &&
@@ -490,6 +496,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
       layout.hasFrontendContract &&
       layout.hasBindingContract &&
       layout.hasRelationshipBrowser &&
+      layout.hasDynamicTemplateControl &&
       layout.hasAuditPanel &&
       layout.hasBuilder &&
       layout.hasRecords &&
@@ -538,6 +545,72 @@ const createFrontendTemplateCollectionThroughUi = async (client) => {
   }
 
   throw new Error('Frontend template collection was not created');
+};
+
+const attachFrontendTemplateThroughUi = async (client, collectionId) => {
+  const selected = await evaluate(client, `(() => {
+    const select = document.querySelector('[data-testid="collections-frontend-template-select"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'template-select-missing', body: document.body?.innerText?.slice(0, 1200) || '' };
+    }
+    const hasOption = Array.from(select.options).some((option) => option.value === ${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_ID)});
+    if (!hasOption) return { ok: false, reason: 'template-option-missing', options: Array.from(select.options).map((option) => option.value) };
+    select.value = ${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_ID)};
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      ok: true,
+      summary: document.querySelector('[data-testid="collections-frontend-template-summary"]')?.textContent || '',
+    };
+  })()`);
+  assert(selected.ok, `Unable to choose captured collection template: ${JSON.stringify(selected)}`);
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      selected: document.querySelector('[data-testid="collections-frontend-template-select"]')?.value || '',
+      summary: document.querySelector('[data-testid="collections-frontend-template-summary"]')?.textContent || '',
+    }))()`);
+    if (
+      state.selected === FRONTEND_COLLECTION_TEMPLATE_ID &&
+      state.summary.includes(FRONTEND_COLLECTION_TEMPLATE_NAME) &&
+      state.summary.includes(FRONTEND_COLLECTION_TEMPLATE_ID)
+    ) {
+      break;
+    }
+    if (attempt === 19) {
+      throw new Error(`Captured collection template summary did not update: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const form = document.querySelector('#collections-schema');
+    const button = form
+      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+      : null;
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'save-button-missing' };
+    }
+    if (button.disabled) return { ok: false, reason: 'save-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to save captured collection template selection: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const collections = await fetchCollections();
+    const collection = collections.find((candidate) => candidate.id === collectionId);
+    if (
+      collection?.metadata?.frontendDesignTemplateId === FRONTEND_COLLECTION_TEMPLATE_ID &&
+      collection?.metadata?.frontendDesignTemplateName === FRONTEND_COLLECTION_TEMPLATE_NAME &&
+      collection?.metadata?.frontendDesignSource?.label === 'Smoke collections frontend' &&
+      Array.isArray(collection?.metadata?.frontendDesignBindingHints)
+    ) {
+      return collection;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Captured collection template selection did not persist');
 };
 
 const publishRecordThroughUi = async (client, recordSlug) => {
@@ -739,6 +812,7 @@ const main = async () => {
 
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
+    await attachFrontendTemplateThroughUi(client, collectionId);
     const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
     frontendTemplateCollectionId = frontendTemplateCollection.id;
     await navigateToCollections(client, { collectionId, recordSlug });
