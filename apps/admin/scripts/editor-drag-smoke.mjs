@@ -8745,6 +8745,8 @@ const testRepeaterControls = async (client, collectionId) => {
   await clickControlByTestId(client, 'editor-repeater-filter-value-current-record');
   const reverseFilterValue = await evaluate(client, `document.querySelector('[data-testid="editor-repeater-filter-value"]')?.value || ''`);
   assert(reverseFilterValue === '$currentRecord.id', `Repeater reverse relationship current-record filter mismatch: ${reverseFilterValue}`);
+  const reversePreviewMessage = await evaluate(client, `document.querySelector('[data-testid="editor-repeater-record-preview-current-record"]')?.textContent || ''`);
+  assert(/Current record filters resolve on dynamic item pages/i.test(reversePreviewMessage), `Repeater current-record preview guidance missing: ${reversePreviewMessage}`);
   await setFormControlByTestId(client, 'editor-repeater-filter-field', 'author.company.name');
   await setFormControlByTestId(client, 'editor-repeater-filter-value', 'Editor Smoke Studio');
   await setFormControlByTestId(client, 'editor-repeater-sort-by', 'author.company.domain');
@@ -8754,6 +8756,31 @@ const testRepeaterControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-repeater-columns', '2');
   await setFormControlByTestId(client, 'editor-repeater-gap', '18');
   await setFormControlByTestId(client, 'editor-repeater-empty-message', 'No matching records.');
+
+  let previewState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    previewState = await evaluate(client, `(() => {
+      const preview = document.querySelector('[data-testid="editor-repeater-record-preview"]');
+      const image = preview?.querySelector('img');
+      return {
+        text: preview?.textContent || '',
+        rowCount: preview ? preview.querySelectorAll('[data-testid="editor-repeater-record-preview-row"]').length : 0,
+        count: document.querySelector('[data-testid="editor-repeater-record-preview-count"]')?.textContent || '',
+        imageSrc: image instanceof HTMLImageElement ? image.getAttribute('src') || image.currentSrc || '' : '',
+        loading: Boolean(document.querySelector('[data-testid="editor-repeater-record-preview-loading"]')),
+        error: document.querySelector('[data-testid="editor-repeater-record-preview-error"]')?.textContent || '',
+      };
+    })()`);
+    if (
+      previewState.rowCount > 0 &&
+      /Editor Smoke Studio/i.test(previewState.text) &&
+      /Beta featured item summary/i.test(previewState.text) &&
+      /1 total/i.test(previewState.count || previewState.text)
+    ) {
+      break;
+    }
+    await sleep(200);
+  }
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
@@ -8766,6 +8793,8 @@ const testRepeaterControls = async (client, collectionId) => {
     const summary = Array.from(document.querySelectorAll('[data-testid="editor-repeater-controls"]'))
       .map((node) => node.textContent || '')
       .join(' ');
+    const preview = document.querySelector('[data-testid="editor-repeater-record-preview"]');
+    const previewImage = preview?.querySelector('img');
     return {
       collectionId: value('editor-repeater-collection'),
       datasetId: value('editor-repeater-dataset-id'),
@@ -8784,6 +8813,10 @@ const testRepeaterControls = async (client, collectionId) => {
       gap: value('editor-repeater-gap'),
       emptyMessage: value('editor-repeater-empty-message'),
       summary,
+      previewText: preview?.textContent || '',
+      previewRowCount: preview ? preview.querySelectorAll('[data-testid="editor-repeater-record-preview-row"]').length : 0,
+      previewCount: document.querySelector('[data-testid="editor-repeater-record-preview-count"]')?.textContent || '',
+      previewImageSrc: previewImage instanceof HTMLImageElement ? previewImage.getAttribute('src') || previewImage.currentSrc || '' : '',
     };
   })()`);
 
@@ -8795,6 +8828,9 @@ const testRepeaterControls = async (client, collectionId) => {
   assert(state.sortBy === 'author.company.domain' && state.sortDirection === 'desc', `Repeater query sort mismatch: ${JSON.stringify(state)}`);
   assert(state.limit === '2' && state.offset === '0' && state.columns === '2' && state.gap === '18', `Repeater layout mismatch: ${JSON.stringify(state)}`);
   assert(/title join author\.company\.name/i.test(state.summary) && /sort author\.company\.domain desc/i.test(state.summary) && /2 columns/i.test(state.summary), `Repeater summary missing: ${JSON.stringify(state)}`);
+  assert(state.previewRowCount === 1 && /1 total/i.test(state.previewCount), `Repeater record preview count mismatch: ${JSON.stringify(state)}`);
+  assert(/Editor Smoke Studio/i.test(state.previewText) && /Beta featured item summary/i.test(state.previewText), `Repeater record preview missing joined record values: ${JSON.stringify(state)}`);
+  assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.previewImageSrc), `Repeater record preview image missing: ${JSON.stringify(state)}`);
 
   return state;
 };

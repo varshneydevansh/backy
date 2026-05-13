@@ -4573,6 +4573,7 @@ type SavedCollectionBindingPreset = CollectionBindingPreset;
 
 const COLLECTION_BINDING_PRESET_STORAGE_KEY = 'backy.editor.collectionBindingPresets.v1';
 const CURRENT_RECORD_FILTER_VALUE = '$currentRecord.id';
+const LEGACY_CURRENT_RECORD_FILTER_VALUE = '$record.id';
 
 const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollectionBindingPreset[] => (
   Array.isArray(value)
@@ -4699,12 +4700,14 @@ function CollectionFilterValueControl({
 
 interface RepeaterDataPropertiesProps {
   element: CanvasElement;
+  siteId?: string;
   collections: Collection[];
   onChange: (updates: Partial<CanvasElement>) => void;
 }
 
 function RepeaterDataProperties({
   element,
+  siteId,
   collections,
   onChange,
 }: RepeaterDataPropertiesProps) {
@@ -4755,6 +4758,200 @@ function RepeaterDataProperties({
   const selectedEmptyMessage = typeof props.emptyMessage === 'string' ? props.emptyMessage : 'No records yet.';
   const repeaterFieldOptions = collectionFieldPathOptions(selectedCollection, collections);
   const repeaterImageFieldOptions = collectionFieldPathOptions(selectedCollection, collections, { includeNone: true });
+  const [previewRecords, setPreviewRecords] = useState<CollectionRecord[]>([]);
+  const [previewPagination, setPreviewPagination] = useState<{ total: number; limit: number; offset: number; hasMore: boolean } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewReferenceRecords, setPreviewReferenceRecords] = useState<Record<string, CollectionRecord[]>>({});
+  const [previewReferenceLoading, setPreviewReferenceLoading] = useState(false);
+  const [previewReferenceError, setPreviewReferenceError] = useState<string | null>(null);
+  const usesCurrentRecordFilter = selectedFilterValue === CURRENT_RECORD_FILTER_VALUE || selectedFilterValue === LEGACY_CURRENT_RECORD_FILTER_VALUE;
+  const previewLimit = Math.min(
+    Math.max(Number.parseInt(selectedLimit || '6', 10) || 6, 1),
+    8,
+  );
+  const previewOffset = Math.max(Number.parseInt(selectedOffset || '0', 10) || 0, 0);
+  const previewNeedsClientQuery = selectedFilterField.includes('.') || selectedSortBy.includes('.');
+
+  useEffect(() => {
+    if (!siteId || !selectedCollectionId || !selectedCollection || usesCurrentRecordFilter) {
+      setPreviewRecords([]);
+      setPreviewPagination(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    listCollectionRecords(siteId, selectedCollectionId, {
+      status: '',
+      search: selectedSearch.trim() || undefined,
+      fieldKey: previewNeedsClientQuery ? undefined : selectedFilterField.trim() || undefined,
+      fieldValue: previewNeedsClientQuery ? undefined : selectedFilterValue.trim() || undefined,
+      sortBy: previewNeedsClientQuery ? 'updatedAt' : selectedSortBy.trim() || undefined,
+      sortDirection: previewNeedsClientQuery ? 'desc' : selectedSortDirection,
+      limit: previewNeedsClientQuery ? 100 : previewLimit,
+      offset: previewNeedsClientQuery ? 0 : previewOffset,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setPreviewRecords(result.records);
+        setPreviewPagination(result.pagination);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPreviewRecords([]);
+        setPreviewPagination(null);
+        setPreviewError(error instanceof Error ? error.message : 'Unable to load repeater preview records');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    previewLimit,
+    previewOffset,
+    selectedCollection,
+    selectedCollectionId,
+    selectedFilterField,
+    selectedFilterValue,
+    selectedSearch,
+    selectedSortBy,
+    selectedSortDirection,
+    siteId,
+    previewNeedsClientQuery,
+    usesCurrentRecordFilter,
+  ]);
+
+  useEffect(() => {
+    const referenceCollectionIds = Array.from(new Set([
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedTitleField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedDescriptionField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedImageField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedFilterField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedSortBy),
+    ]));
+
+    if (!siteId || referenceCollectionIds.length === 0) {
+      setPreviewReferenceRecords({});
+      setPreviewReferenceError(null);
+      setPreviewReferenceLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewReferenceLoading(true);
+    setPreviewReferenceError(null);
+    Promise.all(referenceCollectionIds.map(async (collectionId) => {
+      const result = await listCollectionRecords(siteId, collectionId, {
+        status: '',
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+        limit: 100,
+        offset: 0,
+      });
+      return [collectionId, result.records] as const;
+    }))
+      .then((entries) => {
+        if (cancelled) return;
+        setPreviewReferenceRecords(Object.fromEntries(entries));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPreviewReferenceRecords({});
+        setPreviewReferenceError(error instanceof Error ? error.message : 'Unable to resolve joined preview records');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreviewReferenceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collections, selectedCollection, selectedDescriptionField, selectedFilterField, selectedImageField, selectedSortBy, selectedTitleField, siteId]);
+
+  const clientResolvedPreviewRecords = previewNeedsClientQuery
+    ? previewRecords
+        .filter((record) => {
+          if (!selectedFilterField.trim() || !selectedFilterValue.trim()) return true;
+          const resolvedValue = resolveRecordFieldPathFromCache(
+            selectedCollection,
+            collections,
+            previewReferenceRecords,
+            record,
+            selectedFilterField,
+          );
+          const resolvedValues = Array.isArray(resolvedValue) ? resolvedValue : [resolvedValue];
+          return resolvedValues.some((value) => (
+            recordPreviewValue(value).trim().toLowerCase() === selectedFilterValue.trim().toLowerCase()
+          ));
+        })
+        .sort((a, b) => {
+          if (!selectedSortBy.trim()) return 0;
+          const firstValue = recordPreviewValue(resolveRecordFieldPathFromCache(
+            selectedCollection,
+            collections,
+            previewReferenceRecords,
+            a,
+            selectedSortBy,
+          ));
+          const secondValue = recordPreviewValue(resolveRecordFieldPathFromCache(
+            selectedCollection,
+            collections,
+            previewReferenceRecords,
+            b,
+            selectedSortBy,
+          ));
+          const comparison = firstValue.localeCompare(secondValue, undefined, { numeric: true, sensitivity: 'base' });
+          return selectedSortDirection === 'desc' ? comparison * -1 : comparison;
+        })
+    : previewRecords;
+  const visiblePreviewRecords = previewNeedsClientQuery
+    ? clientResolvedPreviewRecords.slice(previewOffset, previewOffset + previewLimit)
+    : previewRecords;
+  const effectivePreviewPagination = previewNeedsClientQuery
+    ? {
+        total: clientResolvedPreviewRecords.length,
+        limit: previewLimit,
+        offset: previewOffset,
+        hasMore: previewOffset + visiblePreviewRecords.length < clientResolvedPreviewRecords.length,
+      }
+    : previewPagination;
+
+  const repeaterPreviewRows = visiblePreviewRecords.map((record) => {
+    const title = recordPreviewValue(
+      resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedTitleField),
+    ) || collectionRecordLabel(record, selectedCollection);
+    const description = recordPreviewValue(
+      resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedDescriptionField),
+    );
+    const rawImage = selectedImageField
+      ? recordPreviewValue(resolveRecordFieldPathFromCache(selectedCollection, collections, previewReferenceRecords, record, selectedImageField)).trim()
+      : '';
+    const imageSrc = rawImage
+      ? /^(https?:)?\/\//.test(rawImage) || rawImage.startsWith('/')
+        ? rawImage
+        : siteId
+          ? getPublicMediaFileUrl(rawImage, siteId)
+          : ''
+      : '';
+
+    return {
+      record,
+      title,
+      description,
+      imageSrc,
+    };
+  });
 
   const updateRepeater = (updates: {
     collectionId?: string;
@@ -5109,6 +5306,82 @@ function RepeaterDataProperties({
             {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
             {selectedLimit ? ` • limit ${selectedLimit}` : ''}
             {selectedColumns ? ` • ${selectedColumns} columns` : ''}
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-repeater-record-preview">
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium text-foreground">Matching records</span>
+              {effectivePreviewPagination && !usesCurrentRecordFilter && (
+                <span className="text-muted-foreground" data-testid="editor-repeater-record-preview-count">
+                  {effectivePreviewPagination.total} total
+                </span>
+              )}
+            </div>
+            {usesCurrentRecordFilter ? (
+              <p className="text-xs text-muted-foreground" data-testid="editor-repeater-record-preview-current-record">
+                Current record filters resolve on dynamic item pages. Choose a concrete reference value to preview matches here.
+              </p>
+            ) : previewLoading ? (
+              <p className="text-xs text-muted-foreground" data-testid="editor-repeater-record-preview-loading">
+                Loading matching records...
+              </p>
+            ) : previewError ? (
+              <p className="text-xs text-amber-700" data-testid="editor-repeater-record-preview-error">
+                {previewError}
+              </p>
+            ) : repeaterPreviewRows.length > 0 ? (
+              <div className="space-y-2" data-testid="editor-repeater-record-preview-list">
+                {repeaterPreviewRows.map(({ record, title, description, imageSrc }) => (
+                  <div
+                    key={record.id}
+                    className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2 rounded-md border border-border bg-background p-2 text-xs"
+                    data-testid="editor-repeater-record-preview-row"
+                  >
+                    {imageSrc ? (
+                      <img
+                        src={imageSrc}
+                        alt={`${title} preview`}
+                        className="h-11 w-11 rounded object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded border border-dashed border-border bg-muted text-[10px] text-muted-foreground">
+                        No image
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium text-foreground">{title}</span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{record.status}</span>
+                      </div>
+                      {description && (
+                        <div className="truncate text-muted-foreground">{description}</div>
+                      )}
+                      <div className="truncate text-[11px] text-muted-foreground">{record.slug || record.id}</div>
+                    </div>
+                  </div>
+                ))}
+                {effectivePreviewPagination?.hasMore && (
+                  <div className="text-xs text-muted-foreground" data-testid="editor-repeater-record-preview-has-more">
+                    Showing {repeaterPreviewRows.length} of {effectivePreviewPagination.total}; increase the preview limit or adjust filters to inspect more.
+                  </div>
+                )}
+                {previewReferenceLoading && (
+                  <div className="text-xs text-muted-foreground" data-testid="editor-repeater-record-preview-reference-loading">
+                    Resolving joined preview fields...
+                  </div>
+                )}
+                {previewReferenceError && (
+                  <div className="text-xs text-amber-700" data-testid="editor-repeater-record-preview-reference-error">
+                    {previewReferenceError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground" data-testid="editor-repeater-record-preview-empty">
+                No records match the current query.
+              </p>
+            )}
           </div>
         </>
       )}
@@ -5546,6 +5819,7 @@ function DataBindingProperties({
     return (
       <RepeaterDataProperties
         element={element}
+        siteId={siteId}
         collections={collections}
         onChange={onChange}
       />
