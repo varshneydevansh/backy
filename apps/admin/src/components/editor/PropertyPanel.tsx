@@ -38,9 +38,12 @@ import { RichTextFormatting } from './RichTextFormatting';
 import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
 import type { CanvasElement, ElementProps } from '@/types/editor';
 import {
+  listCollectionBindingPresets,
   listCollections,
   listCollectionRecords,
+  saveCollectionBindingPresets,
   type Collection,
+  type CollectionBindingPreset,
   type CollectionField,
   type CollectionRecord,
 } from '@/lib/adminContentApi';
@@ -4435,21 +4438,7 @@ const collectionBindingPresetOptions = (
   ));
 };
 
-interface SavedCollectionBindingPreset {
-  id: string;
-  name: string;
-  collectionId: string;
-  fieldKey: string;
-  targetPath: string;
-  search: string;
-  filterField: string;
-  filterValue: string;
-  sortBy: string;
-  sortDirection: 'asc' | 'desc';
-  limit: string;
-  offset: string;
-  updatedAt: string;
-}
+type SavedCollectionBindingPreset = CollectionBindingPreset;
 
 const COLLECTION_BINDING_PRESET_STORAGE_KEY = 'backy.editor.collectionBindingPresets.v1';
 
@@ -4491,6 +4480,20 @@ const loadSavedCollectionBindingPresets = (): SavedCollectionBindingPreset[] => 
 const persistSavedCollectionBindingPresets = (presets: SavedCollectionBindingPreset[]) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(COLLECTION_BINDING_PRESET_STORAGE_KEY, JSON.stringify(presets));
+};
+
+const mergeCollectionBindingPresets = (
+  primary: SavedCollectionBindingPreset[],
+  secondary: SavedCollectionBindingPreset[],
+): SavedCollectionBindingPreset[] => {
+  const seen = new Set<string>();
+  return [...primary, ...secondary]
+    .filter((preset) => {
+      if (seen.has(preset.id)) return false;
+      seen.add(preset.id);
+      return true;
+    })
+    .slice(0, 48);
 };
 
 function CollectionFilterValueControl({
@@ -5003,8 +5006,46 @@ function DataBindingProperties({
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>(() => loadSavedCollectionBindingPresets());
+  const [savedPresetSyncState, setSavedPresetSyncState] = useState<'loading' | 'shared' | 'local'>('loading');
+  const [savedPresetSyncError, setSavedPresetSyncError] = useState<string | null>(null);
   const [savedPresetName, setSavedPresetName] = useState('');
   const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const localPresets = loadSavedCollectionBindingPresets();
+
+    if (!siteId) {
+      setSavedPresetSyncState('local');
+      setSavedPresetSyncError(null);
+      setSavedBindingPresets(localPresets);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSavedPresetSyncState('loading');
+    setSavedPresetSyncError(null);
+    listCollectionBindingPresets(siteId)
+      .then((presets) => {
+        if (cancelled) return;
+        const normalized = normalizeSavedCollectionBindingPresets(presets);
+        const nextPresets = mergeCollectionBindingPresets(normalized, localPresets);
+        setSavedBindingPresets(nextPresets);
+        persistSavedCollectionBindingPresets(nextPresets);
+        setSavedPresetSyncState('shared');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSavedBindingPresets(localPresets);
+        setSavedPresetSyncState('local');
+        setSavedPresetSyncError(error instanceof Error ? error.message : 'Unable to load shared presets');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId]);
 
   useEffect(() => {
     if (!siteId || !selectedCollectionId) {
@@ -5161,7 +5202,32 @@ function DataBindingProperties({
     });
   };
 
-  const saveCurrentBindingPreset = () => {
+  const persistSharedBindingPresets = async (nextPresets: SavedCollectionBindingPreset[]) => {
+    persistSavedCollectionBindingPresets(nextPresets);
+
+    if (!siteId) {
+      setSavedPresetSyncState('local');
+      setSavedPresetSyncError(null);
+      return nextPresets;
+    }
+
+    try {
+      const persisted = normalizeSavedCollectionBindingPresets(
+        await saveCollectionBindingPresets(siteId, nextPresets),
+      );
+      setSavedPresetSyncState('shared');
+      setSavedPresetSyncError(null);
+      persistSavedCollectionBindingPresets(persisted);
+      setSavedBindingPresets(persisted);
+      return persisted;
+    } catch (error) {
+      setSavedPresetSyncState('local');
+      setSavedPresetSyncError(error instanceof Error ? error.message : 'Unable to save shared presets');
+      return nextPresets;
+    }
+  };
+
+  const saveCurrentBindingPreset = async () => {
     if (!selectedCollection || !selectedFieldKey) return;
     const name = savedPresetName.trim() || `${selectedCollection.name} ${selectedField?.label || selectedFieldKey}`;
     const now = new Date().toISOString();
@@ -5189,9 +5255,9 @@ function DataBindingProperties({
       ...savedBindingPresets.filter((item) => item.id !== preset.id),
     ].slice(0, 24);
     setSavedBindingPresets(nextPresets);
-    persistSavedCollectionBindingPresets(nextPresets);
     setSavedPresetName('');
     setSelectedSavedPresetId(preset.id);
+    await persistSharedBindingPresets(nextPresets);
   };
 
   const applySavedBindingPreset = () => {
@@ -5209,12 +5275,12 @@ function DataBindingProperties({
     });
   };
 
-  const deleteSavedBindingPreset = () => {
+  const deleteSavedBindingPreset = async () => {
     if (!selectedSavedPreset) return;
     const nextPresets = savedBindingPresets.filter((preset) => preset.id !== selectedSavedPreset.id);
     setSavedBindingPresets(nextPresets);
-    persistSavedCollectionBindingPresets(nextPresets);
     setSelectedSavedPresetId(nextPresets.find((preset) => preset.collectionId === selectedCollectionId)?.id || '');
+    await persistSharedBindingPresets(nextPresets);
   };
 
   if (collectionsError) {
@@ -5293,7 +5359,16 @@ function DataBindingProperties({
           )}
 
           <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-saved-binding-presets">
-            <div className="mb-2 text-xs font-medium text-foreground">Saved presets</div>
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium text-foreground">Saved presets</span>
+              <span className="text-muted-foreground" data-testid="editor-data-saved-preset-sync-state">
+                {savedPresetSyncState === 'loading'
+                  ? 'Loading shared presets'
+                  : savedPresetSyncState === 'shared'
+                    ? 'Shared with this site'
+                    : 'Local fallback'}
+              </span>
+            </div>
             <div className="space-y-2">
               <div className="flex gap-2">
                 <input
@@ -5359,6 +5434,11 @@ function DataBindingProperties({
                   {selectedSavedPreset.fieldKey} to {selectedSavedPreset.targetPath}
                   {selectedSavedPreset.sortBy ? ` • sort ${selectedSavedPreset.sortBy} ${selectedSavedPreset.sortDirection}` : ''}
                   {selectedSavedPreset.limit ? ` • limit ${selectedSavedPreset.limit}` : ''}
+                </div>
+              )}
+              {savedPresetSyncError && (
+                <div className="text-xs text-amber-700" data-testid="editor-data-saved-preset-sync-error">
+                  Shared preset sync failed: {savedPresetSyncError}
                 </div>
               )}
             </div>

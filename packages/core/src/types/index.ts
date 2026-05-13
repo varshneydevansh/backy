@@ -309,6 +309,32 @@ export interface SiteSettings {
 
   /** Contact pipeline configuration for saved lead views and custom CRM handoff */
   contacts?: SiteContactPipelineSettings;
+
+  /** Site-scoped editor preferences and presets shared by admins working on this site */
+  editor?: SiteEditorSettings;
+}
+
+export interface SiteEditorCollectionBindingPreset {
+  id: string;
+  name: string;
+  collectionId: string;
+  fieldKey: string;
+  targetPath: string;
+  search?: string;
+  filterField?: string;
+  filterValue?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  limit?: string;
+  offset?: string;
+  createdAt?: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface SiteEditorSettings {
+  collectionBindingPresets?: SiteEditorCollectionBindingPreset[];
 }
 
 export type SiteContactSavedListQuality =

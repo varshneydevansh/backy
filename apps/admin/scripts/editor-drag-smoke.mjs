@@ -8426,9 +8426,13 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
           ? Array.from(select.options).map((option) => option.textContent || '')
           : [],
         summary: document.querySelector('[data-testid="editor-data-saved-preset-summary"]')?.textContent || '',
+        syncState: document.querySelector('[data-testid="editor-data-saved-preset-sync-state"]')?.textContent || '',
       };
     })()`);
-    if (savedPresetState.options.some((label) => /Featured title preset/i.test(label))) {
+    if (
+      savedPresetState.options.some((label) => /Featured title preset/i.test(label)) &&
+      /Shared with this site/i.test(savedPresetState.syncState)
+    ) {
       break;
     }
     await sleep(100);
@@ -8437,8 +8441,18 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     savedPresetState?.options?.some((label) => /Featured title preset/i.test(label)) &&
       /title to props\.content/i.test(savedPresetState?.summary || '') &&
       /sort rank desc/i.test(savedPresetState?.summary || '') &&
-      /limit 1/i.test(savedPresetState?.summary || ''),
+      /limit 1/i.test(savedPresetState?.summary || '') &&
+      /Shared with this site/i.test(savedPresetState?.syncState || ''),
     `Saved collection binding preset missing: ${JSON.stringify(savedPresetState)}`,
+  );
+  const sharedPresetPayload = await requestApi(`/api/admin/sites/${SITE_ID}/editor/collection-binding-presets`);
+  const sharedPreset = sharedPresetPayload.data?.presets?.find((preset) => preset.name === 'Featured title preset');
+  assert(
+    sharedPreset?.collectionId === collectionId &&
+      sharedPreset?.fieldKey === 'title' &&
+      sharedPreset?.targetPath === 'props.content' &&
+      sharedPreset?.sortBy === 'rank',
+    `Shared collection binding preset did not persist to the backend: ${JSON.stringify(sharedPresetPayload)}`,
   );
   await clickControlByTestId(client, 'editor-data-preset-summary');
   await clickControlByTestId(client, 'editor-data-apply-saved-preset');
@@ -8485,6 +8499,20 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
   assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
   assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.thumbnailSrc), `Collection record preview thumbnail missing selected image: ${JSON.stringify(state)}`);
+
+  await clickControlByTestId(client, 'editor-data-delete-saved-preset');
+  let deletedPresetPayload = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    deletedPresetPayload = await requestApi(`/api/admin/sites/${SITE_ID}/editor/collection-binding-presets`);
+    if (!(deletedPresetPayload.data?.presets || []).some((preset) => preset.id === sharedPreset.id)) {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(
+    !(deletedPresetPayload.data?.presets || []).some((preset) => preset.id === sharedPreset.id),
+    `Shared collection binding preset did not delete from the backend: ${JSON.stringify(deletedPresetPayload)}`,
+  );
 
   return state;
 };

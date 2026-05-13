@@ -482,6 +482,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
   },
   frontendDesign: emptyFrontendDesignContract(),
   contacts: { savedLists: [] },
+  editor: { collectionBindingPresets: [] },
 });
 
 const SITE_LIST: StoreSite[] = [
@@ -4009,6 +4010,18 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
           savedLists: Array.isArray(toRecord(settingsInput.contacts).savedLists)
             ? toRecord(settingsInput.contacts).savedLists as NonNullable<SiteSettings['contacts']>['savedLists']
             : base.contacts?.savedLists || [],
+        },
+    editor: settingsInput.editor === undefined
+      ? {
+          ...(base.editor || {}),
+          collectionBindingPresets: [...(base.editor?.collectionBindingPresets || [])],
+        }
+      : {
+          ...(base.editor || {}),
+          ...toRecord(settingsInput.editor),
+          collectionBindingPresets: Array.isArray(toRecord(settingsInput.editor).collectionBindingPresets)
+            ? toRecord(settingsInput.editor).collectionBindingPresets as NonNullable<SiteSettings['editor']>['collectionBindingPresets']
+            : base.editor?.collectionBindingPresets || [],
         },
   };
 }

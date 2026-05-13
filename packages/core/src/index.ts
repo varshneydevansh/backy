@@ -115,6 +115,9 @@ export const DEFAULT_SITE_SETTINGS = {
   contacts: {
     savedLists: [],
   },
+  editor: {
+    collectionBindingPresets: [],
+  },
   frontendDesign: {
     schemaVersion: 'backy.frontend-design.v1',
     status: 'unconfigured',

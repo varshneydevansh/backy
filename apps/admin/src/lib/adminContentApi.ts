@@ -171,6 +171,35 @@ interface ApiSiteFrontendDesignResponse {
   };
 }
 
+export interface CollectionBindingPreset {
+  id: string;
+  name: string;
+  collectionId: string;
+  fieldKey: string;
+  targetPath: string;
+  search?: string;
+  filterField?: string;
+  filterValue?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  limit?: string;
+  offset?: string;
+  createdAt?: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+interface ApiCollectionBindingPresetsResponse {
+  success: boolean;
+  data?: {
+    presets: CollectionBindingPreset[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface ReadinessCheck {
   id: string;
   category: 'site' | 'page' | 'seo' | 'navigation' | 'content' | 'media' | 'layout';
@@ -2750,6 +2779,37 @@ export async function captureSiteFrontendDesignDefaults(siteId: string): Promise
   }
 
   return payload.data;
+}
+
+export async function listCollectionBindingPresets(siteId: string): Promise<CollectionBindingPreset[]> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/editor/collection-binding-presets`);
+  const payload = await readJson<ApiCollectionBindingPresetsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load collection binding presets');
+  }
+
+  return payload.data.presets;
+}
+
+export async function saveCollectionBindingPresets(
+  siteId: string,
+  presets: CollectionBindingPreset[],
+): Promise<CollectionBindingPreset[]> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/editor/collection-binding-presets`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ presets }),
+  });
+  const payload = await readJson<ApiCollectionBindingPresetsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save collection binding presets');
+  }
+
+  return payload.data.presets;
 }
 
 export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
