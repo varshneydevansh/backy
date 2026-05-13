@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getSiteByIdOrSlug, listAuditEvents } from '@/lib/backyStore';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { publicContractJson } from '@/lib/publicContractResponse';
@@ -69,6 +70,20 @@ function parseTextInput(raw: string | null): string {
   return raw ? raw.trim() : '';
 }
 
+function permissionForKind(kind: AuditKind) {
+  if (kind === 'form-submission' || kind === 'contact-shared' || kind === 'contact-sync' || kind === 'contact-status') {
+    return 'forms.view';
+  }
+  if (kind === 'comment-submitted' || kind === 'comment-status' || kind === 'comment-reported') {
+    return 'comments.view';
+  }
+  if (kind === 'commerce-webhook') {
+    return 'commerce.view';
+  }
+
+  return 'activity.export';
+}
+
 function metadataText(event: BackyAuditLogEntry, key: string): string | null {
   const value = event.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -108,6 +123,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const contactId = parseTextInput(searchParams.get('contactId'));
     const limit = parseLimit(searchParams.get('limit'));
     const offset = parseOffset(searchParams.get('offset'));
+    const access = requireAdminAccess(request, responseRequestId, { permission: permissionForKind(kind) });
+    if (access instanceof NextResponse) {
+      return access;
+    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

@@ -56,6 +56,10 @@ const protectedRoutes = [
     file: 'apps/public/src/app/api/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts',
     gates: ["permission: 'forms.view'", "permission: 'forms.manage'"],
   },
+  {
+    file: 'apps/public/src/app/api/sites/[siteId]/events/route.ts',
+    gates: ["permission: permissionForKind(kind)", "'forms.view'", "'comments.view'", "'commerce.view'", "'activity.export'"],
+  },
 ];
 
 for (const route of protectedRoutes) {
