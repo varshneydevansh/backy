@@ -16,6 +16,8 @@ let createdTagId = null;
 let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
+let createdReferenceCollectionId = null;
+let createdReferenceRecordId = null;
 let commerceProductsCollectionId = null;
 let commerceFutureProductRecordId = null;
 let commercePastProductRecordId = null;
@@ -224,6 +226,14 @@ async function cleanup() {
     await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
   }
 
+  if (createdSiteId && createdReferenceCollectionId && createdReferenceRecordId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdReferenceCollectionId}/records/${createdReferenceRecordId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdReferenceCollectionId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdReferenceCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdSiteId && commerceProductsCollectionId && commerceFutureProductRecordId) {
     await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commerceFutureProductRecordId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -307,6 +317,8 @@ try {
   const tagSlug = `admin-contract-tag-${unique}`;
   const collectionSlug = `admin-contract-collection-${unique}`;
   const collectionRecordSlug = `admin-contract-record-${unique}`;
+  const referenceCollectionSlug = `admin-contract-authors-${unique}`;
+  const referenceRecordSlug = `admin-contract-author-${unique}`;
   const dynamicTemplateCollectionSlug = `admin-contract-template-${unique}`;
   const dynamicTemplateRecordSlug = `admin-contract-template-record-${unique}`;
   const futureProductSlug = `admin-contract-future-product-${unique}`;
@@ -3098,6 +3110,49 @@ try {
     assert(unauthCollections.status === 401, `Collections admin API should reject missing auth, got ${unauthCollections.status}`);
     assert(unauthCollectionsJson?.success === false && unauthCollectionsJson?.error?.code === 'UNAUTHORIZED', `Collections admin API missing auth envelope: ${JSON.stringify(unauthCollectionsJson).slice(0, 500)}`);
 
+    const createReferenceCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Authors',
+        slug: referenceCollectionSlug,
+        status: 'published',
+        fields: [
+          { key: 'name', label: 'Name', type: 'text', required: true, unique: true },
+          { key: 'bio', label: 'Bio', type: 'richText' },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(createReferenceCollection.response.status === 201, `${createReferenceCollection.url} expected 201, got ${createReferenceCollection.response.status}`);
+    createdReferenceCollectionId = createReferenceCollection.json?.data?.collection?.id;
+    assert(createdReferenceCollectionId, `${createReferenceCollection.url} missing reference collection id`);
+
+    const createReferenceRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdReferenceCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: referenceRecordSlug,
+        status: 'published',
+        values: {
+          name: 'Contract Author',
+          bio: 'Author referenced by collection-bound render payloads.',
+        },
+      }),
+    });
+    assert(createReferenceRecord.response.status === 201, `${createReferenceRecord.url} expected 201, got ${createReferenceRecord.response.status}`);
+    createdReferenceRecordId = createReferenceRecord.json?.data?.record?.id;
+    assert(createdReferenceRecordId, `${createReferenceRecord.url} missing reference record id`);
+
     const createCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {
@@ -3116,6 +3171,7 @@ try {
           { key: 'rank', label: 'Rank', type: 'number' },
           { key: 'category', label: 'Category', type: 'select', options: ['Featured', 'Standard'] },
           { key: 'labels', label: 'Labels', type: 'tags', options: ['Launch', 'Evergreen', 'Internal'] },
+          { key: 'author', label: 'Author', type: 'reference', referenceCollectionId: createdReferenceCollectionId },
         ],
         permissions: {
           publicRead: true,
@@ -4538,6 +4594,7 @@ try {
           rank: 1,
           category: 'Featured',
           labels: ['Launch', 'Evergreen'],
+          author: createdReferenceRecordId,
         },
       }),
     });
@@ -4946,6 +5003,31 @@ try {
               ],
             },
             {
+              id: 'bound_author',
+              type: 'text',
+              x: 100,
+              y: 185,
+              width: 420,
+              height: 48,
+              props: { content: 'Fallback author' },
+              children: [],
+              dataBindings: [
+                {
+                  id: 'bind_bound_author',
+                  datasetId: 'dataset_contract_collection_author',
+                  targetPath: 'props.content',
+                  source: {
+                    kind: 'collection',
+                    collectionId: createdCollectionId,
+                    field: 'author',
+                    path: 'author.name',
+                    recordId: createdCollectionRecordId,
+                  },
+                  mode: 'text',
+                },
+              ],
+            },
+            {
               id: 'bound_repeater',
               type: 'repeater',
               x: 100,
@@ -5005,11 +5087,28 @@ try {
       `${boundRender.url} missing collection binding manifest`,
     );
     assert(
+      boundRender.json?.data?.dataBindings?.bindings?.some((binding) => (
+        binding.id === 'bind_bound_author'
+        && binding.elementId === 'bound_author'
+        && binding.source?.collectionId === createdCollectionId
+        && binding.source?.field === 'author'
+        && binding.source?.path === 'author.name'
+      )),
+      `${boundRender.url} missing joined collection binding manifest`,
+    );
+    assert(
       boundRender.json?.data?.content?.elements?.some((element) => (
         element.id === 'bound_title'
         && element.props?.content === 'Collection Record'
       )),
       `${boundRender.url} did not resolve bound collection value into element props`,
+    );
+    assert(
+      boundRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'bound_author'
+        && element.props?.content === 'Contract Author'
+      )),
+      `${boundRender.url} did not resolve joined collection value into element props`,
     );
     assert(
       boundRender.json?.data?.content?.elements?.some((element) => (
@@ -5028,6 +5127,7 @@ try {
     const hostedBoundPage = await request(`/sites/${siteSlug}/${boundPageSlug}`);
     assert(hostedBoundPage.response.status === 200, `${hostedBoundPage.url} expected hosted bound page`);
     assert(hostedBoundPage.text.includes('Collection Record'), `${hostedBoundPage.url} missing hosted repeater record`);
+    assert(hostedBoundPage.text.includes('Contract Author'), `${hostedBoundPage.url} missing hosted joined collection value`);
 
     const removeBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(removeBoundPage.response.status === 200, `${removeBoundPage.url} expected 200, got ${removeBoundPage.response.status}`);

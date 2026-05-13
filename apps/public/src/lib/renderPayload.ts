@@ -547,7 +547,7 @@ const valueForBinding = (
   const collectionId = typeof source?.collectionId === 'string' ? source.collectionId : null;
   const field = typeof source?.field === 'string' ? source.field : null;
 
-  if (!collectionId || !field) {
+  if (!source || !collectionId || !field) {
     return undefined;
   }
 
@@ -559,6 +559,44 @@ const valueForBinding = (
   const record = getBoundCollectionRecord(siteId, collection.id, binding);
   if (!record) {
     return undefined;
+  }
+
+  const sourcePath = typeof source.path === 'string' ? source.path : '';
+  if (sourcePath.startsWith(`${field}.`)) {
+    const joinedField = sourcePath.slice(field.length + 1);
+    if (!joinedField) {
+      return record.values[field];
+    }
+
+    const referenceField = collection.fields.find((candidate) => candidate.key === field);
+    const referenceCollectionId = typeof referenceField?.referenceCollectionId === 'string'
+      ? referenceField.referenceCollectionId
+      : '';
+    if (!referenceCollectionId) {
+      return record.values[field];
+    }
+
+    const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
+    if (!referenceCollection) {
+      return record.values[field];
+    }
+
+    const referenceValue = record.values[field];
+    if (Array.isArray(referenceValue)) {
+      return referenceValue
+        .map((entry) => (typeof entry === 'string' ? getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry) : null))
+        .filter((entry): entry is StoreCollectionRecord => Boolean(entry))
+        .map((entry) => entry.values[joinedField])
+        .filter((entry) => entry !== undefined && entry !== null)
+        .join(', ');
+    }
+
+    if (typeof referenceValue === 'string' && referenceValue.length > 0) {
+      const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, referenceValue);
+      if (referenceRecord) {
+        return referenceRecord.values[joinedField];
+      }
+    }
   }
 
   return record.values[field];

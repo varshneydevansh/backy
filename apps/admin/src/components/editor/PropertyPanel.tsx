@@ -4452,6 +4452,7 @@ const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollection
           collectionId: typeof item.collectionId === 'string' ? item.collectionId : '',
           fieldKey: typeof item.fieldKey === 'string' ? item.fieldKey : '',
           targetPath: typeof item.targetPath === 'string' ? item.targetPath : 'props.content',
+          sourcePath: typeof item.sourcePath === 'string' ? item.sourcePath : '',
           search: typeof item.search === 'string' ? item.search : '',
           filterField: typeof item.filterField === 'string' ? item.filterField : '',
           filterValue: typeof item.filterValue === 'string' ? item.filterValue : '',
@@ -4998,8 +4999,16 @@ function DataBindingProperties({
   const selectedTargetPath = typeof currentBinding?.targetPath === 'string'
     ? currentBinding.targetPath
     : getTargetPathOptions(element.type)[0].value;
+  const selectedSourcePath = typeof currentSource?.path === 'string' ? currentSource.path : '';
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) || null;
   const selectedField = selectedCollection?.fields.find((field) => field.key === selectedFieldKey) || null;
+  const selectedReferenceCollection = selectedField?.referenceCollectionId
+    ? collections.find((collection) => collection.id === selectedField.referenceCollectionId) || null
+    : null;
+  const selectedReferenceFieldKey = selectedSourcePath.startsWith(`${selectedFieldKey}.`)
+    ? selectedSourcePath.slice(selectedFieldKey.length + 1)
+    : '';
+  const selectedReferenceField = selectedReferenceCollection?.fields.find((field) => field.key === selectedReferenceFieldKey) || null;
   const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
   const targetPathOptions = getTargetPathOptions(element.type);
   const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
@@ -5094,6 +5103,9 @@ function DataBindingProperties({
   )) || null;
   const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
   const selectedRecordPreviewMedia = selectedRecordPreviewImage(selectedRecordPreview, selectedCollection, siteId);
+  const selectedRecordJoinedValue = selectedRecordPreview && selectedField && selectedReferenceField
+    ? `Joins ${selectedField.label} to ${selectedReferenceCollection?.name || 'referenced collection'} ${selectedReferenceField.label}`
+    : '';
   const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
   const savedPresetsForCollection = savedBindingPresets.filter((preset) => (
     preset.collectionId === selectedCollectionId
@@ -5119,6 +5131,7 @@ function DataBindingProperties({
     fieldKey?: string;
     recordId?: string;
     targetPath?: string;
+    sourcePath?: string;
     search?: string;
     filterField?: string;
     filterValue?: string;
@@ -5134,6 +5147,15 @@ function DataBindingProperties({
       ?? '';
     const field = collection?.fields.find((item) => item.key === fieldKey) || null;
     const targetPath = updates.targetPath ?? selectedTargetPath;
+    const referenceCollection = field?.referenceCollectionId
+      ? collections.find((item) => item.id === field.referenceCollectionId) || null
+      : null;
+    const rawSourcePath = updates.sourcePath ?? (fieldKey === selectedFieldKey ? selectedSourcePath : '');
+    const referenceFieldKey = rawSourcePath.startsWith(`${fieldKey}.`) ? rawSourcePath.slice(fieldKey.length + 1) : rawSourcePath;
+    const sourcePath = referenceCollection && referenceFieldKey
+      ? `${fieldKey}.${referenceFieldKey}`
+      : '';
+    const sourcePathField = referenceCollection?.fields.find((item) => item.key === referenceFieldKey) || null;
     const recordId = updates.recordId ?? selectedRecordId;
     const search = updates.search ?? selectedSearch;
     const filterField = updates.filterField ?? selectedFilterField;
@@ -5185,9 +5207,10 @@ function DataBindingProperties({
             kind: 'collection',
             collectionId: collection.id,
             field: fieldKey,
+            ...(sourcePath ? { path: sourcePath } : {}),
             ...(recordId.trim() ? { recordId: recordId.trim() } : {}),
           },
-          mode: getBindingModeForField(field, targetPath),
+          mode: getBindingModeForField(sourcePathField || field, targetPath),
           ...(Object.keys(query).length > 0 ? { query } : {}),
           ...(Object.keys(pagination).length > 0 ? { pagination } : {}),
         },
@@ -5241,6 +5264,7 @@ function DataBindingProperties({
       collectionId: selectedCollection.id,
       fieldKey: selectedFieldKey,
       targetPath: selectedTargetPath,
+      sourcePath: selectedSourcePath,
       search: selectedSearch,
       filterField: selectedFilterField,
       filterValue: selectedFilterValue,
@@ -5265,6 +5289,7 @@ function DataBindingProperties({
     updateBinding({
       fieldKey: selectedSavedPreset.fieldKey,
       targetPath: selectedSavedPreset.targetPath,
+      sourcePath: selectedSavedPreset.sourcePath,
       search: selectedSavedPreset.search,
       filterField: selectedSavedPreset.filterField,
       filterValue: selectedSavedPreset.filterValue,
@@ -5432,6 +5457,7 @@ function DataBindingProperties({
               {selectedSavedPreset && (
                 <div className="text-xs text-muted-foreground" data-testid="editor-data-saved-preset-summary">
                   {selectedSavedPreset.fieldKey} to {selectedSavedPreset.targetPath}
+                  {selectedSavedPreset.sourcePath ? ` • join ${selectedSavedPreset.sourcePath}` : ''}
                   {selectedSavedPreset.sortBy ? ` • sort ${selectedSavedPreset.sortBy} ${selectedSavedPreset.sortDirection}` : ''}
                   {selectedSavedPreset.limit ? ` • limit ${selectedSavedPreset.limit}` : ''}
                 </div>
@@ -5450,7 +5476,7 @@ function DataBindingProperties({
             </label>
             <select
               value={selectedFieldKey}
-              onChange={(event) => updateBinding({ fieldKey: event.target.value })}
+              onChange={(event) => updateBinding({ fieldKey: event.target.value, sourcePath: '' })}
               data-testid="editor-data-field"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -5464,6 +5490,37 @@ function DataBindingProperties({
               ))}
             </select>
           </div>
+
+          {selectedReferenceCollection && (
+            <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-reference-join">
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Joined field
+              </label>
+              <select
+                value={selectedReferenceFieldKey}
+                onChange={(event) => updateBinding({
+                  sourcePath: event.target.value ? `${selectedFieldKey}.${event.target.value}` : '',
+                })}
+                data-testid="editor-data-reference-field"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="">Reference ID</option>
+                {selectedReferenceCollection.fields.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {selectedReferenceCollection.name}: {field.label} ({field.type})
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {selectedReferenceField
+                  ? `${selectedField?.label || selectedFieldKey} -> ${selectedReferenceCollection.name}.${selectedReferenceField.label}`
+                  : `${selectedField?.label || selectedFieldKey} resolves to the referenced record id.`}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
@@ -5559,6 +5616,12 @@ function DataBindingProperties({
                     <span className="truncate text-foreground">{value}</span>
                   </div>
                 ))}
+                {selectedRecordJoinedValue && (
+                  <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2" data-testid="editor-data-reference-preview">
+                    <span className="truncate text-muted-foreground">Join</span>
+                    <span className="truncate text-foreground">{selectedRecordJoinedValue}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -5709,6 +5772,7 @@ function DataBindingProperties({
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             Dataset: dataset_{selectedCollection.id}
             {selectedField ? ` • ${selectedField.key}` : ''}
+            {selectedSourcePath ? ` • join ${selectedSourcePath}` : ''}
             {selectedRecordId ? ` • record ${selectedRecordId}` : ''}
             {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
             {selectedLimit ? ` • limit ${selectedLimit}` : ''}

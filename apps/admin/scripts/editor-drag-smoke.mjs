@@ -755,6 +755,44 @@ const deleteSmokeReusableSection = async (sectionId) => {
 
 const createSmokeCollection = async () => {
   const slug = `editor-smoke-dataset-${Date.now().toString(36)}`;
+  const authorSlug = `${slug}-authors`;
+  const authorPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Editor Smoke Authors',
+      slug: authorSlug,
+      description: 'Temporary referenced collection for editor dataset join controls.',
+      status: 'published',
+      routePattern: `/${authorSlug}/:recordSlug`,
+      listRoutePattern: `/${authorSlug}`,
+      permissions: {
+        publicRead: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+      fields: [
+        { key: 'name', label: 'Name', type: 'text', required: true, unique: true, sortOrder: 10 },
+        { key: 'bio', label: 'Bio', type: 'richText', required: false, unique: false, sortOrder: 20 },
+      ],
+    }),
+  });
+  const authorCollection = authorPayload.data?.collection || authorPayload.collection;
+  assert(authorCollection?.id, `Unable to create smoke reference collection: ${JSON.stringify(authorPayload).slice(0, 500)}`);
+  const authorRecordPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${authorCollection.id}/records`, {
+    method: 'POST',
+    body: JSON.stringify({
+      slug: `${authorSlug}-jordan`,
+      status: 'published',
+      values: {
+        name: 'Jordan Editor',
+        bio: 'Design systems lead for joined dataset smoke tests.',
+      },
+    }),
+  });
+  const authorRecord = authorRecordPayload.data?.record || authorRecordPayload.record;
+  assert(authorRecord?.id, `Unable to create smoke reference record: ${JSON.stringify(authorRecordPayload).slice(0, 500)}`);
+
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
     method: 'POST',
     body: JSON.stringify({
@@ -776,6 +814,7 @@ const createSmokeCollection = async () => {
         { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 30 },
         { key: 'rank', label: 'Rank', type: 'number', required: false, unique: false, sortOrder: 40 },
         { key: 'thumbnail', label: 'Thumbnail', type: 'image', required: false, unique: false, sortOrder: 50 },
+        { key: 'author', label: 'Author', type: 'reference', required: false, unique: false, sortOrder: 60, referenceCollectionId: authorCollection.id },
       ],
     }),
   });
@@ -794,12 +833,17 @@ const createSmokeCollection = async () => {
           summary: `${title} summary`,
           rank: index + 1,
           thumbnail: `https://cdn.backy.test/${slug}-${index + 1}.jpg`,
+          author: authorRecord.id,
         },
       }),
     });
   }
 
-  return collection;
+  return {
+    ...collection,
+    referenceCollectionId: authorCollection.id,
+    referenceRecordId: authorRecord.id,
+  };
 };
 
 const deleteSmokeCollection = async (collectionId) => {
@@ -8370,6 +8414,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     })()`);
     if (
       queryControlsReady.fields.includes('title') &&
+      queryControlsReady.fields.includes('author') &&
       queryControlsReady.filterFields.includes('category') &&
       queryControlsReady.sortFields.includes('rank') &&
       /Title/i.test(queryControlsReady.presetText) &&
@@ -8383,6 +8428,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   }
   assert(
       queryControlsReady?.fields?.includes('title') &&
+      queryControlsReady?.fields?.includes('author') &&
       queryControlsReady?.filterFields?.includes('category') &&
       queryControlsReady?.sortFields?.includes('rank') &&
       /Title/i.test(queryControlsReady?.presetText || '') &&
@@ -8404,7 +8450,26 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     target: document.querySelector('[data-testid="editor-data-target"]')?.value || '',
   }))()`);
   assert(summaryPresetState.field === 'summary' && summaryPresetState.target === 'props.html', `Collection binding summary preset mismatch: ${JSON.stringify(summaryPresetState)}`);
-  await setFormControlByTestId(client, 'editor-data-field', 'title');
+  await setFormControlByTestId(client, 'editor-data-field', 'author');
+  let referenceJoinState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    referenceJoinState = await evaluate(client, `(() => {
+      const select = document.querySelector('[data-testid="editor-data-reference-field"]');
+      return {
+        hasJoinControl: select instanceof HTMLSelectElement,
+        options: select instanceof HTMLSelectElement
+          ? Array.from(select.options).map((option) => option.value)
+          : [],
+        text: document.querySelector('[data-testid="editor-data-reference-join"]')?.textContent || '',
+      };
+    })()`);
+    if (referenceJoinState.hasJoinControl && referenceJoinState.options.includes('name')) {
+      break;
+    }
+    await sleep(100);
+  }
+  assert(referenceJoinState?.hasJoinControl && referenceJoinState.options.includes('name'), `Collection reference join controls did not render: ${JSON.stringify(referenceJoinState)}`);
+  await setFormControlByTestId(client, 'editor-data-reference-field', 'name');
   await setFormControlByTestId(client, 'editor-data-target', 'props.content');
   await setFormControlByTestId(client, 'editor-data-record-picker', targetRecordId);
   await setFormControlByTestId(client, 'editor-data-query-search', 'featured');
@@ -8414,7 +8479,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-data-query-sort-direction', 'desc');
   await setFormControlByTestId(client, 'editor-data-query-limit', '1');
   await setFormControlByTestId(client, 'editor-data-query-offset', '0');
-  await setFormControlByTestId(client, 'editor-data-saved-preset-name', 'Featured title preset');
+  await setFormControlByTestId(client, 'editor-data-saved-preset-name', 'Featured author preset');
   await clickControlByTestId(client, 'editor-data-save-preset');
   let savedPresetState = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -8430,7 +8495,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       };
     })()`);
     if (
-      savedPresetState.options.some((label) => /Featured title preset/i.test(label)) &&
+      savedPresetState.options.some((label) => /Featured author preset/i.test(label)) &&
       /Shared with this site/i.test(savedPresetState.syncState)
     ) {
       break;
@@ -8438,19 +8503,21 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     await sleep(100);
   }
   assert(
-    savedPresetState?.options?.some((label) => /Featured title preset/i.test(label)) &&
-      /title to props\.content/i.test(savedPresetState?.summary || '') &&
+    savedPresetState?.options?.some((label) => /Featured author preset/i.test(label)) &&
+      /author to props\.content/i.test(savedPresetState?.summary || '') &&
+      /join author\.name/i.test(savedPresetState?.summary || '') &&
       /sort rank desc/i.test(savedPresetState?.summary || '') &&
       /limit 1/i.test(savedPresetState?.summary || '') &&
       /Shared with this site/i.test(savedPresetState?.syncState || ''),
     `Saved collection binding preset missing: ${JSON.stringify(savedPresetState)}`,
   );
   const sharedPresetPayload = await requestApi(`/api/admin/sites/${SITE_ID}/editor/collection-binding-presets`);
-  const sharedPreset = sharedPresetPayload.data?.presets?.find((preset) => preset.name === 'Featured title preset');
+  const sharedPreset = sharedPresetPayload.data?.presets?.find((preset) => preset.name === 'Featured author preset');
   assert(
     sharedPreset?.collectionId === collectionId &&
-      sharedPreset?.fieldKey === 'title' &&
+      sharedPreset?.fieldKey === 'author' &&
       sharedPreset?.targetPath === 'props.content' &&
+      sharedPreset?.sourcePath === 'author.name' &&
       sharedPreset?.sortBy === 'rank',
     `Shared collection binding preset did not persist to the backend: ${JSON.stringify(sharedPresetPayload)}`,
   );
@@ -8473,6 +8540,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     return {
       collectionId: value('editor-data-collection'),
       field: value('editor-data-field'),
+      referenceField: value('editor-data-reference-field'),
       target: value('editor-data-target'),
       recordPicker: value('editor-data-record-picker'),
       recordId: value('editor-data-record-id'),
@@ -8486,17 +8554,19 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       offset: value('editor-data-query-offset'),
       summary,
       preview,
+      referencePreview: document.querySelector('[data-testid="editor-data-reference-preview"]')?.textContent || '',
       thumbnailSrc: thumbnail instanceof HTMLImageElement ? thumbnail.getAttribute('src') || thumbnail.currentSrc || '' : '',
     };
   })()`);
 
   assert(state.collectionId === collectionId, `Collection binding did not select collection: ${JSON.stringify(state)}`);
-  assert(state.field === 'title' && state.target === 'props.content', `Collection binding field/target mismatch: ${JSON.stringify(state)}`);
+  assert(state.field === 'author' && state.referenceField === 'name' && state.target === 'props.content', `Collection binding field/join/target mismatch: ${JSON.stringify(state)}`);
   assert(state.recordPicker === targetRecordId && state.recordId === targetRecordId, `Collection binding record picker mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Collection query filter mismatch: ${JSON.stringify(state)}`);
   assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Collection query filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
-  assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
+  assert(/join author\.name/i.test(state.summary) && /sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
+  assert(/Author.*Editor Smoke Authors.*Name/i.test(state.referencePreview), `Collection reference preview missing join summary: ${JSON.stringify(state)}`);
   assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
   assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.thumbnailSrc), `Collection record preview thumbnail missing selected image: ${JSON.stringify(state)}`);
 
@@ -8528,7 +8598,7 @@ const assertPersistedDataBinding = async (pageId, collectionId) => {
   assert(binding, `Persisted data binding missing from smoke-heading: ${JSON.stringify(heading)}`);
   assert(binding.datasetId === `dataset_${collectionId}`, `Persisted dataset id mismatch: ${JSON.stringify(binding)}`);
   assert(binding.targetPath === 'props.content', `Persisted binding target mismatch: ${JSON.stringify(binding)}`);
-  assert(binding.source?.collectionId === collectionId && binding.source?.field === 'title', `Persisted binding source mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.source?.collectionId === collectionId && binding.source?.field === 'author' && binding.source?.path === 'author.name', `Persisted binding source mismatch: ${JSON.stringify(binding)}`);
   assert(binding.source?.recordId && binding.query?.recordId === binding.source.recordId, `Persisted binding record picker mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.q === 'featured', `Persisted binding search query mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.fieldKey === 'category' && binding.query?.fieldValue === 'Featured', `Persisted binding filter mismatch: ${JSON.stringify(binding)}`);
@@ -12342,6 +12412,7 @@ const main = async () => {
     await deleteSmokePage(tempPageId);
     await deleteSmokeReusableSection(tempReusableSectionId);
     await deleteSmokeCollection(tempCollection?.id);
+    await deleteSmokeCollection(tempCollection?.referenceCollectionId);
   }
 };
 

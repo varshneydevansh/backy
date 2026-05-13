@@ -177,6 +177,7 @@ export interface CollectionBindingPreset {
   collectionId: string;
   fieldKey: string;
   targetPath: string;
+  sourcePath?: string;
   search?: string;
   filterField?: string;
   filterValue?: string;

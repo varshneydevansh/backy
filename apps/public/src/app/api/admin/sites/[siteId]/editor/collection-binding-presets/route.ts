@@ -65,6 +65,7 @@ const normalizePreset = (
     collectionId,
     fieldKey,
     targetPath,
+    sourcePath: textValue(value.sourcePath),
     search: textValue(value.search),
     filterField: textValue(value.filterField),
     filterValue: textValue(value.filterValue),
