@@ -26,10 +26,12 @@ import {
   createCollectionRecord,
   deleteCollection,
   deleteCollectionRecord,
+  exportCollectionsBackup,
   exportCollectionRecordsCsv,
   getPage,
   getUserPermissions,
   getSiteFrontendDesign,
+  importCollectionsBackup,
   importCollectionRecordsCsv,
   listAdminAuditLogs,
   listCollectionRecords,
@@ -1377,6 +1379,8 @@ function CollectionsPage() {
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isExportingRecords, setIsExportingRecords] = useState(false);
   const [isImportingRecords, setIsImportingRecords] = useState(false);
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [isCreatingFrontendTemplateId, setIsCreatingFrontendTemplateId] = useState<string | null>(null);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
@@ -1396,9 +1400,10 @@ function CollectionsPage() {
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const backupImportInputRef = useRef<HTMLInputElement>(null);
   const collectionInteractionVersionRef = useRef(0);
   const recordInteractionVersionRef = useRef(0);
-  const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
+  const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
@@ -1475,6 +1480,8 @@ function CollectionsPage() {
   const adminRecordsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records`;
   const adminImportUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records/import?upsert=true`;
   const adminBulkUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records/bulk`;
+  const adminBackupExportUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/export${activeCollection ? `?ids=${encodeURIComponent(activeCollection.id)}` : ''}`;
+  const adminBackupImportUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/import?upsert=true`;
   const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
   const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
   const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
@@ -1984,6 +1991,8 @@ function CollectionsPage() {
     activeSite?.status,
     activeSiteId,
     adminBulkUrl,
+    adminBackupExportUrl,
+    adminBackupImportUrl,
     adminCollectionsUrl,
     adminImportUrl,
     adminRecordsUrl,
@@ -2182,6 +2191,84 @@ function CollectionsPage() {
     URL.revokeObjectURL(url);
     setError(null);
     setNotice('Collection schema CSV exported.');
+  };
+
+  const downloadCollectionsBackup = async () => {
+    if (isCollectionsBusy) return;
+    if (!canExportCollections) {
+      showPermissionDenied('collections.export', 'export collection backups');
+      return;
+    }
+
+    setIsExportingBackup(true);
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+    try {
+      const backup = await exportCollectionsBackup(activeSiteId, {
+        collectionIds: activeCollection ? [activeCollection.id] : undefined,
+        includeRecords: true,
+      });
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${activeSiteSlug}-${activeCollection?.slug || 'collections'}-backup.json`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setNotice(`Collections JSON backup exported (${backup.backup.collectionCount} collections, ${backup.backup.recordCount} records).`);
+    } catch (exportError) {
+      showApiError(exportError, 'Unable to export collections backup');
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleImportCollectionsBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (isCollectionsBusy) return;
+    if (!canEditCollections) {
+      showPermissionDenied('collections.edit', 'import collection backups');
+      event.target.value = '';
+      return;
+    }
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingBackup(true);
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+    try {
+      const parsed = JSON.parse(await file.text()) as { collections?: unknown[] };
+      const result = await importCollectionsBackup(activeSiteId, parsed, { upsert: true });
+      const backendCollections = await listCollections(activeSiteId);
+      setCollections(backendCollections);
+      const nextSelected = result.collections[0]
+        ? backendCollections.find((collection) => collection.id === result.collections[0].id || collection.slug === result.collections[0].slug)
+        : null;
+      if (nextSelected) {
+        selectCollection(nextSelected);
+      }
+      void loadCollectionAuditLogs();
+      setNotice(
+        `Collections JSON backup imported from ${file.name}: ` +
+        `${result.import.createdCollections} created, ${result.import.updatedCollections} updated, ` +
+        `${result.import.createdRecords} records created, ${result.import.updatedRecords} records updated.`,
+      );
+    } catch (importError) {
+      if (importError instanceof SyntaxError) {
+        setError('Unable to import collections backup: invalid JSON file.');
+      } else {
+        showApiError(importError, 'Unable to import collections backup');
+      }
+    } finally {
+      setIsImportingBackup(false);
+      event.target.value = '';
+    }
   };
 
   useEffect(() => {
@@ -3414,6 +3501,37 @@ function CollectionsPage() {
             </button>
             <button
               type="button"
+              onClick={() => void downloadCollectionsBackup()}
+              disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
+              title={exportPermissionTitle}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="collections-export-backup"
+            >
+              <Download className="h-4 w-4" />
+              {isExportingBackup ? 'Exporting...' : 'Export JSON'}
+            </button>
+            <input
+              ref={backupImportInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => void handleImportCollectionsBackup(event)}
+              aria-label="Import collections JSON backup"
+              data-testid="collections-import-backup-input"
+            />
+            <button
+              type="button"
+              onClick={() => backupImportInputRef.current?.click()}
+              disabled={isCollectionsBusy || !canEditCollections}
+              title={editPermissionTitle}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="collections-import-backup"
+            >
+              <Upload className="h-4 w-4" />
+              {isImportingBackup ? 'Importing...' : 'Import JSON'}
+            </button>
+            <button
+              type="button"
               onClick={() => void loadCollections()}
               disabled={isCollectionsBusy}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
@@ -4058,6 +4176,8 @@ function CollectionsPage() {
             <CollectionApiSnippet label="Admin records" value={adminRecordsUrl} />
             <CollectionApiSnippet label="CSV import" value={adminImportUrl} />
             <CollectionApiSnippet label="Bulk records" value={adminBulkUrl} />
+            <CollectionApiSnippet label="JSON backup export" value={adminBackupExportUrl} />
+            <CollectionApiSnippet label="JSON backup import" value={adminBackupImportUrl} />
           </div>
         </div>
       </section>

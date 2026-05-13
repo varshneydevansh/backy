@@ -1202,6 +1202,28 @@ interface ApiImportCollectionRecordsResponse {
   };
 }
 
+interface ApiExportCollectionsBackupResponse {
+  success: boolean;
+  data?: CollectionBackupExport;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiImportCollectionsBackupResponse {
+  success: boolean;
+  data?: {
+    import: CollectionBackupImportSummary;
+    collections: ApiCollection[];
+    records: ApiCollectionRecord[];
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiReusableSectionContent {
   elements: CanvasElement[];
   canvasSize?: CanvasSize;
@@ -2312,6 +2334,56 @@ export interface CollectionRecordImportResult {
   updated: number;
   skipped: number;
   errors: CollectionRecordImportError[];
+}
+
+export interface CollectionBackupRecord {
+  sourceRecordId?: string;
+  slug: string;
+  status: Page['status'];
+  values: Record<string, unknown>;
+  publishedAt?: string | null;
+  scheduledAt?: string | null;
+}
+
+export interface CollectionBackupCollection {
+  sourceCollectionId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: Collection['status'];
+  routePattern?: string | null;
+  listRoutePattern?: string | null;
+  fields: CollectionField[];
+  permissions?: Partial<CollectionPermissions>;
+  metadata?: Record<string, unknown>;
+  records: CollectionBackupRecord[];
+}
+
+export interface CollectionBackupExport {
+  backup: {
+    schemaVersion: 'backy.collections.backup.v1';
+    exportedAt: string;
+    siteId: string;
+    siteSlug?: string;
+    collectionCount: number;
+    recordCount: number;
+  };
+  collections: CollectionBackupCollection[];
+}
+
+export interface CollectionBackupImportSummary {
+  createdCollections: number;
+  updatedCollections: number;
+  createdRecords: number;
+  updatedRecords: number;
+  totalCollections: number;
+  totalRecords: number;
+}
+
+export interface CollectionBackupImportResult {
+  import: CollectionBackupImportSummary;
+  collections: Collection[];
+  records: CollectionRecord[];
 }
 
 export interface ReusableSectionContent {
@@ -4645,6 +4717,54 @@ export async function importCollectionRecordsCsv(
   }
 
   return payload.data.import;
+}
+
+export async function exportCollectionsBackup(
+  siteId: string,
+  options: { collectionIds?: string[]; includeRecords?: boolean } = {},
+): Promise<CollectionBackupExport> {
+  const query = new URLSearchParams();
+  if (options.collectionIds?.length) query.set('ids', options.collectionIds.join(','));
+  if (options.includeRecords === false) query.set('records', 'false');
+
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/export${suffix}`);
+  const payload = await readJson<ApiExportCollectionsBackupResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to export collections backup', payload.error?.details);
+  }
+
+  return payload.data;
+}
+
+export async function importCollectionsBackup(
+  siteId: string,
+  backup: CollectionBackupExport | { collections?: unknown[] },
+  options: { upsert?: boolean } = {},
+): Promise<CollectionBackupImportResult> {
+  const query = new URLSearchParams();
+  if (options.upsert) query.set('upsert', 'true');
+
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/import${suffix}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(backup),
+  });
+  const payload = await readJson<ApiImportCollectionsBackupResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to import collections backup', payload.error?.details);
+  }
+
+  return {
+    import: payload.data.import,
+    collections: payload.data.collections.map(toCollection),
+    records: payload.data.records.map(toCollectionRecord),
+  };
 }
 
 export async function createCollectionRecord(

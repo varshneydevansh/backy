@@ -585,7 +585,14 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)})) &&
         body.includes('Frontend design collections') &&
         body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
-      hasApiContract: body.includes('Collection API contract') && body.includes('Public records') && body.includes('Bulk records'),
+      hasApiContract: body.includes('Collection API contract') &&
+        body.includes('Public records') &&
+        body.includes('Bulk records') &&
+        body.includes('JSON backup export') &&
+        body.includes('JSON backup import') &&
+        Boolean(document.querySelector('[data-testid="collections-export-backup"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-import-backup"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-import-backup-input"]')),
       hasFrontendContract: body.includes('Dynamic data frontend contract') && body.includes('Frontend wiring'),
       hasBindingContract: Boolean(document.querySelector('[data-testid="collections-binding-contract"]')) &&
         body.includes('Editor data-binding contract') &&
@@ -703,6 +710,78 @@ const assertAuthoringShortcutCopy = async (client) => {
   }
 
   throw new Error('Authoring shortcut copy action did not surface copied preset feedback');
+};
+
+const assertCollectionBackupControls = async (client, collectionId) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const exportClicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="collections-export-backup"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'backup-export-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (button.disabled) return { ok: false, reason: 'backup-export-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (exportClicked.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to click collection JSON backup export: ${JSON.stringify(exportClicked)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: (document.body?.innerText || '').includes('Collections JSON backup exported'),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.ready) break;
+    if (attempt === 39) {
+      throw new Error(`Collection JSON backup export did not show feedback: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  const backupPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/export?ids=${encodeURIComponent(collectionId)}`);
+  const backup = backupPayload.data;
+  assert(backup?.backup?.schemaVersion === 'backy.collections.backup.v1', `Backup API missing schema version: ${JSON.stringify(backupPayload).slice(0, 500)}`);
+  assert(backup.collections?.length === 1, `Backup API expected one collection: ${JSON.stringify(backupPayload).slice(0, 500)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const importState = await evaluate(client, `(() => {
+      const input = document.querySelector('[data-testid="collections-import-backup-input"]');
+      if (!(input instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'backup-import-input-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (input.disabled) return { ok: false, reason: 'backup-import-input-disabled' };
+      const file = new File([${JSON.stringify(JSON.stringify(backup))}], 'collections-smoke-backup.json', { type: 'application/json' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true };
+    })()`);
+    if (importState.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to import collection JSON backup through UI: ${JSON.stringify(importState)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: (document.body?.innerText || '').includes('Collections JSON backup imported from collections-smoke-backup.json') &&
+        (document.body?.innerText || '').includes('records updated'),
+      body: document.body?.innerText?.slice(0, 1200) || '',
+    }))()`);
+    if (state.ready) return state;
+    if (attempt === 79) {
+      throw new Error(`Collection JSON backup import did not show feedback: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const assertNewCollectionButtonReset = async (client, testId = 'collections-new-collection-button') => {
@@ -1441,6 +1520,8 @@ const main = async () => {
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     await assertAuthoringShortcutCopy(client);
+    await assertCollectionBackupControls(client, collectionId);
+    await navigateToCollections(client, { collectionId, recordSlug });
     await configureVisitorMutationPolicyThroughUi(client, collectionId, `smoke-public-write-${suffix}`);
     await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
     await navigateToCollections(client, { collectionId, recordSlug });
