@@ -602,6 +602,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-item-authored-template"]')) &&
         Boolean(document.querySelector('[data-testid="collections-list-authored-template-select"]')) &&
         Boolean(document.querySelector('[data-testid="collections-item-authored-template-select"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-list-template-compare"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-item-template-compare"]')) &&
         Boolean(document.querySelector('[data-testid="collections-visitor-write-policy"]')) &&
         Boolean(document.querySelector('[data-testid="collections-visitor-write-policy-mode"]')) &&
         Boolean(document.querySelector('[data-testid="collections-visitor-mutation-policy"]')) &&
@@ -1012,9 +1014,23 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
     for (let attempt = 0; attempt < 80; attempt += 1) {
       const state = await evaluate(client, `(() => {
         const panel = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-authored-template"]`)});
-        return { text: panel?.textContent || '' };
+        const compare = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-compare"]`)});
+        const compareSelect = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-compare-select"]`)});
+        const diffSummary = document.querySelector(${JSON.stringify(`[data-testid="collections-${kind}-template-diff-summary"]`)});
+        return {
+          text: panel?.textContent || '',
+          compareText: compare?.textContent || '',
+          selectReady: compareSelect instanceof HTMLSelectElement && compareSelect.options.length > 0 && !compareSelect.disabled,
+          diffText: diffSummary?.textContent || '',
+        };
       })()`);
-      if (state.text.includes('Captured') && state.text.includes('root elements')) break;
+      if (
+        state.text.includes('Captured') &&
+        state.text.includes('root elements') &&
+        state.compareText.includes('Compare active capture') &&
+        state.selectReady &&
+        state.diffText.includes(`${kind === 'list' ? 'List' : 'Item'} template diff`)
+      ) break;
       if (attempt === 79) {
         throw new Error(`${kind} authored template capture did not update panel: ${JSON.stringify(state)}`);
       }

@@ -479,6 +479,22 @@ interface CollectionAuthoredDynamicTemplateVersion extends CollectionAuthoredDyn
   elementCount: number;
 }
 
+interface CollectionAuthoredDynamicTemplateDiff {
+  summary: string;
+  hasChanges: boolean;
+  activePageLabel: string;
+  versionPageLabel: string;
+  activeRootCount: number;
+  versionRootCount: number;
+  addedRootIds: string[];
+  removedRootIds: string[];
+  changedRootIds: string[];
+  unchangedRootCount: number;
+  pageChanged: boolean;
+  canvasSizeChanged: boolean;
+  customCssChanged: boolean;
+}
+
 interface CollectionDynamicTemplatesForm {
   list: {
     variant: CollectionDynamicListVariant;
@@ -928,6 +944,91 @@ const appendAuthoredDynamicTemplateHistory = (
   ].slice(0, 8);
 };
 
+const stableTemplateValue = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableTemplateValue(item)).join(',')}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableTemplateValue(record[key])}`)
+    .join(',')}}`;
+};
+
+const templateRootElementId = (element: unknown, index: number) => {
+  if (isPlainRecord(element)) {
+    const id = optionalStringFromRecord(element, 'id');
+    if (id) return id;
+    const type = optionalStringFromRecord(element, 'type');
+    if (type) return `${type}-${index + 1}`;
+  }
+  return `root-${index + 1}`;
+};
+
+const templatePageLabel = (template: CollectionAuthoredDynamicTemplate) => (
+  template.pageTitle || template.pageSlug || template.pageId || 'Untitled page'
+);
+
+const compareAuthoredDynamicTemplates = (
+  active: CollectionAuthoredDynamicTemplate,
+  version: CollectionAuthoredDynamicTemplateVersion,
+): CollectionAuthoredDynamicTemplateDiff => {
+  const activeRoots = new Map(active.elements.map((element, index) => ([
+    templateRootElementId(element, index),
+    stableTemplateValue(element),
+  ])));
+  const versionRoots = new Map(version.elements.map((element, index) => ([
+    templateRootElementId(element, index),
+    stableTemplateValue(element),
+  ])));
+  const addedRootIds = Array.from(activeRoots.keys()).filter((id) => !versionRoots.has(id));
+  const removedRootIds = Array.from(versionRoots.keys()).filter((id) => !activeRoots.has(id));
+  const changedRootIds = Array.from(activeRoots.entries())
+    .filter(([id, fingerprint]) => versionRoots.has(id) && versionRoots.get(id) !== fingerprint)
+    .map(([id]) => id);
+  const unchangedRootCount = Array.from(activeRoots.entries())
+    .filter(([id, fingerprint]) => versionRoots.has(id) && versionRoots.get(id) === fingerprint)
+    .length;
+  const activeSize = active.canvasSize ? `${active.canvasSize.width}x${active.canvasSize.height}` : '';
+  const versionSize = version.canvasSize ? `${version.canvasSize.width}x${version.canvasSize.height}` : '';
+  const pageChanged = active.pageId !== version.pageId;
+  const canvasSizeChanged = activeSize !== versionSize;
+  const customCssChanged = (active.customCSS || '') !== (version.customCSS || '');
+  const totalChanges = addedRootIds.length + removedRootIds.length + changedRootIds.length
+    + (pageChanged ? 1 : 0)
+    + (canvasSizeChanged ? 1 : 0)
+    + (customCssChanged ? 1 : 0);
+
+  return {
+    summary: totalChanges > 0
+      ? `${totalChanges} change${totalChanges === 1 ? '' : 's'} from version ${version.version}`
+      : `No root-level changes from version ${version.version}`,
+    hasChanges: totalChanges > 0,
+    activePageLabel: templatePageLabel(active),
+    versionPageLabel: templatePageLabel(version),
+    activeRootCount: active.elements.length,
+    versionRootCount: version.elements.length,
+    addedRootIds,
+    removedRootIds,
+    changedRootIds,
+    unchangedRootCount,
+    pageChanged,
+    canvasSizeChanged,
+    customCssChanged,
+  };
+};
+
+const summarizeTemplateRootIds = (ids: string[]) => {
+  if (ids.length === 0) return 'None';
+  const visible = ids.slice(0, 4).join(', ');
+  return ids.length > 4 ? `${visible}, +${ids.length - 4} more` : visible;
+};
+
 const parsePageContentRecord = (page: Page): Record<string, unknown> | null => {
   if (!page.content) return null;
   if (isPlainRecord(page.content)) return page.content;
@@ -1290,6 +1391,7 @@ function CollectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [authoredTemplateCompareVersionIds, setAuthoredTemplateCompareVersionIds] = useState({ list: '', item: '' });
   const [pendingCollectionDelete, setPendingCollectionDelete] = useState<Collection | null>(null);
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
@@ -1330,6 +1432,30 @@ function CollectionsPage() {
       || records[0]
       || null,
     [dynamicTemplatePreviewRecordId, records],
+  );
+  const selectedListTemplateCompareVersion = useMemo(
+    () => collectionForm.dynamicTemplates.list.authoredHistory.find((version) => (
+      version.id === authoredTemplateCompareVersionIds.list
+    )) || collectionForm.dynamicTemplates.list.authoredHistory[0] || null,
+    [authoredTemplateCompareVersionIds.list, collectionForm.dynamicTemplates.list.authoredHistory],
+  );
+  const selectedItemTemplateCompareVersion = useMemo(
+    () => collectionForm.dynamicTemplates.item.authoredHistory.find((version) => (
+      version.id === authoredTemplateCompareVersionIds.item
+    )) || collectionForm.dynamicTemplates.item.authoredHistory[0] || null,
+    [authoredTemplateCompareVersionIds.item, collectionForm.dynamicTemplates.item.authoredHistory],
+  );
+  const listTemplateDiff = useMemo(
+    () => (collectionForm.dynamicTemplates.list.authoredCanvas && selectedListTemplateCompareVersion
+      ? compareAuthoredDynamicTemplates(collectionForm.dynamicTemplates.list.authoredCanvas, selectedListTemplateCompareVersion)
+      : null),
+    [collectionForm.dynamicTemplates.list.authoredCanvas, selectedListTemplateCompareVersion],
+  );
+  const itemTemplateDiff = useMemo(
+    () => (collectionForm.dynamicTemplates.item.authoredCanvas && selectedItemTemplateCompareVersion
+      ? compareAuthoredDynamicTemplates(collectionForm.dynamicTemplates.item.authoredCanvas, selectedItemTemplateCompareVersion)
+      : null),
+    [collectionForm.dynamicTemplates.item.authoredCanvas, selectedItemTemplateCompareVersion],
   );
   const dynamicBaseUrl = getPublicBaseUrl();
   const recordPage = Math.floor(recordPagination.offset / recordPagination.limit) + 1;
@@ -4738,6 +4864,16 @@ function CollectionsPage() {
                           <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
                         )}
                       </div>
+                      <AuthoredTemplateComparePanel
+                        kind="list"
+                        history={collectionForm.dynamicTemplates.list.authoredHistory}
+                        selectedVersionId={selectedListTemplateCompareVersion?.id || ''}
+                        diff={listTemplateDiff}
+                        onSelectedVersionIdChange={(versionId) => setAuthoredTemplateCompareVersionIds((prev) => ({
+                          ...prev,
+                          list: versionId,
+                        }))}
+                      />
                     </div>
                   </div>
                 </div>
@@ -4876,6 +5012,16 @@ function CollectionsPage() {
                           <p className="text-xs text-cyan-900/70">No saved capture history yet.</p>
                         )}
                       </div>
+                      <AuthoredTemplateComparePanel
+                        kind="item"
+                        history={collectionForm.dynamicTemplates.item.authoredHistory}
+                        selectedVersionId={selectedItemTemplateCompareVersion?.id || ''}
+                        diff={itemTemplateDiff}
+                        onSelectedVersionIdChange={(versionId) => setAuthoredTemplateCompareVersionIds((prev) => ({
+                          ...prev,
+                          item: versionId,
+                        }))}
+                      />
                     </div>
                     <div className="space-y-2 text-sm md:col-span-2">
                       <span className="font-medium">Detail fields</span>
@@ -5882,6 +6028,106 @@ function CollectionApiSnippet({ label, value }: { label: string; value: string }
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function AuthoredTemplateComparePanel({
+  kind,
+  history,
+  selectedVersionId,
+  diff,
+  onSelectedVersionIdChange,
+}: {
+  kind: 'list' | 'item';
+  history: CollectionAuthoredDynamicTemplateVersion[];
+  selectedVersionId: string;
+  diff: CollectionAuthoredDynamicTemplateDiff | null;
+  onSelectedVersionIdChange: (versionId: string) => void;
+}) {
+  const label = kind === 'list' ? 'List' : 'Item';
+
+  return (
+    <div
+      className="space-y-2 border-t border-cyan-200 pt-2"
+      data-testid={`collections-${kind}-template-compare`}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-cyan-950">Compare active capture</div>
+          <p className="mt-1 text-xs text-cyan-900/75">
+            Review root element, page, canvas, and CSS differences before restoring or saving.
+          </p>
+        </div>
+        <select
+          value={selectedVersionId}
+          onChange={(event) => onSelectedVersionIdChange(event.target.value)}
+          disabled={history.length === 0}
+          className="rounded-md border border-cyan-200 bg-white px-2 py-1 text-xs text-cyan-950 disabled:cursor-not-allowed disabled:opacity-60"
+          data-testid={`collections-${kind}-template-compare-select`}
+        >
+          {history.length === 0 ? (
+            <option value="">No versions</option>
+          ) : history.map((version) => (
+            <option key={version.id} value={version.id}>
+              Version {version.version} · {formatDate(version.capturedAt)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {diff ? (
+        <div className="rounded-md border border-cyan-200 bg-white/80 p-3 text-xs text-cyan-950">
+          <div className="flex flex-wrap items-center gap-2" data-testid={`collections-${kind}-template-diff-summary`}>
+            <Code2 className="h-3.5 w-3.5" />
+            <span className="font-medium">{label} template diff</span>
+            <span className={cn(
+              'rounded-full px-2 py-0.5',
+              diff.hasChanges ? 'bg-amber-100 text-amber-950' : 'bg-emerald-100 text-emerald-950',
+            )}>
+              {diff.summary}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <DiffMetric label="Active roots" value={`${diff.activeRootCount}`} />
+            <DiffMetric label="Version roots" value={`${diff.versionRootCount}`} />
+            <DiffMetric label="Changed roots" value={summarizeTemplateRootIds(diff.changedRootIds)} />
+            <DiffMetric label="Added roots" value={summarizeTemplateRootIds(diff.addedRootIds)} />
+            <DiffMetric label="Removed roots" value={summarizeTemplateRootIds(diff.removedRootIds)} />
+            <DiffMetric label="Unchanged roots" value={`${diff.unchangedRootCount}`} />
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <DiffFlag label="Page" changed={diff.pageChanged} detail={`${diff.versionPageLabel} -> ${diff.activePageLabel}`} />
+            <DiffFlag label="Canvas size" changed={diff.canvasSizeChanged} detail={diff.canvasSizeChanged ? 'Changed' : 'Unchanged'} />
+            <DiffFlag label="Custom CSS" changed={diff.customCssChanged} detail={diff.customCssChanged ? 'Changed' : 'Unchanged'} />
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-md border border-cyan-200 bg-white/80 px-3 py-2 text-xs text-cyan-900/70">
+          Capture a canvas and keep at least one history version to compare authored templates.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DiffMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-cyan-100 bg-cyan-50/50 px-2 py-1">
+      <span className="block text-[11px] uppercase tracking-wide text-cyan-900/70">{label}</span>
+      <span className="break-words font-medium text-cyan-950">{value}</span>
+    </div>
+  );
+}
+
+function DiffFlag({ label, changed, detail }: { label: string; changed: boolean; detail: string }) {
+  return (
+    <div className={cn(
+      'rounded border px-2 py-1',
+      changed ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950',
+    )}>
+      <span className="block text-[11px] uppercase tracking-wide opacity-75">{label}</span>
+      <span className="break-words font-medium">{detail}</span>
     </div>
   );
 }
