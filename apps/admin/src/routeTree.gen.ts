@@ -20,6 +20,7 @@ import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FormsRouteImport } from './routes/forms'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as CommentsRouteImport } from './routes/comments'
 import { Route as CollectionsRouteImport } from './routes/collections'
@@ -88,6 +89,11 @@ const LoginRoute = LoginRouteImport.update({
 const FormsRoute = FormsRouteImport.update({
   id: '/forms',
   path: '/forms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactsRoute = ContactsRouteImport.update({
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/collections': typeof CollectionsRoute
   '/comments': typeof CommentsRoute
   '/contacts': typeof ContactsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/collections': typeof CollectionsRoute
   '/comments': typeof CommentsRoute
   '/contacts': typeof ContactsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -223,6 +231,7 @@ export interface FileRoutesById {
   '/collections': typeof CollectionsRoute
   '/comments': typeof CommentsRoute
   '/contacts': typeof ContactsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -252,6 +261,7 @@ export interface FileRouteTypes {
     | '/collections'
     | '/comments'
     | '/contacts'
+    | '/forgot-password'
     | '/forms'
     | '/login'
     | '/media'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/collections'
     | '/comments'
     | '/contacts'
+    | '/forgot-password'
     | '/forms'
     | '/login'
     | '/media'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/collections'
     | '/comments'
     | '/contacts'
+    | '/forgot-password'
     | '/forms'
     | '/login'
     | '/media'
@@ -334,6 +346,7 @@ export interface RootRouteChildren {
   CollectionsRoute: typeof CollectionsRoute
   CommentsRoute: typeof CommentsRoute
   ContactsRoute: typeof ContactsRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   FormsRoute: typeof FormsRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       path: '/forms'
       fullPath: '/forms'
       preLoaderRoute: typeof FormsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contacts': {
@@ -582,6 +602,7 @@ const rootRouteChildren: RootRouteChildren = {
   CollectionsRoute: CollectionsRoute,
   CommentsRoute: CommentsRoute,
   ContactsRoute: ContactsRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   FormsRoute: FormsRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,

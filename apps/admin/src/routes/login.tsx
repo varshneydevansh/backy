@@ -13,20 +13,14 @@
 
 import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { CheckCircle2, Code2, Database, Eye, EyeOff, KeyRound, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Code2, Database, Eye, EyeOff, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { requestAdminPasswordRecovery } from '@/lib/adminAuthApi';
 import { cn } from '@/lib/utils';
 
 const DEMO_ACCOUNTS = [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
   { email: 'jane@backy.io', password: 'editor123', label: 'Editor' },
 ];
-
-type ResetNotice = {
-  tone: 'success' | 'warning';
-  message: string;
-};
 
 const AUTH_WORKSPACE_ITEMS = [
   {
@@ -78,7 +72,6 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [resetNotice, setResetNotice] = useState<ResetNotice | null>(null);
   const isLoginBusy = isLoading;
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordIsValid = password.length >= 6;
@@ -106,49 +99,13 @@ function LoginPage() {
     return Object.keys(errors).length === 0;
   };
 
-  const handlePasswordRecovery = async () => {
+  const handlePasswordRecovery = () => {
     if (isLoginBusy) return;
 
     clearError();
     const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setFormErrors((current) => ({
-        ...current,
-        email: 'Enter a valid workspace email before requesting recovery.',
-      }));
-      setResetNotice({
-        tone: 'warning',
-        message: 'Enter the account email first so Backy can check whether local recovery is available.',
-      });
-      return;
-    }
-
-    try {
-      const recovery = await requestAdminPasswordRecovery(normalizedEmail);
-      if (recovery.localRecovery?.demoPassword) {
-        setPassword(recovery.localRecovery.demoPassword);
-        setFormErrors((current) => {
-          const { password: _password, email: _email, ...rest } = current;
-          return rest;
-        });
-        setResetNotice({
-          tone: 'success',
-          message: `${recovery.localRecovery.label} local recovery is ready. The demo password was filled from the admin auth API, so you can sign in now.`,
-        });
-        return;
-      }
-
-      setResetNotice({
-        tone: 'warning',
-        message: recovery.message || 'No local recovery credential is available. Connect production email recovery in Settings.',
-      });
-    } catch (error) {
-      setResetNotice({
-        tone: 'warning',
-        message: error instanceof Error ? error.message : 'Unable to request password recovery.',
-      });
-    }
+    const search = normalizedEmail ? `?email=${encodeURIComponent(normalizedEmail)}` : '';
+    void navigate({ href: `/forgot-password${search}` });
   };
 
   /**
@@ -159,7 +116,6 @@ function LoginPage() {
     if (isLoginBusy) return;
 
     clearError();
-    setResetNotice(null);
 
     if (!validateForm()) return;
 
@@ -303,7 +259,7 @@ function LoginPage() {
                   <button
                     type="button"
                     className="text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => void handlePasswordRecovery()}
+                    onClick={handlePasswordRecovery}
                     disabled={isLoginBusy}
                     data-testid="login-password-recovery"
                   >
@@ -350,22 +306,6 @@ function LoginPage() {
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {error}
-                </div>
-              )}
-
-              {resetNotice && (
-                <div className={cn(
-                  'rounded-lg border px-3 py-2 text-sm',
-                  resetNotice.tone === 'success'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                    : 'border-amber-200 bg-amber-50 text-amber-800',
-                )}>
-                  <div className="flex gap-2">
-                    {resetNotice.tone === 'success'
-                      ? <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
-                      : <Mail className="mt-0.5 h-4 w-4 shrink-0" />}
-                    <span>{resetNotice.message}</span>
-                  </div>
                 </div>
               )}
 
