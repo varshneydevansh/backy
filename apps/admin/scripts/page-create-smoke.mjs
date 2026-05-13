@@ -287,6 +287,37 @@ const createParentPage = async () => {
   return payload.data.page;
 };
 
+const createDatasetCollection = async () => {
+  const suffix = Date.now().toString(36);
+  const slug = `page-create-dataset-${suffix}`;
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Smoke Dataset ${suffix}`,
+      slug,
+      description: 'Temporary collection for page create dataset import smoke.',
+      status: 'published',
+      listRoutePattern: `/${slug}`,
+      routePattern: `/${slug}/:recordSlug`,
+      permissions: {
+        publicRead: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true, unique: true, sortOrder: 10 },
+        { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 20 },
+        { key: 'image', label: 'Image', type: 'image', required: false, unique: false, sortOrder: 30 },
+        { key: 'category', label: 'Category', type: 'select', required: false, unique: false, sortOrder: 40, options: ['Smoke', 'Featured'] },
+      ],
+    }),
+  });
+  const collection = payload.data?.collection || payload.collection;
+  assert(collection?.id, `Dataset collection was not created: ${JSON.stringify(payload).slice(0, 500)}`);
+  return collection;
+};
+
 const getFrontendDesign = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
   const frontendDesign = payload.data?.frontendDesign;
@@ -942,6 +973,78 @@ const navigateToFrontendDesignTemplateCreate = async (client, slug, title) => {
   return waitForFrontendDesignTemplateCreateControls(client, slug, title, url);
 };
 
+const waitForDatasetPageCreateControls = async (client, collection, mode, slug, title, url) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').includes('Create Page')
+      ));
+      const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+        importPanel: Boolean(importPanel),
+        importText: importPanel?.textContent || '',
+        title: document.querySelector('#page-title')?.value || '',
+        slug: document.querySelector('#page-slug')?.value || '',
+        payloadDynamicData: payload.dynamicData || '',
+        payloadDatasetMode: payload.datasetImport?.mode || '',
+        payloadCollectionId: payload.datasetImport?.collectionId || '',
+        payloadTitleField: payload.datasetImport?.titleField || '',
+        payloadDescriptionField: payload.datasetImport?.descriptionField || '',
+        payloadImageField: payload.datasetImport?.imageField || '',
+        createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        body: document.body?.innerText?.slice(0, 360) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.importPanel
+      && state.importText.includes(collection.name)
+      && state.importText.includes(collection.id)
+      && state.title === title
+      && state.slug === slug
+      && state.payloadDynamicData.includes(collection.name)
+      && state.payloadDatasetMode === mode
+      && state.payloadCollectionId === collection.id
+      && state.payloadTitleField === 'title'
+      && state.payloadDescriptionField === 'summary'
+      && state.payloadImageField === 'image'
+      && state.createButtonDisabled === false
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Dataset page create route did not render expected controls: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const navigateToDatasetPageCreate = async (client, collection, mode) => {
+  const slug = `${collection.slug}-${mode}-page`;
+  const title = `${collection.name} ${mode === 'item' ? 'Detail' : 'Directory'}`;
+  const query = new URLSearchParams({
+    siteId: SITE_ID,
+    template: 'blank',
+    collectionId: collection.id,
+    datasetMode: mode,
+    title,
+    slug,
+    description: `Smoke ${mode} page seeded from a collection dataset brief.`,
+    nav: mode === 'list' ? 'primary' : 'none',
+    navLabel: collection.name,
+  });
+  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
+  await client.send('Page.navigate', { url });
+  return waitForDatasetPageCreateControls(client, collection, mode, slug, title, url);
+};
+
 const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentPageId) => {
   let state = null;
 
@@ -1270,6 +1373,60 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   };
 };
 
+const assertDatasetPageContent = async (pageId, collection, mode, slug, title) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page;
+
+  assert(page, `Created dataset page ${pageId} detail was not returned`);
+  assert(page.title === title, `Created dataset page title mismatch: ${JSON.stringify({ title: page.title, expected: title })}`);
+  assert(page.slug === slug, `Created dataset page slug mismatch: ${JSON.stringify({ slug: page.slug, expected: slug })}`);
+
+  const content = normalizeCreatedContent(page.content);
+  const elements = Array.isArray(content.elements) ? content.elements : [];
+  const allElements = flattenElements(elements);
+  const byId = new Map(allElements.map((element) => [element.id, element]));
+  const contentDocument = content.contentDocument || null;
+  const canvasSize = content.canvasSize || contentDocument?.metadata?.canvasSize || {};
+  const section = byId.get(`collection-${collection.id}-${mode === 'item' ? 'detail' : 'list'}-section`);
+  const repeater = byId.get(`collection-${collection.id}-repeater`);
+  const detailTitle = byId.get(`collection-${collection.id}-detail-title`);
+  const detailSummary = byId.get(`collection-${collection.id}-detail-summary`);
+
+  assert(section?.props?.datasetImport?.collectionId === collection.id, `Dataset page section missing dataset import metadata: ${JSON.stringify(section)}`);
+  assert(section.props.datasetImport.mode === mode, `Dataset page section dataset mode mismatch: ${JSON.stringify(section.props.datasetImport)}`);
+
+  if (mode === 'list') {
+    assert(repeater?.type === 'repeater', `Dataset list page missing repeater: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 60) })}`);
+    assert(repeater.props?.collectionId === collection.id, `Dataset repeater collection mismatch: ${JSON.stringify(repeater.props)}`);
+    assert(repeater.props?.datasetId === `dataset_${collection.id}`, `Dataset repeater dataset id mismatch: ${JSON.stringify(repeater.props)}`);
+    assert(repeater.props?.titleField === 'title', `Dataset repeater title field mismatch: ${JSON.stringify(repeater.props)}`);
+    assert(repeater.props?.descriptionField === 'summary', `Dataset repeater summary field mismatch: ${JSON.stringify(repeater.props)}`);
+    assert(repeater.props?.imageField === 'image', `Dataset repeater image field mismatch: ${JSON.stringify(repeater.props)}`);
+  } else {
+    assert(Array.isArray(detailTitle?.dataBindings) && detailTitle.dataBindings[0]?.source?.collectionId === collection.id, `Dataset item title binding missing: ${JSON.stringify(detailTitle)}`);
+    assert(Array.isArray(detailSummary?.dataBindings) && detailSummary.dataBindings[0]?.source?.field === 'summary', `Dataset item summary binding missing: ${JSON.stringify(detailSummary)}`);
+  }
+
+  assert(contentDocument?.kind === 'page', `Dataset page contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
+  assert(contentDocument?.slug === page.slug, `Dataset page contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
+  assert(canvasSize.width === 1200 && canvasSize.height >= 1000, `Dataset page canvas size mismatch: ${JSON.stringify(canvasSize)}`);
+
+  return {
+    pageId,
+    mode,
+    slug: page.slug,
+    metaTitle: page.meta?.title || null,
+    content: {
+      rootElementCount: elements.length,
+      totalElementCount: allElements.length,
+      canvasSize,
+      sectionDatasetImport: section.props.datasetImport,
+      repeaterProps: repeater?.props || null,
+      detailBindingCount: (detailTitle?.dataBindings || []).length + (detailSummary?.dataBindings || []).length,
+    },
+  };
+};
+
 const assertStarterTemplateEditorRender = async (client, testCase) => {
   const requiredElementIds = testCase.requiredElementIds;
   let renderState = null;
@@ -1383,6 +1540,23 @@ const createFrontendDesignTemplateBackend = async (client, createdPageIds) => {
   const pageId = editState.path.split('/').filter(Boolean).at(-2);
   createdPageIds.push(pageId);
   const content = await assertFrontendDesignTemplatePageContent(pageId, slug, title);
+
+  return {
+    routeState: routeState.state,
+    editState,
+    pageId,
+    content,
+  };
+};
+
+const createDatasetPageBackend = async (client, createdPageIds, collection, mode = 'list') => {
+  const routeState = await navigateToDatasetPageCreate(client, collection, mode);
+  const editState = await createPageFromUi(client);
+  const pageId = editState.path.split('/').filter(Boolean).at(-2);
+  createdPageIds.push(pageId);
+  const slug = routeState.state.slug;
+  const title = routeState.state.title;
+  const content = await assertDatasetPageContent(pageId, collection, mode, slug, title);
 
   return {
     routeState: routeState.state,
@@ -1598,7 +1772,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId, parentPageId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId, parentPageId, collectionIds = [] }) => {
   const uniquePageIds = Array.from(new Set([...pageIds, pageId].filter(Boolean)));
 
   for (const createdPageId of uniquePageIds) {
@@ -1626,6 +1800,14 @@ const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId
       await requestApi(`/api/admin/sites/${SITE_ID}/pages/${parentPageId}`, { method: 'DELETE' });
     } catch (error) {
       console.warn(`Unable to delete smoke parent page ${parentPageId}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  for (const collectionId of collectionIds.filter(Boolean)) {
+    try {
+      await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, { method: 'DELETE' });
+    } catch (error) {
+      console.warn(`Unable to delete smoke collection ${collectionId}:`, error instanceof Error ? error.message : error);
     }
   }
 
@@ -1674,13 +1856,17 @@ const main = async () => {
   let client;
   let pageId = null;
   const createdPageIds = [];
+  const createdCollectionIds = [];
   let parentPage = null;
+  let datasetCollection = null;
   let originalFrontendDesign = null;
 
   try {
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());
     parentPage = await createParentPage();
+    datasetCollection = await createDatasetCollection();
+    createdCollectionIds.push(datasetCollection.id);
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -1723,6 +1909,7 @@ const main = async () => {
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
     const frontendDesignTemplateBackend = await createFrontendDesignTemplateBackend(client, createdPageIds);
+    const datasetPageBackend = await createDatasetPageBackend(client, createdPageIds, datasetCollection, 'list');
     const starterTemplateBackends = await createStarterTemplateBackends(client, createdPageIds);
 
     await captureScreenshot(client, SCREENSHOT_PATH);
@@ -1755,6 +1942,7 @@ const main = async () => {
       navigationItem,
       pageMeta,
       frontendDesignTemplateBackend,
+      datasetPageBackend,
       starterTemplateBackends,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
@@ -1766,7 +1954,15 @@ const main = async () => {
         console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
       }
     }
-    await cleanup({ client, childProcess, userDataDir, pageIds: createdPageIds, pageId, parentPageId: parentPage?.id || null });
+    await cleanup({
+      client,
+      childProcess,
+      userDataDir,
+      pageIds: createdPageIds,
+      pageId,
+      parentPageId: parentPage?.id || null,
+      collectionIds: createdCollectionIds,
+    });
   }
 };
 

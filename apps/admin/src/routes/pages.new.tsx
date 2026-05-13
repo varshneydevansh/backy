@@ -5,7 +5,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
-import { createPage, getAdminApiBase, getPage, getSiteFrontendDesign, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
+import {
+    createPage,
+    getAdminApiBase,
+    getPage,
+    getSiteFrontendDesign,
+    getSiteNavigation,
+    listCollections,
+    listPages,
+    updateSiteNavigation,
+    type Collection,
+    type CollectionField,
+    type CollectionFieldType,
+} from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -40,11 +52,14 @@ interface NewPageSearch {
     noIndex?: boolean;
     noFollow?: boolean;
     designTemplate?: string;
+    collectionId?: string;
+    datasetMode?: PageDatasetMode;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
+type PageDatasetMode = 'list' | 'item';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -77,6 +92,8 @@ interface PageCreateDraftState {
     noIndex: boolean;
     noFollow: boolean;
     designTemplateId: string;
+    collectionId: string;
+    datasetMode: PageDatasetMode | '';
 }
 
 interface PageCreateAutosaveDraft {
@@ -360,6 +377,10 @@ const isPageNavigationPlacement = (value: unknown): value is PageNavigationPlace
     value === 'none' || value === 'primary' || value === 'footer'
 );
 
+const isPageDatasetMode = (value: unknown): value is PageDatasetMode => (
+    value === 'list' || value === 'item'
+);
+
 const normalizedSearchString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
@@ -407,6 +428,8 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.noIndex ? { noIndex: true } : {}),
     ...(input.noFollow ? { noFollow: true } : {}),
     ...(input.designTemplate?.trim() ? { designTemplate: input.designTemplate.trim() } : {}),
+    ...(input.collectionId?.trim() ? { collectionId: input.collectionId.trim() } : {}),
+    ...(input.datasetMode ? { datasetMode: input.datasetMode } : {}),
 });
 
 export const Route = createFileRoute('/pages/new')({
@@ -430,6 +453,8 @@ export const Route = createFileRoute('/pages/new')({
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
         designTemplate: normalizedSearchString(search.designTemplate),
+        collectionId: normalizedSearchString(search.collectionId),
+        datasetMode: isPageDatasetMode(search.datasetMode) ? search.datasetMode : undefined,
     }),
     component: NewPageRoute,
 });
@@ -452,6 +477,9 @@ function NewPageRoute() {
     const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
     const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
     const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
+    const [collections, setCollections] = useState<Collection[]>([]);
+    const [collectionsLoading, setCollectionsLoading] = useState(false);
+    const [collectionsError, setCollectionsError] = useState<string | null>(null);
     const isPageCreateBusy = isLoading || isCheckingPages;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
@@ -482,6 +510,8 @@ function NewPageRoute() {
         noIndex: search.noIndex ?? false,
         noFollow: search.noFollow ?? false,
         designTemplateId: search.designTemplate ?? '',
+        collectionId: search.collectionId ?? '',
+        datasetMode: search.datasetMode ?? '',
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
     const buildRouteSearchFromForm = (nextFormData: typeof formData): NewPageSearch => normalizeNewPageSearch({
@@ -504,6 +534,8 @@ function NewPageRoute() {
         noIndex: nextFormData.noIndex,
         noFollow: nextFormData.noFollow,
         designTemplate: nextFormData.designTemplateId,
+        collectionId: nextFormData.collectionId,
+        datasetMode: nextFormData.datasetMode || undefined,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
         if (isPageCreateBusy) return;
@@ -616,6 +648,46 @@ function NewPageRoute() {
     }, [formData.siteId]);
 
     useEffect(() => {
+        let cancelled = false;
+        const siteId = formData.siteId;
+
+        if (!siteId || !formData.collectionId) {
+            setCollections([]);
+            setCollectionsError(null);
+            setCollectionsLoading(false);
+            return;
+        }
+
+        const loadPageDatasetCollections = async () => {
+            setCollectionsLoading(true);
+            setCollectionsError(null);
+
+            try {
+                const nextCollections = await listCollections(siteId);
+                if (!cancelled) {
+                    setCollections(nextCollections);
+                    setCollectionsError(null);
+                }
+            } catch (loadError) {
+                if (!cancelled) {
+                    setCollections([]);
+                    setCollectionsError(loadError instanceof Error ? loadError.message : 'Unable to load collections for dataset import.');
+                }
+            } finally {
+                if (!cancelled) {
+                    setCollectionsLoading(false);
+                }
+            }
+        };
+
+        void loadPageDatasetCollections();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.collectionId, formData.siteId]);
+
+    useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
             const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
             const nextFormData = { ...formData, siteId: fallbackSiteId };
@@ -631,7 +703,7 @@ function NewPageRoute() {
         const nextSiteId = nextRequestedSite?.publicSiteId || nextRequestedSite?.id || search.siteId || defaultSiteId;
         const nextTemplate = search.template || 'blank';
         const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
-        const nextFormData = {
+        const nextFormData: PageCreateDraftState = {
             siteId: nextSiteId,
             template: nextTemplate,
             title: search.title ?? nextDefaults.title,
@@ -651,6 +723,8 @@ function NewPageRoute() {
             noIndex: search.noIndex ?? false,
             noFollow: search.noFollow ?? false,
             designTemplateId: search.designTemplate ?? '',
+            collectionId: search.collectionId ?? '',
+            datasetMode: search.datasetMode || '',
         };
         setFormData((current) => {
             const hasChanged = (
@@ -673,6 +747,8 @@ function NewPageRoute() {
                 || nextFormData.noIndex !== current.noIndex
                 || nextFormData.noFollow !== current.noFollow
                 || nextFormData.designTemplateId !== current.designTemplateId
+                || nextFormData.collectionId !== current.collectionId
+                || nextFormData.datasetMode !== current.datasetMode
             );
 
             return hasChanged ? nextFormData : current;
@@ -700,6 +776,8 @@ function NewPageRoute() {
         search.noIndex,
         search.noFollow,
         search.designTemplate,
+        search.collectionId,
+        search.datasetMode,
         sites,
     ]);
 
@@ -719,8 +797,19 @@ function NewPageRoute() {
         () => frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null,
         [formData.designTemplateId, frontendPageTemplates],
     );
+    const selectedDatasetCollection = useMemo(
+        () => collections.find((collection) => collection.id === formData.collectionId) || null,
+        [collections, formData.collectionId],
+    );
+    const selectedDatasetMode = formData.datasetMode || (selectedDatasetCollection ? 'list' : '');
+    const selectedDatasetFields = useMemo(
+        () => selectedDatasetCollection ? buildPageCollectionDatasetFields(selectedDatasetCollection) : null,
+        [selectedDatasetCollection],
+    );
     const effectiveTemplateName = selectedFrontendTemplate
         ? `${selectedFrontendTemplate.name} frontend template`
+        : selectedDatasetCollection
+            ? `${selectedDatasetCollection.name} dataset ${selectedDatasetMode || 'list'} page`
         : selectedTemplate.name;
     const effectiveCanvasSize = selectedFrontendTemplate?.canvasSize || DEFAULT_CANVAS_SIZE;
 
@@ -867,6 +956,7 @@ function NewPageRoute() {
     const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
     const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const hasValidParentPage = !formData.parentPageId || Boolean(selectedParentPage);
+    const datasetImportReady = !formData.collectionId || Boolean(selectedDatasetCollection);
     const adminPagesUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
         [formData.siteId, requestedSiteId],
@@ -882,6 +972,7 @@ function NewPageRoute() {
         && hasValidParentPage
         && canonicalValid
         && jsonLdValid
+        && datasetImportReady
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
@@ -893,11 +984,13 @@ function NewPageRoute() {
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
         if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
         if (!jsonLdValid) return jsonLdResult.message;
+        if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the dataset page.';
+        if (formData.collectionId && !selectedDatasetCollection) return collectionsError || 'Choose an existing collection before creating this dataset page.';
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this page at the top level.';
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, canonicalValid, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, routeCheckError, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, canonicalValid, collectionsError, collectionsLoading, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, routeCheckError, routeConflict, routePreview, selectedDatasetCollection, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -952,11 +1045,22 @@ function NewPageRoute() {
                 label: 'Canvas seed',
                 detail: selectedFrontendTemplate
                     ? `${selectedFrontendTemplate.name} will seed from the saved frontend design contract.`
+                    : selectedDatasetCollection
+                    ? `${selectedDatasetCollection.name} will seed a collection ${selectedDatasetMode || 'list'} dataset with reusable bindings.`
                     : hasStarterCanvas
                     ? `${selectedTemplate.sections.length} starter section${selectedTemplate.sections.length === 1 ? '' : 's'}${seedsSiteChrome ? ' plus editable header, navigation, and footer' : ''} will be created`
                     : 'Blank still creates a heading and intro copy.',
                 ready: true,
             },
+            ...(formData.collectionId ? [{
+                label: 'Dataset import',
+                detail: selectedDatasetCollection
+                    ? `${selectedDatasetCollection.fields.length} fields mapped from ${selectedDatasetCollection.slug}.`
+                    : collectionsLoading
+                        ? 'Loading selected collection before create.'
+                        : collectionsError || 'The selected collection was not found for this site.',
+                ready: Boolean(selectedDatasetCollection),
+            }] : []),
             {
                 label: 'Publish timing',
                 detail: formData.status === 'scheduled'
@@ -1013,7 +1117,10 @@ function NewPageRoute() {
         formData.template,
         formData.title,
         formData.designTemplateId,
+        formData.collectionId,
         canonicalValid,
+        collectionsError,
+        collectionsLoading,
         effectiveSeoDescription,
         effectiveSeoTitle.length,
         effectiveKeywords.length,
@@ -1027,6 +1134,8 @@ function NewPageRoute() {
         selectedSite,
         selectedParentPage,
         selectedFrontendTemplate,
+        selectedDatasetCollection,
+        selectedDatasetMode,
         selectedTemplate.sections.length,
         frontendDesign?.chrome,
     ]);
@@ -1053,9 +1162,19 @@ function NewPageRoute() {
         forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
+            : selectedDatasetCollection
+                ? `Collection dataset ${selectedDatasetMode || 'list'} page for ${selectedDatasetCollection.name}`
             : formData.template === 'blog-index'
                 ? 'Backy blog feed placeholders'
                 : 'none',
+        datasetImport: selectedDatasetCollection ? {
+            mode: selectedDatasetMode || 'list',
+            collectionId: selectedDatasetCollection.id,
+            collectionSlug: selectedDatasetCollection.slug,
+            titleField: selectedDatasetFields?.titleField?.key || null,
+            descriptionField: selectedDatasetFields?.descriptionField?.key || null,
+            imageField: selectedDatasetFields?.imageField?.key || null,
+        } : null,
         navigation: formData.navigationPlacement === 'none'
             ? { placement: 'none', parentPageId: selectedParentPage?.id || null }
             : {
@@ -1095,6 +1214,9 @@ function NewPageRoute() {
         formData.template,
         formData.title,
         formData.designTemplateId,
+        selectedDatasetCollection,
+        selectedDatasetFields,
+        selectedDatasetMode,
         effectiveSeoDescription,
         effectiveSeoTitle,
         effectiveKeywords,
@@ -1144,12 +1266,21 @@ function NewPageRoute() {
             source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration'].includes(formData.template),
-            seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template),
+            seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template) || Boolean(selectedDatasetCollection),
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
             parentPageId: selectedParentPage?.id || null,
             parentTitle: selectedParentPage?.title || null,
         },
+        datasetImport: selectedDatasetCollection ? {
+            mode: selectedDatasetMode || 'list',
+            collectionId: selectedDatasetCollection.id,
+            collectionName: selectedDatasetCollection.name,
+            collectionSlug: selectedDatasetCollection.slug,
+            titleField: selectedDatasetFields?.titleField?.key || null,
+            descriptionField: selectedDatasetFields?.descriptionField?.key || null,
+            imageField: selectedDatasetFields?.imageField?.key || null,
+        } : null,
         hierarchy: selectedParentPage
             ? {
                 parentPageId: selectedParentPage.id,
@@ -1234,6 +1365,9 @@ function NewPageRoute() {
         selectedSite?.slug,
         selectedParentPage,
         selectedFrontendTemplate,
+        selectedDatasetCollection,
+        selectedDatasetFields,
+        selectedDatasetMode,
         selectedTemplate.id,
         selectedTemplate.name,
         selectedTemplate.sections,
@@ -1260,8 +1394,12 @@ function NewPageRoute() {
         || formData.noIndex
         || formData.noFollow
         || formData.designTemplateId.trim().length > 0
+        || formData.collectionId.trim().length > 0
+        || Boolean(formData.datasetMode)
     ), [
         formData.canonicalPath,
+        formData.collectionId,
+        formData.datasetMode,
         formData.description,
         formData.designTemplateId,
         formData.isHomepage,
@@ -1330,9 +1468,11 @@ function NewPageRoute() {
     const restoreRecoveredDraft = () => {
         if (!draftRecovery || isPageCreateBusy) return;
 
-        const recoveredFormData = {
+        const recoveredFormData: PageCreateDraftState = {
             ...draftRecovery.formData,
             designTemplateId: draftRecovery.formData.designTemplateId || '',
+            collectionId: draftRecovery.formData.collectionId || '',
+            datasetMode: draftRecovery.formData.datasetMode || '',
         };
 
         setFormData(recoveredFormData);
@@ -1419,6 +1559,8 @@ function NewPageRoute() {
             template: formData.template,
             frontendTemplate: selectedFrontendTemplate,
             frontendDesign,
+            datasetCollection: selectedDatasetCollection,
+            datasetMode: selectedDatasetMode || undefined,
             title,
             slug,
             status: formData.status,
@@ -1693,6 +1835,29 @@ function NewPageRoute() {
                                 >
                                     Restore draft
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {formData.collectionId && (
+                    <div className="xl:col-span-2 rounded-lg border border-cyan-200 bg-cyan-50/60 px-4 py-3 text-sm text-cyan-950" data-testid="page-create-dataset-import">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div className="font-semibold">Collection dataset import</div>
+                                <div className="mt-1 text-cyan-900/80">
+                                    {selectedDatasetCollection
+                                        ? `${selectedDatasetCollection.name} will seed a ${selectedDatasetMode || 'list'} page with editable collection bindings.`
+                                        : collectionsLoading
+                                            ? 'Loading selected collection before page creation.'
+                                            : collectionsError || 'The selected collection was not found for this site.'}
+                                </div>
+                            </div>
+                            <div className="grid gap-2 font-mono text-xs sm:grid-cols-2 lg:min-w-[420px]">
+                                <div className="rounded-md bg-white/80 px-2 py-1">collection {formData.collectionId}</div>
+                                <div className="rounded-md bg-white/80 px-2 py-1">mode {selectedDatasetMode || 'list'}</div>
+                                <div className="rounded-md bg-white/80 px-2 py-1">title {selectedDatasetFields?.titleField?.key || 'unmapped'}</div>
+                                <div className="rounded-md bg-white/80 px-2 py-1">media {selectedDatasetFields?.imageField?.key || 'unmapped'}</div>
                             </div>
                         </div>
                     </div>
@@ -2527,6 +2692,8 @@ const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): 
         && typeof formData.noIndex === 'boolean'
         && typeof formData.noFollow === 'boolean'
         && (formData.designTemplateId === undefined || typeof formData.designTemplateId === 'string')
+        && (formData.collectionId === undefined || typeof formData.collectionId === 'string')
+        && (formData.datasetMode === undefined || formData.datasetMode === '' || isPageDatasetMode(formData.datasetMode))
     );
 };
 
@@ -2647,6 +2814,8 @@ function createInitialPageContent(input: {
     template: PageTemplate;
     frontendTemplate?: SiteFrontendDesignTemplate | null;
     frontendDesign?: SiteFrontendDesignContract | null;
+    datasetCollection?: Collection | null;
+    datasetMode?: PageDatasetMode;
     title: string;
     slug: string;
     status: 'draft' | 'published' | 'scheduled';
@@ -2654,6 +2823,8 @@ function createInitialPageContent(input: {
 }) {
     const elements = input.frontendTemplate
         ? buildFrontendTemplateElements(input.frontendTemplate, input)
+        : input.datasetCollection
+            ? buildCollectionDatasetPageElements(input.datasetCollection, input.datasetMode || 'list', input)
         : buildTemplateElements(input);
     const canvasSize = input.frontendTemplate?.canvasSize
         ? {
@@ -2684,6 +2855,239 @@ function createInitialPageContent(input: {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const COLLECTION_DATASET_TEXT_FIELD_TYPES: CollectionFieldType[] = ['text', 'richText', 'slug', 'url', 'email', 'phone', 'select', 'tags'];
+const COLLECTION_DATASET_MEDIA_FIELD_TYPES: CollectionFieldType[] = ['image', 'video', 'file'];
+
+const findPageCollectionDatasetField = (
+    fields: CollectionField[],
+    preferredKeys: string[],
+    allowedTypes?: CollectionFieldType[],
+) => {
+    const sorted = [...fields].sort((a, b) => a.sortOrder - b.sortOrder);
+    const preferred = sorted.find((field) => (
+        preferredKeys.includes(field.key.toLowerCase()) &&
+        (!allowedTypes || allowedTypes.includes(field.type))
+    ));
+    if (preferred) return preferred;
+
+    return sorted.find((field) => !allowedTypes || allowedTypes.includes(field.type)) || null;
+};
+
+const buildPageCollectionDatasetFields = (collection: Collection) => ({
+    titleField: findPageCollectionDatasetField(collection.fields, ['title', 'name', 'headline', 'label'], COLLECTION_DATASET_TEXT_FIELD_TYPES),
+    descriptionField: findPageCollectionDatasetField(collection.fields, ['summary', 'description', 'excerpt', 'body'], COLLECTION_DATASET_TEXT_FIELD_TYPES),
+    imageField: findPageCollectionDatasetField(collection.fields, ['image', 'photo', 'thumbnail', 'cover', 'avatar'], COLLECTION_DATASET_MEDIA_FIELD_TYPES),
+});
+
+const normalizeCollectionDatasetListPath = (collection: Collection) => {
+    const raw = collection.listRoutePattern?.trim() || `/${collection.slug}`;
+    const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+    return withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/$/, '') || `/${collection.slug}`;
+};
+
+const normalizeCollectionDatasetItemPath = (collection: Collection) => {
+    const raw = collection.routePattern?.trim() || `/${collection.slug}/:recordSlug`;
+    const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+    return withLeadingSlash
+        .replace(/\/{2,}/g, '/')
+        .replace(':collectionSlug', collection.slug)
+        .replace(':recordSlug', '{recordSlug}')
+        .replace(/\/$/, '');
+};
+
+function buildCollectionDatasetPageElements(
+    collection: Collection,
+    mode: PageDatasetMode,
+    input: { title: string; slug: string; description: string },
+): CanvasElement[] {
+    const fields = buildPageCollectionDatasetFields(collection);
+    const titleField = fields.titleField?.key || collection.fields[0]?.key || 'title';
+    const descriptionField = fields.descriptionField?.key || titleField;
+    const routeLabel = mode === 'item'
+        ? normalizeCollectionDatasetItemPath(collection)
+        : normalizeCollectionDatasetListPath(collection);
+    const baseDataset = {
+        kind: 'collection',
+        collectionId: collection.id,
+        collectionSlug: collection.slug,
+        datasetId: `dataset_${collection.id}`,
+        mode,
+    };
+
+    if (mode === 'item') {
+        return withPageChrome([
+            createCanvasElement('section', 0, 0, {
+                id: `collection-${collection.id}-detail-section`,
+                width: DEFAULT_CANVAS_SIZE.width,
+                height: 700,
+                props: {
+                    backgroundColor: '#ffffff',
+                    borderRadius: 0,
+                    datasetImport: baseDataset,
+                },
+                children: [
+                    createCanvasElement('text', 76, 64, {
+                        id: `collection-${collection.id}-route-label`,
+                        width: 620,
+                        height: 28,
+                        props: {
+                            content: routeLabel,
+                            fontSize: 13,
+                            color: '#0f766e',
+                            fontWeight: '700',
+                        },
+                    }),
+                    createCanvasElement('heading', 72, 112, {
+                        id: `collection-${collection.id}-detail-title`,
+                        width: 720,
+                        height: 100,
+                        props: {
+                            content: input.title || `${collection.name} detail`,
+                            level: 'h1',
+                            fontSize: 54,
+                            fontWeight: '800',
+                            lineHeight: 1.05,
+                            color: '#111827',
+                        },
+                        dataBindings: [{
+                            id: `bind_collection_${collection.id}_title`,
+                            datasetId: `dataset_${collection.id}`,
+                            targetPath: 'props.content',
+                            source: { kind: 'collection', collectionId: collection.id, field: titleField },
+                            mode: 'text',
+                            pagination: { limit: 1 },
+                        }],
+                    }),
+                    createCanvasElement('paragraph', 76, 236, {
+                        id: `collection-${collection.id}-detail-summary`,
+                        width: 650,
+                        height: 124,
+                        props: {
+                            content: input.description || collection.description || `Design a dynamic detail view for ${collection.name}.`,
+                            fontSize: 18,
+                            lineHeight: 1.6,
+                            color: '#4b5563',
+                        },
+                        dataBindings: [{
+                            id: `bind_collection_${collection.id}_summary`,
+                            datasetId: `dataset_${collection.id}`,
+                            targetPath: 'props.content',
+                            source: { kind: 'collection', collectionId: collection.id, field: descriptionField },
+                            mode: 'richText',
+                            pagination: { limit: 1 },
+                        }],
+                    }),
+                    createCanvasElement('box', 770, 108, {
+                        id: `collection-${collection.id}-detail-card`,
+                        width: 360,
+                        height: 360,
+                        props: {
+                            backgroundColor: '#f8fafc',
+                            borderColor: '#cbd5e1',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            borderRadius: 8,
+                        },
+                        children: [
+                            createCanvasElement('paragraph', 28, 30, {
+                                id: `collection-${collection.id}-detail-fields`,
+                                width: 292,
+                                height: 260,
+                                props: {
+                                    content: collection.fields.slice(0, 8).map((field) => `${field.label}: record.${field.key}`).join('\n'),
+                                    fontSize: 15,
+                                    lineHeight: 1.7,
+                                    color: '#334155',
+                                },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ], {
+            title: input.title || `${collection.name} detail`,
+            variant: `collection-${collection.slug}-detail`,
+            navItems: ['Home', collection.name, 'Contact'],
+            headerActionLabel: 'Edit content',
+        });
+    }
+
+    return withPageChrome([
+        createCanvasElement('section', 0, 0, {
+            id: `collection-${collection.id}-list-section`,
+            width: DEFAULT_CANVAS_SIZE.width,
+            height: 760,
+            props: {
+                backgroundColor: '#ffffff',
+                borderRadius: 0,
+                datasetImport: baseDataset,
+            },
+            children: [
+                createCanvasElement('text', 76, 60, {
+                    id: `collection-${collection.id}-list-route`,
+                    width: 600,
+                    height: 28,
+                    props: {
+                        content: routeLabel,
+                        fontSize: 13,
+                        color: '#0f766e',
+                        fontWeight: '700',
+                    },
+                }),
+                createCanvasElement('heading', 72, 108, {
+                    id: `collection-${collection.id}-list-title`,
+                    width: 760,
+                    height: 84,
+                    props: {
+                        content: input.title || collection.name,
+                        level: 'h1',
+                        fontSize: 52,
+                        fontWeight: '800',
+                        lineHeight: 1.05,
+                        color: '#111827',
+                    },
+                }),
+                createCanvasElement('paragraph', 76, 212, {
+                    id: `collection-${collection.id}-list-intro`,
+                    width: 720,
+                    height: 84,
+                    props: {
+                        content: input.description || collection.description || `Browse and manage ${collection.name.toLowerCase()} records from Backy.`,
+                        fontSize: 18,
+                        lineHeight: 1.55,
+                        color: '#4b5563',
+                    },
+                }),
+                createCanvasElement('repeater', 72, 340, {
+                    id: `collection-${collection.id}-repeater`,
+                    width: 1056,
+                    height: 330,
+                    props: {
+                        collectionId: collection.id,
+                        datasetId: `dataset_${collection.id}`,
+                        titleField,
+                        descriptionField,
+                        ...(fields.imageField ? { imageField: fields.imageField.key } : {}),
+                        query: { sortBy: 'updatedAt', sortDirection: 'desc' },
+                        limit: 9,
+                        columns: 3,
+                        gap: 16,
+                        emptyMessage: `No ${collection.name.toLowerCase()} records yet.`,
+                        backgroundColor: '#f8fafc',
+                        borderRadius: 8,
+                        padding: 16,
+                    },
+                }),
+            ],
+        }),
+    ], {
+        title: input.title || collection.name,
+        variant: `collection-${collection.slug}-list`,
+        navItems: ['Home', collection.name, 'Contact'],
+        headerActionLabel: 'Add record',
+    });
 }
 
 function buildFrontendTemplateElements(

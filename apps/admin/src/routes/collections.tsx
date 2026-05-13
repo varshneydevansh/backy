@@ -1891,10 +1891,24 @@ function CollectionsPage() {
 
     navigate({ to: '/settings', search: { tab: 'infrastructure' } });
   };
-  const openDatasetPageBuilder = () => {
-    if (isCollectionsBusy) return;
+  const openDatasetPageBuilder = (mode: 'list' | 'item') => {
+    if (isCollectionsBusy || !activeCollection) return;
 
-    navigate({ to: '/pages/new', search: activeSiteSearch });
+    const suggestedTitle = mode === 'item' ? `${activeCollection.name} detail` : activeCollection.name;
+    const suggestedSlug = mode === 'item' ? `${activeCollection.slug}-detail` : `${activeCollection.slug}-list`;
+    navigate({
+      to: '/pages/new',
+      search: {
+        ...activeSiteSearch,
+        collectionId: activeCollection.id,
+        datasetMode: mode,
+        title: suggestedTitle,
+        slug: suggestedSlug,
+        description: activeCollection.description || `A dynamic ${mode} page for ${activeCollection.name}.`,
+        nav: mode === 'list' ? 'primary' : 'none',
+        navLabel: activeCollection.name,
+      },
+    });
   };
 
   useEffect(() => {
@@ -3289,13 +3303,23 @@ function CollectionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={openDatasetPageBuilder}
+                    onClick={() => openDatasetPageBuilder('list')}
                     disabled={isCollectionsBusy}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
-                    data-testid="collections-authoring-open-page-builder"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-open-list-builder"
                   >
                     <ExternalLink className="h-4 w-4" />
-                    Open page builder
+                    Open list builder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDatasetPageBuilder('item')}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-open-item-builder"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open item builder
                   </button>
                 </div>
 

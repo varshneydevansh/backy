@@ -456,11 +456,14 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-authoring-copy-binding"]')) &&
         Boolean(document.querySelector('[data-testid="collections-authoring-copy-list-brief"]')) &&
         Boolean(document.querySelector('[data-testid="collections-authoring-copy-item-brief"]')) &&
-        Boolean(document.querySelector('[data-testid="collections-authoring-open-page-builder"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-open-list-builder"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-open-item-builder"]')) &&
         authoringText.includes('Dataset authoring shortcuts') &&
         authoringText.includes(${JSON.stringify(`dataset_${collectionId}`)}) &&
         authoringText.includes('Copy repeater preset') &&
         authoringText.includes('Copy field binding') &&
+        authoringText.includes('Open list builder') &&
+        authoringText.includes('Open item builder') &&
         authoringText.includes('/pages/new?siteId='),
       hasRelationshipBrowser: Boolean(document.querySelector('[data-testid="collections-relationship-browser"]')) &&
         Boolean(document.querySelector('[data-testid="collections-relationship-outgoing"]')) &&
@@ -624,18 +627,31 @@ const attachFrontendTemplateThroughUi = async (client, collectionId) => {
     await sleep(100);
   }
 
-  const clicked = await evaluate(client, `(() => {
-    const form = document.querySelector('#collections-schema');
-    const button = form
-      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
-      : null;
-    if (!(button instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'save-button-missing' };
-    }
-    if (button.disabled) return { ok: false, reason: 'save-button-disabled' };
-    button.click();
-    return { ok: true };
-  })()`);
+  let clicked = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const form = document.querySelector('#collections-schema');
+      const button = form
+        ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+        : null;
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'save-button-missing' };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'save-button-disabled',
+          selected: document.querySelector('[data-testid="collections-frontend-template-select"]')?.value || '',
+          summary: document.querySelector('[data-testid="collections-frontend-template-summary"]')?.textContent || '',
+          busyText: document.body?.innerText?.includes('Loading') || false,
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    await sleep(250);
+  }
   assert(clicked.ok, `Unable to save captured collection template selection: ${JSON.stringify(clicked)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
