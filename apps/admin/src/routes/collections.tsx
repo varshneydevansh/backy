@@ -549,6 +549,31 @@ const createEmptyField = (sortOrder: number): CollectionField => ({
 
 const RELATION_FIELD_TYPES: CollectionFieldType[] = ['reference', 'multiReference'];
 const MEDIA_FIELD_TYPES: CollectionFieldType[] = ['image', 'video', 'file'];
+const TEXT_FIELD_TYPES: CollectionFieldType[] = ['text', 'richText', 'slug', 'url', 'email', 'phone', 'select', 'tags'];
+
+const findCollectionAuthoringField = (
+  fields: CollectionField[],
+  preferredKeys: string[],
+  allowedTypes?: CollectionFieldType[],
+) => {
+  const sorted = [...fields].sort((a, b) => a.sortOrder - b.sortOrder);
+  const preferred = sorted.find((field) => (
+    preferredKeys.includes(field.key.toLowerCase()) &&
+    (!allowedTypes || allowedTypes.includes(field.type))
+  ));
+  if (preferred) return preferred;
+
+  return sorted.find((field) => !allowedTypes || allowedTypes.includes(field.type)) || null;
+};
+
+const datasetFieldBinding = (field: CollectionField | null) => (
+  field ? {
+    fieldKey: field.key,
+    label: field.label,
+    type: field.type,
+    path: `record.${field.key}`,
+  } : null
+);
 
 const isLocalAdminHost = () => {
   if (typeof window === 'undefined') return false;
@@ -1249,6 +1274,132 @@ function CollectionsPage() {
       detail: 'Use public read APIs and route templates to power lists, detail pages, catalogs, and forms.',
     },
   ]), []);
+  const datasetAuthoringShortcuts = useMemo(() => {
+    if (!activeCollection) return null;
+
+    const fields = [...activeCollection.fields].sort((a, b) => a.sortOrder - b.sortOrder);
+    const titleField = findCollectionAuthoringField(fields, ['title', 'name', 'headline', 'label'], TEXT_FIELD_TYPES);
+    const descriptionField = findCollectionAuthoringField(fields, ['summary', 'description', 'excerpt', 'body'], TEXT_FIELD_TYPES);
+    const imageField = findCollectionAuthoringField(fields, ['image', 'photo', 'thumbnail', 'cover', 'avatar'], MEDIA_FIELD_TYPES);
+    const slugField = findCollectionAuthoringField(fields, ['slug'], ['slug']);
+    const filterFields = fields.filter((field) => ['select', 'tags', 'boolean', 'reference', 'multiReference'].includes(field.type)).slice(0, 4);
+    const detailFields = fields
+      .filter((field) => ![titleField?.key, descriptionField?.key, imageField?.key].includes(field.key))
+      .slice(0, 8);
+    const datasetId = `dataset_${activeCollection.id}`;
+    const recordsUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
+    const recordBySlugUrl = activeCollectionIsPublic ? publicRecordBySlugUrl : `${adminRecordsUrl}?slug={recordSlug}`;
+    const baseDataset = {
+      id: datasetId,
+      siteId: activeSiteId,
+      collectionId: activeCollection.id,
+      collectionSlug: activeCollection.slug,
+      collectionName: activeCollection.name,
+      status: activeCollection.status,
+      publicReadReady: activeCollectionIsPublic,
+      recordsUrl,
+      recordBySlugUrl,
+      listRoute: activeListRoutePath,
+      itemRouteTemplate: activeItemRoutePath,
+    };
+    const repeaterPreset = {
+      schemaVersion: 'backy.dataset-authoring.v1',
+      type: 'collection-repeater',
+      dataset: baseDataset,
+      query: {
+        status: 'published',
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+        limit: Math.min(recordPagination.limit || DEFAULT_RECORD_PAGE_SIZE, 24),
+      },
+      repeat: {
+        recordAlias: 'record',
+        emptyState: `No ${activeCollection.name.toLowerCase()} records yet.`,
+      },
+      bindings: {
+        title: datasetFieldBinding(titleField),
+        description: datasetFieldBinding(descriptionField),
+        media: datasetFieldBinding(imageField),
+        slug: datasetFieldBinding(slugField),
+        detailHref: {
+          template: activeItemRoutePath,
+          recordSlugPath: 'record.slug',
+        },
+      },
+      filters: filterFields.map((field) => ({
+        fieldKey: field.key,
+        label: field.label,
+        type: field.type,
+        path: `record.${field.key}`,
+      })),
+    };
+    const fieldBindingPreset = {
+      schemaVersion: 'backy.dataset-authoring.v1',
+      type: 'collection-field-bindings',
+      dataset: baseDataset,
+      bindings: [
+        { role: 'title', target: 'heading', binding: datasetFieldBinding(titleField) },
+        { role: 'description', target: 'richText', binding: datasetFieldBinding(descriptionField) },
+        { role: 'media', target: 'image', binding: datasetFieldBinding(imageField) },
+        { role: 'detailHref', target: 'link', binding: { template: activeItemRoutePath, recordSlugPath: 'record.slug' } },
+        ...detailFields.map((field) => ({
+          role: `field.${field.key}`,
+          target: MEDIA_FIELD_TYPES.includes(field.type) ? 'media' : 'text',
+          binding: datasetFieldBinding(field),
+        })),
+      ].filter((binding) => Boolean(binding.binding)),
+    };
+    const listPageBrief = {
+      schemaVersion: 'backy.dataset-authoring.v1',
+      type: 'collection-list-page-brief',
+      page: {
+        suggestedTitle: activeCollection.name,
+        suggestedPath: activeListRoutePath,
+        createRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+      },
+      dataset: baseDataset,
+      repeaterPreset,
+    };
+    const itemPageBrief = {
+      schemaVersion: 'backy.dataset-authoring.v1',
+      type: 'collection-item-page-brief',
+      page: {
+        suggestedTitle: `${activeCollection.name} detail`,
+        suggestedPathTemplate: activeItemRoutePath,
+        createRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+      },
+      dataset: baseDataset,
+      fieldBindingPreset,
+    };
+
+    return {
+      datasetId,
+      titleField,
+      descriptionField,
+      imageField,
+      filterFields,
+      detailFields,
+      repeaterPreset,
+      fieldBindingPreset,
+      listPageBrief,
+      itemPageBrief,
+      repeaterPresetText: JSON.stringify(repeaterPreset, null, 2),
+      fieldBindingPresetText: JSON.stringify(fieldBindingPreset, null, 2),
+      listPageBriefText: JSON.stringify(listPageBrief, null, 2),
+      itemPageBriefText: JSON.stringify(itemPageBrief, null, 2),
+      pagesCreateRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+    };
+  }, [
+    activeCollection,
+    activeCollectionIsPublic,
+    activeItemRoutePath,
+    activeListRoutePath,
+    activeSiteId,
+    adminRecordsUrl,
+    publicRecordBySlugUrl,
+    publicRecordsUrl,
+    recordPagination.limit,
+  ]);
   const collectionHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1289,6 +1440,17 @@ function CollectionsPage() {
             detailRoute: activeItemRoutePath,
             publicReadReady: activeCollectionIsPublic,
             publicCreateReady: activeCollection.permissions.publicCreate,
+            authoringShortcuts: datasetAuthoringShortcuts
+              ? {
+                  datasetId: datasetAuthoringShortcuts.datasetId,
+                  titleField: datasetAuthoringShortcuts.titleField?.key || null,
+                  descriptionField: datasetAuthoringShortcuts.descriptionField?.key || null,
+                  mediaField: datasetAuthoringShortcuts.imageField?.key || null,
+                  filterFields: datasetAuthoringShortcuts.filterFields.map((field) => field.key),
+                  listPageBrief: datasetAuthoringShortcuts.listPageBrief,
+                  itemPageBrief: datasetAuthoringShortcuts.itemPageBrief,
+                }
+              : null,
           }
         : null,
     },
@@ -1407,6 +1569,7 @@ function CollectionsPage() {
     collectionReadiness.checks,
     collectionReadiness.score,
     collections,
+    datasetAuthoringShortcuts,
     fieldHealth,
     frontendCollectionTemplates,
     frontendDesign,
@@ -1727,6 +1890,11 @@ function CollectionsPage() {
     }
 
     navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
+  const openDatasetPageBuilder = () => {
+    if (isCollectionsBusy) return;
+
+    navigate({ to: '/pages/new', search: activeSiteSearch });
   };
 
   useEffect(() => {
@@ -3059,6 +3227,94 @@ function CollectionsPage() {
               ))}
             </div>
           </div>
+
+          {activeCollection && datasetAuthoringShortcuts && (
+            <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/40 p-4" data-testid="collections-authoring-shortcuts">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-cyan-700" />
+                    <h3 className="text-sm font-semibold text-cyan-950">Dataset authoring shortcuts</h3>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm text-cyan-900/80">
+                    Copy ready-to-bind dataset presets for repeaters, detail fields, and generated page briefs before opening the page builder.
+                  </p>
+                </div>
+                <span className="rounded-full bg-white/80 px-2.5 py-1 font-mono text-xs font-medium text-cyan-900" data-testid="collections-authoring-dataset-id">
+                  {datasetAuthoringShortcuts.datasetId}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.repeaterPresetText, 'Repeater dataset preset')}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-copy-repeater"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy repeater preset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.fieldBindingPresetText, 'Field binding preset')}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-copy-binding"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy field binding
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.listPageBriefText, 'List page dataset brief')}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-copy-list-brief"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy list page brief
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCollectionApiText(datasetAuthoringShortcuts.itemPageBriefText, 'Item page dataset brief')}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-medium text-cyan-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="collections-authoring-copy-item-brief"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy item page brief
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openDatasetPageBuilder}
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
+                    data-testid="collections-authoring-open-page-builder"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open page builder
+                  </button>
+                </div>
+
+                <div className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs text-cyan-950" data-testid="collections-authoring-summary">
+                  <div className="grid gap-2">
+                    <CollectionApiStat label="Title" value={datasetAuthoringShortcuts.titleField?.key || 'Unmapped'} />
+                    <CollectionApiStat label="Summary" value={datasetAuthoringShortcuts.descriptionField?.key || 'Unmapped'} />
+                    <CollectionApiStat label="Media" value={datasetAuthoringShortcuts.imageField?.key || 'Unmapped'} />
+                    <CollectionApiStat label="Filters" value={`${datasetAuthoringShortcuts.filterFields.length}`} />
+                  </div>
+                  <div className="mt-3 space-y-1 font-mono text-[11px] leading-5 text-cyan-900/80">
+                    <div>{activeListRoutePath}</div>
+                    <div>{activeItemRoutePath}</div>
+                    <div>{datasetAuthoringShortcuts.pagesCreateRoute}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <CollectionApiSnippet label="Public collections" value={publicCollectionsUrl} />

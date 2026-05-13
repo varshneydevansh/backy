@@ -430,10 +430,11 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
   );
 };
 
-const assertCollectionsLayout = async (client, { collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName }) => {
+const assertCollectionsLayout = async (client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName }) => {
   const layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
     const relationshipText = document.querySelector('[data-testid="collections-relationship-browser"]')?.textContent || '';
+    const authoringText = document.querySelector('[data-testid="collections-authoring-shortcuts"]')?.textContent || '';
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -450,6 +451,17 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         body.includes('Editor data-binding contract') &&
         body.includes('Repeater/list sections') &&
         body.includes('Public write flows'),
+      hasAuthoringShortcuts: Boolean(document.querySelector('[data-testid="collections-authoring-shortcuts"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-copy-repeater"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-copy-binding"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-copy-list-brief"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-copy-item-brief"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-authoring-open-page-builder"]')) &&
+        authoringText.includes('Dataset authoring shortcuts') &&
+        authoringText.includes(${JSON.stringify(`dataset_${collectionId}`)}) &&
+        authoringText.includes('Copy repeater preset') &&
+        authoringText.includes('Copy field binding') &&
+        authoringText.includes('/pages/new?siteId='),
       hasRelationshipBrowser: Boolean(document.querySelector('[data-testid="collections-relationship-browser"]')) &&
         Boolean(document.querySelector('[data-testid="collections-relationship-outgoing"]')) &&
         Boolean(document.querySelector('[data-testid="collections-relationship-incoming"]')) &&
@@ -483,6 +495,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
         (input.getAttribute('aria-label') || '') === ${JSON.stringify(`Select record ${recordSlug}`)}
       ))),
       relationshipText,
+      authoringText,
     };
   })()`);
 
@@ -495,6 +508,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     layout.hasApiContract &&
       layout.hasFrontendContract &&
       layout.hasBindingContract &&
+      layout.hasAuthoringShortcuts &&
       layout.hasRelationshipBrowser &&
       layout.hasDynamicTemplateControl &&
       layout.hasAuditPanel &&
@@ -507,6 +521,34 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     `Collections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const assertAuthoringShortcutCopy = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="collections-authoring-copy-repeater"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'authoring-copy-button-missing' };
+    }
+    if (button.disabled) return { ok: false, reason: 'authoring-copy-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to use authoring shortcut copy action: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        ready: body.includes('Repeater dataset preset copied.') ||
+          (body.includes('backy.dataset-authoring.v1') && body.includes('collection-repeater')),
+        body: body.slice(0, 1200),
+      };
+    })()`);
+    if (state.ready) return state;
+    await sleep(100);
+  }
+
+  throw new Error('Authoring shortcut copy action did not surface copied preset feedback');
 };
 
 const createFrontendTemplateCollectionThroughUi = async (client) => {
@@ -811,7 +853,8 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToCollections(client, { collectionId, recordSlug });
-    await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
+    await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
+    await assertAuthoringShortcutCopy(client);
     await attachFrontendTemplateThroughUi(client, collectionId);
     const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
     frontendTemplateCollectionId = frontendTemplateCollection.id;
