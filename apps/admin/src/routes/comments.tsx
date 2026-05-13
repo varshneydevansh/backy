@@ -22,6 +22,7 @@ import {
   createComment,
   getAdminSite,
   getCommentAnalytics,
+  getUserPermissions,
   deleteCommentBlocklistEntries,
   listCommentDeliveryEvents,
   listAdminAuditLogs,
@@ -40,8 +41,11 @@ import {
   type CommentAnalytics,
   type CommentModerationStatus,
   type CommentModerationTarget,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import type { SiteCommentPolicy } from '@backy-cms/core';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -66,6 +70,14 @@ type CommentTriageFilter =
   | 'reviewed'
   | 'unreviewed';
 type CommentSortFilter = 'newest' | 'oldest';
+type CommentPermissionKey = 'comments.view' | 'comments.manage' | 'comments.configure' | 'activity.export';
+
+const COMMENT_PERMISSION_ROLE_DEFAULTS: Record<CommentPermissionKey, Array<AuthUser['role']>> = {
+  'comments.view': ['owner', 'admin', 'editor', 'viewer'],
+  'comments.manage': ['owner', 'admin', 'editor'],
+  'comments.configure': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+};
 
 const COMMENT_CONTROL_AREAS = [
   {
@@ -236,6 +248,7 @@ const DEFAULT_REPLY_DRAFT: CommentReplyDraft = {
 
 function CommentsRoute() {
   const { sites } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routerState = useRouterState();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
@@ -269,6 +282,9 @@ function CommentsRoute() {
   const [isReplyingId, setIsReplyingId] = useState<string | null>(null);
   const [isMovingId, setIsMovingId] = useState<string | null>(null);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [retryingDeliveryIds, setRetryingDeliveryIds] = useState<string[]>([]);
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -278,7 +294,16 @@ function CommentsRoute() {
     || retryingDeliveryIds.length > 0
     || Boolean(isReplyingId)
     || Boolean(isMovingId);
-  const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const canManageComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const managePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const configurePermissionTitle = canConfigureComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy || isPermissionMatrixPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -780,7 +805,50 @@ function CommentsRoute() {
   const spamReason = moderationReasonText || 'Marked as spam.';
   const blockReason = moderationReasonText || 'Blocked from moderation queue.';
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(loadError instanceof Error ? loadError.message : 'Unable to load comment permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const refreshBlocklist = async () => {
+    if (!canManageComments) {
+      setBlocklist([]);
+      setBlocklistCount(0);
+      return { blocklist: [], count: 0 };
+    }
+
     const result = await listCommentBlocklist(activeSiteId, { limit: 100 });
     setBlocklist(result.blocklist);
     setBlocklistCount(result.count);
@@ -788,12 +856,23 @@ function CommentsRoute() {
   };
 
   const refreshCommentAnalytics = async () => {
+    if (!canViewComments) {
+      setCommentAnalytics(null);
+      return null;
+    }
+
     const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 });
     setCommentAnalytics(analyticsResult);
     return analyticsResult;
   };
 
   const refreshCommentDeliveryEvents = async () => {
+    if (!canManageComments) {
+      setCommentDeliveryEvents([]);
+      setCommentDeliveryError(null);
+      return null;
+    }
+
     setCommentDeliveryError(null);
     try {
       const result = await listCommentDeliveryEvents(activeSiteId, { limit: 100 });
@@ -807,6 +886,12 @@ function CommentsRoute() {
   };
 
   const refreshCommentAuditLogs = async () => {
+    if (!canExportActivity) {
+      setCommentAuditLogs([]);
+      setCommentAuditError(null);
+      return null;
+    }
+
     setCommentAuditError(null);
     try {
       const result = await listAdminAuditLogs({ siteId: activeSiteId, limit: 80 });
@@ -821,6 +906,11 @@ function CommentsRoute() {
 
   const handleRetryCommentDelivery = async (event: CommentDeliveryEvent) => {
     if (isCommentsBusy || !event.commentId) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot retry comment delivery.');
+      setNotice(null);
+      return;
+    }
 
     setRetryingDeliveryIds((current) => [...current, event.id]);
     setError(null);
@@ -844,6 +934,18 @@ function CommentsRoute() {
 
   const loadComments = async () => {
     if (isCommentsBusy) return;
+    if (!canViewComments) {
+      setComments([]);
+      setTargets([]);
+      setCommentAnalytics(null);
+      setCommentDeliveryEvents([]);
+      setCommentAuditLogs([]);
+      setBlocklist([]);
+      setBlocklistCount(0);
+      setError(viewPermissionTitle || 'Your account cannot view comments.');
+      setNotice(null);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -855,15 +957,15 @@ function CommentsRoute() {
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         getAdminSite(activeSiteId).catch(() => null),
-        refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })),
-        listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
+        canManageComments ? refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })) : Promise.resolve({ blocklist: [], count: 0 }),
+        canManageComments ? listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
           setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
           return null;
-        }),
-        listAdminAuditLogs({ siteId: activeSiteId, limit: 80 }).catch((auditError) => {
+        }) : Promise.resolve(null),
+        canExportActivity ? listAdminAuditLogs({ siteId: activeSiteId, limit: 80 }).catch((auditError) => {
           setCommentAuditError(auditError instanceof Error ? auditError.message : 'Unable to load comment audit logs');
           return null;
-        }),
+        }) : Promise.resolve(null),
       ]);
       const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 }).catch(() => null);
       const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
@@ -894,6 +996,15 @@ function CommentsRoute() {
       ]);
       setSelectedIds((current) => current.filter((id) => commentResult.comments.some((comment) => comment.id === id)));
     } catch (loadError) {
+      if (isAdminPermissionDeniedError(loadError)) {
+        setComments([]);
+        setTargets([]);
+        setCommentAnalytics(null);
+        setCommentDeliveryEvents([]);
+        setCommentAuditLogs([]);
+        setBlocklist([]);
+        setBlocklistCount(0);
+      }
       setError(loadError instanceof Error ? loadError.message : 'Unable to load comments');
     } finally {
       setIsLoading(false);
@@ -924,12 +1035,19 @@ function CommentsRoute() {
   }, [routerState.location.search, selectedSiteId, sites]);
 
   useEffect(() => {
-    void loadComments();
+    if (!isPermissionMatrixPending) {
+      void loadComments();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, canViewComments, canManageComments, canExportActivity, isPermissionMatrixPending]);
 
   const toggleVisibleSelection = () => {
     if (isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot select comments for moderation.');
+      setNotice(null);
+      return;
+    }
 
     setSelectedIds((current) => {
       const currentSet = new Set(current);
@@ -948,6 +1066,12 @@ function CommentsRoute() {
     options: { rejectionReason?: string; blockReason?: string } = {},
   ) => {
     if (commentIds.length === 0 || isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot moderate comments.');
+      setNotice(null);
+      return;
+    }
+
     setUpdatingIds(commentIds);
     setError(null);
     setNotice(null);
@@ -979,6 +1103,11 @@ function CommentsRoute() {
 
   const handleDeleteBlocklistEntries = async (ids: string[]) => {
     if (ids.length === 0 || isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot remove author blocklist entries.');
+      setNotice(null);
+      return;
+    }
 
     setDeletingBlocklistIds(ids);
     setError(null);
@@ -998,6 +1127,7 @@ function CommentsRoute() {
   };
 
   const patchCommentPolicyDraft = (patch: Partial<CommentPolicyDraft>) => {
+    if (!canConfigureComments) return;
     setCommentPolicyDraft((current) => ({
       ...current,
       ...patch,
@@ -1006,6 +1136,7 @@ function CommentsRoute() {
   };
 
   const handleBlockedTermsChange = (value: string) => {
+    if (!canConfigureComments) return;
     patchCommentPolicyDraft({
       blockedTerms: value
         .split(/\r?\n|,/)
@@ -1016,6 +1147,11 @@ function CommentsRoute() {
 
   const saveCommentPolicy = async () => {
     if (isCommentsBusy || !activeSiteId) return;
+    if (!canConfigureComments) {
+      setError(configurePermissionTitle || 'Your account cannot configure comment policy.');
+      setNotice(null);
+      return;
+    }
 
     setIsSavingPolicy(true);
     setError(null);
@@ -1042,6 +1178,12 @@ function CommentsRoute() {
 
   const handleClearReports = async (commentIds: string[]) => {
     if (commentIds.length === 0 || isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot resolve comment reports.');
+      setNotice(null);
+      return;
+    }
+
     setUpdatingIds(commentIds);
     setError(null);
     setNotice(null);
@@ -1070,6 +1212,12 @@ function CommentsRoute() {
 
   const openReplyComposer = (comment: AdminComment) => {
     if (isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot reply to comments.');
+      setNotice(null);
+      return;
+    }
+
     const defaultAuthorName = activeSite?.name ? `${activeSite.name} Team` : DEFAULT_REPLY_DRAFT.authorName;
     setReplyingToId(comment.id);
     setReplyDraft({
@@ -1081,11 +1229,18 @@ function CommentsRoute() {
   };
 
   const patchReplyDraft = (patch: Partial<CommentReplyDraft>) => {
+    if (!canManageComments) return;
     setReplyDraft((current) => ({ ...current, ...patch }));
   };
 
   const handleCreateReply = async (parentComment: AdminComment) => {
     if (isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot reply to comments.');
+      setNotice(null);
+      return;
+    }
+
     const content = replyDraft.content.trim();
     if (!content) {
       setError('Enter a reply before publishing.');
@@ -1130,6 +1285,12 @@ function CommentsRoute() {
 
   const openMoveComposer = (comment: AdminComment, parentOptions: AdminComment[]) => {
     if (isCommentsBusy || !comment.parentId) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot move comment replies.');
+      setNotice(null);
+      return;
+    }
+
     setMovingCommentId(comment.id);
     setMoveParentDraft(parentOptions.some((parent) => parent.id === comment.parentId)
       ? comment.parentId
@@ -1138,6 +1299,12 @@ function CommentsRoute() {
 
   const handleMoveReply = async (comment: AdminComment) => {
     if (isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot move comment replies.');
+      setNotice(null);
+      return;
+    }
+
     if (!comment.parentId) {
       setError('Only replies can be moved to another parent.');
       setNotice(null);
@@ -1198,6 +1365,11 @@ function CommentsRoute() {
   };
   const downloadModerationHandoff = () => {
     if (isCommentsBusy) return;
+    if (!canExportActivity) {
+      setError(activityPermissionTitle || 'Your account cannot export comment handoff data.');
+      setNotice(null);
+      return;
+    }
 
     const blob = new Blob([moderationHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1257,6 +1429,11 @@ function CommentsRoute() {
 
   const handleExportComments = () => {
     if (filteredComments.length === 0 || isCommentsBusy) return;
+    if (!canExportActivity) {
+      setError(activityPermissionTitle || 'Your account cannot export comment data.');
+      setNotice(null);
+      return;
+    }
 
     const rows = filteredComments.map((comment) => {
       const target = targetByKey.get(`${comment.targetType}:${comment.targetId}`);
@@ -1303,6 +1480,19 @@ function CommentsRoute() {
     URL.revokeObjectURL(url);
   };
 
+  if (!isPermissionMatrixPending && !canViewComments) {
+    return (
+      <PageShell
+        title="Comments unavailable"
+        description={viewPermissionTitle || 'Your account cannot view comments.'}
+      >
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant comments.view access.'}
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Comments"
@@ -1341,6 +1531,11 @@ function CommentsRoute() {
           {notice}
         </div>
       )}
+      {permissionError && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {permissionError}
+        </div>
+      )}
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="comments-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1363,17 +1558,25 @@ function CommentsRoute() {
             <Button
               variant="outline"
               onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
-              disabled={isCommentsBusy}
+              disabled={isCommentsBusy || !canExportActivity}
+              title={activityPermissionTitle}
               iconStart={<Copy className="size-4" />}
             >
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadModerationHandoff} disabled={isCommentsBusy} iconStart={<Download className="size-4" />}>
+            <Button
+              variant="outline"
+              onClick={downloadModerationHandoff}
+              disabled={isCommentsBusy || !canExportActivity}
+              title={activityPermissionTitle}
+              iconStart={<Download className="size-4" />}
+            >
               Download JSON
             </Button>
             <Button
               variant="outline"
-              disabled={filteredComments.length === 0 || isCommentsBusy}
+              disabled={filteredComments.length === 0 || isCommentsBusy || !canExportActivity}
+              title={activityPermissionTitle}
               onClick={handleExportComments}
               iconStart={<Download className="size-4" />}
             >
@@ -1513,13 +1716,15 @@ function CommentsRoute() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              disabled={isCommentsBusy || !commentPolicyDirty}
+              disabled={isCommentsBusy || !commentPolicyDirty || !canConfigureComments}
+              title={configurePermissionTitle}
               onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
             >
               Reset policy
             </Button>
             <Button
-              disabled={isCommentsBusy || !commentPolicyDirty}
+              disabled={isCommentsBusy || !commentPolicyDirty || !canConfigureComments}
+              title={configurePermissionTitle}
               onClick={() => void saveCommentPolicy()}
               iconStart={<ShieldAlert className="size-4" />}
             >
@@ -1534,6 +1739,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enabled}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enabled: event.target.checked })}
               />
               Accept public comments
@@ -1542,6 +1749,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.allowGuests}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ allowGuests: event.target.checked })}
               />
               Allow guests
@@ -1550,6 +1759,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.requireName}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ requireName: event.target.checked })}
               />
               Require name
@@ -1558,6 +1769,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.requireEmail}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ requireEmail: event.target.checked })}
               />
               Require email
@@ -1566,6 +1779,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.allowReplies}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ allowReplies: event.target.checked })}
               />
               Allow replies
@@ -1574,6 +1789,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enableReports}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enableReports: event.target.checked })}
               />
               Enable reports
@@ -1582,6 +1799,8 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enableCaptcha}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enableCaptcha: event.target.checked })}
               />
               Require captcha
@@ -1593,6 +1812,8 @@ function CommentsRoute() {
               Default moderation
               <select
                 value={commentPolicyDraft.moderationMode}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ moderationMode: event.target.value as CommentPolicyDraft['moderationMode'] })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
                 aria-label="Default comment moderation"
@@ -1605,6 +1826,8 @@ function CommentsRoute() {
               Public sort
               <select
                 value={commentPolicyDraft.sort}
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ sort: event.target.value as CommentPolicyDraft['sort'] })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
                 aria-label="Default comment sort"
@@ -1621,7 +1844,8 @@ function CommentsRoute() {
                   onChange={(event) => patchCommentPolicyDraft({ captchaProvider: event.target.value as CommentPolicyDraft['captchaProvider'] })}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
                   aria-label="Comment captcha provider"
-                  disabled={!commentPolicyDraft.enableCaptcha}
+                  disabled={isCommentsBusy || !canConfigureComments || !commentPolicyDraft.enableCaptcha}
+                  title={configurePermissionTitle}
                 >
                   <option value="mock">Mock</option>
                   <option value="turnstile">Turnstile</option>
@@ -1636,7 +1860,8 @@ function CommentsRoute() {
                   onChange={(event) => patchCommentPolicyDraft({ captchaSiteKey: event.target.value })}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:opacity-60"
                   aria-label="Comment captcha site key"
-                  disabled={!commentPolicyDraft.enableCaptcha}
+                  disabled={isCommentsBusy || !canConfigureComments || !commentPolicyDraft.enableCaptcha}
+                  title={configurePermissionTitle}
                   placeholder="Public site key"
                 />
               </label>
@@ -1649,6 +1874,8 @@ function CommentsRoute() {
             Closed message
             <input
               value={commentPolicyDraft.closedMessage}
+              disabled={isCommentsBusy || !canConfigureComments}
+              title={configurePermissionTitle}
               onChange={(event) => patchCommentPolicyDraft({ closedMessage: event.target.value })}
               className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
               aria-label="Comment closed message"
@@ -1658,6 +1885,8 @@ function CommentsRoute() {
             Blocked terms
             <textarea
               value={commentPolicyBlockedTermsText}
+              disabled={isCommentsBusy || !canConfigureComments}
+              title={configurePermissionTitle}
               onChange={(event) => handleBlockedTermsChange(event.target.value)}
               rows={3}
               className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
@@ -1736,7 +1965,8 @@ function CommentsRoute() {
             <Button
               size="sm"
               variant="outline"
-              disabled={isCommentsBusy}
+              disabled={isCommentsBusy || !canManageComments}
+              title={managePermissionTitle}
               onClick={() => void refreshCommentDeliveryEvents()}
               iconStart={<RefreshCw className="size-4" />}
               data-testid="comments-delivery-refresh"
@@ -1795,6 +2025,8 @@ function CommentsRoute() {
                       key={event.id}
                       event={event}
                       isRetrying={retryingDeliveryIds.includes(event.id)}
+                      canManageComments={canManageComments}
+                      disabledReason={managePermissionTitle}
                       onRetry={handleRetryCommentDelivery}
                     />
                   ))}
@@ -1814,7 +2046,8 @@ function CommentsRoute() {
             <Button
               size="sm"
               variant="outline"
-              disabled={isCommentsBusy}
+              disabled={isCommentsBusy || !canExportActivity}
+              title={activityPermissionTitle}
               onClick={() => void refreshCommentAuditLogs()}
               iconStart={<RefreshCw className="size-4" />}
               data-testid="comments-audit-refresh"
@@ -1952,7 +2185,8 @@ function CommentsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={isCommentsBusy}
+                disabled={isCommentsBusy || !canManageComments}
+                title={managePermissionTitle}
                 onClick={() => void copyCommentApiText(blocklistUrl, 'Comment blocklist URL')}
                 iconStart={<Copy className="size-4" />}
               >
@@ -1961,7 +2195,8 @@ function CommentsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={isCommentsBusy}
+                disabled={isCommentsBusy || !canManageComments}
+                title={managePermissionTitle}
                 onClick={() => void refreshBlocklist()}
                 iconStart={<RefreshCw className="size-4" />}
               >
@@ -1995,7 +2230,8 @@ function CommentsRoute() {
                 <select
                   aria-label="Comment blocklist type filter"
                   value={blocklistTypeFilter}
-                  disabled={isCommentsBusy}
+                  disabled={isCommentsBusy || !canManageComments}
+                  title={managePermissionTitle}
                   onChange={(event) => setBlocklistTypeFilter(event.target.value as typeof blocklistTypeFilter)}
                   className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -2009,7 +2245,8 @@ function CommentsRoute() {
                     type="search"
                     aria-label="Search comment blocklist"
                     value={blocklistSearch}
-                    disabled={isCommentsBusy}
+                    disabled={isCommentsBusy || !canManageComments}
+                    title={managePermissionTitle}
                     onChange={(event) => setBlocklistSearch(event.target.value)}
                     placeholder="Search identity, reason, actor, request..."
                     className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -2052,7 +2289,8 @@ function CommentsRoute() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={isCommentsBusy || isDeleting}
+                          disabled={isCommentsBusy || isDeleting || !canManageComments}
+                          title={managePermissionTitle}
                           onClick={() => void handleDeleteBlocklistEntries([entry.id])}
                           iconStart={<Trash2 className="size-4" />}
                           aria-label={`Remove blocklist entry ${entry.value}`}
@@ -2079,25 +2317,27 @@ function CommentsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={filteredComments.length === 0 || isCommentsBusy}
+                disabled={filteredComments.length === 0 || isCommentsBusy || !canExportActivity}
+                title={activityPermissionTitle}
                 onClick={handleExportComments}
                 iconStart={<Download className="size-4" />}
               >
                 Export CSV
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={selectedReportedIds.length === 0 || isCommentsBusy}
+                disabled={selectedReportedIds.length === 0 || isCommentsBusy || !canManageComments}
+                title={managePermissionTitle}
                 onClick={() => void handleClearReports(selectedReportedIds)}
                 iconStart={<Flag className="size-4" />}
               >
@@ -2125,7 +2365,8 @@ function CommentsRoute() {
                 <Button
                   variant="outline"
                   onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
-                  disabled={isCommentsBusy}
+                  disabled={isCommentsBusy || !canExportActivity}
+                  title={activityPermissionTitle}
                   iconStart={<Copy className="size-4" />}
                 >
                   Copy manifest
@@ -2274,9 +2515,10 @@ function CommentsRoute() {
                 Moderation reason
                 <textarea
                   value={moderationReason}
-                  disabled={isCommentsBusy}
+                  disabled={isCommentsBusy || !canManageComments}
+                  title={managePermissionTitle}
                   onChange={(event) => {
-                    if (isCommentsBusy) return;
+                    if (isCommentsBusy || !canManageComments) return;
                     setModerationReason(event.target.value);
                   }}
                   rows={2}
@@ -2296,9 +2538,10 @@ function CommentsRoute() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isCommentsBusy}
+                    disabled={isCommentsBusy || !canManageComments}
+                    title={managePermissionTitle}
                     onClick={() => {
-                      if (isCommentsBusy) return;
+                      if (isCommentsBusy || !canManageComments) return;
                       setModerationReason(reason);
                     }}
                   >
@@ -2309,9 +2552,10 @@ function CommentsRoute() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={!moderationReason || isCommentsBusy}
+                  disabled={!moderationReason || isCommentsBusy || !canManageComments}
+                  title={managePermissionTitle}
                   onClick={() => {
-                    if (isCommentsBusy) return;
+                    if (isCommentsBusy || !canManageComments) return;
                     setModerationReason('');
                   }}
                 >
@@ -2344,7 +2588,8 @@ function CommentsRoute() {
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
-                  disabled={isCommentsBusy}
+                  disabled={isCommentsBusy || !canManageComments}
+                  title={managePermissionTitle}
                   onChange={toggleVisibleSelection}
                   className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="Select visible comments"
@@ -2371,9 +2616,10 @@ function CommentsRoute() {
                     isSubmittingMove={isMovingId === comment.id}
                     moveParentId={moveParentDraft}
                     selected={selectedSet.has(comment.id)}
-                    disabled={isCommentsBusy}
+                    disabled={isCommentsBusy || !canManageComments}
+                    disabledReason={managePermissionTitle}
                     onSelect={(checked) => {
-                      if (isCommentsBusy) return;
+                      if (isCommentsBusy || !canManageComments) return;
                       setSelectedIds((current) => (
                         checked
                           ? Array.from(new Set([...current, comment.id]))
@@ -2597,10 +2843,14 @@ function CommentAuditLogCard({ log }: { log: AdminAuditLog }) {
 function CommentDeliveryEventCard({
   event,
   isRetrying,
+  canManageComments,
+  disabledReason,
   onRetry,
 }: {
   event: CommentDeliveryEvent;
   isRetrying: boolean;
+  canManageComments: boolean;
+  disabledReason?: string;
   onRetry: (event: CommentDeliveryEvent) => void;
 }) {
   const statusClass = event.status === 'succeeded'
@@ -2652,7 +2902,8 @@ function CommentDeliveryEventCard({
           <Button
             size="sm"
             variant="outline"
-            disabled={isRetrying}
+            disabled={isRetrying || !canManageComments}
+            title={disabledReason}
             onClick={() => onRetry(event)}
             iconStart={<RotateCcw className={cn('size-4', isRetrying ? 'animate-spin' : '')} />}
             aria-label={`Retry ${channel} delivery ${event.id}`}
@@ -2765,6 +3016,7 @@ function CommentCard({
   moveParentId,
   selected,
   disabled,
+  disabledReason,
   onSelect,
   onApprove,
   onReject,
@@ -2795,6 +3047,7 @@ function CommentCard({
   moveParentId: string;
   selected: boolean;
   disabled: boolean;
+  disabledReason?: string;
   onSelect: (checked: boolean) => void;
   onApprove: () => void;
   onReject: () => void;
@@ -2822,6 +3075,7 @@ function CommentCard({
             type="checkbox"
             checked={selected}
             disabled={disabled}
+            title={disabledReason}
             onChange={(event) => onSelect(event.target.checked)}
             className="mt-1 size-4 shrink-0 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
             aria-label={`Select comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
@@ -2892,6 +3146,7 @@ function CommentCard({
           size="sm"
           onClick={onApprove}
           disabled={disabled || comment.status === 'approved'}
+          title={disabledReason}
           iconStart={<CheckCircle2 className="size-4" />}
           aria-label={`Approve comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
         >
@@ -2902,6 +3157,7 @@ function CommentCard({
           variant="outline"
           onClick={onReject}
           disabled={disabled || comment.status === 'rejected'}
+          title={disabledReason}
           iconStart={<XCircle className="size-4" />}
           aria-label={`Reject comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
         >
@@ -2912,6 +3168,7 @@ function CommentCard({
           variant="outline"
           onClick={onSpam}
           disabled={disabled || comment.status === 'spam'}
+          title={disabledReason}
           iconStart={<Trash2 className="size-4" />}
           aria-label={`Mark comment from ${comment.authorName || comment.authorEmail || 'Anonymous'} as spam`}
         >
@@ -2922,6 +3179,7 @@ function CommentCard({
           variant="danger"
           onClick={onBlock}
           disabled={disabled || comment.status === 'blocked'}
+          title={disabledReason}
           iconStart={<CircleSlash className="size-4" />}
           aria-label={`Block comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
         >
@@ -2933,6 +3191,7 @@ function CommentCard({
             variant="outline"
             onClick={onClearReports}
             disabled={disabled}
+            title={disabledReason}
             iconStart={<Flag className="size-4" />}
             aria-label={`Resolve reports for comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
           >
@@ -2944,6 +3203,7 @@ function CommentCard({
           variant="outline"
           onClick={onOpenReply}
           disabled={disabled || !canReply}
+          title={disabledReason}
           iconStart={<MessageSquare className="size-4" />}
           aria-label={`Reply to comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
           data-testid="comments-reply-open"
@@ -2956,6 +3216,7 @@ function CommentCard({
             variant="outline"
             onClick={onOpenMove}
             disabled={disabled || parentOptions.length === 0}
+            title={disabledReason}
             iconStart={<GitBranch className="size-4" />}
             aria-label={`Move reply from ${comment.authorName || comment.authorEmail || 'Anonymous'} to another parent`}
             data-testid="comments-move-open"
@@ -2981,6 +3242,7 @@ function CommentCard({
               <input
                 value={replyDraft.authorName}
                 disabled={disabled || isSubmittingReply}
+                title={disabledReason}
                 onChange={(event) => onReplyDraftChange({ authorName: event.target.value })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Comment reply author name"
@@ -2991,6 +3253,7 @@ function CommentCard({
               <input
                 value={replyDraft.authorEmail}
                 disabled={disabled || isSubmittingReply}
+                title={disabledReason}
                 onChange={(event) => onReplyDraftChange({ authorEmail: event.target.value })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Comment reply author email"
@@ -3001,6 +3264,7 @@ function CommentCard({
               <select
                 value={replyDraft.moderationMode}
                 disabled={disabled || isSubmittingReply}
+                title={disabledReason}
                 onChange={(event) => onReplyDraftChange({ moderationMode: event.target.value as CommentReplyDraft['moderationMode'] })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Comment reply moderation mode"
@@ -3015,6 +3279,7 @@ function CommentCard({
             <textarea
               value={replyDraft.content}
               disabled={disabled || isSubmittingReply}
+              title={disabledReason}
               onChange={(event) => onReplyDraftChange({ content: event.target.value })}
               rows={3}
               className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
@@ -3027,6 +3292,7 @@ function CommentCard({
               size="sm"
               onClick={onSubmitReply}
               disabled={disabled || isSubmittingReply || !replyDraft.content.trim()}
+              title={disabledReason}
               iconStart={<MessageSquare className="size-4" />}
               data-testid="comments-reply-submit"
             >
@@ -3037,6 +3303,7 @@ function CommentCard({
               variant="ghost"
               onClick={onCancelReply}
               disabled={disabled || isSubmittingReply}
+              title={disabledReason}
             >
               Cancel
             </Button>
@@ -3059,6 +3326,7 @@ function CommentCard({
             <select
               value={moveParentId}
               disabled={disabled || isSubmittingMove}
+              title={disabledReason}
               onChange={(event) => onMoveParentChange(event.target.value)}
               className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Comment reply parent"
@@ -3075,6 +3343,7 @@ function CommentCard({
               size="sm"
               onClick={onSubmitMove}
               disabled={disabled || isSubmittingMove || !moveParentId || moveParentId === comment.parentId}
+              title={disabledReason}
               iconStart={<GitBranch className="size-4" />}
               data-testid="comments-move-submit"
             >
@@ -3085,6 +3354,7 @@ function CommentCard({
               variant="ghost"
               onClick={onCancelMove}
               disabled={disabled || isSubmittingMove}
+              title={disabledReason}
             >
               Cancel
             </Button>
