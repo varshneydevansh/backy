@@ -552,7 +552,9 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
 };
 
 const assertCollectionsLayout = async (client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName }) => {
-  const layout = await evaluate(client, `(() => {
+  let layout = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
     const relationshipText = document.querySelector('[data-testid="collections-relationship-browser"]')?.textContent || '';
     const authoringText = document.querySelector('[data-testid="collections-authoring-shortcuts"]')?.textContent || '';
@@ -658,15 +660,14 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       authoringText,
       dynamicTemplateChecks,
     };
-  })()`);
+    })()`);
 
-  assert(layout.scrollWidth <= layout.width + 8, `Collections page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(
-    layout.path === '/collections' &&
-    layout.hasCommandCenter &&
-    layout.hasTemplates &&
-    layout.hasFrontendTemplates &&
-    layout.hasApiContract &&
+    assert(layout.scrollWidth <= layout.width + 8, `Collections page has horizontal overflow: ${JSON.stringify(layout)}`);
+    const layoutReady = layout.path === '/collections' &&
+      layout.hasCommandCenter &&
+      layout.hasTemplates &&
+      layout.hasFrontendTemplates &&
+      layout.hasApiContract &&
       layout.hasFrontendContract &&
       layout.hasBindingContract &&
       layout.hasAuthoringShortcuts &&
@@ -678,10 +679,14 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.hasCollection &&
       layout.hasRecord &&
       layout.hasFieldControls &&
-      layout.hasSelectionControl,
-    `Collections page missing expected regions: ${JSON.stringify(layout)}`,
-  );
-  return layout;
+      layout.hasSelectionControl;
+    if (layoutReady) {
+      return layout;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Collections page missing expected regions: ${JSON.stringify(layout)}`);
 };
 
 const assertAuthoringShortcutCopy = async (client) => {

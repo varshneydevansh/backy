@@ -66,6 +66,7 @@ interface CollectionsSearch {
   siteId?: string;
   collectionId?: string;
   recordId?: string;
+  draft?: 'new';
   search?: string;
   status?: RecordStatusFilter;
   fieldKey?: string;
@@ -103,6 +104,7 @@ export const Route = createFileRoute('/collections')({
     siteId: normalizedSearchString(search.siteId),
     collectionId: normalizedSearchString(search.collectionId),
     recordId: normalizedSearchString(search.recordId),
+    draft: search.draft === 'new' ? 'new' : undefined,
     search: normalizedSearchString(search.search),
     status: isRecordStatusFilter(search.status) ? search.status : undefined,
     fieldKey: normalizedSearchString(search.fieldKey),
@@ -1348,6 +1350,7 @@ function CollectionsPage() {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(routeSearch.recordId || null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [isCollectionDraftMode, setIsCollectionDraftMode] = useState(false);
+  const collectionDraftModeRef = useRef(false);
   const [dynamicTemplatePreviewRecordId, setDynamicTemplatePreviewRecordId] = useState('');
   const [collectionForm, setCollectionForm] = useState({
     name: '',
@@ -1415,6 +1418,11 @@ function CollectionsPage() {
   const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
+
+  const setCollectionDraftMode = (nextDraftMode: boolean) => {
+    collectionDraftModeRef.current = nextDraftMode;
+    setIsCollectionDraftMode(nextDraftMode);
+  };
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -2044,6 +2052,7 @@ function CollectionsPage() {
   const collectionHandoffText = useMemo(() => JSON.stringify(collectionHandoff, null, 2), [collectionHandoff]);
   const collectionsRouteSearch = useMemo<CollectionsSearch>(() => ({
     siteId: activeSiteId,
+    ...(isCollectionDraftMode && !selectedCollectionId ? { draft: 'new' as const } : {}),
     ...(selectedCollectionId ? { collectionId: selectedCollectionId } : {}),
     ...(selectedRecordId ? { recordId: selectedRecordId } : {}),
     ...(recordFilters.search.trim() ? { search: recordFilters.search.trim() } : {}),
@@ -2066,6 +2075,7 @@ function CollectionsPage() {
     recordPagination.offset,
     selectedCollectionId,
     selectedRecordId,
+    isCollectionDraftMode,
   ]);
 
   const updateCollectionsRouteSearch = (next: CollectionsSearch) => {
@@ -2077,6 +2087,7 @@ function CollectionsPage() {
       siteId: merged.siteId || activeSiteId,
       ...(merged.collectionId ? { collectionId: merged.collectionId } : {}),
       ...(merged.recordId ? { recordId: merged.recordId } : {}),
+      ...(merged.draft === 'new' && !merged.collectionId ? { draft: 'new' as const } : {}),
       ...(merged.search?.trim() ? { search: merged.search.trim() } : {}),
       ...(merged.status ? { status: merged.status } : {}),
       ...(merged.fieldKey ? { fieldKey: merged.fieldKey } : {}),
@@ -2433,7 +2444,7 @@ function CollectionsPage() {
 
   const resetCollectionForm = () => {
     collectionInteractionVersionRef.current += 1;
-    setIsCollectionDraftMode(true);
+    setCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
@@ -2479,7 +2490,7 @@ function CollectionsPage() {
       return;
     }
     resetCollectionForm();
-    navigate({ to: '/collections', search: { siteId: activeSiteId }, replace: true });
+    navigate({ to: '/collections', search: { siteId: activeSiteId, draft: 'new' }, replace: true });
     setError(null);
     setValidationDetails([]);
     setNotice('New collection draft ready. Add a name and fields, then save the schema.');
@@ -2498,7 +2509,7 @@ function CollectionsPage() {
   const resetCollectionsWorkspace = () => {
     setCollections([]);
     resetCollectionForm();
-    setIsCollectionDraftMode(false);
+    setCollectionDraftMode(false);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -2576,11 +2587,19 @@ function CollectionsPage() {
       resetCollectionsWorkspace();
     }
 
-    if (isCollectionDraftMode) {
-      if (routeSearch.collectionId) {
-        navigate({ to: '/collections', search: { siteId: nextSiteId }, replace: true });
+    const routeRequestsNewDraft = routeSearch.draft === 'new' && !routeSearch.collectionId;
+    if (routeRequestsNewDraft) {
+      if (!collectionDraftModeRef.current || selectedCollectionId) {
+        resetCollectionForm();
       }
       return;
+    }
+
+    if (isCollectionDraftMode && !routeSearch.collectionId) {
+      return;
+    }
+    if (isCollectionDraftMode && routeSearch.collectionId) {
+      setCollectionDraftMode(false);
     }
 
     setSelectedCollectionId(routeSearch.collectionId || null);
@@ -2601,6 +2620,7 @@ function CollectionsPage() {
     }));
   }, [
     routeSearch.collectionId,
+    routeSearch.draft,
     routeSearch.fieldKey,
     routeSearch.fieldValue,
     routeSearch.limit,
@@ -2624,7 +2644,7 @@ function CollectionsPage() {
       return;
     }
 
-    setIsCollectionDraftMode(true);
+    setCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
@@ -2710,7 +2730,7 @@ function CollectionsPage() {
   };
 
   const selectCollection = (collection: Collection, preserveRouteState = false) => {
-    setIsCollectionDraftMode(false);
+    setCollectionDraftMode(false);
     setSelectedCollectionId(collection.id);
     setSelectedRecordId(preserveRouteState ? routeSearch.recordId || null : null);
     setSelectedRecordIds([]);
@@ -2771,6 +2791,9 @@ function CollectionsPage() {
       const backendCollections = await listCollections(activeSiteId);
       setCollections(backendCollections);
       if (loadInteractionVersion !== collectionInteractionVersionRef.current) {
+        return;
+      }
+      if ((collectionDraftModeRef.current || routeSearch.draft === 'new') && !routeSearch.collectionId) {
         return;
       }
       const nextSelected = backendCollections.find((collection) => collection.id === selectedCollectionId)
@@ -5508,7 +5531,7 @@ function CollectionsPage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {collectionForm.fields.map((field, index) => (
-                      <tr key={`${field.key}-${index}`}>
+                      <tr key={field.id || `field-${index}`}>
                         <td className="px-4 py-2">
                           <input
                             value={field.key}
