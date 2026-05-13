@@ -30,6 +30,7 @@ const LEGACY_CURRENT_RECORD_ID_QUERY_VALUE = '$record.id';
 interface RenderPayloadOptions {
   requestId: string;
   path: string;
+  dataSource?: RenderDataSource;
 }
 
 interface RenderElement extends JsonObject {
@@ -48,6 +49,46 @@ interface DatasetManifest extends JsonObject {
   query?: JsonObject;
   pagination?: JsonObject;
 }
+
+type CollectionRecordListOptions = Parameters<typeof listCollectionRecords>[2];
+type MediaListOptions = Parameters<typeof getMediaList>[1];
+type MediaListResult = ReturnType<typeof getMediaList>;
+type SiteNavigationResult = ReturnType<typeof getSiteNavigation>;
+
+export interface RenderDataSource {
+  getCollectionByIdOrSlug?: (siteId: string, collectionIdOrSlug: string) => StoreCollection | undefined;
+  getCollectionRecordByIdOrSlug?: (
+    siteId: string,
+    collectionId: string,
+    recordIdOrSlug: string,
+  ) => StoreCollectionRecord | undefined;
+  listCollectionRecords?: (
+    siteId: string,
+    collectionId: string,
+    options?: CollectionRecordListOptions,
+  ) => { records: StoreCollectionRecord[] };
+  getMediaById?: (siteId: string, mediaId: string) => ReturnType<typeof getMediaById>;
+  getMediaList?: (siteId: string, options?: MediaListOptions) => MediaListResult;
+  getSiteNavigation?: (siteId: string) => SiteNavigationResult;
+}
+
+interface RenderPayloadContext {
+  dataSource?: RenderDataSource;
+}
+
+const defaultRenderDataSource: Required<RenderDataSource> = {
+  getCollectionByIdOrSlug,
+  getCollectionRecordByIdOrSlug,
+  listCollectionRecords,
+  getMediaById,
+  getMediaList,
+  getSiteNavigation,
+};
+
+const renderDataSource = (context?: RenderPayloadContext): Required<RenderDataSource> => ({
+  ...defaultRenderDataSource,
+  ...context?.dataSource,
+});
 
 type CollectionTemplateRenderKind = 'list' | 'item';
 
@@ -518,7 +559,9 @@ const getBoundCollectionRecord = (
   siteId: string,
   collectionId: string,
   binding: JsonObject,
+  context?: RenderPayloadContext,
 ): StoreCollectionRecord | undefined => {
+  const sourceData = renderDataSource(context);
   const source = isRecord(binding.source) ? binding.source : {};
   const query = isRecord(binding.query)
     ? binding.query
@@ -543,15 +586,15 @@ const getBoundCollectionRecord = (
   const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
 
   if (recordId) {
-    return getCollectionRecordByIdOrSlug(siteId, collectionId, recordId);
+    return sourceData.getCollectionRecordByIdOrSlug(siteId, collectionId, recordId);
   }
 
   if (fieldKey?.includes('.') || sortBy?.includes('.')) {
-    const collection = getCollectionByIdOrSlug(siteId, collectionId);
+    const collection = sourceData.getCollectionByIdOrSlug(siteId, collectionId);
     if (!collection) {
       return undefined;
     }
-    const records = listCollectionRecords(siteId, collectionId, {
+    const records = sourceData.listCollectionRecords(siteId, collectionId, {
       slug: slug || undefined,
       status: status || undefined,
       search: search || undefined,
@@ -567,7 +610,7 @@ const getBoundCollectionRecord = (
     )[0];
   }
 
-  return listCollectionRecords(siteId, collectionId, {
+  return sourceData.listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
     status: status || undefined,
     search: search || undefined,
@@ -592,6 +635,7 @@ const resolveCollectionRecordFieldPath = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
   pathParts: string[],
+  context?: RenderPayloadContext,
   depth = 0,
 ): unknown => {
   if (depth > MAX_COLLECTION_REFERENCE_DEPTH || pathParts.length === 0) {
@@ -616,7 +660,8 @@ const resolveCollectionRecordFieldPath = (
     return undefined;
   }
 
-  const referenceCollection = getCollectionByIdOrSlug(siteId, referenceCollectionId);
+  const sourceData = renderDataSource(context);
+  const referenceCollection = sourceData.getCollectionByIdOrSlug(siteId, referenceCollectionId);
   if (!referenceCollection) {
     return undefined;
   }
@@ -627,9 +672,9 @@ const resolveCollectionRecordFieldPath = (
         if (typeof entry !== 'string' || entry.length === 0) {
           return undefined;
         }
-        const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry);
+        const referenceRecord = sourceData.getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, entry);
         return referenceRecord
-          ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, depth + 1)
+          ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, context, depth + 1)
           : undefined;
       }),
     );
@@ -639,9 +684,9 @@ const resolveCollectionRecordFieldPath = (
     return undefined;
   }
 
-  const referenceRecord = getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, value);
+  const referenceRecord = sourceData.getCollectionRecordByIdOrSlug(siteId, referenceCollection.id, value);
   return referenceRecord
-    ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, depth + 1)
+    ? resolveCollectionRecordFieldPath(siteId, referenceCollection, referenceRecord, remainingPath, context, depth + 1)
     : undefined;
 };
 
@@ -650,12 +695,13 @@ const collectionRecordQueryValue = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
   fieldKey: string,
+  context?: RenderPayloadContext,
 ): unknown => {
   if (fieldKey === 'slug' || fieldKey === 'status' || fieldKey === 'createdAt' || fieldKey === 'updatedAt') {
     return record[fieldKey];
   }
   return fieldKey.includes('.')
-    ? resolveCollectionRecordFieldPath(siteId, collection, record, fieldKey.split('.'))
+    ? resolveCollectionRecordFieldPath(siteId, collection, record, fieldKey.split('.'), context)
     : record.values[fieldKey];
 };
 
@@ -675,13 +721,14 @@ const filterCollectionRecordsByFieldPath = (
   records: StoreCollectionRecord[],
   fieldKey: string | null,
   fieldValue: unknown,
+  context?: RenderPayloadContext,
 ) => {
   if (!fieldKey || fieldValue === undefined || fieldValue === null || normalizeQueryComparable(fieldValue).length === 0) {
     return records;
   }
   const normalizedFieldValue = normalizeQueryComparable(fieldValue);
   return records.filter((record) => (
-    normalizeQueryComparable(collectionRecordQueryValue(siteId, collection, record, fieldKey)).includes(normalizedFieldValue)
+    normalizeQueryComparable(collectionRecordQueryValue(siteId, collection, record, fieldKey, context)).includes(normalizedFieldValue)
   ));
 };
 
@@ -691,14 +738,15 @@ const sortCollectionRecordsByFieldPath = (
   records: StoreCollectionRecord[],
   sortBy: string | null,
   sortDirection: 'asc' | 'desc',
+  context?: RenderPayloadContext,
 ) => {
   if (!sortBy) {
     return records;
   }
   const direction = sortDirection === 'desc' ? -1 : 1;
   return [...records].sort((left, right) => {
-    const leftValue = collectionRecordQueryValue(siteId, collection, left, sortBy);
-    const rightValue = collectionRecordQueryValue(siteId, collection, right, sortBy);
+    const leftValue = collectionRecordQueryValue(siteId, collection, left, sortBy, context);
+    const rightValue = collectionRecordQueryValue(siteId, collection, right, sortBy, context);
     const leftNumber = typeof leftValue === 'number' ? leftValue : Number.NaN;
     const rightNumber = typeof rightValue === 'number' ? rightValue : Number.NaN;
 
@@ -713,7 +761,9 @@ const sortCollectionRecordsByFieldPath = (
 const valueForBinding = (
   siteId: string,
   binding: JsonObject,
+  context?: RenderPayloadContext,
 ): unknown => {
+  const sourceData = renderDataSource(context);
   const normalized = normalizeCollectionBinding(binding, {
     id: 'binding-target',
     type: 'binding',
@@ -729,26 +779,31 @@ const valueForBinding = (
     return undefined;
   }
 
-  const collection = getCollectionByIdOrSlug(siteId, collectionId);
+  const collection = sourceData.getCollectionByIdOrSlug(siteId, collectionId);
   if (!collection) {
     return undefined;
   }
 
-  const record = getBoundCollectionRecord(siteId, collection.id, binding);
+  const record = getBoundCollectionRecord(siteId, collection.id, binding, context);
   if (!record) {
     return undefined;
   }
 
   const sourcePath = typeof source.path === 'string' ? source.path : '';
   if (sourcePath.startsWith(`${field}.`)) {
-    const joinedValue = resolveCollectionRecordFieldPath(siteId, collection, record, sourcePath.split('.'));
+    const joinedValue = resolveCollectionRecordFieldPath(siteId, collection, record, sourcePath.split('.'), context);
     return joinedValue === undefined ? record.values[field] : joinedValue;
   }
 
   return record.values[field];
 };
 
-const valueForTargetPath = (siteId: string, targetPath: string, value: unknown) => {
+const valueForTargetPath = (
+  siteId: string,
+  targetPath: string,
+  value: unknown,
+  context?: RenderPayloadContext,
+) => {
   if (value === null || value === undefined) {
     return value;
   }
@@ -759,7 +814,7 @@ const valueForTargetPath = (siteId: string, targetPath: string, value: unknown) 
     || targetPath === 'props.mediaId'
   ) {
     if (typeof value === 'string') {
-      const media = getMediaById(siteId, value);
+      const media = renderDataSource(context).getMediaById(siteId, value);
       return {
         value,
         media,
@@ -775,6 +830,7 @@ const applyBindingValue = (
   element: RenderElement,
   targetPath: string,
   rawValue: unknown,
+  context?: RenderPayloadContext,
 ): RenderElement => {
   if (!targetPath.startsWith('props.')) {
     return element;
@@ -785,7 +841,7 @@ const applyBindingValue = (
     return element;
   }
 
-  const resolved = valueForTargetPath(siteId, targetPath, rawValue);
+  const resolved = valueForTargetPath(siteId, targetPath, rawValue, context);
   if (!isRecord(resolved)) {
     return element;
   }
@@ -819,17 +875,21 @@ const applyBindingValue = (
   };
 };
 
-export const resolveElementDataBindings = (siteId: string, rawElements: unknown[]): RenderElement[] => (
+export const resolveElementDataBindings = (
+  siteId: string,
+  rawElements: unknown[],
+  context?: RenderPayloadContext,
+): RenderElement[] => (
   rawElements
     .map(normalizeElement)
     .filter((element): element is RenderElement => !!element)
     .map((element) => {
-      const children = resolveElementDataBindings(siteId, element.children);
+      const children = resolveElementDataBindings(siteId, element.children, context);
       const withChildren: RenderElement = {
         ...element,
         children,
       };
-      const withRepeaterData = hydrateRepeaterElement(siteId, withChildren);
+      const withRepeaterData = hydrateRepeaterElement(siteId, withChildren, context);
 
       return (element.dataBindings || []).reduce<RenderElement>((currentElement, binding, index) => {
         const normalized = normalizeCollectionBinding(binding, currentElement, index);
@@ -838,12 +898,12 @@ export const resolveElementDataBindings = (siteId: string, rawElements: unknown[
           return currentElement;
         }
 
-        const nextValue = valueForBinding(siteId, binding);
+        const nextValue = valueForBinding(siteId, binding, context);
         if (nextValue === undefined) {
           return currentElement;
         }
 
-        return applyBindingValue(siteId, currentElement, targetPath, nextValue);
+        return applyBindingValue(siteId, currentElement, targetPath, nextValue, context);
       }, withRepeaterData);
     })
 );
@@ -893,7 +953,9 @@ const collectionRecordsForQuery = (
   collectionId: string,
   query: JsonObject = {},
   pagination: JsonObject | null = null,
+  context?: RenderPayloadContext,
 ): StoreCollectionRecord[] => {
+  const sourceData = renderDataSource(context);
   const recordId = typeof query.recordId === 'string' && query.recordId.length > 0 ? query.recordId : null;
   const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
   const search = typeof query.q === 'string' && query.q.length > 0
@@ -918,15 +980,15 @@ const collectionRecordsForQuery = (
       : 0;
 
   if (recordId) {
-    return [getCollectionRecordByIdOrSlug(siteId, collectionId, recordId)].filter((record): record is StoreCollectionRecord => !!record);
+    return [sourceData.getCollectionRecordByIdOrSlug(siteId, collectionId, recordId)].filter((record): record is StoreCollectionRecord => !!record);
   }
 
   if (fieldKey?.includes('.') || sortBy?.includes('.')) {
-    const collection = getCollectionByIdOrSlug(siteId, collectionId);
+    const collection = sourceData.getCollectionByIdOrSlug(siteId, collectionId);
     if (!collection) {
       return [];
     }
-    const records = listCollectionRecords(siteId, collectionId, {
+    const records = sourceData.listCollectionRecords(siteId, collectionId, {
       slug: slug || undefined,
       status: status || undefined,
       search: search || undefined,
@@ -938,13 +1000,14 @@ const collectionRecordsForQuery = (
     return sortCollectionRecordsByFieldPath(
       siteId,
       collection,
-      filterCollectionRecordsByFieldPath(siteId, collection, records, fieldKey, fieldValue),
+      filterCollectionRecordsByFieldPath(siteId, collection, records, fieldKey, fieldValue, context),
       sortBy,
       sortDirection,
+      context,
     ).slice(safeOffset, safeOffset + safeLimit);
   }
 
-  return listCollectionRecords(siteId, collectionId, {
+  return sourceData.listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
     status: status || undefined,
     search: search || undefined,
@@ -957,15 +1020,19 @@ const collectionRecordsForQuery = (
   }).records;
 };
 
-const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): DatasetManifest => {
-  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
+const hydrateDatasetRecords = (
+  siteId: string,
+  dataset: DatasetManifest,
+  context?: RenderPayloadContext,
+): DatasetManifest => {
+  const collection = renderDataSource(context).getCollectionByIdOrSlug(siteId, dataset.collectionId);
   if (!collection) {
     return dataset;
   }
 
   const query = isRecord(dataset.query) ? dataset.query : {};
   const pagination = isRecord(dataset.pagination) ? dataset.pagination : null;
-  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination);
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination, context);
 
   return {
     ...dataset,
@@ -1016,12 +1083,13 @@ const repeaterRecordValueForFieldPath = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
   fieldPath: unknown,
+  context?: RenderPayloadContext,
 ): unknown => {
   const path = typeof fieldPath === 'string' ? fieldPath : '';
   if (!path.includes('.')) {
     return undefined;
   }
-  return resolveCollectionRecordFieldPath(siteId, collection, record, path.split('.'));
+  return resolveCollectionRecordFieldPath(siteId, collection, record, path.split('.'), context);
 };
 
 const hydrateRepeaterJoinedRecordValues = (
@@ -1029,12 +1097,13 @@ const hydrateRepeaterJoinedRecordValues = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
   fieldPaths: unknown[],
+  context?: RenderPayloadContext,
 ): StoreCollectionRecord => {
   const joinedValues = fieldPaths.reduce<Record<string, unknown>>((acc, fieldPath) => {
     if (typeof fieldPath !== 'string' || !fieldPath.includes('.')) {
       return acc;
     }
-    const value = repeaterRecordValueForFieldPath(siteId, collection, record, fieldPath);
+    const value = repeaterRecordValueForFieldPath(siteId, collection, record, fieldPath, context);
     if (value !== undefined) {
       acc[fieldPath] = value;
     }
@@ -1054,7 +1123,11 @@ const hydrateRepeaterJoinedRecordValues = (
   };
 };
 
-const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderElement => {
+const hydrateRepeaterElement = (
+  siteId: string,
+  element: RenderElement,
+  context?: RenderPayloadContext,
+): RenderElement => {
   if (element.type !== 'repeater') {
     return element;
   }
@@ -1064,7 +1137,7 @@ const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderE
     return element;
   }
 
-  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
+  const collection = renderDataSource(context).getCollectionByIdOrSlug(siteId, dataset.collectionId);
   if (!collection) {
     return element;
   }
@@ -1086,8 +1159,8 @@ const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderE
     : typeof element.props.repeaterImageField === 'string'
       ? element.props.repeaterImageField
       : 'image';
-  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination)
-    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, [titleField, descriptionField, imageField]));
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination, context)
+    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, [titleField, descriptionField, imageField], context));
 
   return {
     ...element,
@@ -1112,7 +1185,11 @@ const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderE
   };
 };
 
-const collectDataBindingManifest = (siteId: string, elements: RenderElement[]) => {
+const collectDataBindingManifest = (
+  siteId: string,
+  elements: RenderElement[],
+  context?: RenderPayloadContext,
+) => {
   const bindings: JsonObject[] = [];
   const datasets = new Map<string, DatasetManifest>();
 
@@ -1168,7 +1245,7 @@ const collectDataBindingManifest = (siteId: string, elements: RenderElement[]) =
 
   return {
     schemaVersion: 'backy.bindings.v1',
-    datasets: [...datasets.values()].map((dataset) => hydrateDatasetRecords(siteId, dataset)),
+    datasets: [...datasets.values()].map((dataset) => hydrateDatasetRecords(siteId, dataset, context)),
     bindings,
   };
 };
@@ -1276,14 +1353,14 @@ const getStringMetadata = (metadata: Record<string, unknown>, key: string) => {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
 };
 
-const buildFontAssets = (site: StoreSite) => {
+const buildFontAssets = (site: StoreSite, context?: RenderPayloadContext) => {
   const themeFonts = (site.theme.fonts.custom || []).map((font) => ({
     id: `font_${font.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
     family: font.name,
     source: 'uploaded',
     url: font.url,
   }));
-  const mediaFonts = getMediaList(site.id, {
+  const mediaFonts = renderDataSource(context).getMediaList(site.id, {
     type: 'font',
     visibility: 'public',
     limit: 100,
@@ -1475,9 +1552,10 @@ const applyTemplateValue = (
   element: RenderElement,
   targetPath: string,
   value: unknown,
+  context?: RenderPayloadContext,
 ): RenderElement => (
   targetPath.startsWith('props.')
-    ? applyBindingValue(siteId, element, targetPath, value)
+    ? applyBindingValue(siteId, element, targetPath, value, context)
     : element
 );
 
@@ -1511,9 +1589,10 @@ const applyCollectionTemplateContext = (
   collection: StoreCollection,
   kind: CollectionTemplateRenderKind,
   record?: StoreCollectionRecord,
+  context?: RenderPayloadContext,
 ): RenderElement => {
   const children = element.children.map((child) => (
-    applyCollectionTemplateContext(siteId, child, collection, kind, record)
+    applyCollectionTemplateContext(siteId, child, collection, kind, record, context)
   ));
   let next: RenderElement = {
     ...element,
@@ -1573,7 +1652,7 @@ const applyCollectionTemplateContext = (
   if (binding.startsWith('collection.')) {
     const value = collectionTemplateSchemaValue(collection, binding);
     if (value !== undefined) {
-      next = applyTemplateValue(siteId, next, targetPathForElementBinding(next, collection, ''), value);
+      next = applyTemplateValue(siteId, next, targetPathForElementBinding(next, collection, ''), value, context);
     }
   }
 
@@ -1586,7 +1665,7 @@ const applyCollectionTemplateContext = (
           ? record.status
           : record.values[fieldKey];
       const targetPath = targetPathForElementBinding(next, collection, fieldKey);
-      next = applyTemplateValue(siteId, next, targetPath, value);
+      next = applyTemplateValue(siteId, next, targetPath, value, context);
 
       if (fieldKey !== 'slug' && fieldKey !== 'status') {
         next.dataBindings = [
@@ -1633,6 +1712,7 @@ export const buildCollectionTemplateContent = (
   collection: StoreCollection,
   kind: CollectionTemplateRenderKind,
   record?: StoreCollectionRecord,
+  context?: RenderPayloadContext,
 ): { canvasSize: { width: number; height: number }; elements: RenderElement[] } | null => {
   const canvas = collectionTemplateCanvas(site, collection, kind);
   if (!canvas) {
@@ -1644,7 +1724,8 @@ export const buildCollectionTemplateContent = (
     canvas.elements
       .map(normalizeElement)
       .filter((element): element is RenderElement => !!element)
-      .map((element) => applyCollectionTemplateContext(site.id, element, collection, kind, record)),
+      .map((element) => applyCollectionTemplateContext(site.id, element, collection, kind, record, context)),
+    context,
   );
 
   if (elements.length === 0) {
@@ -1795,6 +1876,7 @@ export const buildCollectionListContent = (
   site: StoreSite,
   collection: StoreCollection,
   records: StoreCollectionRecord[],
+  context?: RenderPayloadContext,
 ): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
   const safeCollectionId = safeIdPart(collection.id);
   const variant = collectionListVariant(collection);
@@ -1866,7 +1948,7 @@ export const buildCollectionListContent = (
     const title = titleField ? stringifyRecordValue(record.values[titleField.key]) : getCollectionRecordTitle(collection, record);
     const description = descriptionField ? stringifyRecordValue(record.values[descriptionField.key]) : getCollectionRecordDescription(collection, record);
     const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
-    const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
+    const media = imageValue ? renderDataSource(context).getMediaById(site.id, imageValue) : undefined;
     const imageSrc = media ? publicMediaFilePath(site.id, media.id) : (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
     const href = buildCollectionItemPath(collection, record.slug);
     const cardId = `dynamic_list_${safeCollectionId}_${safeIdPart(record.id)}`;
@@ -2024,6 +2106,7 @@ export const buildCollectionItemContent = (
   site: StoreSite,
   collection: StoreCollection,
   record: StoreCollectionRecord,
+  context?: RenderPayloadContext,
 ): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
   const variant = collectionItemVariant(collection);
   const titleField = selectedTitleField(collection, record);
@@ -2031,7 +2114,7 @@ export const buildCollectionItemContent = (
   const imageField = selectedImageField(collection, record);
   const title = titleField ? stringifyRecordValue(record.values[titleField.key]) : getCollectionRecordTitle(collection, record);
   const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
-  const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
+  const media = imageValue ? renderDataSource(context).getMediaById(site.id, imageValue) : undefined;
   const imageSrc = media ? publicMediaFilePath(site.id, media.id) : (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
   const contentLeft = variant === 'centered' ? 260 : imageSrc && variant === 'split' ? 536 : 96;
   const contentWidth = variant === 'centered' ? 680 : variant === 'directory' ? 1008 : 568;
@@ -2178,9 +2261,11 @@ export const buildCollectionItemContent = (
 };
 
 export function buildPublicRenderPayload(site: StoreSite, page: StorePage, options: RenderPayloadOptions) {
-  const elements = resolveElementDataBindings(site.id, page.content.elements);
+  const context = { dataSource: options.dataSource };
+  const sourceData = renderDataSource(context);
+  const elements = resolveElementDataBindings(site.id, page.content.elements, context);
   const payloadElements = elements.map(normalizeElementForPayload);
-  const mediaPayload = getMediaList(site.id, {
+  const mediaPayload = sourceData.getMediaList(site.id, {
     pageId: page.id,
     visibility: 'public',
     limit: 100,
@@ -2188,8 +2273,8 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const forms = listFormsBySite(site.id, { pageId: page.id });
   const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
   const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(site.id, elements);
-  const navigation = getSiteNavigation(site.id);
+  const dataBindings = collectDataBindingManifest(site.id, elements, context);
+  const navigation = sourceData.getSiteNavigation(site.id);
 
   return {
     success: true,
@@ -2224,7 +2309,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
       }),
       assets: {
         media: mediaPayload.media,
-        fonts: buildFontAssets(site),
+        fonts: buildFontAssets(site, context),
       },
       interactions: {
         forms: forms.map((form) => ({
@@ -2278,18 +2363,20 @@ export function buildPublicCollectionListRenderPayload(
   records: StoreCollectionRecord[],
   options: RenderPayloadOptions,
 ) {
-  const content = buildCollectionTemplateContent(site, collection, 'list')
-    || buildCollectionListContent(site, collection, records);
+  const context = { dataSource: options.dataSource };
+  const sourceData = renderDataSource(context);
+  const content = buildCollectionTemplateContent(site, collection, 'list', undefined, context)
+    || buildCollectionListContent(site, collection, records, context);
   const elements = content.elements;
   const payloadElements = elements.map(normalizeElementForPayload);
-  const mediaPayload = getMediaList(site.id, {
+  const mediaPayload = sourceData.getMediaList(site.id, {
     visibility: 'public',
     limit: 100,
   });
   const canonical = buildCollectionListPath(collection);
   const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(site.id, elements);
-  const navigation = getSiteNavigation(site.id);
+  const dataBindings = collectDataBindingManifest(site.id, elements, context);
+  const navigation = sourceData.getSiteNavigation(site.id);
   const dataset = buildCollectionListDataset(collection, records);
   const description = collection.description || `${collection.name} collection records.`;
 
@@ -2328,7 +2415,7 @@ export function buildPublicCollectionListRenderPayload(
       }),
       assets: {
         media: mediaPayload.media,
-        fonts: buildFontAssets(site),
+        fonts: buildFontAssets(site, context),
       },
       interactions: {
         forms: [],
@@ -2380,18 +2467,20 @@ export function buildPublicCollectionItemRenderPayload(
   record: StoreCollectionRecord,
   options: RenderPayloadOptions,
 ) {
-  const content = buildCollectionTemplateContent(site, collection, 'item', record)
-    || buildCollectionItemContent(site, collection, record);
+  const context = { dataSource: options.dataSource };
+  const sourceData = renderDataSource(context);
+  const content = buildCollectionTemplateContent(site, collection, 'item', record, context)
+    || buildCollectionItemContent(site, collection, record, context);
   const elements = content.elements;
   const payloadElements = elements.map(normalizeElementForPayload);
-  const mediaPayload = getMediaList(site.id, {
+  const mediaPayload = sourceData.getMediaList(site.id, {
     visibility: 'public',
     limit: 100,
   });
   const canonical = buildCollectionItemPath(collection, record.slug);
   const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(site.id, elements);
-  const navigation = getSiteNavigation(site.id);
+  const dataBindings = collectDataBindingManifest(site.id, elements, context);
+  const navigation = sourceData.getSiteNavigation(site.id);
   const title = getCollectionRecordTitle(collection, record);
   const description = getCollectionRecordDescription(collection, record);
   const dataset = buildCollectionItemDataset(collection, record);
@@ -2436,7 +2525,7 @@ export function buildPublicCollectionItemRenderPayload(
       }),
       assets: {
         media: mediaPayload.media,
-        fonts: buildFontAssets(site),
+        fonts: buildFontAssets(site, context),
       },
       interactions: {
         forms: [],
@@ -2487,10 +2576,12 @@ export function buildPublicBlogPostRenderPayload(
   post: StoreBlogPost,
   options: RenderPayloadOptions,
 ) {
+  const context = { dataSource: options.dataSource };
+  const sourceData = renderDataSource(context);
   const elements = normalizePostElements(post);
-  const resolvedElements = resolveElementDataBindings(site.id, elements);
+  const resolvedElements = resolveElementDataBindings(site.id, elements, context);
   const payloadElements = resolvedElements.map(normalizeElementForPayload);
-  const mediaPayload = getMediaList(site.id, {
+  const mediaPayload = sourceData.getMediaList(site.id, {
     postId: post.id,
     visibility: 'public',
     limit: 100,
@@ -2498,8 +2589,8 @@ export function buildPublicBlogPostRenderPayload(
   const forms = listFormsBySite(site.id, { postId: post.id });
   const canonical = post.meta?.canonical || `/blog/${post.slug}`;
   const actions = collectElementActions(resolvedElements);
-  const dataBindings = collectDataBindingManifest(site.id, resolvedElements);
-  const navigation = getSiteNavigation(site.id);
+  const dataBindings = collectDataBindingManifest(site.id, resolvedElements, context);
+  const navigation = sourceData.getSiteNavigation(site.id);
 
   return {
     success: true,
@@ -2536,7 +2627,7 @@ export function buildPublicBlogPostRenderPayload(
       }),
       assets: {
         media: mediaPayload.media,
-        fonts: buildFontAssets(site),
+        fonts: buildFontAssets(site, context),
       },
       interactions: {
         forms: forms.map((form) => ({

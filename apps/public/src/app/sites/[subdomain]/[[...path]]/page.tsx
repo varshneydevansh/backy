@@ -29,6 +29,7 @@ import {
     buildCollectionListContent,
     buildCollectionTemplateContent,
     resolveElementDataBindings,
+    type RenderDataSource,
 } from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -209,9 +210,9 @@ function repositorySiteToStoreSite(site: Site): StoreSite {
     };
 }
 
-function repositoryPageContent(page: BackyPage): PageContent {
+function repositoryPageContentWithContext(page: BackyPage, dataSource?: RenderDataSource): PageContent {
     return {
-        elements: page.content.elements as unknown as PageContent['elements'],
+        elements: resolveElementDataBindings(page.siteId, page.content.elements, { dataSource }) as unknown as PageContent['elements'],
         canvasSize: isRecord(page.content.metadata?.canvasSize)
             ? {
                 width: Number(page.content.metadata.canvasSize.width) || 1200,
@@ -278,6 +279,83 @@ const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreColl
     publishedAt: record.publishedAt || null,
     scheduledAt: record.scheduledAt || null,
 });
+
+async function buildRepositoryRenderDataSource(
+    hostedSite: Extract<HostedSite, { mode: 'database' }>,
+): Promise<RenderDataSource> {
+    const collections = await hostedSite.repositories.collections.list({
+        siteId: hostedSite.site.id,
+        status: 'published',
+        includeUnpublished: false,
+        limit: 100,
+        offset: 0,
+    });
+    const storeCollections = collections.items
+        .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+        .map(repositoryCollectionToStoreCollection);
+    const recordsByCollection = new Map<string, StoreCollectionRecord[]>();
+
+    await Promise.all(storeCollections.map(async (collection) => {
+        const records = await hostedSite.repositories.collections.listRecords({
+            siteId: hostedSite.site.id,
+            collectionId: collection.id,
+            status: 'published',
+            includeUnpublished: false,
+            limit: 1000,
+            offset: 0,
+        });
+        recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+    }));
+
+    const media = await hostedSite.repositories.media.list({
+        siteId: hostedSite.site.id,
+        visibility: 'public',
+        limit: 1000,
+    });
+
+    return {
+        getCollectionByIdOrSlug: (_siteId, collectionIdOrSlug) => (
+            storeCollections.find((collection) => collection.id === collectionIdOrSlug || collection.slug === collectionIdOrSlug)
+        ),
+        getCollectionRecordByIdOrSlug: (_siteId, collectionId, recordIdOrSlug) => (
+            (recordsByCollection.get(collectionId) || []).find((record) => record.id === recordIdOrSlug || record.slug === recordIdOrSlug)
+        ),
+        listCollectionRecords: (_siteId, collectionId, options = {}) => {
+            const records = (recordsByCollection.get(collectionId) || [])
+                .filter((record) => !options.slug || record.slug === options.slug)
+                .filter((record) => !options.status || record.status === options.status)
+                .filter((record) => !options.fieldKey || record.values[options.fieldKey] === options.fieldValue)
+                .filter((record) => {
+                    const search = options.search?.trim().toLowerCase();
+                    return !search || JSON.stringify(record.values).toLowerCase().includes(search) || record.slug.toLowerCase().includes(search);
+                });
+            const sortBy = options.sortBy;
+            const sortedRecords = sortBy
+                ? [...records].sort((left, right) => {
+                    const leftValue = sortBy in left ? left[sortBy as keyof StoreCollectionRecord] : left.values[sortBy];
+                    const rightValue = sortBy in right ? right[sortBy as keyof StoreCollectionRecord] : right.values[sortBy];
+                    const direction = options.sortDirection === 'desc' ? -1 : 1;
+                    return String(leftValue ?? '').localeCompare(String(rightValue ?? '')) * direction;
+                })
+                : records;
+            const requestedOffset = options.offset;
+            const requestedLimit = options.limit;
+            const offset = typeof requestedOffset === 'number' && Number.isInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+            const limit = typeof requestedLimit === 'number' && Number.isInteger(requestedLimit) && requestedLimit > 0 ? requestedLimit : sortedRecords.length;
+            return { records: sortedRecords.slice(offset, offset + limit) };
+        },
+        getMediaById: (_siteId, mediaId) => media.items.find((item) => item.id === mediaId),
+        getMediaList: () => ({
+            media: media.items,
+            pagination: {
+                total: media.items.length,
+                limit: media.items.length,
+                offset: 0,
+                hasMore: false,
+            },
+        }),
+    };
+}
 
 async function getRepositoryDynamicCollectionRoute(
     hostedSite: Extract<HostedSite, { mode: 'database' }>,
@@ -554,6 +632,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
+        const dataSource = await buildRepositoryRenderDataSource(hostedSite);
         const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
         if (!page) {
             const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
@@ -563,10 +642,10 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
             const storeSite = repositorySiteToStoreSite(site);
             const dynamicContent = dynamicRoute.type === 'list'
-                ? (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'list')
-                    || buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records)) as unknown as PageContent
-                : (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'item', dynamicRoute.record)
-                    || buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record)) as unknown as PageContent;
+                ? (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'list', undefined, { dataSource })
+                    || buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records, { dataSource })) as unknown as PageContent
+                : (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'item', dynamicRoute.record, { dataSource })
+                    || buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record, { dataSource })) as unknown as PageContent;
 
             return (
                 <>
@@ -587,7 +666,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         return (
             <>
                 <PageRenderer
-                    content={repositoryPageContent(page)}
+                    content={repositoryPageContentWithContext(page, dataSource)}
                     theme={repositoryTheme(site)}
                     fontAssets={await getRepositoryFontAssets(hostedSite)}
                     siteId={site.id}

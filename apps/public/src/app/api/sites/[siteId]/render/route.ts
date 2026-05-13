@@ -25,6 +25,7 @@ import {
   buildPublicCollectionItemRenderPayload,
   buildPublicCollectionListRenderPayload,
   buildPublicRenderPayload,
+  type RenderDataSource,
 } from '@/lib/renderPayload';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -223,6 +224,88 @@ const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreColl
   scheduledAt: record.scheduledAt || null,
 });
 
+async function buildRepositoryRenderDataSource(
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  site: Site,
+): Promise<RenderDataSource> {
+  const collections = await repositories.collections.list({
+    siteId: site.id,
+    status: 'published',
+    includeUnpublished: false,
+    limit: 100,
+    offset: 0,
+  });
+  const storeCollections = collections.items
+    .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+    .map(repositoryCollectionToStoreCollection);
+  const recordsByCollection = new Map<string, StoreCollectionRecord[]>();
+
+  await Promise.all(storeCollections.map(async (collection) => {
+    const records = await repositories.collections.listRecords({
+      siteId: site.id,
+      collectionId: collection.id,
+      status: 'published',
+      includeUnpublished: false,
+      limit: 1000,
+      offset: 0,
+    });
+    recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+  }));
+
+  const media = await repositories.media.list({
+    siteId: site.id,
+    visibility: 'public',
+    limit: 1000,
+  });
+
+  return {
+    getCollectionByIdOrSlug: (_siteId, collectionIdOrSlug) => (
+      storeCollections.find((collection) => (
+        collection.id === collectionIdOrSlug || collection.slug === collectionIdOrSlug
+      ))
+    ),
+    getCollectionRecordByIdOrSlug: (_siteId, collectionId, recordIdOrSlug) => (
+      (recordsByCollection.get(collectionId) || []).find((record) => (
+        record.id === recordIdOrSlug || record.slug === recordIdOrSlug
+      ))
+    ),
+    listCollectionRecords: (_siteId, collectionId, options = {}) => {
+      const records = (recordsByCollection.get(collectionId) || [])
+        .filter((record) => !options.slug || record.slug === options.slug)
+        .filter((record) => !options.status || record.status === options.status)
+        .filter((record) => !options.fieldKey || record.values[options.fieldKey] === options.fieldValue)
+        .filter((record) => {
+          const search = options.search?.trim().toLowerCase();
+          return !search || JSON.stringify(record.values).toLowerCase().includes(search) || record.slug.toLowerCase().includes(search);
+        });
+      const sortBy = options.sortBy;
+      const sortedRecords = sortBy
+        ? [...records].sort((left, right) => {
+            const leftValue = sortBy in left ? left[sortBy as keyof StoreCollectionRecord] : left.values[sortBy];
+            const rightValue = sortBy in right ? right[sortBy as keyof StoreCollectionRecord] : right.values[sortBy];
+            const direction = options.sortDirection === 'desc' ? -1 : 1;
+            return String(leftValue ?? '').localeCompare(String(rightValue ?? '')) * direction;
+          })
+        : records;
+      const requestedOffset = options.offset;
+      const requestedLimit = options.limit;
+      const offset = typeof requestedOffset === 'number' && Number.isInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+      const limit = typeof requestedLimit === 'number' && Number.isInteger(requestedLimit) && requestedLimit > 0 ? requestedLimit : sortedRecords.length;
+      return { records: sortedRecords.slice(offset, offset + limit) };
+    },
+    getMediaById: (_siteId, mediaId) => media.items.find((item) => item.id === mediaId),
+    getMediaList: () => ({
+      media: media.items,
+      pagination: {
+        total: media.items.length,
+        limit: media.items.length,
+        offset: 0,
+        hasMore: false,
+      },
+    }),
+  };
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -241,6 +324,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const storeSite = repositorySiteToStoreSite(site);
+      const dataSource = await buildRepositoryRenderDataSource(repositories, site);
       const blogMatch = path.match(/^\/blog\/([^/]+)$/);
       if (blogMatch) {
         const slug = decodeURIComponent(blogMatch[1]);
@@ -255,7 +339,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         return publicContractJson(
           await withRepositoryNavigation(
-            buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path }),
+            buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path, dataSource }),
             repositories,
             site,
           ),
@@ -277,7 +361,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (page && (isPubliclyReadable(page) || canPreviewPage)) {
         return publicContractJson(
           await withRepositoryNavigation(
-            buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path }),
+            buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path, dataSource }),
             repositories,
             site,
           ),
@@ -316,7 +400,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               storeSite,
               repositoryCollectionToStoreCollection(collection),
               records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
-              { requestId, path },
+              { requestId, path, dataSource },
             ),
             repositories,
             site,
@@ -349,7 +433,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 storeSite,
                 repositoryCollectionToStoreCollection(collection),
                 repositoryRecordToStoreRecord(record),
-                { requestId, path },
+                { requestId, path, dataSource },
               ),
               repositories,
               site,

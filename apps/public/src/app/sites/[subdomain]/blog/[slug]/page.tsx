@@ -5,15 +5,15 @@
  */
 
 import { notFound } from 'next/navigation';
-import type { BackyPost, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyPost, Site } from '@backy-cms/core';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
 import { getBlogPosts, getMediaList, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
-import { resolveElementDataBindings } from '@/lib/renderPayload';
+import { resolveElementDataBindings, type RenderDataSource } from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Metadata } from 'next';
-import type { StoreBlogPost } from '@/lib/backyStore';
+import type { StoreBlogPost, StoreCollection, StoreCollectionRecord } from '@/lib/backyStore';
 
 type HostedSite =
   | {
@@ -134,9 +134,9 @@ function repositoryTheme(site: Site) {
   };
 }
 
-function normalizeRepositoryPostContent(post: BackyPost): PageContent {
+function normalizeRepositoryPostContentWithContext(post: BackyPost, dataSource?: RenderDataSource): PageContent {
   return {
-    elements: post.content.elements as unknown as PageContent['elements'],
+    elements: resolveElementDataBindings(post.siteId, post.content.elements, { dataSource }) as unknown as PageContent['elements'],
     canvasSize: isRecord(post.content.metadata?.canvasSize)
       ? {
           width: Number(post.content.metadata.canvasSize.width) || 1200,
@@ -145,6 +145,129 @@ function normalizeRepositoryPostContent(post: BackyPost): PageContent {
       : { width: 1200, height: 900 },
     customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
     contentDocument: post.content,
+  };
+}
+
+const repositoryCollectionToStoreCollection = (collection: BackyCollection): StoreCollection => ({
+  id: collection.id,
+  siteId: collection.siteId,
+  name: collection.name,
+  slug: collection.slug,
+  routePattern: collection.routePattern || null,
+  listRoutePattern: collection.listRoutePattern || null,
+  description: collection.description || null,
+  status: collection.status === 'published' || collection.status === 'archived' ? collection.status : 'draft',
+  fields: collection.fields.map((field, index) => ({
+    id: field.id,
+    key: field.key,
+    label: field.label,
+    type: field.type,
+    required: field.required === true,
+    unique: field.unique === true,
+    sortOrder: index,
+    helpText: null,
+    options: field.options,
+    referenceCollectionId: field.referenceCollectionId || null,
+    defaultValue: field.defaultValue,
+  })),
+  permissions: {
+    publicRead: collection.permissions.publicRead,
+    publicCreate: collection.permissions.publicCreate,
+    publicUpdate: collection.permissions.publicUpdate === true,
+    publicDelete: collection.permissions.publicDelete === true,
+  },
+  metadata: isRecord(collection.metadata) ? collection.metadata : undefined,
+  createdAt: collection.createdAt,
+  updatedAt: collection.updatedAt,
+});
+
+const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreCollectionRecord => ({
+  id: record.id,
+  siteId: record.siteId,
+  collectionId: record.collectionId,
+  slug: record.slug,
+  status: record.status,
+  values: record.values,
+  createdAt: record.createdAt,
+  updatedAt: record.updatedAt,
+  publishedAt: record.publishedAt || null,
+  scheduledAt: record.scheduledAt || null,
+});
+
+async function buildRepositoryRenderDataSource(
+  hostedSite: Extract<HostedSite, { mode: 'database' }>,
+): Promise<RenderDataSource> {
+  const collections = await hostedSite.repositories.collections.list({
+    siteId: hostedSite.site.id,
+    status: 'published',
+    includeUnpublished: false,
+    limit: 100,
+    offset: 0,
+  });
+  const storeCollections = collections.items
+    .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+    .map(repositoryCollectionToStoreCollection);
+  const recordsByCollection = new Map<string, StoreCollectionRecord[]>();
+
+  await Promise.all(storeCollections.map(async (collection) => {
+    const records = await hostedSite.repositories.collections.listRecords({
+      siteId: hostedSite.site.id,
+      collectionId: collection.id,
+      status: 'published',
+      includeUnpublished: false,
+      limit: 1000,
+      offset: 0,
+    });
+    recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+  }));
+
+  const media = await hostedSite.repositories.media.list({
+    siteId: hostedSite.site.id,
+    visibility: 'public',
+    limit: 1000,
+  });
+
+  return {
+    getCollectionByIdOrSlug: (_siteId, collectionIdOrSlug) => (
+      storeCollections.find((collection) => collection.id === collectionIdOrSlug || collection.slug === collectionIdOrSlug)
+    ),
+    getCollectionRecordByIdOrSlug: (_siteId, collectionId, recordIdOrSlug) => (
+      (recordsByCollection.get(collectionId) || []).find((record) => record.id === recordIdOrSlug || record.slug === recordIdOrSlug)
+    ),
+    listCollectionRecords: (_siteId, collectionId, options = {}) => {
+      const records = (recordsByCollection.get(collectionId) || [])
+        .filter((record) => !options.slug || record.slug === options.slug)
+        .filter((record) => !options.status || record.status === options.status)
+        .filter((record) => !options.fieldKey || record.values[options.fieldKey] === options.fieldValue)
+        .filter((record) => {
+          const search = options.search?.trim().toLowerCase();
+          return !search || JSON.stringify(record.values).toLowerCase().includes(search) || record.slug.toLowerCase().includes(search);
+        });
+      const sortBy = options.sortBy;
+      const sortedRecords = sortBy
+        ? [...records].sort((left, right) => {
+            const leftValue = sortBy in left ? left[sortBy as keyof StoreCollectionRecord] : left.values[sortBy];
+            const rightValue = sortBy in right ? right[sortBy as keyof StoreCollectionRecord] : right.values[sortBy];
+            const direction = options.sortDirection === 'desc' ? -1 : 1;
+            return String(leftValue ?? '').localeCompare(String(rightValue ?? '')) * direction;
+          })
+        : records;
+      const requestedOffset = options.offset;
+      const requestedLimit = options.limit;
+      const offset = typeof requestedOffset === 'number' && Number.isInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+      const limit = typeof requestedLimit === 'number' && Number.isInteger(requestedLimit) && requestedLimit > 0 ? requestedLimit : sortedRecords.length;
+      return { records: sortedRecords.slice(offset, offset + limit) };
+    },
+    getMediaById: (_siteId, mediaId) => media.items.find((item) => item.id === mediaId),
+    getMediaList: () => ({
+      media: media.items,
+      pagination: {
+        total: media.items.length,
+        limit: media.items.length,
+        offset: 0,
+        hasMore: false,
+      },
+    }),
   };
 }
 
@@ -299,6 +422,7 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
 
   if (hostedSite.mode === 'database') {
     const { site } = hostedSite;
+    const dataSource = await buildRepositoryRenderDataSource(hostedSite);
     const post = await getRepositoryPost(hostedSite, slug, previewToken);
     if (!post) {
       notFound();
@@ -307,7 +431,7 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
     return (
       <>
         <PageRenderer
-          content={normalizeRepositoryPostContent(post)}
+          content={normalizeRepositoryPostContentWithContext(post, dataSource)}
           theme={repositoryTheme(site)}
           fontAssets={await getRepositoryFontAssets(hostedSite)}
           siteId={site.id}
