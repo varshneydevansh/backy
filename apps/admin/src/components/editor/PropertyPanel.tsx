@@ -514,6 +514,12 @@ interface PropertyPanelProps {
   onDelete?: () => void;
   mediaContext?: MediaContext;
   disabled?: boolean;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  canViewCollections?: boolean;
+  mediaViewDisabledReason?: string;
+  mediaCreateDisabledReason?: string;
+  collectionsViewDisabledReason?: string;
   embedded?: boolean;
   hideHeader?: boolean;
 }
@@ -534,6 +540,12 @@ export function PropertyPanel({
   onDelete,
   mediaContext,
   disabled = false,
+  canViewMedia = true,
+  canCreateMedia = true,
+  canViewCollections = true,
+  mediaViewDisabledReason,
+  mediaCreateDisabledReason,
+  collectionsViewDisabledReason,
   embedded = false,
   hideHeader = false,
 }: PropertyPanelProps) {
@@ -556,8 +568,9 @@ export function PropertyPanel({
   const siteId = mediaContext?.siteId;
 
   useEffect(() => {
-    if (!siteId) {
+    if (!siteId || !canViewCollections) {
       setCollections([]);
+      setCollectionsError(!canViewCollections ? collectionsViewDisabledReason || 'You do not have permission to view collections.' : null);
       return;
     }
 
@@ -582,7 +595,7 @@ export function PropertyPanel({
     return () => {
       cancelled = true;
     };
-  }, [siteId]);
+  }, [canViewCollections, collectionsViewDisabledReason, siteId]);
 
   useEffect(() => {
     setAppliedChangeCount(0);
@@ -855,6 +868,10 @@ export function PropertyPanel({
         initialUploadFilter={mediaUploadFilter}
         mediaContext={mediaContext}
         allowedTypes={mediaAllowedTypes}
+        canView={canViewMedia}
+        canCreate={canCreateMedia}
+        viewDisabledReason={mediaViewDisabledReason}
+        createDisabledReason={mediaCreateDisabledReason}
       />
 
       <EmojiPickerModal

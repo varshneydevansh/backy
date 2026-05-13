@@ -20,14 +20,17 @@ import {
   getAdminApiBase,
   getPage,
   getPageReadiness,
+  getUserPermissions,
   listPageRevisions,
   publishPage,
   rollbackPage,
   updatePage as updatePageFromApi,
+  type AdminUserPermissionMatrix,
   type ContentRevision,
   type PageReadiness,
 } from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
@@ -109,6 +112,57 @@ type PageSaveConflict = {
   currentUpdatedAt?: string;
 };
 
+type PageEditorPermissionKey =
+  | 'pages.view'
+  | 'pages.edit'
+  | 'pages.publish'
+  | 'pages.delete'
+  | 'media.view'
+  | 'media.create'
+  | 'collections.view';
+
+const PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<PageEditorPermissionKey, Array<User['role']>> = {
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.edit': ['owner', 'admin', 'editor'],
+  'pages.publish': ['owner', 'admin', 'editor'],
+  'pages.delete': ['owner', 'admin'],
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'media.create': ['owner', 'admin', 'editor'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+};
+
+const pageEditorPermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: PageEditorPermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isPageEditorPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: PageEditorPermissionKey,
+): boolean => {
+  const matrixRule = pageEditorPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.allowed;
+
+  return Boolean(currentAdmin && PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const pageEditorPermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: PageEditorPermissionKey,
+): string => {
+  const matrixRule = pageEditorPermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.reason;
+  if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+
+  return PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   !!value && typeof value === 'object' && !Array.isArray(value)
 );
@@ -147,6 +201,7 @@ function PageEditorRoute() {
   const { pageId } = Route.useParams();
   const routeSearch = Route.useSearch();
   const { sites, pages, updatePage } = useStore();
+  const currentAdmin = useAuthStore((store) => store.user);
   const storePage = pages.find((candidate) => candidate.id === pageId);
   const storePageId = storePage?.id;
   const storePageSiteId = storePage?.siteId;
@@ -177,9 +232,66 @@ function PageEditorRoute() {
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(true);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view');
+  const canEditPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');
+  const canPublishPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish');
+  const canDeletePage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete');
+  const canViewMedia = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
+  const canCreateMedia = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.create');
+  const canViewCollections = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
+  const viewPagePermissionTitle = canViewPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.view');
+  const editPagePermissionTitle = canEditPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.edit');
+  const publishPagePermissionTitle = canPublishPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.publish');
+  const deletePagePermissionTitle = canDeletePage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.delete');
+  const viewMediaPermissionTitle = canViewMedia ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'media.view');
+  const createMediaPermissionTitle = canCreateMedia ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'media.create');
+  const viewCollectionsPermissionTitle = canViewCollections ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
+  const editPageDeniedMessage = `Your account needs pages.edit to change this page. ${editPagePermissionTitle}`;
+  const publishPageDeniedMessage = `Your account needs pages.publish to preview or publish this page. ${publishPagePermissionTitle}`;
   const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
   const isPageEditorSaveBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
-  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;
+  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy || isPermissionMatrixPending;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load page editor permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    setPermissionError(null);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load page editor permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +300,17 @@ function PageEditorRoute() {
     setSiteId(nextSiteId);
 
     const loadPage = async () => {
+      if (isPermissionMatrixPending) {
+        return;
+      }
+
+      if (!canViewPage) {
+        setIsLoadingPage(false);
+        setLoadError(viewPagePermissionTitle || 'Your account cannot view this page.');
+        setPage(null);
+        return;
+      }
+
       setIsLoadingPage(true);
       setLoadError(null);
 
@@ -222,7 +345,8 @@ function PageEditorRoute() {
         }
       } catch (error) {
         if (!cancelled) {
-          if (localFallbackPage) {
+          const deniedByBackend = error instanceof Error && /permission|forbidden|unauthori[sz]ed/i.test(error.message);
+          if (localFallbackPage && !deniedByBackend) {
             setPage(localFallbackPage);
             setLoadError(error instanceof Error ? error.message : 'Unable to load backend page.');
           } else {
@@ -242,10 +366,10 @@ function PageEditorRoute() {
     return () => {
       cancelled = true;
     };
-  }, [fallbackSiteId, pageId, storePageId, storePageSite?.id, storePageSite?.publicSiteId, storePageSiteId, updatePage]);
+  }, [canViewPage, fallbackSiteId, isPermissionMatrixPending, pageId, storePageId, storePageSite?.id, storePageSite?.publicSiteId, storePageSiteId, updatePage, viewPagePermissionTitle]);
 
   useEffect(() => {
-    if (!page) {
+    if (!page || !canViewPage) {
       return;
     }
 
@@ -269,10 +393,14 @@ function PageEditorRoute() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageId, siteId]);
+  }, [canViewPage, page, pageId, siteId]);
 
   const loadPageReadiness = async () => {
     if (!page) {
+      return null;
+    }
+    if (!canViewPage) {
+      setReadinessError(viewPagePermissionTitle || 'Your account cannot view page readiness.');
       return null;
     }
 
@@ -296,7 +424,7 @@ function PageEditorRoute() {
       void loadPageReadiness();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page?.id, siteId]);
+  }, [page?.id, siteId, canViewPage]);
 
   useEffect(() => {
     setIsWorkspaceFocus(routeSearch.focus === 'canvas');
@@ -363,6 +491,16 @@ function PageEditorRoute() {
     );
   }
 
+  if (!canViewPage && !isPermissionMatrixPending) {
+    return (
+      <PageShell title="Page access denied" description={viewPagePermissionTitle || permissionError || "Your account can't view this page."}>
+        <button onClick={() => navigate({ to: '/pages', search: { siteId } })} className="text-primary hover:underline">
+          &larr; Back to Pages
+        </button>
+      </PageShell>
+    );
+  }
+
   if (!page) {
     return (
       <PageShell title="Page Not Found" description={loadError || "The page you requested doesn't exist."}>
@@ -416,9 +554,17 @@ function PageEditorRoute() {
     : isReadinessBlocked
       ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
       : null;
-  const externalWorkflowDisabledReason = editorHasUnsavedChanges
+  const editorPublishDisabledReason = !canPublishPage ? publishPageDeniedMessage : publishDisabledReason;
+  const externalWorkflowDisabledReason = !canPublishPage
+    ? publishPageDeniedMessage
+    : editorHasUnsavedChanges
     ? 'Save the canvas before previewing, publishing, archiving, or restoring from the page panels.'
     : publishDisabledReason;
+  const archiveDisabledReason = !canEditPage
+    ? editPageDeniedMessage
+    : editorHasUnsavedChanges
+      ? 'Save the canvas before archiving from this panel'
+      : null;
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
@@ -638,6 +784,11 @@ function PageEditorRoute() {
       throw new Error(message);
     }
 
+    if (!canEditPage) {
+      setSaveWarning(editPageDeniedMessage);
+      throw new Error(editPageDeniedMessage);
+    }
+
     try {
       const validationMessage = validatePageSettings(settings);
       if (validationMessage) {
@@ -648,6 +799,11 @@ function PageEditorRoute() {
       if (settings.status === 'published' && page.status !== 'published' && publishDisabledReason) {
         setSaveWarning(publishDisabledReason);
         throw new Error(publishDisabledReason);
+      }
+
+      if ((settings.status === 'published' || settings.status === 'scheduled') && page.status !== settings.status && !canPublishPage) {
+        setSaveWarning(publishPageDeniedMessage);
+        throw new Error(publishPageDeniedMessage);
       }
 
       const shouldPublishThroughWorkflow = settings.status === 'published' && page.status !== 'published';
@@ -701,6 +857,10 @@ function PageEditorRoute() {
 
   const reloadLatestPage = async () => {
     if (isPageEditorBusy) return;
+    if (!canViewPage) {
+      setSaveWarning(viewPagePermissionTitle || 'Your account cannot reload this page.');
+      return;
+    }
 
     setIsLoadingPage(true);
     setSaveWarning(null);
@@ -744,6 +904,14 @@ function PageEditorRoute() {
 
   const applyWorkflow = async (action: 'publish' | 'archive') => {
     if (isPageEditorBusy) return;
+    if (action === 'publish' && !canPublishPage) {
+      setSaveWarning(publishPageDeniedMessage);
+      return;
+    }
+    if (action === 'archive' && !canEditPage) {
+      setSaveWarning(editPageDeniedMessage);
+      return;
+    }
 
     setIsWorkflowBusy(true);
     setSaveWarning(null);
@@ -780,6 +948,10 @@ function PageEditorRoute() {
 
   const generatePreview = async () => {
     if (isPageEditorBusy) return;
+    if (!canPublishPage) {
+      setSaveWarning(publishPageDeniedMessage);
+      return;
+    }
 
     setIsPreviewBusy(true);
     setSaveWarning(null);
@@ -804,6 +976,10 @@ function PageEditorRoute() {
 
   const restoreRevision = async (revision: ContentRevision) => {
     if (isPageEditorBusy) return;
+    if (!canEditPage) {
+      setSaveWarning(editPageDeniedMessage);
+      return;
+    }
 
     setIsWorkflowBusy(true);
     setSaveWarning(null);
@@ -867,6 +1043,12 @@ function PageEditorRoute() {
       {(loadError || saveWarning) && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
           {saveWarning || `${loadError} Using the local page copy.`}
+        </div>
+      )}
+
+      {(permissionError || isPermissionMatrixPending) && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 shadow-sm">
+          {isPermissionMatrixPending ? 'Loading page editor permissions...' : permissionError}
         </div>
       )}
 
@@ -965,9 +1147,9 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPageEditorBusy || editorHasUnsavedChanges}
+              disabled={isPageEditorBusy || editorHasUnsavedChanges || !canPublishPage}
               iconStart={<Eye className="size-4" />}
-              title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+              title={!canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
             >
               Preview
             </Button>
@@ -975,7 +1157,8 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void loadPageReadiness()}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorBusy || !canViewPage}
+              title={canViewPage ? 'Refresh readiness' : viewPagePermissionTitle}
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
             >
               Refresh readiness
@@ -1149,8 +1332,20 @@ function PageEditorRoute() {
                 targetLabel: page.title,
               }}
               validateSettings={validatePageSettings}
-              publishDisabled={Boolean(publishDisabledReason)}
-              publishDisabledReason={publishDisabledReason || undefined}
+              canView={canViewPage}
+              canEdit={canEditPage}
+              canPublish={canPublishPage}
+              canViewMedia={canViewMedia}
+              canCreateMedia={canCreateMedia}
+              canViewCollections={canViewCollections}
+              canDeleteReusableSections={canDeletePage}
+              editDisabledReason={editPagePermissionTitle}
+              publishDisabled={Boolean(editorPublishDisabledReason)}
+              publishDisabledReason={editorPublishDisabledReason || undefined}
+              mediaViewDisabledReason={viewMediaPermissionTitle}
+              mediaCreateDisabledReason={createMediaPermissionTitle}
+              collectionsViewDisabledReason={viewCollectionsPermissionTitle}
+              reusableDeleteDisabledReason={deletePagePermissionTitle}
               onUnsavedChangesChange={setEditorHasUnsavedChanges}
               className="h-full w-full"
             />
@@ -1177,11 +1372,11 @@ function PageEditorRoute() {
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
-                  disabled={isPageEditorBusy || editorHasUnsavedChanges}
+                  disabled={isPageEditorBusy || editorHasUnsavedChanges || !canPublishPage}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
                   className="w-full"
-                  title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+                  title={!canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
                 >
                   Preview
                 </Button>
@@ -1197,11 +1392,11 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('archive')}
-                  disabled={isPageEditorBusy || page.status === 'archived' || editorHasUnsavedChanges}
+                  disabled={isPageEditorBusy || page.status === 'archived' || Boolean(archiveDisabledReason)}
                   variant="outline"
                   iconStart={<Archive className="size-4" />}
                   className="w-full"
-                  title={editorHasUnsavedChanges ? 'Save the canvas before archiving from this panel' : 'Archive page'}
+                  title={archiveDisabledReason || 'Archive page'}
                 >
                   Archive
                 </Button>
@@ -1241,9 +1436,9 @@ function PageEditorRoute() {
                 <button
                   type="button"
                   onClick={() => void loadPageReadiness()}
-                  disabled={isPageEditorBusy}
+                  disabled={isPageEditorBusy || !canViewPage}
                   className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Refresh page readiness"
+                  title={canViewPage ? 'Refresh page readiness' : viewPagePermissionTitle}
                 >
                   <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
                 </button>
@@ -1321,10 +1516,10 @@ function PageEditorRoute() {
                         </div>
                         <button
                           type="button"
-                          disabled={isPageEditorBusy || editorHasUnsavedChanges}
+                          disabled={isPageEditorBusy || editorHasUnsavedChanges || !canEditPage}
                           onClick={() => setPendingRestoreRevision(revision)}
                           className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                          title={editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
+                          title={!canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </button>
@@ -1373,7 +1568,8 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isPageEditorBusy || editorHasUnsavedChanges}
+                disabled={isPageEditorBusy || editorHasUnsavedChanges || !canEditPage}
+                title={canEditPage ? undefined : editPagePermissionTitle}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}

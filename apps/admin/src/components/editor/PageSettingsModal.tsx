@@ -26,6 +26,14 @@ interface PageSettingsModalProps {
     onSave: (settings: PageSettings) => Promise<void> | void;
     validateSettings?: (settings: PageSettings) => string | null;
     mediaContext?: MediaContext;
+    canEdit?: boolean;
+    canPublish?: boolean;
+    canViewMedia?: boolean;
+    canCreateMedia?: boolean;
+    editDisabledReason?: string;
+    publishDisabledReason?: string;
+    mediaViewDisabledReason?: string;
+    mediaCreateDisabledReason?: string;
 }
 
 const formatJsonLd = (jsonLd: PageSettings['meta']['jsonLd']): string => (
@@ -70,6 +78,14 @@ export function PageSettingsModal({
     onSave,
     validateSettings,
     mediaContext,
+    canEdit = true,
+    canPublish = true,
+    canViewMedia = true,
+    canCreateMedia = true,
+    editDisabledReason = 'You do not have permission to edit this page.',
+    publishDisabledReason = 'You do not have permission to publish this page.',
+    mediaViewDisabledReason,
+    mediaCreateDisabledReason,
 }: PageSettingsModalProps) {
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
@@ -100,6 +116,14 @@ export function PageSettingsModal({
 
     const handleSave = async () => {
         if (isSavingSettings) {
+            return;
+        }
+        if (!canEdit) {
+            setValidationError(editDisabledReason);
+            return;
+        }
+        if ((settings.status === 'published' || settings.status === 'scheduled') && !canPublish) {
+            setValidationError(publishDisabledReason);
             return;
         }
 
@@ -143,6 +167,7 @@ export function PageSettingsModal({
     };
 
     const updateKeywords = (nextKeywords: string[]) => {
+        if (!canEdit) return;
         setSettings({
             ...settings,
             meta: {
@@ -153,6 +178,7 @@ export function PageSettingsModal({
     };
 
     const addKeywordDraft = () => {
+        if (!canEdit) return;
         const nextKeywords = normalizeKeywords([...keywords, keywordDraft]);
         if (nextKeywords.length === keywords.length && !keywordDraft.trim()) {
             return;
@@ -163,6 +189,7 @@ export function PageSettingsModal({
     };
 
     const removeKeyword = (keyword: string) => {
+        if (!canEdit) return;
         updateKeywords(keywords.filter((item) => item !== keyword));
     };
 
@@ -246,7 +273,9 @@ export function PageSettingsModal({
                                     type="text"
                                     value={settings.title}
                                     onChange={(e) => setSettings({ ...settings, title: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder="e.g. valid-title"
                                     data-testid="page-settings-title"
                                 />
@@ -262,7 +291,9 @@ export function PageSettingsModal({
                                         type="text"
                                         value={settings.slug}
                                         onChange={(e) => setSettings({ ...settings, slug: e.target.value })}
-                                        className="flex-1 px-3 py-2 border rounded-r-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                        disabled={!canEdit}
+                                        title={canEdit ? undefined : editDisabledReason}
+                                        className="flex-1 px-3 py-2 border rounded-r-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="about-us"
                                         data-testid="page-settings-slug"
                                     />
@@ -287,12 +318,14 @@ export function PageSettingsModal({
                                             scheduledAt: status === 'scheduled' ? settings.scheduledAt || null : null,
                                         });
                                     }}
-                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     data-testid="page-settings-status"
                                 >
                                     <option value="draft">Draft</option>
-                                    <option value="published">Published</option>
-                                    <option value="scheduled">Scheduled</option>
+                                    <option value="published" disabled={!canPublish}>Published</option>
+                                    <option value="scheduled" disabled={!canPublish}>Scheduled</option>
                                     <option value="archived">Archived</option>
                                 </select>
                             </div>
@@ -308,7 +341,9 @@ export function PageSettingsModal({
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
                                         onFocus={() => setValidationError(null)}
-                                        className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                        disabled={!canEdit || !canPublish}
+                                        title={!canEdit ? editDisabledReason : !canPublish ? publishDisabledReason : undefined}
+                                        className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                         data-testid="page-settings-scheduled-at"
                                     />
                                     <p className="mt-1 text-xs text-muted-foreground">
@@ -355,7 +390,9 @@ export function PageSettingsModal({
                                             meta: { ...settings.meta, title: e.target.value },
                                         })
                                     }
-                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder="Title shown in search results"
                                     data-testid="page-settings-meta-title"
                                 />
@@ -372,7 +409,9 @@ export function PageSettingsModal({
                                         })
                                     }
                                     rows={3}
-                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder="Description shown in search results"
                                     data-testid="page-settings-meta-description"
                                 />
@@ -394,6 +433,7 @@ export function PageSettingsModal({
                                                 <button
                                                     type="button"
                                                     onClick={() => removeKeyword(keyword)}
+                                                    disabled={!canEdit}
                                                     className="rounded text-muted-foreground transition hover:text-foreground"
                                                     aria-label={`Remove ${keyword} keyword`}
                                                 >
@@ -412,7 +452,9 @@ export function PageSettingsModal({
                                                 }
                                             }}
                                             onBlur={addKeywordDraft}
-                                            className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-sm outline-none"
+                                            disabled={!canEdit}
+                                            title={canEdit ? undefined : editDisabledReason}
+                                            className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                             placeholder={keywords.length ? 'Add keyword...' : 'cms, website builder, portfolio'}
                                             data-testid="page-settings-keywords"
                                         />
@@ -432,7 +474,9 @@ export function PageSettingsModal({
                                         setJsonLdText(e.target.value);
                                     }}
                                     rows={6}
-                                    className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs leading-5 focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs leading-5 focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder='[{"@context":"https://schema.org","@type":"WebPage"}]'
                                     data-testid="page-settings-json-ld"
                                 />
@@ -472,7 +516,9 @@ export function PageSettingsModal({
                                                     ...settings,
                                                     meta: { ...settings.meta, ogImage: '' },
                                                 })}
-                                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                                                disabled={!canEdit}
+                                                title={canEdit ? undefined : editDisabledReason}
+                                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
                                                 Remove
@@ -481,7 +527,9 @@ export function PageSettingsModal({
                                         <button
                                             type="button"
                                             onClick={() => setIsSocialImagePickerOpen(true)}
-                                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent"
+                                            disabled={!canEdit || !canViewMedia}
+                                            title={!canEdit ? editDisabledReason : !canViewMedia ? mediaViewDisabledReason : undefined}
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             <Upload className="h-3.5 w-3.5" />
                                             Select image
@@ -501,7 +549,9 @@ export function PageSettingsModal({
                                             meta: { ...settings.meta, ogImage: e.target.value },
                                         })
                                     }
-                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    disabled={!canEdit}
+                                    title={canEdit ? undefined : editDisabledReason}
+                                    className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder="https://..."
                                     data-testid="page-settings-og-image"
                                 />
@@ -521,8 +571,9 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={Boolean(settingsValidation) || isSavingSettings}
-                        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:opacity-50"
+                        disabled={Boolean(settingsValidation) || isSavingSettings || !canEdit}
+                        title={canEdit ? undefined : editDisabledReason}
+                        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                         data-testid="page-settings-save"
                     >
                         {isSavingSettings ? 'Saving...' : 'Save Changes'}
@@ -542,6 +593,10 @@ export function PageSettingsModal({
                 initialUploadFilter="image"
                 mediaContext={mediaContext}
                 allowScopeSwitcher={Boolean(mediaContext?.scope)}
+                canView={canViewMedia}
+                canCreate={canCreateMedia}
+                viewDisabledReason={mediaViewDisabledReason}
+                createDisabledReason={mediaCreateDisabledReason}
             />
         </div>
     );

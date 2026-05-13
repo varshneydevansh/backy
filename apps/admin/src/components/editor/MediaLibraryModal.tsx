@@ -41,6 +41,10 @@ interface MediaLibraryModalProps {
   allowStatusLabels?: boolean;
   initialTab?: MediaLibraryTab;
   initialUploadFilter?: UploadFilter;
+  canView?: boolean;
+  canCreate?: boolean;
+  viewDisabledReason?: string;
+  createDisabledReason?: string;
 }
 
 export function MediaLibraryModal({
@@ -53,6 +57,10 @@ export function MediaLibraryModal({
   allowStatusLabels = true,
   initialTab = 'library',
   initialUploadFilter = 'all',
+  canView = true,
+  canCreate = true,
+  viewDisabledReason = 'You do not have permission to view media.',
+  createDisabledReason = 'You do not have permission to upload media.',
 }: MediaLibraryModalProps) {
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
@@ -79,7 +87,7 @@ export function MediaLibraryModal({
       return;
     }
 
-    setActiveTab(initialTab || 'library');
+    setActiveTab(canView ? (canCreate ? initialTab || 'library' : 'library') : 'library');
     setUploadFilter(
       initialUploadFilter && ['all', 'image', 'video', 'audio', 'file', 'font', 'other'].includes(initialUploadFilter)
         ? initialUploadFilter
@@ -90,7 +98,7 @@ export function MediaLibraryModal({
     setIncludeNestedFolders(true);
     setNewFolderName('');
     setSearchQuery('');
-  }, [initialTab, initialUploadFilter, isOpen]);
+  }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
     if (allowedTypes === 'any') return new Set(['image', 'video', 'audio', 'file', 'font', 'other']);
@@ -224,6 +232,12 @@ export function MediaLibraryModal({
   }, [folders, includeNestedFolders, libraryFolderFilter]);
 
   const loadMedia = useCallback(async () => {
+    if (!canView) {
+      setFolders([]);
+      setError(viewDisabledReason);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -244,7 +258,7 @@ export function MediaLibraryModal({
     } finally {
       setIsLoading(false);
     }
-  }, [setMedia, siteId, targetId, targetScope]);
+  }, [canView, setMedia, siteId, targetId, targetScope, viewDisabledReason]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -255,7 +269,9 @@ export function MediaLibraryModal({
   }, [isOpen, loadMedia]);
 
   const filteredMedia = useMemo(
-    () =>
+    () => !canView
+      ? []
+      :
       normalized.filter((item) => {
         if (!allowedTypesSet.has(item.type)) return false;
         if (libraryTypeFilter !== 'all' && item.type !== libraryTypeFilter) return false;
@@ -277,7 +293,7 @@ export function MediaLibraryModal({
         }
         return mediaContextFilter(item as MediaAsset & { scope: 'global' | 'page' | 'post'; scopeTargetId: string | null });
       }),
-    [allowedTypesSet, libraryFolderFilter, libraryFolderIds, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
+    [allowedTypesSet, canView, libraryFolderFilter, libraryFolderIds, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
   );
 
   const libraryStats = useMemo(() => ({
@@ -376,6 +392,10 @@ export function MediaLibraryModal({
 
   const handleCreateFolder = async () => {
     if (isCreatingFolder || isUploading) return;
+    if (!canCreate) {
+      setError(createDisabledReason);
+      return;
+    }
 
     const name = newFolderName.trim();
     if (!name) {
@@ -422,7 +442,8 @@ export function MediaLibraryModal({
               void handleCreateFolder();
             }
           }}
-          disabled={isUploading || isCreatingFolder}
+          disabled={isUploading || isCreatingFolder || !canCreate}
+          title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder-name"
           className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Campaign assets"
@@ -430,7 +451,8 @@ export function MediaLibraryModal({
         <button
           type="button"
           onClick={() => void handleCreateFolder()}
-          disabled={isUploading || isCreatingFolder || !newFolderName.trim()}
+          disabled={isUploading || isCreatingFolder || !newFolderName.trim() || !canCreate}
+          title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder"
           className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -442,6 +464,10 @@ export function MediaLibraryModal({
 
   const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
     if (isUploading) return;
+    if (!canCreate) {
+      setError(createDisabledReason);
+      return;
+    }
     if (!files || files.length === 0) return;
 
     const shouldKeepFile = (file: File) => {
@@ -567,10 +593,16 @@ export function MediaLibraryModal({
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => {
+                    if (tab === 'library' && !canView) return;
+                    if (tab === 'upload' && !canCreate) return;
+                    setActiveTab(tab);
+                  }}
+                  disabled={(tab === 'library' && !canView) || (tab === 'upload' && !canCreate)}
+                  title={tab === 'library' && !canView ? viewDisabledReason : tab === 'upload' && !canCreate ? createDisabledReason : undefined}
                   data-testid={`media-library-tab-${tab}`}
                   className={cn(
-                    'min-h-9 rounded-md px-4 text-sm font-medium capitalize transition-colors',
+                    'min-h-9 rounded-md px-4 text-sm font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                     activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
@@ -704,8 +736,10 @@ export function MediaLibraryModal({
                     </p>
                     <button
                       type="button"
-                      onClick={() => setActiveTab('upload')}
-                      className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+                      onClick={() => canCreate && setActiveTab('upload')}
+                      disabled={!canCreate}
+                      title={canCreate ? undefined : createDisabledReason}
+                      className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Upload assets
                     </button>
@@ -792,10 +826,11 @@ export function MediaLibraryModal({
                       type="button"
                       key={filter}
                       onClick={() => {
-                        if (isUploading) return;
+                        if (isUploading || !canCreate) return;
                         setUploadFilter(filter);
                       }}
-                      disabled={isUploading}
+                      disabled={isUploading || !canCreate}
+                      title={canCreate ? undefined : createDisabledReason}
                       data-testid={`media-upload-filter-${filter}`}
                       className={cn(
                         'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
@@ -812,23 +847,23 @@ export function MediaLibraryModal({
                   className={cn(
                     'relative flex min-h-[420px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-8 text-center transition-colors',
                     dragActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/20 hover:border-primary/50',
-                    isUploading && 'cursor-not-allowed opacity-75 hover:border-border'
+                    (isUploading || !canCreate) && 'cursor-not-allowed opacity-75 hover:border-border'
                   )}
                   onDragEnter={() => {
-                    if (!isUploading) {
+                    if (!isUploading && canCreate) {
                       setDragActive(true);
                     }
                   }}
                   onDragLeave={() => setDragActive(false)}
                   onDragOver={(e) => {
-                    if (!isUploading) {
+                    if (!isUploading && canCreate) {
                       e.preventDefault();
                     }
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragActive(false);
-                    if (isUploading) return;
+                    if (isUploading || !canCreate) return;
                     void handleFileUpload(e.dataTransfer.files, uploadFilter);
                   }}
                   data-testid="media-upload-dropzone"
@@ -838,7 +873,8 @@ export function MediaLibraryModal({
                     type="file"
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     multiple
-                    disabled={isUploading}
+                    disabled={isUploading || !canCreate}
+                    title={canCreate ? undefined : createDisabledReason}
                     accept={getAcceptValue(uploadFilter)}
                     data-testid="media-upload-input"
                     onChange={(e) => {
@@ -882,7 +918,8 @@ export function MediaLibraryModal({
                     <select
                       value={uploadVisibility}
                       onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
-                      disabled={isUploading}
+                      disabled={isUploading || !canCreate}
+                      title={canCreate ? undefined : createDisabledReason}
                       data-testid="media-upload-visibility"
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -896,7 +933,8 @@ export function MediaLibraryModal({
                     <select
                       value={uploadFolderId}
                       onChange={(event) => setUploadFolderId(event.target.value)}
-                      disabled={isUploading}
+                      disabled={isUploading || !canCreate}
+                      title={canCreate ? undefined : createDisabledReason}
                       data-testid="media-upload-folder"
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -920,7 +958,7 @@ export function MediaLibraryModal({
                       placeholder="Add hero, product, brand..."
                       ariaLabel="Media upload tags"
                       maxTags={10}
-                      disabled={isUploading}
+                      disabled={isUploading || !canCreate}
                     />
                   </div>
 

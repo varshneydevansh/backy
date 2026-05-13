@@ -744,8 +744,20 @@ export interface CanvasEditorProps {
     size?: CanvasSize
   ) => void;
   validateSettings?: (settings: PageSettings) => string | null;
+  canView?: boolean;
+  canEdit?: boolean;
+  canPublish?: boolean;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  canViewCollections?: boolean;
+  canDeleteReusableSections?: boolean;
+  editDisabledReason?: string;
   publishDisabled?: boolean;
   publishDisabledReason?: string;
+  mediaViewDisabledReason?: string;
+  mediaCreateDisabledReason?: string;
+  collectionsViewDisabledReason?: string;
+  reusableDeleteDisabledReason?: string;
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
 }
 
@@ -856,8 +868,20 @@ export function CanvasEditor({
   mediaContext,
   onChange,
   validateSettings,
+  canView = true,
+  canEdit = true,
+  canPublish = true,
+  canViewMedia = true,
+  canCreateMedia = true,
+  canViewCollections = true,
+  canDeleteReusableSections = true,
+  editDisabledReason = 'You do not have permission to edit this page.',
   publishDisabled = false,
   publishDisabledReason,
+  mediaViewDisabledReason,
+  mediaCreateDisabledReason,
+  collectionsViewDisabledReason,
+  reusableDeleteDisabledReason,
   onUnsavedChangesChange,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
@@ -879,7 +903,7 @@ export function CanvasEditor({
 
   useEffect(() => {
     const siteId = activeSiteId;
-    if (!siteId) {
+    if (!siteId || !canViewMedia) {
       return;
     }
 
@@ -901,7 +925,7 @@ export function CanvasEditor({
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, setMedia]);
+  }, [activeSiteId, canViewMedia, setMedia]);
 
   // Load fonts
   useEffect(() => {
@@ -954,7 +978,7 @@ export function CanvasEditor({
   const [lastSaveError, setLastSaveError] = useState<string | null>(null);
   const [pendingChangeCount, setPendingChangeCount] = useState(0);
   const [autosaveDueAt, setAutosaveDueAt] = useState<Date | null>(null);
-  const isCanvasMutationDisabled = isSaving || isPreview;
+  const isCanvasMutationDisabled = isSaving || isPreview || !canEdit;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const changeSequenceRef = useRef(0);
@@ -1192,6 +1216,10 @@ export function CanvasEditor({
   }, [handleFitCanvas]);
 
   const applyCanvasSize = useCallback((nextSize: CanvasSize, nextBreakpoint = breakpoint) => {
+    if (isCanvasMutationDisabled) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
     const normalizedSize = {
       ...nextSize,
       width: clampCanvasDimension(nextSize.width),
@@ -1203,7 +1231,7 @@ export function CanvasEditor({
     if (onChange) {
       onChange(elements, pageSettings, normalizedSize);
     }
-  }, [breakpoint, elements, markChanges, onChange, pageSettings]);
+  }, [breakpoint, editDisabledReason, elements, isCanvasMutationDisabled, markChanges, onChange, pageSettings]);
 
   const activeCanvasPresetId = useMemo(() => (
     CANVAS_SIZE_PRESETS.find((preset) => preset.width === size.width && preset.height === size.height)?.id || 'custom'
@@ -1425,7 +1453,7 @@ export function CanvasEditor({
   }, []);
 
   const loadReusableSections = useCallback(async () => {
-    if (!activeSiteId) {
+    if (!activeSiteId || !canView) {
       setReusableSections([]);
       setReusableSectionsError(null);
       return;
@@ -1441,7 +1469,7 @@ export function CanvasEditor({
     } finally {
       setReusableSectionsLoading(false);
     }
-  }, [activeSiteId]);
+  }, [activeSiteId, canView]);
 
   useEffect(() => {
     void loadReusableSections();
@@ -3308,6 +3336,10 @@ export function CanvasEditor({
   }, [addLibraryItemToCanvas, getViewportInsertionPoint, isCanvasMutationDisabled]);
 
   const handleSaveSelectionAsReusableSection = useCallback(() => {
+    if (!canEdit) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
     if (!activeSiteId || !selectedId || isSavingReusableSection) {
       return;
     }
@@ -3325,6 +3357,8 @@ export function CanvasEditor({
     });
   }, [
     activeSiteId,
+    canEdit,
+    editDisabledReason,
     elements,
     findElementById,
     isSavingReusableSection,
@@ -3332,6 +3366,10 @@ export function CanvasEditor({
   ]);
 
   const confirmReusableSectionDraft = useCallback(async () => {
+    if (!canEdit) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
     if (!activeSiteId || !reusableSectionDraft || isSavingReusableSection) {
       return;
     }
@@ -3394,6 +3432,8 @@ export function CanvasEditor({
     }
   }, [
     activeSiteId,
+    canEdit,
+    editDisabledReason,
     elements,
     findElementById,
     isSavingReusableSection,
@@ -3404,6 +3444,10 @@ export function CanvasEditor({
   ]);
 
   const handleRenameReusableSection = useCallback((sectionId: string) => {
+    if (!canEdit) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
     if (!activeSiteId) {
       return;
     }
@@ -3418,9 +3462,13 @@ export function CanvasEditor({
       name: section.name,
       sectionId,
     });
-  }, [activeSiteId, reusableSections]);
+  }, [activeSiteId, canEdit, editDisabledReason, reusableSections]);
 
   const confirmDeleteReusableSection = useCallback(async (sectionId: string) => {
+    if (!canDeleteReusableSections) {
+      setEditorNotice(reusableDeleteDisabledReason || 'You do not have permission to delete reusable sections.');
+      return;
+    }
     if (!activeSiteId) {
       return;
     }
@@ -3437,14 +3485,18 @@ export function CanvasEditor({
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : 'Unable to delete reusable section');
     }
-  }, [activeSiteId, reusableSections]);
+  }, [activeSiteId, canDeleteReusableSections, reusableDeleteDisabledReason, reusableSections]);
 
   const handleDeleteReusableSection = useCallback((sectionId: string) => {
+    if (!canDeleteReusableSections) {
+      setEditorNotice(reusableDeleteDisabledReason || 'You do not have permission to delete reusable sections.');
+      return;
+    }
     const section = reusableSections.find((item) => item.id === sectionId);
     if (section) {
       setPendingDeleteReusableSection(section);
     }
-  }, [reusableSections]);
+  }, [canDeleteReusableSections, reusableDeleteDisabledReason, reusableSections]);
 
   /**
    * Handle canvas drop
@@ -3552,6 +3604,16 @@ export function CanvasEditor({
     if (isSaving) {
       return false;
     }
+    if (!canEdit) {
+      setHasUnsavedChanges(true);
+      setSaveStatus('error');
+      setLastSaveError(editDisabledReason);
+      setAutosaveDueAt(null);
+      if (!silent) {
+        setEditorNotice(editDisabledReason);
+      }
+      return false;
+    }
 
     const saveSequence = changeSequenceRef.current;
     const nextSettings = settingsOverride ?? pageSettings;
@@ -3607,9 +3669,18 @@ export function CanvasEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, onSave, pageSettings, size, validateSettings]);
+  }, [canEdit, editDisabledReason, isSaving, onSave, pageSettings, size, validateSettings]);
 
   const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
+    if (!canEdit) {
+      setEditorNotice(editDisabledReason);
+      throw new Error(editDisabledReason);
+    }
+    if ((newSettings.status === 'published' || newSettings.status === 'scheduled') && pageSettings.status !== newSettings.status && !canPublish) {
+      const message = publishDisabledReason || 'You do not have permission to publish this page.';
+      setEditorNotice(message);
+      throw new Error(message);
+    }
     setPageSettings(newSettings);
     markChanges();
 
@@ -3617,12 +3688,20 @@ export function CanvasEditor({
     if (!saved) {
       throw new Error('Unable to save page settings. Changes were not persisted.');
     }
-  }, [handleSaveWrapper, markChanges]);
+  }, [canEdit, canPublish, editDisabledReason, handleSaveWrapper, markChanges, pageSettings.status, publishDisabledReason]);
 
   const handleTogglePublish = useCallback(async () => {
+    if (!canEdit) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
     const previousSettings = pageSettings;
     const wasDirty = hasUnsavedChanges;
     const nextStatus = pageSettings.status === 'published' ? 'draft' : 'published';
+    if (nextStatus === 'published' && !canPublish) {
+      setEditorNotice(publishDisabledReason || 'You do not have permission to publish this page.');
+      return;
+    }
     if (nextStatus === 'published' && publishDisabled) {
       setEditorNotice(publishDisabledReason || 'Resolve page readiness issues before publishing.');
       return;
@@ -3639,7 +3718,7 @@ export function CanvasEditor({
       setPageSettings(previousSettings);
       setHasUnsavedChanges(wasDirty);
     }
-  }, [handleSaveWrapper, hasUnsavedChanges, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
+  }, [canEdit, canPublish, editDisabledReason, handleSaveWrapper, hasUnsavedChanges, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
 
   const performReload = useCallback(() => {
     const nextElements = getInitialElements();
@@ -4100,14 +4179,14 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('desktop')}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
                 className={cn(
                   'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'desktop'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title="Desktop"
+                title={canEdit ? 'Desktop' : editDisabledReason}
                 aria-label="Desktop canvas"
               >
                 <Monitor className="w-4 h-4" />
@@ -4115,14 +4194,14 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('tablet')}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
                 className={cn(
                   'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'tablet'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title="Tablet"
+                title={canEdit ? 'Tablet' : editDisabledReason}
                 aria-label="Tablet canvas"
               >
                 <Tablet className="w-4 h-4" />
@@ -4130,14 +4209,14 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('mobile')}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
                 className={cn(
                   'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'mobile'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title="Mobile"
+                title={canEdit ? 'Mobile' : editDisabledReason}
                 aria-label="Mobile canvas"
               >
                 <Smartphone className="w-4 h-4" />
@@ -4147,7 +4226,8 @@ export function CanvasEditor({
               <select
                 value={activeCanvasPresetId}
                 onChange={(event) => handleCanvasPresetChange(event.target.value)}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
+                title={canEdit ? undefined : editDisabledReason}
                 className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas size preset"
               >
@@ -4165,7 +4245,8 @@ export function CanvasEditor({
                 step={10}
                 value={size.width}
                 onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
+                title={canEdit ? undefined : editDisabledReason}
                 className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas width"
               />
@@ -4177,7 +4258,8 @@ export function CanvasEditor({
                 step={10}
                 value={size.height}
                 onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
-                disabled={isSaving}
+                disabled={isCanvasMutationDisabled}
+                title={canEdit ? undefined : editDisabledReason}
                 className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas height"
               />
@@ -4557,19 +4639,23 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={handleTogglePublish}
-                    disabled={isSaving || (pageSettings.status !== 'published' && publishDisabled)}
+                    disabled={isSaving || !canEdit || (pageSettings.status === 'published' ? false : (!canPublish || publishDisabled))}
                     className={cn(
                       'px-2 py-1.5 rounded-md text-sm font-medium',
                       pageSettings.status === 'published'
                         ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                         : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
-                      isSaving || (pageSettings.status !== 'published' && publishDisabled)
+                      isSaving || !canEdit || (pageSettings.status === 'published' ? false : (!canPublish || publishDisabled))
                         ? 'opacity-70 cursor-not-allowed'
                         : '',
                     )}
                     title={
-                      pageSettings.status === 'published'
+                      !canEdit
+                        ? editDisabledReason
+                        : pageSettings.status === 'published'
                         ? 'Set page back to draft'
+                        : !canPublish
+                          ? publishDisabledReason || 'You do not have permission to publish this page'
                         : publishDisabled
                           ? publishDisabledReason || 'Resolve page readiness issues before publishing'
                           : 'Publish page'
@@ -4577,7 +4663,7 @@ export function CanvasEditor({
                     aria-label={
                       pageSettings.status === 'published'
                         ? 'Unpublish page'
-                        : publishDisabled
+                        : !canPublish || publishDisabled
                           ? publishDisabledReason || 'Publish disabled'
                           : 'Publish page'
                     }
@@ -4589,9 +4675,9 @@ export function CanvasEditor({
                 <button
                   type="button"
                   onClick={() => void handleSaveWrapper()}
-                  disabled={isSaving}
+                  disabled={isSaving || !canEdit}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
-                  title="Save Page (Ctrl+S)"
+                  title={canEdit ? 'Save Page (Ctrl+S)' : editDisabledReason}
                   aria-label="Save page"
                   data-testid="editor-save-page"
                 >
@@ -4615,8 +4701,11 @@ export function CanvasEditor({
               reusableSectionsLoading={reusableSectionsLoading}
               reusableSectionsError={reusableSectionsError}
               canSaveSelection={Boolean(activeSiteId && selectedId)}
+              canDeleteReusableSections={canDeleteReusableSections}
               isSavingReusableSection={isSavingReusableSection}
-              disabled={isSaving}
+              disabled={isCanvasMutationDisabled}
+              disabledReason={editDisabledReason}
+              deleteDisabledReason={reusableDeleteDisabledReason}
               onRefreshReusableSections={loadReusableSections}
               onSaveSelectionAsReusableSection={handleSaveSelectionAsReusableSection}
               onRenameReusableSection={handleRenameReusableSection}
@@ -5183,6 +5272,12 @@ export function CanvasEditor({
                     onDelete={deleteElement}
                     mediaContext={mediaContext}
                     disabled={isCanvasMutationDisabled}
+                    canViewMedia={canViewMedia}
+                    canCreateMedia={canCreateMedia}
+                    canViewCollections={canViewCollections}
+                    mediaViewDisabledReason={mediaViewDisabledReason}
+                    mediaCreateDisabledReason={mediaCreateDisabledReason}
+                    collectionsViewDisabledReason={collectionsViewDisabledReason}
                     embedded
                     hideHeader
                   />
@@ -5357,6 +5452,14 @@ export function CanvasEditor({
           validateSettings={validateSettings}
           mediaContext={mediaContext}
           onSave={handleSettingsSave}
+          canEdit={canEdit}
+          canPublish={canPublish}
+          canViewMedia={canViewMedia}
+          canCreateMedia={canCreateMedia}
+          editDisabledReason={editDisabledReason}
+          publishDisabledReason={publishDisabledReason}
+          mediaViewDisabledReason={mediaViewDisabledReason}
+          mediaCreateDisabledReason={mediaCreateDisabledReason}
         />
       </div>
     </ActiveEditorProvider>

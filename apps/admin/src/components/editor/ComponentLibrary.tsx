@@ -68,8 +68,11 @@ interface ComponentLibraryProps {
   reusableSectionsLoading?: boolean;
   reusableSectionsError?: string | null;
   canSaveSelection?: boolean;
+  canDeleteReusableSections?: boolean;
   isSavingReusableSection?: boolean;
   disabled?: boolean;
+  disabledReason?: string;
+  deleteDisabledReason?: string;
   onAddItem?: (item: ComponentLibraryItem) => void;
   onRefreshReusableSections?: () => void;
   onSaveSelectionAsReusableSection?: () => void;
@@ -89,8 +92,11 @@ export function ComponentLibrary({
   reusableSectionsLoading = false,
   reusableSectionsError = null,
   canSaveSelection = false,
+  canDeleteReusableSections = true,
   isSavingReusableSection = false,
   disabled = false,
+  disabledReason,
+  deleteDisabledReason,
   onAddItem,
   onRefreshReusableSections,
   onSaveSelectionAsReusableSection,
@@ -302,7 +308,7 @@ export function ComponentLibrary({
                 ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             )}
-            title={canSaveSelection ? 'Save the selected element as a reusable section' : 'Select an element to save it as a reusable section'}
+            title={disabled ? disabledReason : canSaveSelection ? 'Save the selected element as a reusable section' : 'Select an element to save it as a reusable section'}
           >
             <BookmarkPlus className="h-3.5 w-3.5" />
             <span className="truncate">{isSavingReusableSection ? 'Saving...' : 'Save selection'}</span>
@@ -337,6 +343,9 @@ export function ComponentLibrary({
                     key={item.id ?? item.type}
                     item={item}
                     disabled={disabled}
+                    disabledReason={disabledReason}
+                    canDeleteReusableSections={canDeleteReusableSections}
+                    deleteDisabledReason={deleteDisabledReason}
                     isFavorite={favoriteKeySet.has(getLibraryItemKey(item))}
                     onDragStart={() => onDragStart?.(item)}
                     onAddItem={() => onAddItem?.(item)}
@@ -598,6 +607,9 @@ function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
 interface LibraryItemProps {
   item: ComponentLibraryItem;
   disabled?: boolean;
+  disabledReason?: string;
+  canDeleteReusableSections?: boolean;
+  deleteDisabledReason?: string;
   isFavorite?: boolean;
   onDragStart: () => void;
   onAddItem?: () => void;
@@ -610,6 +622,9 @@ interface LibraryItemProps {
 function LibraryItem({
   item,
   disabled = false,
+  disabledReason,
+  canDeleteReusableSections = true,
+  deleteDisabledReason,
   isFavorite = false,
   onDragStart,
   onAddItem,
@@ -667,6 +682,7 @@ function LibraryItem({
 
   const Icon = getIcon();
   const reusableSectionId = item.reusableContent?.sectionId;
+  const isReusableDeleteDisabled = disabled || !canDeleteReusableSections;
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     if (disabled) {
@@ -753,7 +769,7 @@ function LibraryItem({
         }}
         disabled={disabled}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-        title={`Add ${item.name} to canvas`}
+        title={disabled ? disabledReason : `Add ${item.name} to canvas`}
         aria-label={`Add ${item.name} to canvas`}
         data-component-add={item.id ?? item.type}
       >
@@ -772,7 +788,7 @@ function LibraryItem({
             }}
             disabled={disabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-            title="Rename saved section"
+            title={disabled ? disabledReason : 'Rename saved section'}
             aria-label={`Rename ${item.name}`}
             data-reusable-section-rename={reusableSectionId}
           >
@@ -784,12 +800,12 @@ function LibraryItem({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (disabled) return;
+              if (isReusableDeleteDisabled) return;
               onDeleteReusableSection?.(reusableSectionId);
             }}
-            disabled={disabled}
+            disabled={isReusableDeleteDisabled}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-            title="Delete saved section"
+            title={isReusableDeleteDisabled ? (deleteDisabledReason || disabledReason) : 'Delete saved section'}
             aria-label={`Delete ${item.name}`}
             data-reusable-section-delete={reusableSectionId}
           >
