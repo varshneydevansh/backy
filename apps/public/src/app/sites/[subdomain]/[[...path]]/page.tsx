@@ -24,7 +24,12 @@ import {
 } from '@/lib/backyStore';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
-import { buildCollectionItemContent, buildCollectionListContent, resolveElementDataBindings } from '@/lib/renderPayload';
+import {
+    buildCollectionItemContent,
+    buildCollectionListContent,
+    buildCollectionTemplateContent,
+    resolveElementDataBindings,
+} from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
@@ -200,6 +205,7 @@ function repositorySiteToStoreSite(site: Site): StoreSite {
         status: site.isPublished ? 'published' : 'draft',
         isPublished: site.isPublished,
         theme: repositoryTheme(site) as StoreSite['theme'],
+        settings: site.settings as StoreSite['settings'],
     };
 }
 
@@ -257,6 +263,7 @@ const repositoryCollectionToStoreCollection = (collection: BackyCollection): Sto
     },
     createdAt: collection.createdAt,
     updatedAt: collection.updatedAt,
+    metadata: collection.metadata,
 });
 
 const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreCollectionRecord => ({
@@ -556,8 +563,10 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
             const storeSite = repositorySiteToStoreSite(site);
             const dynamicContent = dynamicRoute.type === 'list'
-                ? buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records) as unknown as PageContent
-                : buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record) as unknown as PageContent;
+                ? (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'list')
+                    || buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records)) as unknown as PageContent
+                : (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'item', dynamicRoute.record)
+                    || buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record)) as unknown as PageContent;
 
             return (
                 <>
@@ -625,8 +634,10 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const dynamicContent = dynamicRoute.type === 'list'
-        ? buildCollectionListContent(site, dynamicRoute.collection, dynamicRoute.records) as unknown as PageContent
-        : buildCollectionItemContent(site, dynamicRoute.collection, dynamicRoute.record) as unknown as PageContent;
+        ? (buildCollectionTemplateContent(site, dynamicRoute.collection, 'list')
+            || buildCollectionListContent(site, dynamicRoute.collection, dynamicRoute.records)) as unknown as PageContent
+        : (buildCollectionTemplateContent(site, dynamicRoute.collection, 'item', dynamicRoute.record)
+            || buildCollectionItemContent(site, dynamicRoute.collection, dynamicRoute.record)) as unknown as PageContent;
 
     return (
         <>

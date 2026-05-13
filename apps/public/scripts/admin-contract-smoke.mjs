@@ -482,6 +482,100 @@ try {
                         { role: 'page.title', binding: 'page.title', fields: ['title'] },
                       ],
                     },
+                    {
+                      id: 'imported-external-collection-template',
+                      type: 'collection',
+                      name: 'Imported External Collection',
+                      routePattern: '/directory/:recordSlug',
+                      canvasSize: { width: 1200, height: 820 },
+                      content: {
+                        name: 'Imported directory schema',
+                        slug: 'imported-directory',
+                        listRoutePattern: '/directory',
+                        routePattern: '/directory/:recordSlug',
+                        fields: [
+                          { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
+                          { key: 'summary', label: 'Summary', type: 'richText' },
+                          { key: 'rank', label: 'Rank', type: 'number' },
+                          { key: 'category', label: 'Category', type: 'select', options: ['Featured', 'Standard'] },
+                          { key: 'labels', label: 'Labels', type: 'tags', options: ['Launch', 'Evergreen', 'Internal'] },
+                        ],
+                        listTemplate: {
+                          canvasSize: { width: 1200, height: 820 },
+                          elements: [
+                            {
+                              id: 'imported-collection-list-root',
+                              type: 'section',
+                              x: 0,
+                              y: 0,
+                              width: 1200,
+                              height: 820,
+                              props: { backgroundColor: '#f0fdfa' },
+                              children: [
+                                {
+                                  id: 'imported-collection-list-title',
+                                  type: 'heading',
+                                  x: 80,
+                                  y: 84,
+                                  width: 720,
+                                  height: 80,
+                                  props: { content: 'Imported collection fallback', binding: 'collection.name' },
+                                },
+                                {
+                                  id: 'imported-collection-list-repeater',
+                                  type: 'repeater',
+                                  x: 80,
+                                  y: 204,
+                                  width: 980,
+                                  height: 360,
+                                  props: { binding: 'collections.importedDirectory.records', limit: 12 },
+                                  children: [],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                        itemTemplate: {
+                          canvasSize: { width: 1200, height: 760 },
+                          elements: [
+                            {
+                              id: 'imported-collection-item-root',
+                              type: 'section',
+                              x: 0,
+                              y: 0,
+                              width: 1200,
+                              height: 760,
+                              props: { backgroundColor: '#fff7ed' },
+                              children: [
+                                {
+                                  id: 'imported-collection-item-title',
+                                  type: 'heading',
+                                  x: 96,
+                                  y: 104,
+                                  width: 780,
+                                  height: 92,
+                                  props: { content: 'Imported item fallback', binding: 'record.title' },
+                                },
+                                {
+                                  id: 'imported-collection-item-summary',
+                                  type: 'text',
+                                  x: 96,
+                                  y: 232,
+                                  width: 680,
+                                  height: 120,
+                                  props: { content: 'Imported summary fallback', binding: 'record.summary' },
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                      bindingHints: [
+                        { role: 'collection.list', binding: 'collections.importedDirectory.records' },
+                        { role: 'collection.item.title', binding: 'record.title' },
+                        { role: 'collection.item.summary', binding: 'record.summary' },
+                      ],
+                    },
                   ],
                   editableMap: [
                     { elementId: 'imported-external-heading', role: 'heading', binding: 'page.title', fields: ['title'] },
@@ -494,14 +588,15 @@ try {
       });
       assert(importDesign.response.status === 200, `${importDesign.url} expected imported frontend contract`);
       assert(importDesign.json?.data?.frontendDesign?.source?.label === 'Imported external frontend', `${importDesign.url} missing imported source label`);
-      assert(importDesign.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'imported-external-page-template'), `${importDesign.url} missing imported template`);
+      assert(importDesign.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'imported-external-page-template'), `${importDesign.url} missing imported page template`);
+      assert(importDesign.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'imported-external-collection-template'), `${importDesign.url} missing imported collection template`);
 
       const importAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=site&entityId=${createdSiteId}&action=frontendDesign.import&requestId=${importDesign.json.requestId}`);
       assert(importAudit.response.status === 200, `${importAudit.url} expected imported frontend audit read`);
       assert(importAudit.json?.data?.logs?.some((entry) => (
         entry.action === 'frontendDesign.import' &&
         entry.metadata?.importSource === 'manifest.site.frontendDesign' &&
-        entry.metadata?.templateCount === 1
+        entry.metadata?.templateCount === 2
       )), `${importAudit.url} missing imported frontend audit log`);
 
       const importedTemplatePageSlug = `${pageSlug}-imported-template`;
@@ -2962,6 +3057,7 @@ try {
       body: JSON.stringify({
         name: 'Admin Contract Collection',
         slug: collectionSlug,
+        frontendDesignTemplateId: 'imported-external-collection-template',
         listRoutePattern: `/directory`,
         routePattern: `/directory/:recordSlug`,
         status: 'published',
@@ -4476,6 +4572,21 @@ try {
     assert(dynamicListRender.json?.data?.route?.type === 'dynamicList', `${dynamicListRender.url} expected dynamic list render route`);
     assert(dynamicListRender.json?.data?.content?.kind === 'dynamicList', `${dynamicListRender.url} expected dynamic list content`);
     assert(dynamicListRender.json?.data?.content?.id === createdCollectionId, `${dynamicListRender.url} returned wrong rendered collection`);
+    assert(dynamicListRender.json?.data?.frontendDesign?.content?.templateId === 'imported-external-collection-template', `${dynamicListRender.url} missing dynamic list frontend template provenance`);
+    assert(
+      dynamicListRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'imported-collection-list-root'
+        && element.children?.some((child) => child.id === 'imported-collection-list-title' && child.props?.content === 'Admin Contract Collection')
+      )),
+      `${dynamicListRender.url} did not render imported collection list template`,
+    );
+    assert(
+      dynamicListRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'imported-collection-list-root'
+        && element.children?.some((child) => child.id === 'imported-collection-list-repeater' && child.props?.collectionId === createdCollectionId)
+      )),
+      `${dynamicListRender.url} did not bind imported collection list repeater`,
+    );
     assert(
       dynamicListRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
         dataset.id === `dataset_${createdCollectionId}_list`
@@ -4505,6 +4616,18 @@ try {
     assert(dynamicRender.json?.data?.route?.type === 'dynamicItem', `${dynamicRender.url} expected dynamic item render route`);
     assert(dynamicRender.json?.data?.content?.kind === 'dynamicItem', `${dynamicRender.url} expected dynamic item content`);
     assert(dynamicRender.json?.data?.content?.id === createdCollectionRecordId, `${dynamicRender.url} returned wrong rendered collection record`);
+    assert(dynamicRender.json?.data?.frontendDesign?.content?.templateId === 'imported-external-collection-template', `${dynamicRender.url} missing dynamic item frontend template provenance`);
+    assert(
+      dynamicRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'imported-collection-item-root'
+        && element.children?.some((child) => child.id === 'imported-collection-item-title' && child.props?.content === 'Collection Record')
+      )),
+      `${dynamicRender.url} did not render imported collection item template`,
+    );
+    assert(
+      dynamicRender.json?.data?.editableMap?.[`collection.${createdCollectionId}.imported-collection-item-title.title`]?.recordId === createdCollectionRecordId,
+      `${dynamicRender.url} missing editable map for imported collection item title`,
+    );
     assert(
       dynamicRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
         dataset.collectionId === createdCollectionId

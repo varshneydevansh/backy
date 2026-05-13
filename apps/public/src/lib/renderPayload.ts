@@ -47,6 +47,8 @@ interface DatasetManifest extends JsonObject {
   pagination?: JsonObject;
 }
 
+type CollectionTemplateRenderKind = 'list' | 'item';
+
 interface CanonicalContentPayloadInput {
   id: string;
   kind: BackyContentKind;
@@ -118,6 +120,90 @@ const normalizeElement = (raw: unknown): RenderElement | null => {
     actions: Array.isArray(raw.actions) ? raw.actions.filter(isRecord) : [],
     dataBindings: Array.isArray(raw.dataBindings) ? raw.dataBindings.filter(isRecord) : [],
   };
+};
+
+const cloneJsonObject = (value: unknown): JsonObject | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as JsonObject;
+  } catch {
+    return { ...value };
+  }
+};
+
+const metadataTemplateId = (metadata: unknown): string => (
+  isRecord(metadata) && typeof metadata.frontendDesignTemplateId === 'string'
+    ? metadata.frontendDesignTemplateId
+    : ''
+);
+
+const collectionFrontendDesignTemplate = (site: StoreSite, collection: StoreCollection) => {
+  const templateId = metadataTemplateId(collection.metadata);
+  const templates = site.settings?.frontendDesign?.templates || [];
+
+  if (templateId) {
+    const exact = templates.find((template) => template.type === 'collection' && template.id === templateId);
+    if (exact) {
+      return exact;
+    }
+  }
+
+  return templates.find((template) => (
+    template.type === 'collection'
+    && typeof template.routePattern === 'string'
+    && template.routePattern === collection.routePattern
+  ));
+};
+
+const templateContentCanvas = (
+  value: unknown,
+): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+  const content = isRecord(value) ? value : null;
+  if (!content || !Array.isArray(content.elements)) {
+    return null;
+  }
+
+  const rawCanvasSize = isRecord(content.canvasSize) ? content.canvasSize : null;
+  const width = typeof rawCanvasSize?.width === 'number' ? rawCanvasSize.width : undefined;
+  const height = typeof rawCanvasSize?.height === 'number' ? rawCanvasSize.height : undefined;
+
+  return {
+    ...(width && height ? { canvasSize: { width, height } } : {}),
+    elements: content.elements,
+  };
+};
+
+const collectionTemplateCanvas = (
+  site: StoreSite,
+  collection: StoreCollection,
+  kind: CollectionTemplateRenderKind,
+): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+  const template = collectionFrontendDesignTemplate(site, collection);
+  const content = cloneJsonObject(template?.content);
+  if (!template || !content) {
+    return null;
+  }
+
+  const candidateKeys = kind === 'list'
+    ? ['listTemplate', 'collectionListTemplate', 'dynamicList', 'listContent', 'list']
+    : ['itemTemplate', 'recordTemplate', 'detailTemplate', 'dynamicItem', 'itemContent', 'item'];
+
+  for (const key of candidateKeys) {
+    const candidate = templateContentCanvas(content[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const rootCanvas = templateContentCanvas(content);
+  if (rootCanvas) {
+    return rootCanvas;
+  }
+
+  return null;
 };
 
 const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
@@ -280,7 +366,7 @@ const normalizeBindingQuery = (value: unknown): JsonObject | null => {
   }
 
   const query: JsonObject = {};
-  for (const key of ['recordId', 'slug', 'q', 'search', 'fieldKey', 'sortBy']) {
+  for (const key of ['recordId', 'slug', 'status', 'q', 'search', 'fieldKey', 'sortBy']) {
     if (typeof value[key] === 'string' && value[key].length > 0) {
       query[key] = value[key];
     }
@@ -300,6 +386,12 @@ const normalizeBindingQuery = (value: unknown): JsonObject | null => {
 
   return Object.keys(query).length > 0 ? query : null;
 };
+
+const normalizeCollectionRecordStatus = (value: unknown): StoreCollectionRecord['status'] | null => (
+  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+    ? value
+    : null
+);
 
 const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, index: number): JsonObject | null => {
   const source = normalizeBindingSource(binding.source);
@@ -420,6 +512,7 @@ const getBoundCollectionRecord = (
       : null;
   const fieldKey = typeof query.fieldKey === 'string' && query.fieldKey.length > 0 ? query.fieldKey : null;
   const fieldValue = query.fieldValue;
+  const status = normalizeCollectionRecordStatus(query.status);
   const sortBy = typeof query.sortBy === 'string' && query.sortBy.length > 0 ? query.sortBy : null;
   const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
 
@@ -429,6 +522,7 @@ const getBoundCollectionRecord = (
 
   return listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
+    status: status || undefined,
     search: search || undefined,
     fieldKey: fieldKey || undefined,
     fieldValue,
@@ -625,6 +719,7 @@ const collectionRecordsForQuery = (
       : null;
   const fieldKey = typeof query.fieldKey === 'string' && query.fieldKey.length > 0 ? query.fieldKey : null;
   const fieldValue = query.fieldValue;
+  const status = normalizeCollectionRecordStatus(query.status);
   const sortBy = typeof query.sortBy === 'string' && query.sortBy.length > 0 ? query.sortBy : null;
   const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
   const limit = isRecord(pagination) && typeof pagination.limit === 'number'
@@ -644,6 +739,7 @@ const collectionRecordsForQuery = (
 
   return listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
+    status: status || undefined,
     search: search || undefined,
     fieldKey: fieldKey || undefined,
     fieldValue,
@@ -1099,6 +1195,202 @@ const collectionBindingForField = (
   ];
 };
 
+const collectionFieldForKey = (collection: StoreCollection, fieldKey: string) => (
+  collection.fields.find((field) => field.key === fieldKey)
+);
+
+const targetPathForElementBinding = (
+  element: RenderElement,
+  collection: StoreCollection,
+  fieldKey: string,
+): string => {
+  if (typeof element.props.bindingTargetPath === 'string' && element.props.bindingTargetPath.length > 0) {
+    return element.props.bindingTargetPath;
+  }
+
+  const field = collectionFieldForKey(collection, fieldKey);
+  if (field?.type === 'image' || element.type === 'image') {
+    return 'props.assetId';
+  }
+  if (field?.type === 'richText' || element.type === 'html') {
+    return 'props.html';
+  }
+
+  return 'props.content';
+};
+
+const applyTemplateValue = (
+  siteId: string,
+  element: RenderElement,
+  targetPath: string,
+  value: unknown,
+): RenderElement => (
+  targetPath.startsWith('props.')
+    ? applyBindingValue(siteId, element, targetPath, value)
+    : element
+);
+
+const collectionTemplateSchemaValue = (
+  collection: StoreCollection,
+  binding: string,
+): unknown => {
+  const key = binding.replace(/^collection\./, '');
+  if (key === 'name' || key === 'title') return collection.name;
+  if (key === 'description') return collection.description || '';
+  if (key === 'slug') return collection.slug;
+  if (key === 'routePattern') return collection.routePattern || '';
+  if (key === 'listRoutePattern') return collection.listRoutePattern || '';
+  if (key === 'status') return collection.status;
+  return undefined;
+};
+
+const recordTemplateFieldKey = (binding: string): string => {
+  const normalized = binding.trim();
+  for (const prefix of ['record.', 'product.', 'item.']) {
+    if (normalized.startsWith(prefix)) {
+      return normalized.slice(prefix.length);
+    }
+  }
+  return '';
+};
+
+const applyCollectionTemplateContext = (
+  siteId: string,
+  element: RenderElement,
+  collection: StoreCollection,
+  kind: CollectionTemplateRenderKind,
+  record?: StoreCollectionRecord,
+): RenderElement => {
+  const children = element.children.map((child) => (
+    applyCollectionTemplateContext(siteId, child, collection, kind, record)
+  ));
+  let next: RenderElement = {
+    ...element,
+    children,
+    props: { ...element.props },
+    dataBindings: [...(element.dataBindings || [])],
+  };
+  const binding = typeof next.props.binding === 'string' ? next.props.binding.trim() : '';
+  const bindsCollectionRecords = /^collections\.[^.]+\.records$/.test(binding) || binding === 'collection.records';
+
+  if (next.type === 'repeater' || bindsCollectionRecords) {
+    const repeater = isRecord(next.props.repeater) ? { ...next.props.repeater } : {};
+    const titleField = collection.fields.find((field) => ['title', 'name', 'label'].includes(field.key)) || collection.fields[0];
+    const descriptionField = collection.fields.find((field) => ['summary', 'description', 'excerpt', 'body'].includes(field.key));
+    const imageField = collection.fields.find((field) => field.type === 'image' || /image|photo|avatar|thumbnail/i.test(field.key));
+    next.props = {
+      ...next.props,
+      repeater: {
+        ...repeater,
+        collectionId: collection.id,
+        datasetId: typeof repeater.datasetId === 'string' && repeater.datasetId.length > 0
+          ? repeater.datasetId
+          : `dataset_${collection.id}_list`,
+        query: isRecord(repeater.query) ? repeater.query : { status: 'published' },
+        pagination: isRecord(repeater.pagination) ? repeater.pagination : { limit: 24, offset: 0 },
+      },
+      collectionId: collection.id,
+      datasetId: typeof next.props.datasetId === 'string' && next.props.datasetId.length > 0
+        ? next.props.datasetId
+        : `dataset_${collection.id}_list`,
+      titleField: typeof next.props.titleField === 'string' ? next.props.titleField : titleField?.key || 'title',
+      descriptionField: typeof next.props.descriptionField === 'string' ? next.props.descriptionField : descriptionField?.key || 'summary',
+      imageField: typeof next.props.imageField === 'string' ? next.props.imageField : imageField?.key || 'image',
+    };
+  }
+
+  if (binding.startsWith('collection.')) {
+    const value = collectionTemplateSchemaValue(collection, binding);
+    if (value !== undefined) {
+      next = applyTemplateValue(siteId, next, targetPathForElementBinding(next, collection, ''), value);
+    }
+  }
+
+  if (kind === 'item' && record && binding) {
+    const fieldKey = recordTemplateFieldKey(binding);
+    if (fieldKey) {
+      const value = fieldKey === 'slug'
+        ? record.slug
+        : fieldKey === 'status'
+          ? record.status
+          : record.values[fieldKey];
+      const targetPath = targetPathForElementBinding(next, collection, fieldKey);
+      next = applyTemplateValue(siteId, next, targetPath, value);
+
+      if (fieldKey !== 'slug' && fieldKey !== 'status') {
+        next.dataBindings = [
+          ...(next.dataBindings || []),
+          ...collectionBindingForField(collection, record, fieldKey, targetPath),
+        ];
+      }
+    }
+  }
+
+  next.dataBindings = (next.dataBindings || []).map((dataBinding) => {
+    const source = isRecord(dataBinding.source) ? { ...dataBinding.source } : {};
+    const field = typeof source.field === 'string' && source.field.length > 0
+      ? source.field
+      : typeof dataBinding.field === 'string' && dataBinding.field.length > 0
+        ? dataBinding.field
+        : '';
+
+    if (!field && !source.collectionId && !dataBinding.collectionId) {
+      return dataBinding;
+    }
+
+    return {
+      ...dataBinding,
+      collectionId: collection.id,
+      source: {
+        ...source,
+        kind: 'collection',
+        collectionId: collection.id,
+        ...(field ? { field } : {}),
+        ...(kind === 'item' && record ? { recordId: record.id } : {}),
+      },
+      ...(kind === 'item' && record ? { query: { ...(isRecord(dataBinding.query) ? dataBinding.query : {}), recordId: record.id } } : {}),
+    };
+  });
+
+  return next;
+};
+
+export const buildCollectionTemplateContent = (
+  site: StoreSite,
+  collection: StoreCollection,
+  kind: CollectionTemplateRenderKind,
+  record?: StoreCollectionRecord,
+): { canvasSize: { width: number; height: number }; elements: RenderElement[] } | null => {
+  const canvas = collectionTemplateCanvas(site, collection, kind);
+  if (!canvas) {
+    return null;
+  }
+
+  const elements = resolveElementDataBindings(
+    site.id,
+    canvas.elements
+      .map(normalizeElement)
+      .filter((element): element is RenderElement => !!element)
+      .map((element) => applyCollectionTemplateContext(site.id, element, collection, kind, record)),
+  );
+
+  if (elements.length === 0) {
+    return null;
+  }
+
+  return {
+    canvasSize: {
+      width: canvas.canvasSize?.width || pageDefaultWidth,
+      height: canvas.canvasSize?.height || Math.max(720, ...elements.map((element) => {
+        const y = typeof element.y === 'number' ? element.y : 0;
+        const height = typeof element.height === 'number' ? element.height : 0;
+        return y + height + 96;
+      })),
+    },
+    elements,
+  };
+};
+
 const buildCollectionListDataset = (
   collection: StoreCollection,
   records: StoreCollectionRecord[],
@@ -1116,6 +1408,23 @@ const buildCollectionListDataset = (
   },
   fields: normalizeResolvedCollectionFields(collection.fields),
   records: normalizeResolvedCollectionRecords(records),
+});
+
+const buildCollectionItemDataset = (
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+): DatasetManifest => ({
+  id: `dataset_${collection.id}_${record.id}`,
+  collectionId: collection.id,
+  query: {
+    recordId: record.id,
+  },
+  pagination: {
+    limit: 1,
+    offset: 0,
+  },
+  fields: normalizeResolvedCollectionFields(collection.fields),
+  records: normalizeResolvedCollectionRecords([record]),
 });
 
 export const buildCollectionListContent = (
@@ -1554,7 +1863,8 @@ export function buildPublicCollectionListRenderPayload(
   records: StoreCollectionRecord[],
   options: RenderPayloadOptions,
 ) {
-  const content = buildCollectionListContent(site, collection, records);
+  const content = buildCollectionTemplateContent(site, collection, 'list')
+    || buildCollectionListContent(site, collection, records);
   const elements = content.elements;
   const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
@@ -1655,7 +1965,8 @@ export function buildPublicCollectionItemRenderPayload(
   record: StoreCollectionRecord,
   options: RenderPayloadOptions,
 ) {
-  const content = buildCollectionItemContent(site, collection, record);
+  const content = buildCollectionTemplateContent(site, collection, 'item', record)
+    || buildCollectionItemContent(site, collection, record);
   const elements = content.elements;
   const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
@@ -1668,6 +1979,11 @@ export function buildPublicCollectionItemRenderPayload(
   const navigation = getSiteNavigation(site.id);
   const title = getCollectionRecordTitle(collection, record);
   const description = getCollectionRecordDescription(collection, record);
+  const dataset = buildCollectionItemDataset(collection, record);
+  const frontendDesignMetadata = {
+    ...collection.metadata,
+    ...record.values,
+  };
 
   return {
     success: true,
@@ -1683,7 +1999,7 @@ export function buildPublicCollectionItemRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
-      frontendDesign: buildRenderFrontendDesign(site, record.values),
+      frontendDesign: buildRenderFrontendDesign(site, frontendDesignMetadata),
       route: {
         type: 'dynamicItem',
         path: options.path,
@@ -1741,6 +2057,10 @@ export function buildPublicCollectionItemRenderPayload(
       },
       dataBindings: {
         ...dataBindings,
+        datasets: [
+          dataset,
+          ...dataBindings.datasets.filter((item) => item.id !== dataset.id),
+        ],
       },
       editableMap: buildEditableMap(elements),
     },
