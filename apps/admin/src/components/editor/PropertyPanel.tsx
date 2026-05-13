@@ -5530,9 +5530,12 @@ function DataBindingProperties({
   }, [selectedCollectionId, siteId]);
 
   useEffect(() => {
-    const referenceCollectionIds = collectionIdsForFieldPath(selectedCollection, collections, selectedSourcePath);
+    const referenceCollectionIds = Array.from(new Set([
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedSourcePath),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedFilterField),
+      ...collectionIdsForFieldPath(selectedCollection, collections, selectedSortBy),
+    ]));
     if (!siteId || referenceCollectionIds.length === 0) {
-      setReferencePreviewRecords({});
       setReferencePreviewError(null);
       setReferencePreviewLoading(false);
       return;
@@ -5553,7 +5556,10 @@ function DataBindingProperties({
     }))
       .then((entries) => {
         if (cancelled) return;
-        setReferencePreviewRecords(Object.fromEntries(entries));
+        setReferencePreviewRecords((currentRecords) => ({
+          ...currentRecords,
+          ...Object.fromEntries(entries),
+        }));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -5569,7 +5575,7 @@ function DataBindingProperties({
     return () => {
       cancelled = true;
     };
-  }, [collections, selectedCollection, selectedSourcePath, siteId]);
+  }, [collections, selectedCollection, selectedFilterField, selectedSortBy, selectedSourcePath, siteId]);
 
   const selectedRecordOptionValue = recordOptions.find((record) => (
     record.id === selectedRecordId || record.slug === selectedRecordId
