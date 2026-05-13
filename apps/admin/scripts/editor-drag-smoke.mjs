@@ -8612,7 +8612,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(Array.isArray(state.filterValueOptions), `Collection query filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'author.company.domain' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
   assert(/join author\.company\.name/i.test(state.summary) && /sort author\.company\.domain desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
-  assert(/Author.*Company.*Editor Smoke Companies.*Name/i.test(state.referencePreview), `Collection reference preview missing join summary: ${JSON.stringify(state)}`);
+  assert(/Author.*Company.*Editor Smoke Companies.*Name.*Editor Smoke Studio/i.test(state.referencePreview), `Collection reference preview missing joined value: ${JSON.stringify(state)}`);
   assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
   assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.thumbnailSrc), `Collection record preview thumbnail missing selected image: ${JSON.stringify(state)}`);
 

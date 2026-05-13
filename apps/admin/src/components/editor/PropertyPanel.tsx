@@ -4454,6 +4454,71 @@ const selectedRecordPreviewImage = (
   };
 };
 
+const collectionIdsForFieldPath = (
+  collection: Collection | null,
+  collections: Collection[],
+  key: string,
+): string[] => {
+  if (!collection || !key) return [];
+  const ids: string[] = [];
+  let currentCollection: Collection | null = collection;
+  const parts = key.split('.').filter(Boolean);
+
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const field = currentCollection?.fields.find((candidate) => candidate.key === parts[index]);
+    const referenceCollectionId = field?.referenceCollectionId || '';
+    if (!referenceCollectionId) break;
+    ids.push(referenceCollectionId);
+    currentCollection = collections.find((candidate) => candidate.id === referenceCollectionId) || null;
+    if (!currentCollection) break;
+  }
+
+  return Array.from(new Set(ids));
+};
+
+const resolveRecordFieldPathFromCache = (
+  collection: Collection | null,
+  collections: Collection[],
+  recordsByCollectionId: Record<string, CollectionRecord[]>,
+  record: CollectionRecord | null,
+  key: string,
+  depth = 0,
+): unknown => {
+  if (!collection || !record || !key || depth > MAX_COLLECTION_FIELD_PATH_DEPTH) return undefined;
+  const [fieldKey, ...remainingKeys] = key.split('.').filter(Boolean);
+  if (!fieldKey) return undefined;
+  const value = record.values?.[fieldKey];
+  if (remainingKeys.length === 0) return value;
+
+  const field = collection.fields.find((candidate) => candidate.key === fieldKey);
+  const referenceCollection = field?.referenceCollectionId
+    ? collections.find((candidate) => candidate.id === field.referenceCollectionId) || null
+    : null;
+  if (!referenceCollection) return undefined;
+
+  const referenceRecords = recordsByCollectionId[referenceCollection.id] || [];
+  const resolveReference = (referenceId: unknown) => {
+    if (typeof referenceId !== 'string' || referenceId.length === 0) return undefined;
+    const referenceRecord = referenceRecords.find((candidate) => (
+      candidate.id === referenceId || candidate.slug === referenceId
+    )) || null;
+    return resolveRecordFieldPathFromCache(
+      referenceCollection,
+      collections,
+      recordsByCollectionId,
+      referenceRecord,
+      remainingKeys.join('.'),
+      depth + 1,
+    );
+  };
+
+  if (Array.isArray(value)) {
+    return value.map(resolveReference).filter((entry) => entry !== undefined && entry !== null);
+  }
+
+  return resolveReference(value);
+};
+
 const firstExistingTargetPath = (
   targetPathOptions: Array<{ value: string; label: string }>,
   candidates: string[],
@@ -5085,6 +5150,9 @@ function DataBindingProperties({
   const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
+  const [referencePreviewRecords, setReferencePreviewRecords] = useState<Record<string, CollectionRecord[]>>({});
+  const [referencePreviewLoading, setReferencePreviewLoading] = useState(false);
+  const [referencePreviewError, setReferencePreviewError] = useState<string | null>(null);
   const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>(() => loadSavedCollectionBindingPresets());
   const [savedPresetSyncState, setSavedPresetSyncState] = useState<'loading' | 'shared' | 'local'>('loading');
   const [savedPresetSyncError, setSavedPresetSyncError] = useState<string | null>(null);
@@ -5166,6 +5234,49 @@ function DataBindingProperties({
       cancelled = true;
     };
   }, [selectedCollectionId, siteId]);
+
+  useEffect(() => {
+    const referenceCollectionIds = collectionIdsForFieldPath(selectedCollection, collections, selectedSourcePath);
+    if (!siteId || referenceCollectionIds.length === 0) {
+      setReferencePreviewRecords({});
+      setReferencePreviewError(null);
+      setReferencePreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setReferencePreviewLoading(true);
+    setReferencePreviewError(null);
+    Promise.all(referenceCollectionIds.map(async (collectionId) => {
+      const result = await listCollectionRecords(siteId, collectionId, {
+        status: '',
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+        limit: 100,
+        offset: 0,
+      });
+      return [collectionId, result.records] as const;
+    }))
+      .then((entries) => {
+        if (cancelled) return;
+        setReferencePreviewRecords(Object.fromEntries(entries));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setReferencePreviewRecords({});
+        setReferencePreviewError(error instanceof Error ? error.message : 'Unable to resolve joined preview records');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setReferencePreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collections, selectedCollection, selectedSourcePath, siteId]);
+
   const selectedRecordOptionValue = recordOptions.find((record) => (
     record.id === selectedRecordId || record.slug === selectedRecordId
   ))?.id || '';
@@ -5174,8 +5285,20 @@ function DataBindingProperties({
   )) || null;
   const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
   const selectedRecordPreviewMedia = selectedRecordPreviewImage(selectedRecordPreview, selectedCollection, siteId);
+  const selectedRecordJoinedPreviewValue = recordPreviewValue(
+    resolveRecordFieldPathFromCache(
+      selectedCollection,
+      collections,
+      referencePreviewRecords,
+      selectedRecordPreview,
+      selectedSourcePath,
+    ),
+  );
   const selectedRecordJoinedValue = selectedRecordPreview && selectedField && selectedReferenceField
-    ? `Joins ${selectedField.label} to ${selectedReferenceFieldLabel}`
+    ? [
+        `Joins ${selectedField.label} to ${selectedReferenceFieldLabel}`,
+        selectedRecordJoinedPreviewValue ? `Value: ${selectedRecordJoinedPreviewValue}` : '',
+      ].filter(Boolean).join(' • ')
     : '';
   const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
   const savedPresetsForCollection = savedBindingPresets.filter((preset) => (
@@ -5694,6 +5817,18 @@ function DataBindingProperties({
                   <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2" data-testid="editor-data-reference-preview">
                     <span className="truncate text-muted-foreground">Join</span>
                     <span className="truncate text-foreground">{selectedRecordJoinedValue}</span>
+                  </div>
+                )}
+                {referencePreviewLoading && selectedReferenceField && (
+                  <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2" data-testid="editor-data-reference-preview-loading">
+                    <span className="truncate text-muted-foreground">Join</span>
+                    <span className="truncate text-muted-foreground">Resolving joined value...</span>
+                  </div>
+                )}
+                {referencePreviewError && (
+                  <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2 text-amber-700" data-testid="editor-data-reference-preview-error">
+                    <span className="truncate">Join</span>
+                    <span className="truncate">{referencePreviewError}</span>
                   </div>
                 )}
               </div>
