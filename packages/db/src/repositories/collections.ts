@@ -16,7 +16,7 @@ import {
     type BackyRepositoryMutationResult,
     type PublishStatus,
 } from '@backy-cms/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import {
     contentCollectionRecords,
     contentCollections,
@@ -115,6 +115,36 @@ const searchText = (value: string | null | undefined, search: string): boolean =
     (value || '').toLowerCase().includes(search.toLowerCase())
 );
 
+const normalizedSearch = (value?: string): string => (
+    typeof value === 'string' ? value.trim().toLowerCase() : ''
+);
+
+const normalizedFieldText = (value: BackyJsonValue | undefined): string => {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizedFieldText(item)).filter(Boolean).join(' ');
+    }
+    if (typeof value === 'object') {
+        return JSON.stringify(value);
+    }
+    return String(value);
+};
+
+const fieldMatches = (record: BackyCollectionRecord, fieldKey: string, fieldValue: BackyJsonValue | undefined): boolean => {
+    const actual = record.values[fieldKey];
+    const expected = normalizedFieldText(fieldValue).toLowerCase();
+
+    if (!expected) {
+        return actual === fieldValue;
+    }
+    if (Array.isArray(actual)) {
+        return actual.some((item) => normalizedFieldText(item).toLowerCase() === expected);
+    }
+    return normalizedFieldText(actual).toLowerCase() === expected;
+};
+
 const publishedAtForStatus = (status: PublishStatus, existing?: string | null): Date | null => {
     if (status !== 'published') {
         return existing ? new Date(existing) : null;
@@ -153,6 +183,53 @@ const sortValue = (record: BackyCollectionRecord, key: string): string | number 
         return value;
     }
     return typeof value === 'string' ? value : JSON.stringify(value ?? '');
+};
+
+const recordSortColumn = (key: string, direction: 'asc' | 'desc' | undefined): unknown => {
+    const column = key === 'slug'
+        ? contentCollectionRecords.slug
+        : key === 'status'
+            ? contentCollectionRecords.status
+            : key === 'createdAt'
+                ? contentCollectionRecords.createdAt
+                : key === 'publishedAt'
+                    ? contentCollectionRecords.publishedAt
+                    : key === 'scheduledAt'
+                        ? contentCollectionRecords.scheduledAt
+                        : key === 'updatedAt'
+                            ? contentCollectionRecords.updatedAt
+                            : sql`${contentCollectionRecords.values}->>${key}`;
+
+    return direction === 'asc' ? asc(column) : desc(column);
+};
+
+const recordSqlConditions = (input: BackyCollectionRecordListInput): SQL[] => {
+    const conditions: SQL[] = [
+        eq(contentCollectionRecords.siteId, input.siteId),
+        eq(contentCollectionRecords.collectionId, input.collectionId),
+    ];
+    const status = input.status && input.status !== 'all'
+        ? input.status
+        : input.includeUnpublished
+            ? null
+            : 'published';
+    const search = normalizedSearch(input.search);
+
+    if (status) {
+        conditions.push(eq(contentCollectionRecords.status, status));
+    }
+    if (input.fieldKey && input.fieldValue !== undefined && input.fieldValue !== null) {
+        conditions.push(sql`(
+            ${contentCollectionRecords.values} @> ${JSON.stringify({ [input.fieldKey]: input.fieldValue })}::jsonb
+            OR ${contentCollectionRecords.values}->>${input.fieldKey} = ${String(input.fieldValue)}
+            OR (${contentCollectionRecords.values}->${input.fieldKey}) ? ${String(input.fieldValue)}
+        )`);
+    }
+    if (search) {
+        conditions.push(sql`lower(coalesce(${contentCollectionRecords.slug}, '') || ' ' || coalesce(${contentCollectionRecords.values}::text, '')) LIKE ${`%${search}%`}`);
+    }
+
+    return conditions;
 };
 
 const slugFromValues = (values: Record<string, BackyJsonValue>): string => {
@@ -266,15 +343,18 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
         },
 
         async listRecords(input: BackyCollectionRecordListInput): Promise<BackyListResult<BackyCollectionRecord>> {
-            const rows = await database.select().from(contentCollectionRecords).where(and(
-                eq(contentCollectionRecords.siteId, input.siteId),
-                eq(contentCollectionRecords.collectionId, input.collectionId),
-            )).orderBy(desc(contentCollectionRecords.updatedAt)) as CollectionRecordRow[];
+            const conditions = recordSqlConditions(input);
+            const rows = await database.select()
+                .from(contentCollectionRecords)
+                .where(and(...conditions))
+                .orderBy(input.sortBy
+                    ? recordSortColumn(input.sortBy, input.sortDirection)
+                    : desc(contentCollectionRecords.updatedAt)) as CollectionRecordRow[];
             const filtered = rows
                 .map(toCollectionRecord)
                 .filter((record) => input.includeUnpublished || input.status === 'all' || record.status === 'published')
                 .filter((record) => input.status && input.status !== 'all' ? record.status === input.status : true)
-                .filter((record) => input.fieldKey ? record.values[input.fieldKey] === input.fieldValue : true)
+                .filter((record) => input.fieldKey ? fieldMatches(record, input.fieldKey, input.fieldValue) : true)
                 .filter((record) => input.search ? searchText(`${record.slug} ${JSON.stringify(record.values)}`, input.search) : true);
             const sorted = input.sortBy
                 ? [...filtered].sort((left, right) => {

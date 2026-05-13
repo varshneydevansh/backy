@@ -19,6 +19,7 @@ import {
     timestamp,
     integer,
     jsonb,
+    index,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -379,7 +380,11 @@ export const contentCollections = pgTable('content_collections', {
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteSlugIdx: index('content_collections_site_slug_idx').on(table.siteId, table.slug),
+    siteStatusUpdatedIdx: index('content_collections_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
+    siteRouteIdx: index('content_collections_site_route_idx').on(table.siteId, table.routePattern, table.listRoutePattern),
+}));
 
 /**
  * Content collection records - structured entries for dynamic pages and public APIs.
@@ -401,7 +406,15 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
     scheduledAt: timestamp('scheduled_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    siteCollectionStatusUpdatedIdx: index('content_collection_records_site_collection_status_updated_idx').on(
+        table.siteId,
+        table.collectionId,
+        table.status,
+        table.updatedAt,
+    ),
+    siteCollectionSlugIdx: index('content_collection_records_site_collection_slug_idx').on(table.siteId, table.collectionId, table.slug),
+}));
 
 // ==========================================================================
 // FORMS - Public interaction definitions, submissions, and contacts

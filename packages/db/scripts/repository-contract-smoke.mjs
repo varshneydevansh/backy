@@ -969,6 +969,7 @@ const publishedRecord = (await collectionRepository.updateRecord(site.id, collec
   values: {
     title: 'Starter Pack',
     price: 59,
+    tags: ['starter', 'featured'],
   },
 })).item;
 assert(publishedRecord.status === 'published' && publishedRecord.publishedAt, 'Expected published collection record');
@@ -981,6 +982,46 @@ assert((await collectionRepository.listRecords({
   fieldKey: 'price',
   fieldValue: 59,
 })).items.length === 1, 'Expected field value filter');
+assert((await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  fieldKey: 'price',
+  fieldValue: '59',
+})).items.length === 1, 'Expected URL string field value filter');
+assert((await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  fieldKey: 'tags',
+  fieldValue: 'featured',
+})).items.length === 1, 'Expected array field value filter');
+const premiumRecord = (await collectionRepository.createRecord({
+  siteId: site.id,
+  collectionId: collection.id,
+  slug: 'premium-pack',
+  status: 'published',
+  values: {
+    title: 'Premium Pack',
+    price: 129,
+    tags: ['featured'],
+  },
+})).item;
+const searchedRecords = await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  search: 'premium',
+});
+assert(searchedRecords.items.length === 1 && searchedRecords.items[0].id === premiumRecord.id, 'Expected collection record search');
+const sortedRecords = await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  sortBy: 'price',
+  sortDirection: 'asc',
+  limit: 1,
+  offset: 1,
+});
+assert(sortedRecords.pagination.total === 2, 'Expected collection record pagination total');
+assert(sortedRecords.items.length === 1 && sortedRecords.items[0].id === premiumRecord.id, 'Expected collection record sort and offset');
+assert(await collectionRepository.deleteRecord(site.id, collection.id, premiumRecord.id), 'Expected extra collection record delete');
 assert(await collectionRepository.deleteRecord(site.id, collection.id, record.id), 'Expected collection record delete');
 assert(await collectionRepository.delete(site.id, updatedCollection.id), 'Expected collection delete');
 assert(await collectionRepository.delete(site.id, collection.id), 'Expected published collection delete');
