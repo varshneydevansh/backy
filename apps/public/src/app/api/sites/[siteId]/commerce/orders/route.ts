@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyJsonValue } from '@backy-cms/core';
+import type { BackyCollectionField, BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
 import {
   PRODUCT_COLLECTION_SLUG,
   buildCommerceStorefrontContract,
@@ -17,11 +17,14 @@ import {
   type CommerceStorefrontContract,
 } from '@/lib/commerceCatalog';
 import {
+  createAdminCollection,
   createAdminCollectionRecord,
   getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
+  listCollectionRecords,
+  updateAdminCollection,
   updateAdminCollectionRecord,
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
@@ -60,6 +63,7 @@ interface CheckoutOrderInput {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_CONTRACT_VERSION = 'backy.commerce-orders.v1';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -124,6 +128,107 @@ const normalizeCheckoutInput = (body: Record<string, unknown>): CheckoutOrderInp
 };
 
 const buildOrderNumber = () => `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+const normalizeSlug = (value: unknown): string => (
+  typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    : ''
+);
+
+const normalizeEmail = (value: unknown): string => textValue(value).toLowerCase();
+
+const customerSlug = (email: string): string => (
+  normalizeSlug(email.replace('@', '-at-')) || `customer-${Date.now().toString(36)}`
+);
+
+const customerFields = (): BackyCollectionField[] => [
+  { id: 'field-customer-name', key: 'name', label: 'Name', type: 'text', required: true },
+  { id: 'field-customer-email', key: 'email', label: 'Email', type: 'email', required: true, unique: true },
+  { id: 'field-customer-phone', key: 'phone', label: 'Phone', type: 'text' },
+  { id: 'field-customer-status', key: 'status', label: 'Status', type: 'select', options: ['lead', 'customer', 'vip', 'inactive'] },
+  { id: 'field-customer-source', key: 'source', label: 'Source', type: 'text' },
+  { id: 'field-customer-last-order-id', key: 'lastorderid', label: 'Last Order ID', type: 'text' },
+  { id: 'field-customer-last-order-number', key: 'lastordernumber', label: 'Last Order Number', type: 'text' },
+  { id: 'field-customer-last-order-at', key: 'lastorderat', label: 'Last Order At', type: 'date' },
+  { id: 'field-customer-order-count', key: 'ordercount', label: 'Order Count', type: 'number' },
+  { id: 'field-customer-total-spent', key: 'totalspent', label: 'Total Spent', type: 'number' },
+  { id: 'field-customer-notes', key: 'notes', label: 'Notes', type: 'richText' },
+  { id: 'field-customer-source-values', key: 'sourcevalues', label: 'Source Values', type: 'json' },
+];
+
+const customerCollectionInput = () => ({
+  name: 'Customers',
+  slug: CUSTOMERS_COLLECTION_SLUG,
+  description: 'Private customer profiles promoted from Backy contacts and commerce workflows.',
+  status: 'draft',
+  listRoutePattern: '/customers',
+  routePattern: '/customers/:recordSlug',
+  fields: customerFields(),
+  permissions: {
+    publicRead: false,
+    publicCreate: false,
+    publicUpdate: false,
+    publicDelete: false,
+  },
+  metadata: {
+    schemaVersion: 'backy.customers.v1',
+    source: 'commerce-order-intake',
+  },
+});
+
+const ensureCustomerFields = <T extends { key: string }>(collection: { fields: T[] }): Array<T | BackyCollectionField> => {
+  const existingKeys = new Set((collection.fields || []).map((field) => field.key));
+  const missingFields = customerFields().filter((field) => !existingKeys.has(field.key));
+  return missingFields.length > 0 ? [...(collection.fields || []), ...missingFields] : collection.fields || [];
+};
+
+const checkoutCustomerValues = ({
+  input,
+  existingValues,
+  orderId,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  input: CheckoutOrderInput;
+  existingValues?: Record<string, unknown>;
+  orderId: string;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}): Record<string, BackyJsonValue> => {
+  const existingOrderCount = Math.max(0, Number(existingValues?.ordercount || 0));
+  const existingTotalSpent = Math.max(0, Number(existingValues?.totalspent || 0));
+  const existingSourceValues = existingValues?.sourcevalues && typeof existingValues.sourcevalues === 'object' && !Array.isArray(existingValues.sourcevalues)
+    ? existingValues.sourcevalues as Record<string, unknown>
+    : {};
+
+  return {
+    name: (input.customer?.name || existingValues?.name || input.customer?.email || 'Customer') as BackyJsonValue,
+    email: normalizeEmail(input.customer?.email) as BackyJsonValue,
+    phone: (input.customer?.phone || existingValues?.phone || '') as BackyJsonValue,
+    status: (existingValues?.status || 'customer') as BackyJsonValue,
+    source: 'checkout',
+    lastorderid: orderId,
+    lastordernumber: orderNumber,
+    lastorderat: orderCreatedAt,
+    ordercount: existingOrderCount + 1,
+    totalspent: moneyValue(existingTotalSpent + total),
+    notes: (existingValues?.notes || '') as BackyJsonValue,
+    sourcevalues: {
+      ...existingSourceValues,
+      lastCheckoutOrder: {
+        orderId,
+        orderNumber,
+        total,
+        requestId,
+        updatedAt: orderCreatedAt,
+      },
+    } as BackyJsonValue,
+  };
+};
 
 const orderContract = (siteId: string) => ({
   schemaVersion: ORDER_CONTRACT_VERSION,
@@ -345,6 +450,164 @@ const calculateCheckoutQuote = (
   };
 };
 
+const upsertRepositoryCheckoutCustomer = async ({
+  siteId,
+  repositories,
+  input,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  siteId: string;
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+  input: CheckoutOrderInput;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}) => {
+  const email = normalizeEmail(input.customer?.email);
+  if (!email) return null;
+
+  const collectionInput = customerCollectionInput();
+  const existingCollection = await repositories.collections.getBySlug(siteId, CUSTOMERS_COLLECTION_SLUG);
+  const collection = existingCollection || (await repositories.collections.create({
+    siteId,
+    name: collectionInput.name,
+    slug: collectionInput.slug,
+    description: collectionInput.description,
+    status: 'draft',
+    routePattern: collectionInput.routePattern,
+    listRoutePattern: collectionInput.listRoutePattern,
+    fields: collectionInput.fields,
+    permissions: collectionInput.permissions,
+    metadata: collectionInput.metadata as BackyJsonObject,
+  })).item;
+  const ensuredFields = ensureCustomerFields(collection);
+  const customerCollection = ensuredFields.length === collection.fields.length
+    ? collection
+    : (await repositories.collections.update(siteId, collection.id, {
+      fields: ensuredFields,
+      metadata: {
+        ...(collection.metadata && typeof collection.metadata === 'object' && !Array.isArray(collection.metadata) ? collection.metadata : {}),
+        schemaVersion: 'backy.customers.v1',
+        source: 'commerce-order-intake',
+      } as BackyJsonObject,
+    })).item;
+  const existingRecords = await repositories.collections.listRecords({
+    siteId,
+    collectionId: customerCollection.id,
+    includeUnpublished: true,
+    fieldKey: 'email',
+    fieldValue: email,
+    limit: 100,
+    offset: 0,
+  });
+  const existingRecord = existingRecords.items.find((record) => normalizeEmail(record.values.email) === email);
+  const values = checkoutCustomerValues({
+    input,
+    existingValues: existingRecord?.values,
+    orderId: orderNumber,
+    orderNumber,
+    orderCreatedAt,
+    total,
+    requestId,
+  });
+  const record = existingRecord
+    ? (await repositories.collections.updateRecord(siteId, customerCollection.id, existingRecord.id, {
+      status: existingRecord.status,
+      values: {
+        ...existingRecord.values,
+        ...values,
+      },
+    })).item
+    : (await repositories.collections.createRecord({
+      siteId,
+      collectionId: customerCollection.id,
+      slug: customerSlug(email),
+      status: 'draft',
+      values,
+    })).item;
+
+  return {
+    collection: customerCollection,
+    record,
+    existingRecord: Boolean(existingRecord),
+  };
+};
+
+const upsertDemoCheckoutCustomer = ({
+  siteId,
+  input,
+  orderNumber,
+  orderCreatedAt,
+  total,
+  requestId,
+}: {
+  siteId: string;
+  input: CheckoutOrderInput;
+  orderNumber: string;
+  orderCreatedAt: string;
+  total: number;
+  requestId: string;
+}) => {
+  const email = normalizeEmail(input.customer?.email);
+  if (!email) return null;
+
+  const collectionInput = customerCollectionInput();
+  const existingCollection = getCollectionByIdOrSlug(siteId, CUSTOMERS_COLLECTION_SLUG, { includeUnpublished: true });
+  const collection = existingCollection || createAdminCollection(siteId, collectionInput);
+  const ensuredFields = ensureCustomerFields(collection);
+  const customerCollection = ensuredFields.length === collection.fields.length
+    ? collection
+    : updateAdminCollection(siteId, collection.id, {
+      fields: ensuredFields,
+      metadata: {
+        ...(collection.metadata && typeof collection.metadata === 'object' && !Array.isArray(collection.metadata) ? collection.metadata : {}),
+        schemaVersion: 'backy.customers.v1',
+        source: 'commerce-order-intake',
+      },
+    }) || collection;
+  const existingRecord = listCollectionRecords(siteId, customerCollection.id, {
+    includeUnpublished: true,
+    fieldKey: 'email',
+    fieldValue: email,
+    limit: 100,
+    offset: 0,
+  }).records.find((record) => normalizeEmail(record.values.email) === email);
+  const values = checkoutCustomerValues({
+    input,
+    existingValues: existingRecord?.values,
+    orderId: orderNumber,
+    orderNumber,
+    orderCreatedAt,
+    total,
+    requestId,
+  });
+  const record = existingRecord
+    ? updateAdminCollectionRecord(siteId, customerCollection.id, existingRecord.id, {
+      status: existingRecord.status,
+      values: {
+        ...existingRecord.values,
+        ...values,
+      },
+    })
+    : createAdminCollectionRecord(siteId, customerCollection.id, {
+      slug: customerSlug(email),
+      status: 'draft',
+      values,
+    });
+
+  return record
+    ? {
+      collection: customerCollection,
+      record,
+      existingRecord: Boolean(existingRecord),
+    }
+    : null;
+};
+
 const parseVariantSource = (value: unknown): unknown[] => {
   if (Array.isArray(value)) {
     return value;
@@ -563,6 +826,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         slug = `${orderNumber.toLowerCase()}-${suffix}`;
         suffix += 1;
       }
+      const orderCreatedAt = new Date().toISOString();
+      const customerProfile = await upsertRepositoryCheckoutCustomer({
+        siteId: site.id,
+        repositories,
+        input,
+        orderNumber,
+        orderCreatedAt,
+        total: quote.total,
+        requestId,
+      });
 
       const values = {
         ordernumber: orderNumber,
@@ -578,7 +851,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
         checkoutsessionid: input.checkoutSessionId || requestId,
-        customerid: '',
+        customerid: customerProfile?.record.id || '',
         orderstatus: 'open',
         paymentstatus: 'pending',
         paymentprovider: input.paymentProvider || 'manual',
@@ -625,6 +898,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
             createdAt: order.createdAt,
           },
+          customer: customerProfile ? {
+            id: customerProfile.record.id,
+            slug: customerProfile.record.slug,
+            existing: customerProfile.existingRecord,
+          } : null,
           quote,
           lineItems,
         },
@@ -716,6 +994,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       slug = `${orderNumber.toLowerCase()}-${suffix}`;
       suffix += 1;
     }
+    const orderCreatedAt = new Date().toISOString();
+    const customerProfile = upsertDemoCheckoutCustomer({
+      siteId: site.id,
+      input,
+      orderNumber,
+      orderCreatedAt,
+      total: quote.total,
+      requestId,
+    });
 
     const order = createAdminCollectionRecord(site.id, ordersCollection.id, {
       slug,
@@ -734,7 +1021,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         items: JSON.stringify(lineItems, null, 2),
         ordersource: 'web',
         checkoutsessionid: input.checkoutSessionId || requestId,
-        customerid: '',
+        customerid: customerProfile?.record.id || '',
         orderstatus: 'open',
         paymentstatus: 'pending',
         paymentprovider: input.paymentProvider || 'manual',
@@ -778,6 +1065,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
           createdAt: order.createdAt,
         },
+        customer: customerProfile ? {
+          id: customerProfile.record.id,
+          slug: customerProfile.record.slug,
+          existing: customerProfile.existingRecord,
+        } : null,
         quote,
         lineItems,
       },

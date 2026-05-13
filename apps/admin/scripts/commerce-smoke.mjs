@@ -14,6 +14,7 @@ const SCREENSHOT_PATH = process.env.BACKY_COMMERCE_SCREENSHOT || path.join(os.tm
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
+const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const PRODUCT_REQUIRED_FIELD_COUNT = 27;
 const ORDER_REQUIRED_FIELD_COUNT = 29;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
@@ -971,8 +972,10 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   });
 
   const order = orderPayload.data?.order;
+  const customer = orderPayload.data?.customer;
   const quote = orderPayload.data?.quote;
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
+  assert(customer?.id, `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
   assert(quote.discountAmount === 11.76, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
   assert(quote.shippingAmount === 12, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
@@ -987,13 +990,24 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
   assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
   assert(orderRecord.values?.customername === 'Commerce Smoke Buyer', 'Order customer name was not persisted');
+  assert(orderRecord.values?.customerid === customer.id, `Order did not link to the private customer profile: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.taxamount === 8.62, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.total === 106.86, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
-  return { productRecord, updatedProduct, order, orderRecord };
+  const customersCollection = await findCollection(CUSTOMERS_COLLECTION_SLUG);
+  assert(customersCollection?.id, 'Private customers collection was not created from checkout intake');
+  assert(customersCollection.permissions?.publicRead === false && customersCollection.permissions?.publicCreate === false, `Customers collection was not private: ${JSON.stringify(customersCollection.permissions)}`);
+  const customerRecord = await getCollectionRecordBySlug(customersCollection.id, customer.slug);
+  assert(customerRecord?.id === customer.id, `Customer record was not available by slug ${customer.slug}: ${JSON.stringify(customerRecord)}`);
+  assert(customerRecord.values?.email === 'commerce-smoke@example.com', `Customer email was not persisted: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.ordercount === 1, `Customer order count was unexpected: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.totalspent === 106.86, `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.lastordernumber === order.orderNumber, `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`);
+
+  return { productRecord, updatedProduct, order, orderRecord, customersCollection, customerRecord };
 };
 
 const assertProductCsvImport = async ({ productCollection, suffix }) => {
@@ -1157,6 +1171,7 @@ const main = async () => {
   await patchFrontendDesign(smokeFrontendDesignContract());
   const originalProductCollection = snapshotCollection(await findCollection(PRODUCT_COLLECTION_SLUG));
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
+  const originalCustomerCollection = snapshotCollection(await findCollection(CUSTOMERS_COLLECTION_SLUG));
   const apiSchemaSetup = await ensureCommerceSchemasReadyViaApi();
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -1164,8 +1179,10 @@ const main = async () => {
   let productRecordId = null;
   let importedProductRecordId = null;
   let orderRecordId = null;
+  let customerRecordId = null;
   let finalProductCollection = null;
   let finalOrdersCollection = null;
+  let finalCustomerCollection = null;
   let frontendProductCleaned = false;
   let restored = false;
   let frontendTemplateProduct = null;
@@ -1223,6 +1240,8 @@ const main = async () => {
     });
     productRecordId = publicCommerce.productRecord.id;
     orderRecordId = publicCommerce.orderRecord.id;
+    finalCustomerCollection = publicCommerce.customersCollection;
+    customerRecordId = publicCommerce.customerRecord.id;
 
     const layout = await assertProductsLayout(client);
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -1238,14 +1257,17 @@ const main = async () => {
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
 
     await deleteCollectionRecord(finalOrdersCollection.id, orderRecordId);
+    await deleteCollectionRecord(finalCustomerCollection.id, customerRecordId);
     await deleteCollectionRecord(finalProductCollection.id, productRecordId);
     await deleteCollectionRecord(finalProductCollection.id, importedProductRecordId);
     productRecordId = null;
     importedProductRecordId = null;
     orderRecordId = null;
+    customerRecordId = null;
 
     await restoreCollection(originalProductCollection, finalProductCollection);
     await restoreCollection(originalOrdersCollection, finalOrdersCollection);
+    await restoreCollection(originalCustomerCollection, finalCustomerCollection);
     restored = true;
 
     console.log(JSON.stringify({
@@ -1283,6 +1305,12 @@ const main = async () => {
         total: publicCommerce.order.total,
         itemCount: publicCommerce.order.itemCount,
       },
+      customer: {
+        id: publicCommerce.customerRecord.id,
+        slug: publicCommerce.customerRecord.slug,
+        orderCount: publicCommerce.customerRecord.values?.ordercount,
+        totalSpent: publicCommerce.customerRecord.values?.totalspent,
+      },
       layout,
       frontendProductCleaned,
       restored,
@@ -1300,6 +1328,11 @@ const main = async () => {
           console.warn('Unable to delete smoke order:', error instanceof Error ? error.message : error);
         });
       }
+      if (finalCustomerCollection?.id && customerRecordId) {
+        await deleteCollectionRecord(finalCustomerCollection.id, customerRecordId).catch((error) => {
+          console.warn('Unable to delete smoke customer:', error instanceof Error ? error.message : error);
+        });
+      }
       if (finalProductCollection?.id && productRecordId) {
         await deleteCollectionRecord(finalProductCollection.id, productRecordId).catch((error) => {
           console.warn('Unable to delete smoke product:', error instanceof Error ? error.message : error);
@@ -1315,6 +1348,9 @@ const main = async () => {
       });
       await restoreCollection(originalOrdersCollection, finalOrdersCollection || await findCollection(ORDERS_COLLECTION_SLUG)).catch((error) => {
         console.warn('Unable to restore orders collection:', error instanceof Error ? error.message : error);
+      });
+      await restoreCollection(originalCustomerCollection, finalCustomerCollection || await findCollection(CUSTOMERS_COLLECTION_SLUG)).catch((error) => {
+        console.warn('Unable to restore customers collection:', error instanceof Error ? error.message : error);
       });
     }
     await patchFrontendDesign(originalFrontendDesign).catch((error) => {
