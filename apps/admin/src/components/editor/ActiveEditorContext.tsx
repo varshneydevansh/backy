@@ -80,6 +80,10 @@ interface ActiveEditorContextType {
   toggleTableHeaderColumn: () => boolean;
   /** Toggle the current table cell between body and header semantics */
   toggleTableHeaderCell: () => boolean;
+  /** Merge the current table cell with the cell immediately to its right */
+  mergeTableCellRight: () => boolean;
+  /** Split the current table cell when it has a column span */
+  splitTableCell: () => boolean;
   /** Set or clear the current table cell fill color */
   setTableCellBackgroundColor: (color: string) => boolean;
   /** Set or clear the current table cell border color */
@@ -148,6 +152,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleTableHeaderRow: () => false,
   toggleTableHeaderColumn: () => false,
   toggleTableHeaderCell: () => false,
+  mergeTableCellRight: () => false,
+  splitTableCell: () => false,
   setTableCellBackgroundColor: () => false,
   setTableCellBorderColor: () => false,
   setTableCellVerticalAlign: () => false,
@@ -816,6 +822,92 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const mergeSelectedTableCellRight = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rowChildren = Array.isArray((context.rowNode as any).children) ? (context.rowNode as any).children : [];
+    const rightCellIndex = context.cellIndex + 1;
+    if (rightCellIndex >= rowChildren.length) {
+      return false;
+    }
+
+    const cellNode = Node.get(editor as any, context.cellPath) as any;
+    const rightCellNode = Node.get(editor as any, [...context.rowPath, rightCellIndex]) as any;
+    if ((cellNode?.type !== 'td' && cellNode?.type !== 'th') || (rightCellNode?.type !== 'td' && rightCellNode?.type !== 'th')) {
+      return false;
+    }
+
+    const currentColSpan = Number.isInteger(cellNode.colSpan) && cellNode.colSpan > 1 ? cellNode.colSpan : 1;
+    const rightColSpan = Number.isInteger(rightCellNode.colSpan) && rightCellNode.colSpan > 1 ? rightCellNode.colSpan : 1;
+    const mergedCell = {
+      ...JSON.parse(JSON.stringify(cellNode)),
+      colSpan: currentColSpan + rightColSpan,
+      children: [
+        ...(Array.isArray(cellNode.children) ? JSON.parse(JSON.stringify(cellNode.children)) : []),
+        ...(Array.isArray(rightCellNode.children) ? JSON.parse(JSON.stringify(rightCellNode.children)) : []),
+      ],
+    } as any;
+
+    Transforms.removeNodes(editor as any, { at: [...context.rowPath, rightCellIndex] });
+    Transforms.removeNodes(editor as any, { at: context.cellPath });
+    Transforms.insertNodes(editor as any, mergedCell, { at: context.cellPath });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after table cell merge.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
+  const splitSelectedTableCell = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const cellNode = Node.get(editor as any, context.cellPath) as any;
+    if (cellNode?.type !== 'td' && cellNode?.type !== 'th') {
+      return false;
+    }
+
+    const colSpan = Number.isInteger(cellNode.colSpan) && cellNode.colSpan > 1 ? cellNode.colSpan : 1;
+    if (colSpan <= 1) {
+      return false;
+    }
+
+    const children = Array.isArray(cellNode.children) ? JSON.parse(JSON.stringify(cellNode.children)) : [];
+    const currentCell = {
+      ...JSON.parse(JSON.stringify(cellNode)),
+      children: children.length > 0 ? [children[0]] : createEmptyTableCellNode().children,
+    } as any;
+    const nextColSpan = colSpan - 1;
+    if (nextColSpan > 1) {
+      currentCell.colSpan = nextColSpan;
+    } else {
+      delete currentCell.colSpan;
+    }
+
+    const splitCell = {
+      ...JSON.parse(JSON.stringify(cellNode)),
+      children: children.length > 1 ? children.slice(1) : createEmptyTableCellNode().children,
+    } as any;
+    delete splitCell.colSpan;
+
+    Transforms.removeNodes(editor as any, { at: context.cellPath });
+    Transforms.insertNodes(editor as any, [currentCell, splitCell], { at: context.cellPath });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after table cell split.
+    }
+    return true;
+  }, [createEmptyTableCellNode, getSelectedTableContext]);
+
   const setSelectedTableCellBackgroundColor = useCallback((editor: PlateEditor, color: string) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -1172,6 +1264,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           backgroundColor: typeof (node as { backgroundColor?: unknown }).backgroundColor === 'string' ? (node as { backgroundColor?: string }).backgroundColor : undefined,
           borderColor: typeof (node as { borderColor?: unknown }).borderColor === 'string' ? (node as { borderColor?: string }).borderColor : undefined,
           verticalAlign: typeof (node as { verticalAlign?: unknown }).verticalAlign === 'string' ? (node as { verticalAlign?: string }).verticalAlign : undefined,
+          colSpan: typeof (node as { colSpan?: unknown }).colSpan === 'number' ? (node as { colSpan?: number }).colSpan : undefined,
           align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
@@ -2322,6 +2415,56 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, syncActiveEditorContentSoon, toggleSelectedTableHeaderCell]);
 
+  const mergeTableCellRight = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('mergeTableCellRight.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!mergeSelectedTableCellRight(editor)) return false;
+
+      debug('mergeTableCellRight.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('mergeTableCellRight failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, mergeSelectedTableCellRight, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
+  const splitTableCell = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('splitTableCell.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!splitSelectedTableCell(editor)) return false;
+
+      debug('splitTableCell.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('splitTableCell failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, restoreSelection, setStoredSelection, splitSelectedTableCell, syncActiveEditorContentSoon]);
+
   const setTableCellBackgroundColor = useCallback((color: string) => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2771,6 +2914,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleTableHeaderRow,
       toggleTableHeaderColumn,
       toggleTableHeaderCell,
+      mergeTableCellRight,
+      splitTableCell,
       setTableCellBackgroundColor,
       setTableCellBorderColor,
       setTableCellVerticalAlign,

@@ -136,6 +136,8 @@ export function RichTextFormatting({
     toggleTableHeaderRow,
     toggleTableHeaderColumn,
     toggleTableHeaderCell,
+    mergeTableCellRight,
+    splitTableCell,
     setTableCellBackgroundColor,
     setTableCellBorderColor,
     setTableCellVerticalAlign,
@@ -1886,6 +1888,18 @@ export function RichTextFormatting({
     });
   }, [runOrActivateTextEditor, toggleTableHeaderCell]);
 
+  const mergeTableCellRightAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-merge-cell-right', () => {
+      mergeTableCellRight();
+    });
+  }, [mergeTableCellRight, runOrActivateTextEditor]);
+
+  const splitTableCellAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-split-cell', () => {
+      splitTableCell();
+    });
+  }, [runOrActivateTextEditor, splitTableCell]);
+
   const readSelectedTableCaption = useCallback(() => {
     const editor = getActiveEditor();
     const selection = editor?.selection;
@@ -2721,6 +2735,32 @@ export function RichTextFormatting({
             title="Toggle table header cell"
           >
             <Square className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-merge-cell-right', () => mergeTableCellRightAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-merge-cell-right"
+            title="Merge table cell right"
+          >
+            <Columns3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-split-cell', () => splitTableCellAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-split-cell"
+            title="Split table cell"
+          >
+            <Columns2 className="w-4 h-4" />
           </button>
           <button
             type="button"

@@ -643,6 +643,7 @@ export const BackyEditor = ({
                 <Tag
                     {...attributes}
                     data-backy-rich-table-cell="true"
+                    colSpan={Number.isInteger(element?.colSpan) && element.colSpan > 1 ? element.colSpan : undefined}
                     style={{
                         ...elementStyle,
                         border: `1px solid ${borderColor || '#e5e7eb'}`,

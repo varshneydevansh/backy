@@ -3974,6 +3974,81 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeMerge = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeMerge?.ok, `Unable to select table cell before merge-right control: ${JSON.stringify(selectedTableCellBeforeMerge)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-merge-cell-right');
+  await sleep(500);
+
+  const mergedCellState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const firstRowCells = Array.from(rows[0]?.querySelectorAll('td, th') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const mergedCellNode = slateState?.types?.find((node) => (node.type === 'td' || node.type === 'th') && node.text.includes('Column 1') && node.text.includes('Column 2'));
+    return {
+      firstRowCellCount: firstRowCells.length,
+      firstCellColSpan: firstRowCells[0]?.getAttribute('colspan') || '',
+      firstCellText: firstRowCells[0]?.textContent || '',
+      mergedCellColSpan: mergedCellNode?.colSpan,
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    mergedCellState.firstRowCellCount === 1 &&
+      mergedCellState.firstCellColSpan === '2' &&
+      mergedCellState.firstCellText.includes('Column 1') &&
+      mergedCellState.firstCellText.includes('Column 2') &&
+      mergedCellState.mergedCellColSpan === 2,
+    `Table merge-right control did not merge the selected cell with its right sibling: ${JSON.stringify(mergedCellState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedMergedTableCell?.ok, `Unable to reselect merged table cell before split control: ${JSON.stringify(selectedMergedTableCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
+  await sleep(500);
+
+  const splitCellState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const firstRowCells = Array.from(rows[0]?.querySelectorAll('td, th') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      firstRowCellCount: firstRowCells.length,
+      firstCellColSpan: firstRowCells[0]?.getAttribute('colspan') || '',
+      firstRowCellTexts: firstRowCells.map((node) => node.textContent || ''),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    splitCellState.firstRowCellCount === 2 &&
+      splitCellState.firstCellColSpan === '' &&
+      splitCellState.firstRowCellTexts[0]?.includes('Column 1') &&
+      splitCellState.firstRowCellTexts[1]?.includes('Column 2'),
+    `Table split-cell control did not restore split sibling cells: ${JSON.stringify(splitCellState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedTableCellBeforeDuplicateRow = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -4609,12 +4684,49 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   })()`);
   assert(selectedClearTableCell?.ok, `Unable to select table cell before color clear check: ${JSON.stringify(selectedClearTableCell)}`);
 
-  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#fce5cd');
-  await activateTextEditing(client, elementId);
-  const reselectedClearBorderSetTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  let reselectedClearBorderSetTableCell = null;
+  let clearFillSetupState = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#fce5cd');
+    await sleep(500);
+    await activateTextEditing(client, elementId);
+    reselectedClearBorderSetTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+    assert(reselectedClearBorderSetTableCell?.ok, `Unable to reselect table cell before border set for clear check: ${JSON.stringify(reselectedClearBorderSetTableCell)}`);
+    clearFillSetupState = await evaluate(client, `(() => {
+      const host = document.querySelector('[data-element-id="${elementId}"]');
+      const cells = Array.from(host?.querySelectorAll('td, th') || []);
+      const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+      const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+        ? window.__backyReadActiveEditorTableState()
+        : null;
+      const targetCellNode = slateState?.types?.find((node) => (
+        (node.type === 'td' || node.type === 'th') &&
+        (node.text || '').includes('Column 2')
+      ));
+      return {
+        targetBackgroundColor: targetCell ? window.getComputedStyle(targetCell).backgroundColor : '',
+        targetCellBackgroundColor: targetCellNode?.backgroundColor || '',
+        slateState,
+      };
+    })()`);
+    if (
+      clearFillSetupState?.targetBackgroundColor === 'rgb(252, 229, 205)' &&
+      clearFillSetupState?.targetCellBackgroundColor === '#fce5cd'
+    ) {
+      break;
+    }
+  }
+  assert(
+    clearFillSetupState?.targetBackgroundColor === 'rgb(252, 229, 205)' &&
+      clearFillSetupState?.targetCellBackgroundColor === '#fce5cd',
+    `Rich-text table cell fill setup before clear did not apply: ${JSON.stringify(clearFillSetupState)}`,
+  );
   assert(reselectedClearBorderSetTableCell?.ok, `Unable to reselect table cell before border set for clear check: ${JSON.stringify(reselectedClearBorderSetTableCell)}`);
   await selectColorPickerValue(client, 'rich-text-table-cell-border', '#ea9999');
   await sleep(500);
+  await activateTextEditing(client, elementId);
+  const reselectedClearSetTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedClearSetTableCell?.ok, `Unable to reselect table cell before color clear setup verification: ${JSON.stringify(reselectedClearSetTableCell)}`);
 
   const tableCellClearSetState = await evaluate(client, `(() => {
     const host = document.querySelector('[data-element-id="${elementId}"]');
@@ -4653,6 +4765,9 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   assert(reselectedClearBorderTableCell?.ok, `Unable to reselect table cell before border clear: ${JSON.stringify(reselectedClearBorderTableCell)}`);
   await clearColorPickerValue(client, 'rich-text-table-cell-border');
   await sleep(500);
+  await activateTextEditing(client, elementId);
+  const reselectedClearVerifyTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedClearVerifyTableCell?.ok, `Unable to reselect table cell before color clear verification: ${JSON.stringify(reselectedClearVerifyTableCell)}`);
 
   const tableCellClearState = await evaluate(client, `(() => {
     const host = document.querySelector('[data-element-id="${elementId}"]');
@@ -4758,6 +4873,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     tableState,
     editedTableState,
     trimmedTableState,
+    selectedTableCellBeforeMerge,
+    mergedCellState,
+    selectedMergedTableCell,
+    splitCellState,
     selectedTableCellBeforeDuplicateRow,
     duplicatedRowState,
     restoredDuplicateRowState,
@@ -4796,8 +4915,11 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     tableCellVerticalState,
     selectedClearTableCell,
     reselectedClearBorderSetTableCell,
+    clearFillSetupState,
+    reselectedClearSetTableCell,
     reselectedClearFillTableCell,
     reselectedClearBorderTableCell,
+    reselectedClearVerifyTableCell,
     tableCellClearSetState,
     tableCellClearState,
     reselectedAlignedTableCell,
@@ -4932,12 +5054,15 @@ const selectColorPickerValue = async (client, testId, color) => {
   await sleep(150);
 
   const selected = await evaluate(client, `(() => {
-    const swatch = Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('title') === ${JSON.stringify(color)});
+    const clearButton = document.querySelector('[data-testid="${testId}-clear"]');
+    const popover = clearButton instanceof HTMLElement ? clearButton.parentElement : document;
+    const swatch = Array.from(popover?.querySelectorAll('button') || []).find((button) => button.getAttribute('title') === ${JSON.stringify(color)});
     if (!(swatch instanceof HTMLButtonElement)) {
       return {
         ok: false,
         reason: 'missing-swatch',
         color: ${JSON.stringify(color)},
+        testId: ${JSON.stringify(testId)},
         openPopoverText: document.body.textContent?.slice(-1000) || '',
       };
     }
