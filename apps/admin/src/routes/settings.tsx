@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
+import { useAuthStore } from '@/stores/authStore';
 import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
@@ -587,6 +588,7 @@ function settingsDraftFingerprint(snapshot: SettingsDraftSnapshot): string {
 function SettingsPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
+  const currentUser = useAuthStore((state) => state.user);
   const [activeTab, setActiveTab] = useState<SettingsTab>(search.tab || 'general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [authSettings, setAuthSettings] = useState<SiteSettingsInput['auth']>();
@@ -606,6 +608,7 @@ function SettingsPage() {
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
+  const canManageApiKeys = currentUser?.role === 'owner';
 
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
     const snapshot = createSettingsDraftSnapshot(backendSettings);
@@ -1363,6 +1366,7 @@ function SettingsPage() {
             authSettings={authSettings}
             onAuthSettingsChange={setAuthSettings}
             onRegenerateKeys={handleRegenerateKeys}
+            canManageApiKeys={canManageApiKeys}
             auditLogs={settingsAuditLogs}
             isAuditLoading={isAuditLoading}
             auditNotice={auditNotice}
@@ -4097,6 +4101,7 @@ function SecuritySettings({
   authSettings,
   onAuthSettingsChange,
   onRegenerateKeys,
+  canManageApiKeys,
   auditLogs,
   isAuditLoading,
   auditNotice,
@@ -4107,6 +4112,7 @@ function SecuritySettings({
   authSettings?: SiteSettingsInput['auth'];
   onAuthSettingsChange: Dispatch<SetStateAction<SiteSettingsInput['auth']>>;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
+  canManageApiKeys: boolean;
   auditLogs: AdminAuditLog[];
   isAuditLoading: boolean;
   auditNotice: string | null;
@@ -4140,6 +4146,7 @@ function SecuritySettings({
   };
 
   const rotateKey = async (scope: 'all' | 'public' | 'admin') => {
+    if (!canManageApiKeys) return;
     setRotatingKey(scope);
     try {
       await onRegenerateKeys(scope);
@@ -4254,7 +4261,8 @@ function SecuritySettings({
                   size="sm"
                   variant="outline"
                   onClick={() => void rotateKey(item.scope)}
-                  disabled={rotatingKey !== null}
+                  disabled={!canManageApiKeys || rotatingKey !== null}
+                  title={canManageApiKeys ? undefined : 'Only owners can regenerate API keys.'}
                 >
                   {rotatingKey === item.scope ? 'Regenerating...' : `Regenerate ${item.scope}`}
                 </Button>
@@ -4273,11 +4281,17 @@ function SecuritySettings({
             <Button
               variant="outline"
               onClick={() => void rotateKey('all')}
-              disabled={rotatingKey !== null}
+              disabled={!canManageApiKeys || rotatingKey !== null}
+              title={canManageApiKeys ? undefined : 'Only owners can regenerate API keys.'}
             >
               {rotatingKey === 'all' ? 'Regenerating...' : 'Regenerate all keys'}
             </Button>
           </div>
+          {!canManageApiKeys ? (
+            <p className="mt-3 text-xs text-amber-700">
+              API key regeneration is restricted to workspace owners.
+            </p>
+          ) : null}
         </div>
       </div>
 

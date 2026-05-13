@@ -852,8 +852,13 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody(request);
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
     const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
+    const keyRegeneration = body.action === 'regenerate-api-keys';
     const access = requireAdminAccess(request, requestId, {
-      permission: mediaStorageCheck || mediaStorageProvisioningProbe ? 'media.configure' : 'settings.configure',
+      permission: mediaStorageCheck || mediaStorageProvisioningProbe
+        ? 'media.configure'
+        : keyRegeneration
+          ? 'settings.manageKeys'
+          : 'settings.configure',
     });
     if (access instanceof NextResponse) {
       return access;

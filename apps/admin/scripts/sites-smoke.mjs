@@ -138,9 +138,25 @@ const listSiteAuditLogs = async (siteId) => {
   return payload.data?.logs || payload.logs || [];
 };
 
-const deleteSite = async (siteId) => {
+const deleteSite = async (siteId, sessionToken = apiAdminSessionToken) => {
   if (!siteId) return;
-  await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
+  await requestApi(`/api/admin/sites/${siteId}`, {
+    method: 'DELETE',
+    headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {},
+  });
+};
+
+const assertAdminSiteDeleteDenied = async (siteId) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/sites/${siteId}`, {
+    method: 'DELETE',
+    headers: {
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `Admin without sites.delete should not delete sites, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Site delete denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
 const findSiteBySlug = async (slug) => {
@@ -1034,7 +1050,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, siteId, ownerSessionToken }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -1057,7 +1073,7 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
 
   if (siteId) {
     try {
-      await deleteSite(siteId);
+      await deleteSite(siteId, ownerSessionToken);
     } catch {
       // The UI flow may already have removed the temporary site.
     }
@@ -1072,6 +1088,7 @@ const main = async () => {
   let duplicatedSiteId;
   let ownerUserId;
   let viewerUserId;
+  let ownerSessionToken;
   const suffix = Date.now().toString(36);
   const siteName = `Sites Smoke ${suffix}`;
   const slug = `sites-smoke-${suffix}`;
@@ -1092,6 +1109,7 @@ const main = async () => {
     ownerUserId = owner.id;
     const ownerInvite = await createInviteToken(owner.id);
     const ownerSession = await acceptInviteToken(ownerInvite.token);
+    ownerSessionToken = ownerSession.session.token;
     const viewer = await createUser({
       fullName: `Sites Viewer ${suffix}`,
       email: viewerEmail,
@@ -1121,6 +1139,7 @@ const main = async () => {
     await navigateToCreateSite(client);
     const { site: created, pages } = await createSiteThroughUi(client, { siteName, slug, customDomain });
     createdSiteId = created.id;
+    await assertAdminSiteDeleteDenied(createdSiteId);
     assert(created.status === 'published', `Unexpected created site status: ${JSON.stringify(created)}`);
     assert(pages.length >= 3, `Storefront blueprint did not seed enough pages: ${JSON.stringify(pages).slice(0, 700)}`);
 
@@ -1168,7 +1187,7 @@ const main = async () => {
     await waitForSiteMissing(slug);
     createdSiteId = null;
 
-    await deleteSite(duplicatedSiteId);
+    await deleteSite(duplicatedSiteId, ownerSessionToken);
     duplicatedSiteId = null;
     await deleteUser(viewerUserId);
     viewerUserId = null;
@@ -1183,9 +1202,9 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId });
+    await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId, ownerSessionToken });
     if (duplicatedSiteId) {
-      await deleteSite(duplicatedSiteId).catch(() => {});
+      await deleteSite(duplicatedSiteId, ownerSessionToken).catch(() => {});
     }
     if (viewerUserId) {
       await deleteUser(viewerUserId).catch(() => {});

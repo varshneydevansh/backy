@@ -82,6 +82,41 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
+const createUser = async (input) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const user = payload.data?.user || payload.user;
+  assert(user?.id, `Create site detail RBAC user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return user;
+};
+
+const createInviteToken = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/invite-link`, {
+    method: 'POST',
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  const invite = payload.data?.invite || payload.invite;
+  assert(invite?.token, `Invite link endpoint did not return a token: ${JSON.stringify(payload).slice(0, 500)}`);
+  return invite;
+};
+
+const acceptInviteToken = async (token) => {
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  const session = payload.data?.session;
+  assert(session?.token, `Invite accept did not return a user session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return session;
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
+
 const listSites = async () => {
   const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
   return payload.data?.sites || payload.sites || [];
@@ -103,9 +138,25 @@ const createSite = async ({ name, slug, customDomain }) => {
   return site;
 };
 
-const deleteSite = async (siteId) => {
+const deleteSite = async (siteId, sessionToken = apiAdminSessionToken) => {
   if (!siteId) return;
-  await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
+  await requestApi(`/api/admin/sites/${siteId}`, {
+    method: 'DELETE',
+    headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {},
+  });
+};
+
+const assertAdminSiteDeleteDenied = async (siteId) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/sites/${siteId}`, {
+    method: 'DELETE',
+    headers: {
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `Admin without sites.delete should not delete sites, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Site delete denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
 const findSiteBySlug = async (slug) => {
@@ -852,7 +903,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, siteId, ownerSessionToken, ownerUserId }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -875,9 +926,17 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId }) => {
 
   if (siteId) {
     try {
-      await deleteSite(siteId);
+      await deleteSite(siteId, ownerSessionToken);
     } catch {
       // The site detail smoke owns only temporary sites.
+    }
+  }
+
+  if (ownerUserId) {
+    try {
+      await deleteUser(ownerUserId);
+    } catch {
+      // Temporary RBAC users are deleted best-effort.
     }
   }
 };
@@ -887,6 +946,8 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let siteId;
+  let ownerUserId;
+  let ownerSessionToken;
   const suffix = Date.now().toString(36);
   const siteName = `Site Detail Smoke ${suffix}`;
   const slug = `site-detail-smoke-${suffix}`;
@@ -914,6 +975,14 @@ const main = async () => {
     await loginAdminApi();
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
+    const owner = await createUser({
+      fullName: `Site Detail Owner ${suffix}`,
+      email: `site-detail-owner-${suffix}@example.com`,
+      role: 'owner',
+      status: 'invited',
+    });
+    ownerUserId = owner.id;
+    ownerSessionToken = (await acceptInviteToken((await createInviteToken(owner.id)).token)).token;
 
     const site = await createSite({
       name: siteName,
@@ -921,6 +990,7 @@ const main = async () => {
       customDomain: `${slug}.example.com`,
     });
     siteId = site.id;
+    await assertAdminSiteDeleteDenied(siteId);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -957,9 +1027,11 @@ const main = async () => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
 
-    await deleteSite(siteId);
+    await deleteSite(siteId, ownerSessionToken);
     await waitForSiteMissing(slug);
     siteId = null;
+    await deleteUser(ownerUserId);
+    ownerUserId = null;
 
     console.log(JSON.stringify({
       ok: true,
@@ -968,7 +1040,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, siteId });
+    await cleanup({ client, childProcess, userDataDir, siteId, ownerSessionToken, ownerUserId });
   }
 };
 

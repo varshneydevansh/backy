@@ -84,6 +84,21 @@ const readSettings = async () => {
   return payload.data.settings;
 };
 
+const assertAdminKeyRotationDenied = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({ action: 'regenerate-api-keys', scope: 'public' }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `Admin without settings.manageKeys should not rotate API keys, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Key rotation denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+};
+
 const restoreSettings = async (settings) => {
   if (!settings) return;
 
@@ -680,6 +695,7 @@ const main = async () => {
   const suffix = `settings-smoke-${Date.now().toString(36)}`;
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
+  await assertAdminKeyRotationDenied();
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let restored = false;

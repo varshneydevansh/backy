@@ -501,7 +501,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.delete' });
   if (access instanceof NextResponse) {
     return access;
   }
