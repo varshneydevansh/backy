@@ -16,6 +16,7 @@ import {
   updateAdminCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
@@ -33,6 +34,17 @@ interface RouteParams {
     siteId: string;
     collectionId: string;
   }>;
+}
+
+interface CollectionAuditSource {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  routePattern?: string | null;
+  listRoutePattern?: string | null;
+  fields?: unknown[];
+  permissions?: Partial<BackyCollectionPermissions> | null;
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -103,6 +115,26 @@ const parseListRoutePattern = (value: unknown, slug: string): string | undefined
 
   return normalizeCollectionListRoutePattern(value, slug);
 };
+
+const collectionAuditMetadata = (collection: CollectionAuditSource): BackyJsonObject => ({
+  collectionId: collection.id,
+  name: collection.name,
+  slug: collection.slug,
+  status: collection.status,
+  routePattern: collection.routePattern || null,
+  listRoutePattern: collection.listRoutePattern || null,
+  fieldCount: Array.isArray(collection.fields) ? collection.fields.length : 0,
+  publicRead: collection.permissions?.publicRead === true,
+  publicCreate: collection.permissions?.publicCreate === true,
+});
+
+const updateAuditMetadata = (
+  collection: Parameters<typeof collectionAuditMetadata>[0],
+  body: Record<string, unknown>,
+): BackyJsonObject => ({
+  ...collectionAuditMetadata(collection),
+  changedFields: Object.keys(body),
+});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -232,6 +264,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: 'collection-updated',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'collection',
+        entityId: updated.id,
+        action: 'update',
+        before: collectionAuditMetadata(collection),
+        after: collectionAuditMetadata(updated),
+        metadata: updateAuditMetadata(updated, body),
+        requestId,
+      });
 
       return NextResponse.json({ success: true, requestId, data: { collection: updated, cacheInvalidation } });
     }
@@ -291,6 +334,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'collection',
+      entityId: updated.id,
+      action: 'update',
+      before: collectionAuditMetadata(collection),
+      after: collectionAuditMetadata(updated),
+      metadata: updateAuditMetadata(updated, body),
+      requestId,
+    });
 
     return NextResponse.json({ success: true, requestId, data: { collection: updated } });
   } catch (error) {
@@ -334,6 +387,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         reason: 'collection-deleted',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'collection',
+        entityId: collection.id,
+        action: 'delete',
+        before: collectionAuditMetadata(collection),
+        metadata: collectionAuditMetadata(collection),
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -361,6 +424,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!deleted) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'collection',
+      entityId: collection.id,
+      action: 'delete',
+      before: collectionAuditMetadata(collection),
+      metadata: collectionAuditMetadata(collection),
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

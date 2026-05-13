@@ -2987,6 +2987,11 @@ try {
     assert(createCollection.json?.data?.collection?.routePattern === '/directory/:recordSlug', `${createCollection.url} returned wrong collection route pattern`);
     assert(createCollection.json?.data?.collection?.fields?.some((field) => field.key === 'title' && field.required === true), `${createCollection.url} missing title field schema`);
     createdCollectionId = createCollection.json.data.collection.id;
+    const collectionCreateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collection&entityId=${createdCollectionId}&action=create&requestId=${createCollection.json.requestId}`);
+    assert(collectionCreateAudit.response.status === 200, `${collectionCreateAudit.url} expected collection create audit readback`);
+    assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionSlug, `${collectionCreateAudit.url} missing collection create slug metadata`);
+    assert(collectionCreateAudit.json?.data?.logs?.[0]?.after?.status === 'published', `${collectionCreateAudit.url} missing collection create after snapshot`);
+    assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.publicCreate === false, `${collectionCreateAudit.url} missing collection create permission metadata`);
 
     const capturedCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
       method: 'POST',
@@ -3226,6 +3231,11 @@ try {
     });
     assert(enablePublicCreate.response.status === 200, `${enablePublicCreate.url} expected 200, got ${enablePublicCreate.response.status}`);
     assert(enablePublicCreate.json?.data?.collection?.permissions?.publicCreate === true, `${enablePublicCreate.url} expected publicCreate true`);
+    const collectionUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collection&entityId=${createdCollectionId}&action=update&requestId=${enablePublicCreate.json.requestId}`);
+    assert(collectionUpdateAudit.response.status === 200, `${collectionUpdateAudit.url} expected collection update audit readback`);
+    assert(collectionUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('permissions'), `${collectionUpdateAudit.url} missing collection update changedFields metadata`);
+    assert(collectionUpdateAudit.json?.data?.logs?.[0]?.before?.publicCreate === false, `${collectionUpdateAudit.url} missing collection update before publicCreate snapshot`);
+    assert(collectionUpdateAudit.json?.data?.logs?.[0]?.after?.publicCreate === true, `${collectionUpdateAudit.url} missing collection update after publicCreate snapshot`);
 
     const publicCreatedRecordSlug = `${collectionRecordSlug}-public-created`;
     const publicCreateRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
@@ -4670,6 +4680,10 @@ try {
     const removeCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' });
     assert(removeCollection.response.status === 200, `${removeCollection.url} expected 200, got ${removeCollection.response.status}`);
     assert(removeCollection.json?.data?.deleted === true, `${removeCollection.url} expected deleted collection`);
+    const collectionDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collection&entityId=${createdCollectionId}&action=delete&requestId=${removeCollection.json.requestId}`);
+    assert(collectionDeleteAudit.response.status === 200, `${collectionDeleteAudit.url} expected collection delete audit readback`);
+    assert(collectionDeleteAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionSlug, `${collectionDeleteAudit.url} missing collection delete slug metadata`);
+    assert(collectionDeleteAudit.json?.data?.logs?.[0]?.before?.status === 'draft', `${collectionDeleteAudit.url} missing collection delete before snapshot`);
     createdCollectionId = null;
   });
 
