@@ -73,6 +73,52 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const normalizeStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : []
+);
+
+const visitorWritePolicyFromCollection = (
+  collection: StoreCollection | { metadata?: unknown },
+): { createFieldMode: 'all' | 'selected'; allowedCreateFields: string[] } => {
+  const metadata = toRecord(collection.metadata);
+  const policy = toRecord(metadata.visitorWritePolicy);
+  const createFieldMode = policy.createFieldMode === 'selected' ? 'selected' : 'all';
+  return {
+    createFieldMode,
+    allowedCreateFields: normalizeStringList(policy.allowedCreateFields),
+  };
+};
+
+const applyVisitorCreateFieldPolicy = (
+  collection: StoreCollection | { metadata?: unknown },
+  values: Record<string, unknown>,
+): {
+  values: Record<string, unknown>;
+  ignoredFields: string[];
+  allowedCreateFields: string[];
+} => {
+  const policy = visitorWritePolicyFromCollection(collection);
+  if (policy.createFieldMode !== 'selected') {
+    return { values, ignoredFields: [], allowedCreateFields: [] };
+  }
+
+  const allowed = new Set(policy.allowedCreateFields);
+  const filteredValues = Object.fromEntries(
+    Object.entries(values).filter(([key]) => allowed.has(key)),
+  );
+  const ignoredFields = Object.keys(values).filter((key) => !allowed.has(key));
+
+  return {
+    values: filteredValues,
+    ignoredFields,
+    allowedCreateFields: policy.allowedCreateFields,
+  };
+};
+
 const isPublishedRecord = (record: BackyCollectionRecord | null | undefined): record is BackyCollectionRecord => (
   record?.status === 'published'
 );
@@ -238,7 +284,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
-      const values = toRecord(body.values || body.fields);
+      const submittedValues = toRecord(body.values || body.fields);
+      const visitorWritePolicy = applyVisitorCreateFieldPolicy(collection, submittedValues);
+      const values = visitorWritePolicy.values;
       const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || `submission-${Date.now()}`);
 
       if (!slug) {
@@ -266,8 +314,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         {
           success: true,
           requestId,
-          data: { record },
+          data: { record, visitorWritePolicy },
           record,
+          visitorWritePolicy,
         },
         requestId,
         201,
@@ -290,7 +339,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
-    const values = toRecord(body.values || body.fields);
+    const submittedValues = toRecord(body.values || body.fields);
+    const visitorWritePolicy = applyVisitorCreateFieldPolicy(collection, submittedValues);
+    const values = visitorWritePolicy.values;
     const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || `submission-${Date.now()}`);
 
     if (!slug) {
@@ -320,8 +371,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       {
         success: true,
         requestId,
-        data: { record },
+        data: { record, visitorWritePolicy },
         record,
+        visitorWritePolicy,
       },
       requestId,
       201,

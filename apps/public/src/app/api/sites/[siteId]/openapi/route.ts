@@ -769,7 +769,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           post: {
             tags: ['Interactions'],
-            summary: 'Create a draft collection record when public creation is enabled',
+            summary: 'Create a draft collection record when public creation and field policy allow it',
             operationId: 'createBackyCollectionRecord',
             parameters: [
               {
@@ -2190,6 +2190,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             required: ['record'],
             properties: {
               record: { $ref: '#/components/schemas/CollectionRecord' },
+              visitorWritePolicy: {
+                type: 'object',
+                additionalProperties: true,
+                properties: {
+                  allowedCreateFields: { type: 'array', items: { type: 'string' } },
+                  ignoredFields: { type: 'array', items: { type: 'string' } },
+                },
+              },
             },
           }),
           CollectionSchema: {

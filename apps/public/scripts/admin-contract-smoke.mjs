@@ -3613,10 +3613,19 @@ try {
           publicUpdate: false,
           publicDelete: false,
         },
+        metadata: {
+          ...(createCollection.json?.data?.collection?.metadata || {}),
+          visitorWritePolicy: {
+            createFieldMode: 'selected',
+            allowedCreateFields: ['title', 'summary', 'category', 'labels'],
+          },
+        },
       }),
     });
     assert(enablePublicCreate.response.status === 200, `${enablePublicCreate.url} expected 200, got ${enablePublicCreate.response.status}`);
     assert(enablePublicCreate.json?.data?.collection?.permissions?.publicCreate === true, `${enablePublicCreate.url} expected publicCreate true`);
+    assert(enablePublicCreate.json?.data?.collection?.metadata?.visitorWritePolicy?.createFieldMode === 'selected', `${enablePublicCreate.url} expected selected visitor write policy`);
+    assert(enablePublicCreate.json?.data?.collection?.metadata?.visitorWritePolicy?.allowedCreateFields?.includes('category'), `${enablePublicCreate.url} expected visitor writable category field`);
     const collectionUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collection&entityId=${createdCollectionId}&action=update&requestId=${enablePublicCreate.json.requestId}`);
     assert(collectionUpdateAudit.response.status === 200, `${collectionUpdateAudit.url} expected collection update audit readback`);
     assert(collectionUpdateAudit.json?.data?.logs?.[0]?.metadata?.changedFields?.includes('permissions'), `${collectionUpdateAudit.url} missing collection update changedFields metadata`);
@@ -3645,6 +3654,8 @@ try {
     assert(publicCreateRecord.json?.success === true, `${publicCreateRecord.url} expected success envelope`);
     assert(publicCreateRecord.json?.data?.record?.status === 'draft', `${publicCreateRecord.url} expected public-created records to default to draft`);
     assert(publicCreateRecord.json?.data?.record?.values?.category === 'Standard', `${publicCreateRecord.url} expected validated option value`);
+    assert(publicCreateRecord.json?.data?.record?.values?.rank === undefined, `${publicCreateRecord.url} expected visitor policy to ignore disallowed rank field`);
+    assert(publicCreateRecord.json?.data?.visitorWritePolicy?.ignoredFields?.includes('rank'), `${publicCreateRecord.url} expected ignored rank field in visitor policy response`);
 
     const hiddenPublicCreatedRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${publicCreatedRecordSlug}`);
     assert(hiddenPublicCreatedRecord.response.status === 404, `${hiddenPublicCreatedRecord.url} expected draft public-created record to stay hidden`);

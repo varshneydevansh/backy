@@ -583,6 +583,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-item-authored-template"]')) &&
         Boolean(document.querySelector('[data-testid="collections-list-authored-template-select"]')) &&
         Boolean(document.querySelector('[data-testid="collections-item-authored-template-select"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-visitor-write-policy"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-visitor-write-policy-mode"]')) &&
         authoringText.includes('Dataset authoring shortcuts') &&
         authoringText.includes(${JSON.stringify(`dataset_${collectionId}`)}) &&
         authoringText.includes('Copy repeater preset') &&

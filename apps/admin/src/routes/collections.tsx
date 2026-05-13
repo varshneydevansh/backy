@@ -498,6 +498,11 @@ interface CollectionDynamicTemplatesForm {
   };
 }
 
+interface CollectionVisitorWritePolicyForm {
+  createFieldMode: 'all' | 'selected';
+  allowedCreateFields: string[];
+}
+
 const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
   list: {
     variant: 'cards',
@@ -521,6 +526,11 @@ const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
     authoredCapturedAt: '',
     authoredCanvas: null,
   },
+});
+
+const defaultVisitorWritePolicy = (): CollectionVisitorWritePolicyForm => ({
+  createFieldMode: 'all',
+  allowedCreateFields: [],
 });
 
 const COLLECTION_SCHEMA_EXPORT_COLUMNS = [
@@ -767,6 +777,46 @@ const optionalStringListFromRecord = (record: Record<string, unknown> | undefine
   if (!Array.isArray(value)) return undefined;
   const strings = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
   return strings.length > 0 ? strings : undefined;
+};
+
+const normalizeVisitorWritePolicy = (
+  metadata: unknown,
+  fields: CollectionField[] = [],
+): CollectionVisitorWritePolicyForm => {
+  const defaults = defaultVisitorWritePolicy();
+  if (!isPlainRecord(metadata)) return defaults;
+  const policy = isPlainRecord(metadata.visitorWritePolicy) ? metadata.visitorWritePolicy : {};
+  const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
+  const allowedCreateFields = optionalStringListFromRecord(policy, 'allowedCreateFields') || [];
+
+  return {
+    createFieldMode: policy.createFieldMode === 'selected' ? 'selected' : defaults.createFieldMode,
+    allowedCreateFields: allowedCreateFields.filter((fieldKey) => fieldKeys.size === 0 || fieldKeys.has(fieldKey)),
+  };
+};
+
+const collectionMetadataWithVisitorWritePolicy = (
+  metadata: unknown,
+  visitorWritePolicy: CollectionVisitorWritePolicyForm,
+  fields: CollectionField[],
+): Record<string, unknown> => {
+  const baseMetadata = isPlainRecord(metadata) ? { ...metadata } : {};
+  const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
+  const allowedCreateFields = visitorWritePolicy.allowedCreateFields
+    .filter((fieldKey) => fieldKeys.has(fieldKey));
+
+  if (visitorWritePolicy.createFieldMode === 'selected') {
+    return {
+      ...baseMetadata,
+      visitorWritePolicy: {
+        createFieldMode: 'selected',
+        allowedCreateFields,
+      },
+    };
+  }
+
+  delete baseMetadata.visitorWritePolicy;
+  return baseMetadata;
 };
 
 const normalizeCanvasSize = (value: unknown): CollectionAuthoredDynamicTemplate['canvasSize'] | undefined => {
@@ -1111,6 +1161,7 @@ function CollectionsPage() {
     permissions: DEFAULT_PERMISSIONS,
     frontendDesignTemplateId: '',
     dynamicTemplates: defaultDynamicTemplates(),
+    visitorWritePolicy: defaultVisitorWritePolicy(),
     fields: [createEmptyField(10)],
   });
   const [recordForm, setRecordForm] = useState({
@@ -1548,6 +1599,7 @@ function CollectionsPage() {
             detailRoute: activeItemRoutePath,
             publicReadReady: activeCollectionIsPublic,
             publicCreateReady: activeCollection.permissions.publicCreate,
+            visitorWritePolicy: normalizeVisitorWritePolicy(activeCollection.metadata, activeCollection.fields),
             authoringShortcuts: datasetAuthoringShortcuts
               ? {
                   datasetId: datasetAuthoringShortcuts.datasetId,
@@ -1608,6 +1660,7 @@ function CollectionsPage() {
       status: activeCollection.status,
       description: activeCollection.description,
       permissions: activeCollection.permissions,
+      visitorWritePolicy: normalizeVisitorWritePolicy(activeCollection.metadata, activeCollection.fields),
       listRoutePattern: normalizeCollectionListRoutePattern(activeCollection.listRoutePattern, activeCollection.slug),
       routePattern: normalizeCollectionRoutePattern(activeCollection.routePattern, activeCollection.slug),
       listRoutePath: activeListRoutePath,
@@ -1979,6 +2032,7 @@ function CollectionsPage() {
       permissions: DEFAULT_PERMISSIONS,
       frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
+      visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -2127,6 +2181,7 @@ function CollectionsPage() {
       permissions: { ...template.permissions },
       frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
+      visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: cloneTemplateFields(template.fields),
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -2205,6 +2260,7 @@ function CollectionsPage() {
       permissions: collection.permissions,
       frontendDesignTemplateId: getCollectionFrontendTemplateId(collection) || '',
       dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
+      visitorWritePolicy: normalizeVisitorWritePolicy(collection.metadata, collection.fields),
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -2401,6 +2457,35 @@ function CollectionsPage() {
     });
   };
 
+  const updateVisitorWritePolicy = (updates: Partial<CollectionVisitorWritePolicyForm>) => {
+    setCollectionForm((prev) => ({
+      ...prev,
+      visitorWritePolicy: {
+        ...prev.visitorWritePolicy,
+        ...updates,
+      },
+    }));
+  };
+
+  const toggleVisitorCreateField = (fieldKey: string, checked: boolean) => {
+    setCollectionForm((prev) => {
+      const allowedCreateFields = new Set(prev.visitorWritePolicy.allowedCreateFields);
+      if (checked) {
+        allowedCreateFields.add(fieldKey);
+      } else {
+        allowedCreateFields.delete(fieldKey);
+      }
+
+      return {
+        ...prev,
+        visitorWritePolicy: {
+          ...prev.visitorWritePolicy,
+          allowedCreateFields: Array.from(allowedCreateFields),
+        },
+      };
+    });
+  };
+
   const captureAuthoredDynamicTemplate = async (kind: 'list' | 'item') => {
     if (isCollectionsBusy) return;
     const pageId = kind === 'list'
@@ -2492,8 +2577,12 @@ function CollectionsPage() {
       const selectedFrontendTemplate = collectionForm.frontendDesignTemplateId
         ? frontendCollectionTemplates.find((template) => template.id === collectionForm.frontendDesignTemplateId) || null
         : null;
-      const baseMetadata = stripFrontendCollectionTemplateMetadata(
-        collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+      const baseMetadata = collectionMetadataWithVisitorWritePolicy(
+        stripFrontendCollectionTemplateMetadata(
+          collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
+        ),
+        collectionForm.visitorWritePolicy,
+        fields,
       );
       const metadata = selectedFrontendTemplate
         ? {
@@ -3909,6 +3998,87 @@ function CollectionsPage() {
                     checked={collectionForm.permissions.publicDelete}
                     disabled
                   />
+                </div>
+                <div
+                  className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3"
+                  data-testid="collections-visitor-write-policy"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="font-medium text-amber-950">Visitor create field policy</div>
+                      <p className="mt-1 text-xs leading-5 text-amber-900/80">
+                        Restrict which schema fields public record creation may write before validation and moderation.
+                      </p>
+                    </div>
+                    <select
+                      value={collectionForm.visitorWritePolicy.createFieldMode}
+                      onChange={(event) => updateVisitorWritePolicy({
+                        createFieldMode: event.target.value === 'selected' ? 'selected' : 'all',
+                      })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border bg-background px-3 py-2 text-xs"
+                      data-testid="collections-visitor-write-policy-mode"
+                    >
+                      <option value="all">Allow all fields</option>
+                      <option value="selected">Only selected fields</option>
+                    </select>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {collectionForm.fields
+                      .filter((field) => field.key.trim() && field.label.trim())
+                      .map((field) => (
+                        <label
+                          key={field.id || field.key}
+                          className={cn(
+                            'flex items-start gap-2 rounded-lg border bg-white px-3 py-2 text-xs',
+                            collectionForm.visitorWritePolicy.createFieldMode === 'selected' &&
+                              collectionForm.visitorWritePolicy.allowedCreateFields.includes(field.key)
+                              ? 'border-amber-400'
+                              : 'border-amber-100',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={collectionForm.visitorWritePolicy.allowedCreateFields.includes(field.key)}
+                            disabled={schemaMutationDisabled || collectionForm.visitorWritePolicy.createFieldMode !== 'selected'}
+                            onChange={(event) => toggleVisitorCreateField(field.key, event.target.checked)}
+                            data-testid={`collections-visitor-write-field-${field.key}`}
+                          />
+                          <span>
+                            <span className="font-medium text-amber-950">{field.label}</span>
+                            <span className="block text-amber-900/70">{field.key}</span>
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateVisitorWritePolicy({
+                        createFieldMode: 'selected',
+                        allowedCreateFields: collectionForm.fields
+                          .map((field) => field.key)
+                          .filter(Boolean),
+                      })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-950 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateVisitorWritePolicy({ createFieldMode: 'selected', allowedCreateFields: [] })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-950 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Clear selected
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-amber-900/80">
+                    {collectionForm.visitorWritePolicy.createFieldMode === 'selected'
+                      ? `${collectionForm.visitorWritePolicy.allowedCreateFields.length} fields writable from public POST. Other submitted values are ignored.`
+                      : 'Public POST may write any schema field, then records stay draft for moderation.'}
+                  </p>
                 </div>
               </div>
               <label className="space-y-1 text-sm lg:col-span-4">

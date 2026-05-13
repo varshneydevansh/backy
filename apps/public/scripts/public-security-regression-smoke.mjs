@@ -86,7 +86,7 @@ const publicIntakeRoutes = [
   },
   {
     file: 'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/route.ts',
-    required: ['collection.permissions.publicCreate', "status: 'draft'", 'validateCollectionRecordValues('],
+    required: ['collection.permissions.publicCreate', "status: 'draft'", 'validateCollectionRecordValues(', 'applyVisitorCreateFieldPolicy('],
   },
   {
     file: 'apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts',
@@ -112,8 +112,11 @@ for (const file of [
 }
 
 const checkoutRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts');
-const createOrderIndex = checkoutRoute.indexOf('collections.createRecord(');
-const updateInventoryIndex = checkoutRoute.indexOf('collections.updateRecord(');
+const orderCreateAnchor = 'const order = (await repositories.collections.createRecord({';
+const orderCreateAnchorIndex = checkoutRoute.indexOf(orderCreateAnchor);
+const createOrderIndex = checkoutRoute.lastIndexOf('collections.createRecord(', orderCreateAnchorIndex);
+const updateInventoryIndex = checkoutRoute.indexOf('collections.updateRecord(', orderCreateAnchorIndex);
+assert(orderCreateAnchorIndex !== -1, 'checkout route missing public order create anchor');
 assert(createOrderIndex !== -1, 'checkout route missing order create');
 assert(updateInventoryIndex !== -1, 'checkout route missing inventory update');
 assert(createOrderIndex < updateInventoryIndex, 'checkout route must create the order before updating inventory');
