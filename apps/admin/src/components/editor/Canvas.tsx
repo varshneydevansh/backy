@@ -23,6 +23,7 @@ import {
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { ACTIVE_EDITOR_CONTENT_SYNC_EVENT, useActiveEditor } from './ActiveEditorContext';
 import {
+  extractListItemEntriesFromSlate,
   extractListItemsFromSlate,
   getListTypeFromSlate,
   normalizeListContent,
@@ -3270,7 +3271,7 @@ function CanvasElementComponent({
               : undefined;
         const listType = listTypeFromProps || listTypeFromSelection;
         const listStyleType = p.listMarker ?? (listType === 'number' ? 'decimal' : 'disc');
-        const listItems = extractListItemsFromSlate(listValue);
+        const listItems = extractListItemEntriesFromSlate(listValue);
         const listIndent = toNonNegativeCssLength(p.listIndent ?? p.padding ?? 0);
         if (!isEditingEnabled) {
           return React.createElement(
@@ -3294,7 +3295,14 @@ function CanvasElementComponent({
               },
             },
             ...(listItems.length > 0
-              ? listItems.map((item, index) => <li key={`${element.id}-item-${index}`}>{item}</li>)
+              ? listItems.map((item, index) => (
+                <li
+                  key={`${element.id}-item-${index}`}
+                  style={item.indent ? { marginLeft: `${item.indent * 24}px` } : undefined}
+                >
+                  {item.text}
+                </li>
+              ))
               : [<li key={`${element.id}-item-empty`}>List item</li>]),
           );
         }

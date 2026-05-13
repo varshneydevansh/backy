@@ -1,10 +1,15 @@
 type SlateNode = {
   type?: string;
   text?: string;
+  indent?: unknown;
   children?: unknown[];
 };
 
 export type ListType = 'bullet' | 'number';
+export type ListItemEntry = {
+  text: string;
+  indent?: number;
+};
 
 const normalizeListType = (listType: unknown): ListType =>
   listType === 'number' || listType === 'ordered' || listType === 'decimal' ? 'number' : 'bullet';
@@ -20,28 +25,59 @@ const toListItemText = (value: unknown): string => {
     return String(value);
   }
 
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.label === 'string') {
+      return record.label.trimEnd();
+    }
+    if (typeof record.value === 'string') {
+      return record.value.trimEnd();
+    }
+    if (typeof record.text === 'string') {
+      return record.text.trimEnd();
+    }
+  }
+
   return '';
 };
 
+const toListItemIndent = (value: unknown): number | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const raw = (value as Record<string, unknown>).indent;
+  const indent = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isFinite(indent) || indent <= 0) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.floor(indent));
+};
+
 export const buildListContentFromItems = (items: unknown = [], listType: ListType = 'bullet'): unknown[] => {
-  const normalized = Array.isArray(items)
-    ? items.map((item) => toListItemText(item))
+  const normalized: ListItemEntry[] = Array.isArray(items)
+    ? items.map((item) => ({
+      text: toListItemText(item),
+      indent: toListItemIndent(item),
+    }))
     : [];
 
   const hasExplicitItems = Array.isArray(items) && items.length > 0;
-  const hasMeaningfulItem = normalized.some((item) => item.length > 0);
+  const hasMeaningfulItem = normalized.some((item) => item.text.length > 0);
   const safeItems = hasExplicitItems
     ? normalized
     : hasMeaningfulItem
       ? normalized
-      : [listPlaceholderItem];
+      : [{ text: listPlaceholderItem }];
 
   return [
     {
       type: normalizeListType(listType) === 'number' ? 'ol' : 'ul',
       children: safeItems.map((item) => ({
         type: 'li',
-        children: [{ text: item }],
+        ...(item.indent ? { indent: item.indent } : {}),
+        children: [{ text: item.text }],
       })),
     },
   ];
@@ -64,19 +100,42 @@ const getNodeText = (node: unknown): string => {
   return typed.children.map(getNodeText).join('');
 };
 
-export const extractListItemsFromSlate = (value: unknown): string[] => {
+const getListItemOwnText = (node: unknown): string => {
+  if (!node || typeof node !== 'object') {
+    return '';
+  }
+
+  const typed = node as SlateNode;
+  if (!Array.isArray(typed.children)) {
+    return typeof typed.text === 'string' ? typed.text : '';
+  }
+
+  return typed.children
+    .filter((child) => {
+      if (!child || typeof child !== 'object') {
+        return true;
+      }
+      const childType = (child as SlateNode).type;
+      return childType !== 'ul' && childType !== 'ol';
+    })
+    .map(getNodeText)
+    .join('');
+};
+
+export const extractListItemEntriesFromSlate = (value: unknown): ListItemEntry[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const items: string[] = [];
+  const items: ListItemEntry[] = [];
 
-  const walk = (node: unknown) => {
+  const walk = (node: unknown, inheritedIndent = 0) => {
     if (!node || typeof node !== 'object') {
       return;
     }
 
     const typed = node as SlateNode;
+    const ownIndent = toListItemIndent(typed);
 
     if (typed.type === 'ul' || typed.type === 'ol') {
       const children = Array.isArray(typed.children) ? typed.children : [];
@@ -85,32 +144,47 @@ export const extractListItemsFromSlate = (value: unknown): string[] => {
         return (child as SlateNode).type === 'li';
       });
 
-        if (hasListItems) {
-          children.forEach((child) => {
-            if (child && typeof child === 'object' && (child as SlateNode).type === 'li') {
-              const text = getNodeText(child);
-              items.push(text.trimEnd());
-              return;
-            }
-          });
+      if (hasListItems) {
+        children.forEach((child) => {
+          if (child && typeof child === 'object' && (child as SlateNode).type === 'li') {
+            walk(child, inheritedIndent);
+          }
+        });
         return;
       }
     }
 
     if (typed.type === 'li') {
-      const text = getNodeText(typed);
-      items.push(text.trimEnd());
+      const indent = ownIndent ?? inheritedIndent;
+      items.push({
+        text: getListItemOwnText(typed).trimEnd(),
+        ...(indent > 0 ? { indent } : {}),
+      });
+      if (Array.isArray(typed.children)) {
+        typed.children.forEach((child) => {
+          if (child && typeof child === 'object') {
+            const childType = (child as SlateNode).type;
+            if (childType === 'ul' || childType === 'ol') {
+              walk(child, indent + 1);
+            }
+          }
+        });
+      }
       return;
     }
 
     if (Array.isArray(typed.children)) {
-      typed.children.forEach((child) => walk(child));
+      typed.children.forEach((child) => walk(child, inheritedIndent));
     }
   };
 
   value.forEach((node) => walk(node));
   return items;
 };
+
+export const extractListItemsFromSlate = (value: unknown): string[] => (
+  extractListItemEntriesFromSlate(value).map((item) => item.text)
+);
 
 export const getListTypeFromSlate = (value: unknown): ListType => {
   if (!Array.isArray(value)) {
@@ -167,9 +241,9 @@ export const getListItemsFromProps = (props: {
   content?: unknown;
   items?: unknown;
 }): string[] => {
-  const contentItems = extractListItemsFromSlate(props?.content);
+  const contentItems = extractListItemEntriesFromSlate(props?.content);
   if (contentItems.length > 0) {
-    return contentItems.map((item) => item.trimEnd());
+    return contentItems.map((item) => item.text.trimEnd());
   }
 
   if (Array.isArray(props?.items)) {

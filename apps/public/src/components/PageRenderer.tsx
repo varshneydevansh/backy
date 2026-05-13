@@ -652,8 +652,14 @@ interface ElementRendererProps extends ElementRendererContext {
 interface SlateNode {
   type?: string;
   text?: string;
+  indent?: unknown;
   children?: unknown[];
 }
+
+type ListItemEntry = {
+  text: string;
+  indent?: number;
+};
 
 function getLength(value: unknown, fallback = ''): string {
   if (value === undefined || value === null) {
@@ -848,16 +854,44 @@ function parseOptionValues(raw: unknown): string[] {
   return Array.from(new Set(parsed.filter((item) => item.length > 0)));
 }
 
-function parseListItems(raw: unknown, content: unknown): string[] {
+const toListItemIndent = (value: unknown): number | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const raw = (value as Record<string, unknown>).indent;
+  const indent = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isFinite(indent) || indent <= 0) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.floor(indent));
+};
+
+function parseListItemEntries(raw: unknown, content: unknown): ListItemEntry[] {
   if (Array.isArray(raw)) {
-    return raw.map((item) => (typeof item === 'string' ? item.trimEnd() : getNameClass(item).trimEnd()));
+    return raw.map((item) => ({
+      text: typeof item === 'string'
+        ? item.trimEnd()
+        : item && typeof item === 'object' && typeof (item as Record<string, unknown>).label === 'string'
+          ? ((item as Record<string, string>).label).trimEnd()
+          : item && typeof item === 'object' && typeof (item as Record<string, unknown>).value === 'string'
+            ? ((item as Record<string, string>).value).trimEnd()
+            : item && typeof item === 'object' && typeof (item as Record<string, unknown>).text === 'string'
+              ? ((item as Record<string, string>).text).trimEnd()
+              : getNameClass(item).trimEnd(),
+      indent: toListItemIndent(item),
+    }));
   }
 
   if (typeof raw === 'string') {
-    return raw.split(/\r?\n/).map((item) => item.trimEnd());
+    return raw.split(/\r?\n/).map((item) => ({ text: item.trimEnd() }));
   }
 
-  return extractListItemsFromSlate(content).map((item) => item.trimEnd());
+  return extractListItemEntriesFromSlate(content).map((item) => ({
+    ...item,
+    text: item.text.trimEnd(),
+  }));
 }
 
 function normalizeFormSchemaFieldType(raw: unknown): FormSchemaFieldType {
@@ -1193,34 +1227,70 @@ const getSlateText = (node: unknown): string => {
   return typed.children.map(getSlateText).join('');
 };
 
-const extractListItemsFromSlate = (value: unknown): string[] => {
+const getListItemOwnText = (node: unknown): string => {
+  if (!node || typeof node !== 'object') {
+    return '';
+  }
+
+  const typed = node as SlateNode;
+  if (!Array.isArray(typed.children)) {
+    return typeof typed.text === 'string' ? typed.text : '';
+  }
+
+  return typed.children
+    .filter((child) => {
+      if (!child || typeof child !== 'object') {
+        return true;
+      }
+      const childType = (child as SlateNode).type;
+      return childType !== 'ul' && childType !== 'ol';
+    })
+    .map(getSlateText)
+    .join('');
+};
+
+const extractListItemEntriesFromSlate = (value: unknown): ListItemEntry[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const items: string[] = [];
+  const items: ListItemEntry[] = [];
 
-  const walk = (node: unknown) => {
+  const walk = (node: unknown, inheritedIndent = 0) => {
     if (!node || typeof node !== 'object') {
       return;
     }
 
     const typed = node as SlateNode;
     if ((typed.type === 'li' || typed.type === 'item')) {
-      const text = getSlateText(node).trim();
-      items.push(text);
+      const indent = toListItemIndent(typed) ?? inheritedIndent;
+      const text = getListItemOwnText(node).trimEnd();
+      items.push({
+        text,
+        ...(indent > 0 ? { indent } : {}),
+      });
+      if (Array.isArray(typed.children)) {
+        typed.children.forEach((child) => {
+          if (child && typeof child === 'object') {
+            const childType = (child as SlateNode).type;
+            if (childType === 'ul' || childType === 'ol') {
+              walk(child, indent + 1);
+            }
+          }
+        });
+      }
       return;
     }
 
     if (typed.type === 'ul' || typed.type === 'ol') {
       if (Array.isArray(typed.children)) {
-        typed.children.forEach(walk);
+        typed.children.forEach((child) => walk(child, inheritedIndent));
       }
       return;
     }
 
     if (Array.isArray(typed.children)) {
-      typed.children.forEach(walk);
+      typed.children.forEach((child) => walk(child, inheritedIndent));
     }
   };
 
@@ -2047,7 +2117,7 @@ function HtmlElement({ element }: ElementRendererProps) {
  */
 function ListElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
-  const options = parseListItems(props.items, props.content);
+  const options = parseListItemEntries(props.items, props.content);
   const listTypeFromType = getNameClass(props.listType);
   const listType = listTypeFromType === 'number' || listTypeFromType === 'ordered' ? 'ol' : 'ul';
   const listIndent = getNonNegativeLength(props.listIndent, 0);
@@ -2067,7 +2137,14 @@ function ListElement({ element }: ElementRendererProps) {
       },
     },
     ...(options.length > 0
-      ? options.map((item, index) => <li key={`${element.id}-${item}-${index}`}>{item}</li>)
+      ? options.map((item, index) => (
+        <li
+          key={`${element.id}-${item.text}-${index}`}
+          style={item.indent ? { marginLeft: `${item.indent * 24}px` } : undefined}
+        >
+          {item.text}
+        </li>
+      ))
       : [<li key={`${element.id}-empty`}>List item</li>]),
   );
 }

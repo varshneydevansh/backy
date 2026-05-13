@@ -6,16 +6,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-const helperPath = path.resolve('src/components/editor/richTextListTransforms.ts');
-const source = fs.readFileSync(helperPath, 'utf8');
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ES2022,
-    target: ts.ScriptTarget.ES2020,
-  },
-  fileName: helperPath,
-});
-const helper = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const loadTsModule = async (relativePath) => {
+  const helperPath = path.resolve(relativePath);
+  const source = fs.readFileSync(helperPath, 'utf8');
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: helperPath,
+  });
+  const helper = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+  return { helperPath, helper };
+};
+
+const { helperPath, helper } = await loadTsModule('src/components/editor/richTextListTransforms.ts');
+const { helper: listUtils } = await loadTsModule('src/components/editor/listUtils.ts');
 
 const paragraphNodes = [
   { type: 'p', children: [{ text: 'Discovery' }] },
@@ -67,8 +73,45 @@ const indented = helper.applyListIndentToNodes(existingOrdered, 1);
 assert.equal(indented[0].children[0].indent, 2);
 assert.equal(indented[0].children[1].indent, 1);
 
+const nestedSlateList = [{
+  type: 'ul',
+  children: [
+    {
+      type: 'li',
+      children: [
+        { text: 'Parent' },
+        {
+          type: 'ul',
+          children: [
+            { type: 'li', children: [{ text: 'Child' }] },
+          ],
+        },
+      ],
+    },
+    { type: 'li', indent: 2, children: [{ text: 'Explicit' }] },
+  ],
+}];
+const nestedEntries = listUtils.extractListItemEntriesFromSlate(nestedSlateList);
+assert.deepEqual(nestedEntries, [
+  { text: 'Parent' },
+  { text: 'Child', indent: 1 },
+  { text: 'Explicit', indent: 2 },
+]);
+assert.deepEqual(listUtils.extractListItemsFromSlate(nestedSlateList), ['Parent', 'Child', 'Explicit']);
+
+const objectBackedList = listUtils.buildListContentFromItems([
+  { label: 'Parent object' },
+  { text: 'Child object', indent: 2 },
+], 'number');
+assert.equal(objectBackedList[0].type, 'ol');
+assert.equal(objectBackedList[0].children[1].indent, 2);
+assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
+  { text: 'Parent object' },
+  { text: 'Child object', indent: 2 },
+]);
+
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 14,
+  cases: 23,
 }));
