@@ -509,6 +509,9 @@ interface CollectionDynamicTemplatesForm {
 interface CollectionVisitorWritePolicyForm {
   createFieldMode: 'all' | 'selected';
   allowedCreateFields: string[];
+  publicWriteToken: string;
+  updateFieldMode: 'all' | 'selected';
+  allowedUpdateFields: string[];
 }
 
 const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
@@ -541,6 +544,9 @@ const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
 const defaultVisitorWritePolicy = (): CollectionVisitorWritePolicyForm => ({
   createFieldMode: 'all',
   allowedCreateFields: [],
+  publicWriteToken: '',
+  updateFieldMode: 'all',
+  allowedUpdateFields: [],
 });
 
 const COLLECTION_SCHEMA_EXPORT_COLUMNS = [
@@ -798,10 +804,14 @@ const normalizeVisitorWritePolicy = (
   const policy = isPlainRecord(metadata.visitorWritePolicy) ? metadata.visitorWritePolicy : {};
   const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
   const allowedCreateFields = optionalStringListFromRecord(policy, 'allowedCreateFields') || [];
+  const allowedUpdateFields = optionalStringListFromRecord(policy, 'allowedUpdateFields') || [];
 
   return {
     createFieldMode: policy.createFieldMode === 'selected' ? 'selected' : defaults.createFieldMode,
     allowedCreateFields: allowedCreateFields.filter((fieldKey) => fieldKeys.size === 0 || fieldKeys.has(fieldKey)),
+    publicWriteToken: optionalStringFromRecord(policy, 'publicWriteToken') || optionalStringFromRecord(metadata, 'publicWriteToken') || '',
+    updateFieldMode: policy.updateFieldMode === 'selected' ? 'selected' : defaults.updateFieldMode,
+    allowedUpdateFields: allowedUpdateFields.filter((fieldKey) => fieldKeys.size === 0 || fieldKeys.has(fieldKey)),
   };
 };
 
@@ -814,19 +824,31 @@ const collectionMetadataWithVisitorWritePolicy = (
   const fieldKeys = new Set(fields.map((field) => field.key).filter(Boolean));
   const allowedCreateFields = visitorWritePolicy.allowedCreateFields
     .filter((fieldKey) => fieldKeys.has(fieldKey));
+  const allowedUpdateFields = visitorWritePolicy.allowedUpdateFields
+    .filter((fieldKey) => fieldKeys.has(fieldKey));
+  const publicWriteToken = visitorWritePolicy.publicWriteToken.trim();
+  const hasCustomPolicy = (
+    visitorWritePolicy.createFieldMode === 'selected' ||
+    publicWriteToken ||
+    visitorWritePolicy.updateFieldMode === 'selected'
+  );
 
-  if (visitorWritePolicy.createFieldMode === 'selected') {
-    return {
-      ...baseMetadata,
-      visitorWritePolicy: {
-        createFieldMode: 'selected',
-        allowedCreateFields,
-      },
-    };
+  delete baseMetadata.publicWriteToken;
+  if (!hasCustomPolicy) {
+    delete baseMetadata.visitorWritePolicy;
+    return baseMetadata;
   }
 
-  delete baseMetadata.visitorWritePolicy;
-  return baseMetadata;
+  return {
+    ...baseMetadata,
+    visitorWritePolicy: {
+      createFieldMode: visitorWritePolicy.createFieldMode,
+      ...(visitorWritePolicy.createFieldMode === 'selected' ? { allowedCreateFields } : {}),
+      ...(publicWriteToken ? { publicWriteToken } : {}),
+      updateFieldMode: visitorWritePolicy.updateFieldMode,
+      ...(visitorWritePolicy.updateFieldMode === 'selected' ? { allowedUpdateFields } : {}),
+    },
+  };
 };
 
 const normalizeCanvasSize = (value: unknown): CollectionAuthoredDynamicTemplate['canvasSize'] | undefined => {
@@ -2645,6 +2667,25 @@ function CollectionsPage() {
     });
   };
 
+  const toggleVisitorUpdateField = (fieldKey: string, checked: boolean) => {
+    setCollectionForm((prev) => {
+      const allowedUpdateFields = new Set(prev.visitorWritePolicy.allowedUpdateFields);
+      if (checked) {
+        allowedUpdateFields.add(fieldKey);
+      } else {
+        allowedUpdateFields.delete(fieldKey);
+      }
+
+      return {
+        ...prev,
+        visitorWritePolicy: {
+          ...prev.visitorWritePolicy,
+          allowedUpdateFields: Array.from(allowedUpdateFields),
+        },
+      };
+    });
+  };
+
   const captureAuthoredDynamicTemplate = async (kind: 'list' | 'item') => {
     if (isCollectionsBusy) return;
     const pageId = kind === 'list'
@@ -4162,6 +4203,7 @@ function CollectionsPage() {
                     description="Frontend pages can list and render records."
                     checked={collectionForm.permissions.publicRead}
                     disabled={schemaMutationDisabled}
+                    testId="collections-public-read-toggle"
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -4175,6 +4217,7 @@ function CollectionsPage() {
                     description="Public POST creates draft records."
                     checked={collectionForm.permissions.publicCreate}
                     disabled={schemaMutationDisabled}
+                    testId="collections-public-create-toggle"
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -4185,15 +4228,31 @@ function CollectionsPage() {
                   />
                   <PermissionSwitch
                     label="Visitor update"
-                    description="Planned after public auth scopes."
+                    description="Public PATCH requires the write token below."
                     checked={collectionForm.permissions.publicUpdate}
-                    disabled
+                    disabled={schemaMutationDisabled}
+                    testId="collections-public-update-toggle"
+                    onChange={(checked) => setCollectionForm((prev) => ({
+                      ...prev,
+                      permissions: {
+                        ...prev.permissions,
+                        publicUpdate: checked,
+                      },
+                    }))}
                   />
                   <PermissionSwitch
                     label="Visitor delete"
-                    description="Planned after public auth scopes."
+                    description="Public DELETE requires the write token below."
                     checked={collectionForm.permissions.publicDelete}
-                    disabled
+                    disabled={schemaMutationDisabled}
+                    testId="collections-public-delete-toggle"
+                    onChange={(checked) => setCollectionForm((prev) => ({
+                      ...prev,
+                      permissions: {
+                        ...prev.permissions,
+                        publicDelete: checked,
+                      },
+                    }))}
                   />
                 </div>
                 <div
@@ -4275,6 +4334,111 @@ function CollectionsPage() {
                     {collectionForm.visitorWritePolicy.createFieldMode === 'selected'
                       ? `${collectionForm.visitorWritePolicy.allowedCreateFields.length} fields writable from public POST. Other submitted values are ignored.`
                       : 'Public POST may write any schema field, then records stay draft for moderation.'}
+                  </p>
+                </div>
+                <div
+                  className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3"
+                  data-testid="collections-visitor-mutation-policy"
+                >
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+                    <div>
+                      <div className="font-medium text-rose-950">Visitor update/delete policy</div>
+                      <p className="mt-1 text-xs leading-5 text-rose-900/80">
+                        Public PATCH and DELETE require a collection-scoped write token. Update requests may also be limited to selected fields.
+                      </p>
+                    </div>
+                    <label className="space-y-1 text-xs">
+                      <span className="font-medium text-rose-950">Public write token</span>
+                      <input
+                        type="password"
+                        value={collectionForm.visitorWritePolicy.publicWriteToken}
+                        onChange={(event) => updateVisitorWritePolicy({ publicWriteToken: event.target.value })}
+                        disabled={schemaMutationDisabled}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                        placeholder="Required for public update/delete"
+                        data-testid="collections-visitor-write-token"
+                      />
+                      <span className="block text-rose-900/70">
+                        Sent by custom frontends as `x-backy-public-write-token` or `publicWriteToken`.
+                      </span>
+                    </label>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="text-xs text-rose-900/80">
+                      {collectionForm.permissions.publicUpdate || collectionForm.permissions.publicDelete
+                        ? collectionForm.visitorWritePolicy.publicWriteToken.trim()
+                          ? 'Token configured for enabled public mutation routes.'
+                          : 'Set a token before using public update/delete from a frontend.'
+                        : 'Enable visitor update or delete above to expose public mutation routes.'}
+                    </div>
+                    <select
+                      value={collectionForm.visitorWritePolicy.updateFieldMode}
+                      onChange={(event) => updateVisitorWritePolicy({
+                        updateFieldMode: event.target.value === 'selected' ? 'selected' : 'all',
+                      })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border bg-background px-3 py-2 text-xs"
+                      data-testid="collections-visitor-update-policy-mode"
+                    >
+                      <option value="all">Allow all update fields</option>
+                      <option value="selected">Only selected update fields</option>
+                    </select>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {collectionForm.fields
+                      .filter((field) => field.key.trim() && field.label.trim())
+                      .map((field) => (
+                        <label
+                          key={`update-${field.id || field.key}`}
+                          className={cn(
+                            'flex items-start gap-2 rounded-lg border bg-white px-3 py-2 text-xs',
+                            collectionForm.visitorWritePolicy.updateFieldMode === 'selected' &&
+                              collectionForm.visitorWritePolicy.allowedUpdateFields.includes(field.key)
+                              ? 'border-rose-400'
+                              : 'border-rose-100',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={collectionForm.visitorWritePolicy.allowedUpdateFields.includes(field.key)}
+                            disabled={schemaMutationDisabled || collectionForm.visitorWritePolicy.updateFieldMode !== 'selected'}
+                            onChange={(event) => toggleVisitorUpdateField(field.key, event.target.checked)}
+                            data-testid={`collections-visitor-update-field-${field.key}`}
+                          />
+                          <span>
+                            <span className="font-medium text-rose-950">{field.label}</span>
+                            <span className="block text-rose-900/70">{field.key}</span>
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateVisitorWritePolicy({
+                        updateFieldMode: 'selected',
+                        allowedUpdateFields: collectionForm.fields
+                          .map((field) => field.key)
+                          .filter(Boolean),
+                      })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-950 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Select update fields
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateVisitorWritePolicy({ updateFieldMode: 'selected', allowedUpdateFields: [] })}
+                      disabled={schemaMutationDisabled}
+                      className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-950 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Clear update fields
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-rose-900/80">
+                    {collectionForm.visitorWritePolicy.updateFieldMode === 'selected'
+                      ? `${collectionForm.visitorWritePolicy.allowedUpdateFields.length} fields writable from public PATCH. Other submitted values are ignored.`
+                      : 'Public PATCH may write any schema field after token validation.'}
                   </p>
                 </div>
               </div>
@@ -5728,18 +5892,21 @@ function PermissionSwitch({
   checked,
   disabled = false,
   onChange,
+  testId,
 }: {
   label: string;
   description: string;
   checked: boolean;
   disabled?: boolean;
   onChange?: (checked: boolean) => void;
+  testId?: string;
 }) {
   return (
     <label
       className={`flex min-h-24 items-start gap-3 rounded-lg border border-border bg-background p-3 ${
         disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:bg-muted/40'
       }`}
+      data-testid={testId}
     >
       <input
         type="checkbox"

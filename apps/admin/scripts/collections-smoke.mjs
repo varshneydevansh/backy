@@ -604,6 +604,13 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-item-authored-template-select"]')) &&
         Boolean(document.querySelector('[data-testid="collections-visitor-write-policy"]')) &&
         Boolean(document.querySelector('[data-testid="collections-visitor-write-policy-mode"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-visitor-mutation-policy"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-visitor-write-token"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-visitor-update-policy-mode"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-public-update-toggle"]')) &&
+        Boolean(document.querySelector('[data-testid="collections-public-delete-toggle"]')) &&
+        body.includes('Visitor update/delete policy') &&
+        body.includes('Public write token') &&
         authoringText.includes('Dataset authoring shortcuts') &&
         authoringText.includes(${JSON.stringify(`dataset_${collectionId}`)}) &&
         authoringText.includes('Copy repeater preset') &&
@@ -727,7 +734,11 @@ const assertNewCollectionButtonReset = async (client) => {
         viewportHeight: window.innerHeight,
       };
     })()`);
-    if (state.hasNotice && state.nameValue === '' && state.formTop !== null && state.formTop < state.viewportHeight) {
+    if (
+      state.hasNotice &&
+      state.nameValue === '' &&
+      (state.activeElementId === 'collections-schema-name' || (state.formTop !== null && state.formTop < state.viewportHeight))
+    ) {
       return;
     }
     if (attempt === 39) {
@@ -735,6 +746,115 @@ const assertNewCollectionButtonReset = async (client) => {
     }
     await sleep(250);
   }
+};
+
+const configureVisitorMutationPolicyThroughUi = async (client, collectionId, token) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const configured = await evaluate(client, `(() => {
+      const setNativeValue = (element, value) => {
+        const prototype = Object.getPrototypeOf(element);
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+        descriptor?.set?.call(element, value);
+      };
+      const updateToggle = document.querySelector('[data-testid="collections-public-update-toggle"] input');
+      const deleteToggle = document.querySelector('[data-testid="collections-public-delete-toggle"] input');
+      const tokenInput = document.querySelector('[data-testid="collections-visitor-write-token"]');
+      const updateMode = document.querySelector('[data-testid="collections-visitor-update-policy-mode"]');
+      const summaryField = document.querySelector('[data-testid="collections-visitor-update-field-summary"]');
+
+      if (!(updateToggle instanceof HTMLInputElement)) return { ok: false, reason: 'update-toggle-missing' };
+      if (!(deleteToggle instanceof HTMLInputElement)) return { ok: false, reason: 'delete-toggle-missing' };
+      if (!(tokenInput instanceof HTMLInputElement)) return { ok: false, reason: 'token-input-missing' };
+      if (!(updateMode instanceof HTMLSelectElement)) return { ok: false, reason: 'update-mode-missing' };
+      if (!(summaryField instanceof HTMLInputElement)) return { ok: false, reason: 'summary-field-missing' };
+      if (updateToggle.disabled || deleteToggle.disabled || tokenInput.disabled || updateMode.disabled) {
+        return {
+          ok: false,
+          reason: 'controls-disabled',
+          updateDisabled: updateToggle.disabled,
+          deleteDisabled: deleteToggle.disabled,
+          tokenDisabled: tokenInput.disabled,
+          updateModeDisabled: updateMode.disabled,
+        };
+      }
+
+      if (!updateToggle.checked) updateToggle.click();
+      if (!deleteToggle.checked) deleteToggle.click();
+      setNativeValue(tokenInput, ${JSON.stringify(token)});
+      tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeValue(updateMode, 'selected');
+      updateMode.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!summaryField.checked) summaryField.click();
+
+      return {
+        ok: true,
+        updateChecked: updateToggle.checked,
+        deleteChecked: deleteToggle.checked,
+        tokenValue: tokenInput.value,
+        updateMode: updateMode.value,
+        summaryChecked: summaryField.checked,
+      };
+    })()`);
+    if (configured.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to configure visitor mutation policy controls: ${JSON.stringify(configured)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updateChecked: document.querySelector('[data-testid="collections-public-update-toggle"] input')?.checked || false,
+      deleteChecked: document.querySelector('[data-testid="collections-public-delete-toggle"] input')?.checked || false,
+      tokenValue: document.querySelector('[data-testid="collections-visitor-write-token"]')?.value || '',
+      updateMode: document.querySelector('[data-testid="collections-visitor-update-policy-mode"]')?.value || '',
+      summaryChecked: document.querySelector('[data-testid="collections-visitor-update-field-summary"]')?.checked || false,
+    }))()`);
+    if (
+      state.updateChecked &&
+      state.deleteChecked &&
+      state.tokenValue === token &&
+      state.updateMode === 'selected' &&
+      state.summaryChecked
+    ) {
+      break;
+    }
+    if (attempt === 19) {
+      throw new Error(`Visitor mutation policy controls did not settle: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const form = document.querySelector('#collections-schema');
+    const button = form
+      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+      : null;
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+    if (button.disabled) return { ok: false, reason: 'save-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to save visitor mutation policy: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const collections = await fetchCollections();
+    const collection = collections.find((candidate) => candidate.id === collectionId);
+    const policy = collection?.metadata?.visitorWritePolicy;
+    if (
+      collection?.permissions?.publicUpdate === true &&
+      collection?.permissions?.publicDelete === true &&
+      policy?.publicWriteToken === token &&
+      policy?.updateFieldMode === 'selected' &&
+      Array.isArray(policy?.allowedUpdateFields) &&
+      policy.allowedUpdateFields.includes('summary')
+    ) {
+      return collection;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Visitor mutation policy did not persist');
 };
 
 const createFrontendTemplateCollectionThroughUi = async (client) => {
@@ -967,29 +1087,36 @@ const assertAuthoredDynamicTemplateRender = async ({ collectionId, collectionSlu
 };
 
 const publishRecordThroughUi = async (client, recordSlug) => {
-  const selected = await evaluate(client, `(() => {
-    const checkbox = Array.from(document.querySelectorAll('input')).find((input) => (
-      (input.getAttribute('aria-label') || '') === ${JSON.stringify(`Select record ${recordSlug}`)}
-    ));
-    if (!(checkbox instanceof HTMLInputElement)) {
-      return { ok: false, reason: 'record-checkbox-missing' };
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const checkbox = Array.from(document.querySelectorAll('input')).find((input) => (
+        (input.getAttribute('aria-label') || '') === ${JSON.stringify(`Select record ${recordSlug}`)}
+      ));
+      if (!(checkbox instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'record-checkbox-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+      if (checkbox.disabled) return { ok: false, reason: 'record-checkbox-disabled' };
+      if (!checkbox.checked) checkbox.click();
+      return { ok: true, checked: checkbox.checked };
+    })()`);
+    if (selected.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Unable to select collection record: ${JSON.stringify(selected)}`);
     }
-    if (!checkbox.checked) checkbox.click();
-    return { ok: true, checked: checkbox.checked };
-  })()`);
-  assert(selected.ok, `Unable to select collection record: ${JSON.stringify(selected)}`);
+    await sleep(250);
+  }
 
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="collections-record-bulk-toolbar"]')) &&
         (document.querySelector('[data-testid="collections-record-bulk-toolbar"]')?.textContent || '').includes('1 selected'),
       body: document.body?.innerText?.slice(0, 800) || '',
     }))()`);
     if (state.ready) break;
-    if (attempt === 39) {
+    if (attempt === 79) {
       throw new Error(`Selected collection record toolbar did not appear: ${JSON.stringify(state)}`);
     }
-    await sleep(100);
+    await sleep(250);
   }
 
   const clicked = await evaluate(client, `(() => {
@@ -1182,6 +1309,7 @@ const main = async () => {
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
     await assertAuthoringShortcutCopy(client);
+    await configureVisitorMutationPolicyThroughUi(client, collectionId, `smoke-public-write-${suffix}`);
     await assertNewCollectionButtonReset(client);
     await navigateToCollections(client, { collectionId, recordSlug });
     await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
