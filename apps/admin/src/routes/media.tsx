@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { DEFAULT_MAX_TAGS, normalizeTagValues, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import {
   getSettings,
+  getUserPermissions,
   listAdminAuditLogs,
   listBlogPosts,
   listPages,
@@ -21,6 +22,7 @@ import {
   runSettingsStorageProvisioningProbe,
   validateSettingsInfrastructure,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
   type SettingsStorageProvisioningResult,
@@ -744,6 +746,9 @@ function MediaPage() {
   });
   const sites = useStore((state) => state.sites);
   const currentAdmin = useAuthStore((state) => state.user);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const files = useStore((state) => state.media);
   const pages = useStore((state) => state.pages);
   const posts = useStore((state) => state.posts);
@@ -760,11 +765,67 @@ function MediaPage() {
   useEffect(() => {
     mediaPaginationRef.current = mediaPagination;
   }, [mediaPagination]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setPermissionError('Sign in with an admin account to load media permissions.');
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    setPermissionError(null);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+        }
+      })
+      .catch((permissionLoadError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionLoadError instanceof Error
+            ? permissionLoadError.message
+            : 'Unable to load media permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const siteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || getDefaultMediaSiteId();
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewMedia = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
+  const canCreateMedia = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.create');
+  const canEditMedia = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.edit');
+  const canConfigureMediaStorage = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');
+  const canDeleteMedia = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.delete');
+  const canExportMediaActivity = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
+  const viewPermissionTitle = canViewMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.view');
+  const createPermissionTitle = canCreateMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.create');
+  const editPermissionTitle = canEditMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.edit');
+  const configurePermissionTitle = canConfigureMediaStorage ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.configure');
+  const deletePermissionTitle = canDeleteMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.delete');
+  const activityPermissionTitle = canExportMediaActivity ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'activity.export');
+  const deniedCreateMessage = `Your account needs media.create to upload or create folders. ${createPermissionTitle}`;
+  const deniedEditMessage = `Your account needs media.edit to change media metadata. ${editPermissionTitle}`;
+  const deniedDeleteMessage = `Your account needs media.delete to delete media assets. ${deletePermissionTitle}`;
   const isMediaMutationBusy = isUploading ||
     isSavingMetadata ||
     isCreatingSignedUrl ||
@@ -780,7 +841,7 @@ function MediaPage() {
     isCreatingFolder ||
     isUpdatingFolder ||
     isDeletingFolder;
-  const isMediaLibraryBusy = isLoading || isMediaMutationBusy;
+  const isMediaLibraryBusy = isLoading || isMediaMutationBusy || isPermissionMatrixPending;
   const activeSiteRouteSearch = useMemo(() => ({ siteId }), [siteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
@@ -955,10 +1016,9 @@ function MediaPage() {
     [selectedAsset?.metadata],
   );
   const mediaAccessRows = useMemo(
-    () => getMediaAccessRows(currentAdmin?.role),
-    [currentAdmin?.role],
+    () => getMediaAccessRows(permissionMatrix, currentAdmin),
+    [currentAdmin, permissionMatrix],
   );
-  const canConfigureMediaStorage = Boolean(mediaAccessRows.find((row) => row.permission === 'media.configure')?.allowed);
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
   const displayedFiles = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -1882,6 +1942,10 @@ function MediaPage() {
 
   const handleCreateSignedUrl = async () => {
     if (isMediaMutationBusy) return;
+    if (!canViewMedia) {
+      setAssetDeliveryError(`Your account needs media.view to generate signed delivery URLs. ${viewPermissionTitle}`);
+      return;
+    }
 
     if (!selectedAsset) {
       return;
@@ -1910,6 +1974,10 @@ function MediaPage() {
 
   const handlePrepareTransforms = async () => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setAssetDeliveryError(deniedEditMessage);
+      return;
+    }
 
     if (!selectedAsset || selectedAsset.type !== 'image') {
       return;
@@ -1943,6 +2011,10 @@ function MediaPage() {
 
   const handleSaveProviderAnalytics = async () => {
     if (isMediaMutationBusy || !selectedAsset) return;
+    if (!canEditMedia) {
+      setAssetDeliveryError(deniedEditMessage);
+      return;
+    }
 
     const totalRequests = Math.max(0, Math.floor(Number(providerAnalyticsRequests) || 0));
     const bytesServed = Math.max(0, Math.floor(Number(providerAnalyticsBytes) || 0));
@@ -1989,6 +2061,10 @@ function MediaPage() {
 
   const handleQuarantineAsset = async () => {
     if (isMediaMutationBusy || !selectedAsset) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     setIsUpdatingSafety(true);
     setAssetDeliveryError(null);
@@ -2023,6 +2099,10 @@ function MediaPage() {
 
   const handleReleaseQuarantine = async () => {
     if (isMediaMutationBusy || !selectedAsset) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     const previousVisibility = selectedMediaSecurity.previousVisibility === 'private' ? 'private' : 'public';
     setIsUpdatingSafety(true);
@@ -2057,7 +2137,7 @@ function MediaPage() {
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (isMediaMutationBusy) {
+    if (isMediaMutationBusy || !canCreateMedia) {
       e.dataTransfer.dropEffect = 'none';
       setIsDragging(false);
       return;
@@ -2072,6 +2152,10 @@ function MediaPage() {
 
   const handleFileUpload = async (fileList: FileList | null) => {
     if (isMediaMutationBusy) return;
+    if (!canCreateMedia) {
+      setError(deniedCreateMessage);
+      return;
+    }
     if (!fileList || fileList.length === 0) return;
     const uploadFiles = Array.from(fileList);
     const targetFolderMode = uploadFolderId;
@@ -2154,6 +2238,11 @@ function MediaPage() {
 
   const handleDeleteAsset = async (file: MediaAsset) => {
     if (isMediaMutationBusy) return;
+    if (!canDeleteMedia) {
+      setError(deniedDeleteMessage);
+      setPendingDeleteAsset(null);
+      return;
+    }
 
     setError(null);
     setIsDeletingAsset(true);
@@ -2207,6 +2296,10 @@ function MediaPage() {
 
   const handleBulkUpdate = async () => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     if (selectedMediaAssets.length === 0 || !hasBulkChange) {
       return;
@@ -2308,6 +2401,11 @@ function MediaPage() {
 
   const handleBulkDelete = async () => {
     if (isMediaMutationBusy) return;
+    if (!canDeleteMedia) {
+      setError(deniedDeleteMessage);
+      setPendingBulkDelete(false);
+      return;
+    }
 
     if (selectedMediaAssets.length === 0) {
       return;
@@ -2358,6 +2456,10 @@ function MediaPage() {
 
   const handleSaveMetadata = async () => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     if (!selectedAsset) {
       return;
@@ -2418,6 +2520,10 @@ function MediaPage() {
 
   const handleReplaceAsset = async (fileList: FileList | null) => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setAssetReplacementError(deniedEditMessage);
+      return;
+    }
 
     if (!selectedAsset || !fileList || fileList.length === 0) {
       return;
@@ -2459,6 +2565,10 @@ function MediaPage() {
 
   const handleDeleteAssetVersion = async (version: ReplacementVersion) => {
     if (isMediaMutationBusy || !selectedAsset || !version.id) return;
+    if (!canDeleteMedia) {
+      setAssetReplacementError(deniedDeleteMessage);
+      return;
+    }
 
     if (pendingDeleteVersionId !== version.id) {
       setPendingDeleteVersionId(version.id);
@@ -2489,6 +2599,10 @@ function MediaPage() {
 
   const handleRestoreAssetVersion = async (version: ReplacementVersion) => {
     if (isMediaMutationBusy || !selectedAsset || !version.id) return;
+    if (!canEditMedia) {
+      setAssetReplacementError(deniedEditMessage);
+      return;
+    }
 
     if (pendingRestoreVersionId !== version.id) {
       setPendingRestoreVersionId(version.id);
@@ -2517,6 +2631,10 @@ function MediaPage() {
 
   const handleBindTarget = async () => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setAssetReferenceError(deniedEditMessage);
+      return;
+    }
 
     if (!selectedAsset || !bindingTargetId) {
       return;
@@ -2546,6 +2664,10 @@ function MediaPage() {
 
   const handleUnbindTarget = async (targetType: 'page' | 'post', targetId: string) => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setAssetReferenceError(deniedEditMessage);
+      return;
+    }
 
     if (!selectedAsset) {
       return;
@@ -2574,6 +2696,10 @@ function MediaPage() {
 
   const handleCreateFolder = async () => {
     if (isMediaMutationBusy) return;
+    if (!canCreateMedia) {
+      setError(deniedCreateMessage);
+      return;
+    }
 
     const name = newFolderName.trim();
     if (!name) {
@@ -2612,6 +2738,10 @@ function MediaPage() {
 
   const startEditingFolder = (folder: MediaFolder) => {
     if (isMediaLibraryBusy) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     setEditingFolderId(folder.id);
     setEditingFolderName(folder.name);
@@ -2627,6 +2757,10 @@ function MediaPage() {
 
   const handleRenameFolder = async (folderId: string) => {
     if (isMediaMutationBusy) return;
+    if (!canEditMedia) {
+      setError(deniedEditMessage);
+      return;
+    }
 
     const name = editingFolderName.trim();
     if (!name) {
@@ -2664,6 +2798,11 @@ function MediaPage() {
 
   const handleDeleteFolder = async (folderId: string) => {
     if (isMediaMutationBusy) return;
+    if (!canDeleteMedia) {
+      setError(deniedDeleteMessage);
+      setPendingDeleteFolder(null);
+      return;
+    }
 
     const folder = folders.find((item) => item.id === folderId);
     if (!folder) {
@@ -2805,7 +2944,7 @@ function MediaPage() {
             multiple
             accept={activeUploadMode.accept}
             aria-label="Upload media files"
-            disabled={isMediaMutationBusy}
+            disabled={isMediaMutationBusy || !canCreateMedia}
             onChange={(e) => {
               void handleFileUpload(e.target.files);
               e.currentTarget.value = '';
@@ -2815,8 +2954,9 @@ function MediaPage() {
             htmlFor="header-upload"
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 cursor-pointer transition-colors",
-              isMediaMutationBusy && "pointer-events-none opacity-70"
+              (isMediaMutationBusy || !canCreateMedia) && "pointer-events-none opacity-70"
             )}
+            title={canCreateMedia ? undefined : createPermissionTitle}
           >
             <Upload className="w-4 h-4" />
             {isUploading ? 'Uploading...' : 'Upload'}
@@ -2825,6 +2965,16 @@ function MediaPage() {
       }
     >
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="media-library-command-center">
+        {permissionError && (
+          <Notice tone="warning" className="mb-4">
+            {permissionError}
+          </Notice>
+        )}
+        {isPermissionMatrixPending && (
+          <Notice tone="info" className="mb-4">
+            Loading media permissions before enabling library actions.
+          </Notice>
+        )}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2884,7 +3034,8 @@ function MediaPage() {
             <button
               type="button"
               onClick={exportMediaCsv}
-              disabled={displayedFiles.length === 0 || isMediaLibraryBusy}
+              disabled={displayedFiles.length === 0 || isMediaLibraryBusy || !canExportMediaActivity}
+              title={activityPermissionTitle}
               className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -2894,8 +3045,9 @@ function MediaPage() {
               htmlFor="header-upload"
               className={cn(
                 'inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90',
-                isMediaMutationBusy && 'pointer-events-none opacity-70',
+                (isMediaMutationBusy || !canCreateMedia) && 'pointer-events-none opacity-70',
               )}
+              title={canCreateMedia ? undefined : createPermissionTitle}
             >
               <Upload className="h-4 w-4" />
               Upload files
@@ -3002,6 +3154,7 @@ function MediaPage() {
             e.preventDefault();
             setIsDragging(false);
             if (isMediaMutationBusy) return;
+            if (!canCreateMedia) return;
             void handleFileUpload(e.dataTransfer.files);
           }}
           data-testid="media-upload-dropzone"
@@ -3012,6 +3165,7 @@ function MediaPage() {
               : "border-border hover:border-primary/50",
             isMediaMutationBusy && "cursor-not-allowed opacity-75 hover:border-border"
           )}
+          title={canCreateMedia ? undefined : createPermissionTitle}
         >
           <input
             type="file"
@@ -3020,7 +3174,7 @@ function MediaPage() {
             accept={activeUploadMode.accept}
             aria-label="Upload media files"
             data-testid="media-upload-input"
-            disabled={isMediaMutationBusy}
+            disabled={isMediaMutationBusy || !canCreateMedia}
             onChange={(e) => {
               void handleFileUpload(e.target.files);
               e.currentTarget.value = '';
@@ -3040,7 +3194,7 @@ function MediaPage() {
               <button
                 key={mode.value}
                 type="button"
-                disabled={isMediaMutationBusy}
+                disabled={isMediaMutationBusy || !canCreateMedia}
                 data-testid={`media-upload-mode-${mode.value}`}
                 className={cn(
                   'pointer-events-auto min-h-9 rounded-lg border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
@@ -3050,7 +3204,7 @@ function MediaPage() {
                 )}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (isMediaMutationBusy) return;
+                  if (isMediaMutationBusy || !canCreateMedia) return;
                   setUploadMode(mode.value);
                 }}
               >
@@ -3129,7 +3283,7 @@ function MediaPage() {
               Visibility
               <select
                 value={uploadVisibility}
-                disabled={isUploading}
+                disabled={isUploading || !canCreateMedia}
                 onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload visibility"
@@ -3143,7 +3297,7 @@ function MediaPage() {
               Destination
               <select
                 value={uploadFolderId}
-                disabled={isUploading}
+                disabled={isUploading || !canCreateMedia}
                 onChange={(event) => setUploadFolderId(event.target.value)}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload folder"
@@ -3166,8 +3320,8 @@ function MediaPage() {
                 onChange={setUploadTagList}
                 placeholder="Add hero, product, brand..."
                 ariaLabel="Upload tags"
-                disabled={isUploading}
-                className={isUploading ? 'opacity-60' : undefined}
+                disabled={isUploading || !canCreateMedia}
+                className={(isUploading || !canCreateMedia) ? 'opacity-60' : undefined}
               />
             </div>
 
@@ -3538,6 +3692,7 @@ function MediaPage() {
                   variant="outline"
                   onClick={handleUseRuntimeStorageSettings}
                   disabled={storageSettingsControlsDisabled}
+                  title={canConfigureMediaStorage ? undefined : configurePermissionTitle}
                 >
                   Use detected storage
                 </Button>
@@ -3547,6 +3702,7 @@ function MediaPage() {
                   variant="outline"
                   onClick={handleUseRuntimeSupabaseSettings}
                   disabled={storageSettingsControlsDisabled}
+                  title={canConfigureMediaStorage ? undefined : configurePermissionTitle}
                 >
                   Use Supabase
                 </Button>
@@ -3557,6 +3713,7 @@ function MediaPage() {
                   onClick={() => void saveMediaStorageSettings()}
                   disabled={storageSettingsControlsDisabled}
                   iconStart={<Save className="size-3.5" />}
+                  title={canConfigureMediaStorage ? undefined : configurePermissionTitle}
                 >
                   {isSavingStorageSettings ? 'Saving...' : 'Save storage'}
                 </Button>
@@ -4216,8 +4373,10 @@ function MediaPage() {
                 Activity type
                 <select
                   value={libraryAuditActionFilter}
+                  disabled={!canExportMediaActivity || isLoadingLibraryAudit}
+                  title={canExportMediaActivity ? undefined : activityPermissionTitle}
                   onChange={(event) => setLibraryAuditActionFilter(event.target.value as MediaAuditActionFilter)}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="Filter media library activity"
                 >
                   {MEDIA_AUDIT_ACTION_FILTERS.map((filter) => (
@@ -4230,9 +4389,10 @@ function MediaPage() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={isLoadingLibraryAudit}
+                  disabled={isLoadingLibraryAudit || !canExportMediaActivity}
                   onClick={() => void loadLibraryAuditLogs(libraryAuditPagination.offset)}
                   className="w-full"
+                  title={canExportMediaActivity ? undefined : activityPermissionTitle}
                 >
                   Refresh
                 </Button>
@@ -4242,9 +4402,10 @@ function MediaPage() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={isLoadingLibraryAudit || libraryAuditLogs.length === 0}
+                  disabled={isLoadingLibraryAudit || !canExportMediaActivity || libraryAuditLogs.length === 0}
                   onClick={exportMediaAuditCsv}
                   className="w-full"
+                  title={canExportMediaActivity ? undefined : activityPermissionTitle}
                   iconStart={<Download className="size-4" />}
                 >
                   Export audit
@@ -4328,8 +4489,9 @@ function MediaPage() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={isLoadingLibraryAudit || libraryAuditPagination.offset <= 0}
+                  disabled={isLoadingLibraryAudit || !canExportMediaActivity || libraryAuditPagination.offset <= 0}
                   onClick={() => void loadLibraryAuditLogs(Math.max(0, libraryAuditPagination.offset - libraryAuditPagination.limit))}
+                  title={canExportMediaActivity ? undefined : activityPermissionTitle}
                 >
                   Previous
                 </Button>
@@ -4337,8 +4499,9 @@ function MediaPage() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={isLoadingLibraryAudit || !libraryAuditPagination.hasMore}
+                  disabled={isLoadingLibraryAudit || !canExportMediaActivity || !libraryAuditPagination.hasMore}
                   onClick={() => void loadLibraryAuditLogs(libraryAuditPagination.offset + libraryAuditPagination.limit)}
+                  title={canExportMediaActivity ? undefined : activityPermissionTitle}
                 >
                   Next
                 </Button>
@@ -4451,7 +4614,8 @@ function MediaPage() {
           <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
             <select
               value={newFolderParentId}
-              disabled={isMediaLibraryBusy}
+              disabled={isMediaLibraryBusy || !canCreateMedia}
+              title={canCreateMedia ? undefined : createPermissionTitle}
               onChange={(event) => setNewFolderParentId(event.target.value)}
               className="w-full max-w-[180px] rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="New folder parent"
@@ -4464,7 +4628,8 @@ function MediaPage() {
             <input
               type="text"
               value={newFolderName}
-              disabled={isMediaLibraryBusy}
+              disabled={isMediaLibraryBusy || !canCreateMedia}
+              title={canCreateMedia ? undefined : createPermissionTitle}
               onChange={(event) => setNewFolderName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -4478,7 +4643,8 @@ function MediaPage() {
             />
             <button
               type="button"
-              disabled={isMediaLibraryBusy || !newFolderName.trim()}
+              disabled={isMediaLibraryBusy || !canCreateMedia || !newFolderName.trim()}
+              title={canCreateMedia ? undefined : createPermissionTitle}
               onClick={() => void handleCreateFolder()}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Create media folder"
@@ -4527,7 +4693,8 @@ function MediaPage() {
                   <input
                     type="text"
                     value={editingFolderName}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setEditingFolderName(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
@@ -4545,7 +4712,8 @@ function MediaPage() {
                   />
                   <select
                     value={editingFolderParentId}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setEditingFolderParentId(event.target.value)}
                     className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label={`Parent folder for ${folder.name}`}
@@ -4557,10 +4725,10 @@ function MediaPage() {
                   </select>
                   <button
                     type="button"
-                    disabled={isMediaLibraryBusy || !editingFolderName.trim()}
+                    disabled={isMediaLibraryBusy || !canEditMedia || !editingFolderName.trim()}
                     onClick={() => void handleRenameFolder(folder.id)}
                     className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Save folder name"
+                    title={canEditMedia ? 'Save folder name' : editPermissionTitle}
                     aria-label={`Save folder name for ${folder.name}`}
                   >
                     <Save className="h-3.5 w-3.5" />
@@ -4599,9 +4767,9 @@ function MediaPage() {
                   <button
                     type="button"
                     onClick={() => startEditingFolder(folder)}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
                     className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Rename folder"
+                    title={canEditMedia ? 'Rename folder' : editPermissionTitle}
                     aria-label={`Rename folder ${folder.name}`}
                   >
                     <Edit3 className="h-3.5 w-3.5" />
@@ -4609,12 +4777,12 @@ function MediaPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (isMediaLibraryBusy) return;
+                      if (isMediaLibraryBusy || !canDeleteMedia) return;
                       setPendingDeleteFolder(folder);
                     }}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canDeleteMedia}
                     className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Delete folder"
+                    title={canDeleteMedia ? 'Delete folder' : deletePermissionTitle}
                     aria-label={`Delete folder ${folder.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -4678,7 +4846,8 @@ function MediaPage() {
                   Visibility
                   <select
                     value={bulkVisibility}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                     aria-label="Bulk visibility"
@@ -4693,7 +4862,8 @@ function MediaPage() {
                   Folder
                   <select
                     value={bulkFolderId}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setBulkFolderId(event.target.value)}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                     aria-label="Bulk folder"
@@ -4710,7 +4880,8 @@ function MediaPage() {
                   Safety
                   <select
                     value={bulkSafetyAction}
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setBulkSafetyAction(
                       event.target.value === 'quarantine' || event.target.value === 'release'
                         ? event.target.value
@@ -4730,9 +4901,10 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isMediaLibraryBusy || selectedMediaAssets.length === 0 || !hasBulkChange}
+                    disabled={isMediaLibraryBusy || !canEditMedia || selectedMediaAssets.length === 0 || !hasBulkChange}
                     onClick={() => void handleBulkUpdate()}
                     className="w-full whitespace-nowrap"
+                    title={canEditMedia ? undefined : editPermissionTitle}
                   >
                     {isBulkUpdating ? 'Applying...' : 'Apply changes'}
                   </Button>
@@ -4743,10 +4915,11 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="danger"
-                    disabled={isMediaLibraryBusy || selectedMediaAssets.length === 0}
+                    disabled={isMediaLibraryBusy || !canDeleteMedia || selectedMediaAssets.length === 0}
                     onClick={() => void handleBulkDelete()}
                     className="w-full whitespace-nowrap"
                     iconStart={<Trash2 className="size-4" />}
+                    title={canDeleteMedia ? undefined : deletePermissionTitle}
                   >
                     Delete selected
                   </Button>
@@ -4759,7 +4932,8 @@ function MediaPage() {
                     Tag action
                     <select
                       value={bulkTagMode}
-                      disabled={isMediaLibraryBusy}
+                      disabled={isMediaLibraryBusy || !canEditMedia}
+                      title={canEditMedia ? undefined : editPermissionTitle}
                       onChange={(event) => setBulkTagMode(event.target.value as typeof bulkTagMode)}
                       className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                       aria-label="Bulk tag action"
@@ -4781,8 +4955,8 @@ function MediaPage() {
                       onChange={setBulkTagList}
                       placeholder="Add campaign, hero, product..."
                       ariaLabel="Bulk media tags"
-                      disabled={isMediaLibraryBusy || bulkTagMode === 'clear' || bulkTagMode === 'keep'}
-                      className={isMediaLibraryBusy || bulkTagMode === 'clear' || bulkTagMode === 'keep' ? 'opacity-60' : undefined}
+                      disabled={isMediaLibraryBusy || !canEditMedia || bulkTagMode === 'clear' || bulkTagMode === 'keep'}
+                      className={isMediaLibraryBusy || !canEditMedia || bulkTagMode === 'clear' || bulkTagMode === 'keep' ? 'opacity-60' : undefined}
                     />
                   </div>
 
@@ -4908,7 +5082,8 @@ function MediaPage() {
                 <input
                   type="checkbox"
                   checked={selectedMediaSet.has(file.id)}
-                  disabled={isMediaLibraryBusy}
+                  disabled={isMediaLibraryBusy || (!canEditMedia && !canDeleteMedia)}
+                  title={canEditMedia || canDeleteMedia ? undefined : editPermissionTitle}
                   onChange={() => toggleMediaSelection(file.id)}
                   className="h-3.5 w-3.5 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={`Select ${file.name}`}
@@ -4921,12 +5096,12 @@ function MediaPage() {
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
                     className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? 'Edit metadata' : editPermissionTitle}
                     onClick={() => {
-                      if (isMediaLibraryBusy) return;
+                      if (isMediaLibraryBusy || !canEditMedia) return;
                       openMetadataEditor(file);
                     }}
-                    title="Edit metadata"
                     aria-label={`Edit metadata for ${file.name}`}
                   >
                     <Edit3 className="w-4 h-4" />
@@ -4956,12 +5131,12 @@ function MediaPage() {
                   )}
                   <button
                     className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isMediaLibraryBusy}
+                    disabled={isMediaLibraryBusy || !canDeleteMedia}
                     onClick={() => {
-                      if (isMediaLibraryBusy) return;
+                      if (isMediaLibraryBusy || !canDeleteMedia) return;
                       setPendingDeleteAsset(file);
                     }}
-                    title="Delete media"
+                    title={canDeleteMedia ? 'Delete media' : deletePermissionTitle}
                     aria-label={`Delete ${file.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -5059,8 +5234,10 @@ function MediaPage() {
                   <label className="mb-1 block text-sm font-medium">File name</label>
                   <input
                     value={metadataForm.name}
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setMetadataForm((current) => ({ ...current, name: event.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
 
@@ -5068,8 +5245,10 @@ function MediaPage() {
                   <label className="mb-1 block text-sm font-medium">Alt text</label>
                   <input
                     value={metadataForm.altText}
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setMetadataForm((current) => ({ ...current, altText: event.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                     placeholder="Describe the image or file"
                   />
                 </div>
@@ -5078,8 +5257,10 @@ function MediaPage() {
                   <label className="mb-1 block text-sm font-medium">Caption</label>
                   <textarea
                     value={metadataForm.caption}
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setMetadataForm((current) => ({ ...current, caption: event.target.value }))}
-                    className="min-h-20 w-full rounded-lg border bg-background px-3 py-2"
+                    className="min-h-20 w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                     placeholder="Optional caption"
                   />
                 </div>
@@ -5091,6 +5272,8 @@ function MediaPage() {
                     onChange={(tags) => setMetadataForm((current) => ({ ...current, tags: serializeTagValues(tags) }))}
                     placeholder="Add hero, product, brand..."
                     ariaLabel="Media asset tags"
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    className={!canEditMedia || isMediaMutationBusy ? 'opacity-60' : undefined}
                   />
                 </div>
 
@@ -5126,11 +5309,13 @@ function MediaPage() {
                               min="0"
                               max="100"
                               value={metadataForm.imageFocalX}
+                              disabled={!canEditMedia || isMediaMutationBusy}
+                              title={canEditMedia ? undefined : editPermissionTitle}
                               onChange={(event) => setMetadataForm((current) => ({
                                 ...current,
                                 imageFocalX: clampPercent(event.target.value),
                               }))}
-                              className="w-full rounded-lg border bg-background px-3 py-2"
+                              className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                           </label>
                           <label className="space-y-1 text-sm">
@@ -5140,11 +5325,13 @@ function MediaPage() {
                               min="0"
                               max="100"
                               value={metadataForm.imageFocalY}
+                              disabled={!canEditMedia || isMediaMutationBusy}
+                              title={canEditMedia ? undefined : editPermissionTitle}
                               onChange={(event) => setMetadataForm((current) => ({
                                 ...current,
                                 imageFocalY: clampPercent(event.target.value),
                               }))}
-                              className="w-full rounded-lg border bg-background px-3 py-2"
+                              className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                           </label>
                         </div>
@@ -5152,13 +5339,15 @@ function MediaPage() {
                           <label className="block font-medium">Crop fit</label>
                           <select
                             value={metadataForm.imageObjectFit}
+                            disabled={!canEditMedia || isMediaMutationBusy}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                             onChange={(event) => setMetadataForm((current) => ({
                               ...current,
                               imageObjectFit: isMediaImageObjectFit(event.target.value)
                                 ? event.target.value
                                 : DEFAULT_IMAGE_PRESENTATION.objectFit,
                             }))}
-                            className="w-full rounded-lg border bg-background px-3 py-2"
+                            className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="cover">Cover crop</option>
                             <option value="contain">Contain full image</option>
@@ -5168,13 +5357,15 @@ function MediaPage() {
                           <label className="block font-medium">Aspect ratio</label>
                           <select
                             value={metadataForm.imageAspectRatio}
+                            disabled={!canEditMedia || isMediaMutationBusy}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                             onChange={(event) => setMetadataForm((current) => ({
                               ...current,
                               imageAspectRatio: isMediaImageAspectRatio(event.target.value)
                                 ? event.target.value
                                 : DEFAULT_IMAGE_PRESENTATION.aspectRatio,
                             }))}
-                            className="w-full rounded-lg border bg-background px-3 py-2"
+                            className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {MEDIA_IMAGE_ASPECT_RATIO_OPTIONS.map((option) => (
                               <option key={option.value} value={option.value}>{option.label}</option>
@@ -5202,8 +5393,10 @@ function MediaPage() {
                         <span className="font-medium">Family</span>
                         <input
                           value={metadataForm.fontFamily}
+                          disabled={!canEditMedia || isMediaMutationBusy}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onChange={(event) => setMetadataForm((current) => ({ ...current, fontFamily: event.target.value }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                           placeholder="Brand Sans"
                         />
                       </label>
@@ -5211,8 +5404,10 @@ function MediaPage() {
                         <span className="font-medium">Weight</span>
                         <input
                           value={metadataForm.fontWeight}
+                          disabled={!canEditMedia || isMediaMutationBusy}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onChange={(event) => setMetadataForm((current) => ({ ...current, fontWeight: event.target.value }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                           placeholder="400"
                         />
                       </label>
@@ -5220,13 +5415,15 @@ function MediaPage() {
                         <span className="font-medium">Style</span>
                         <select
                           value={metadataForm.fontStyle}
+                          disabled={!canEditMedia || isMediaMutationBusy}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onChange={(event) => setMetadataForm((current) => ({
                             ...current,
                             fontStyle: event.target.value === 'italic' || event.target.value === 'oblique'
                               ? event.target.value
                               : 'normal',
                           }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value="normal">Normal</option>
                           <option value="italic">Italic</option>
@@ -5239,8 +5436,10 @@ function MediaPage() {
                         <span className="font-medium">Fallback stack</span>
                         <input
                           value={metadataForm.fontFallback}
+                          disabled={!canEditMedia || isMediaMutationBusy}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onChange={(event) => setMetadataForm((current) => ({ ...current, fontFallback: event.target.value }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                           placeholder="system-ui, sans-serif"
                         />
                       </label>
@@ -5248,6 +5447,8 @@ function MediaPage() {
                         <span className="font-medium">Display</span>
                         <select
                           value={metadataForm.fontDisplay}
+                          disabled={!canEditMedia || isMediaMutationBusy}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onChange={(event) => setMetadataForm((current) => ({
                             ...current,
                             fontDisplay: event.target.value === 'auto' ||
@@ -5257,7 +5458,7 @@ function MediaPage() {
                               ? event.target.value
                               : 'swap',
                           }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value="swap">Swap</option>
                           <option value="fallback">Fallback</option>
@@ -5284,8 +5485,10 @@ function MediaPage() {
                   <label className="mb-1 block text-sm font-medium">Folder</label>
                   <select
                     value={metadataForm.folderId}
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setMetadataForm((current) => ({ ...current, folderId: event.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">Root</option>
                     {folderOptions.map((folder) => (
@@ -5298,11 +5501,13 @@ function MediaPage() {
                   <label className="mb-1 block text-sm font-medium">Visibility</label>
                   <select
                     value={metadataForm.visibility}
+                    disabled={!canEditMedia || isMediaMutationBusy}
+                    title={canEditMedia ? undefined : editPermissionTitle}
                     onChange={(event) => setMetadataForm((current) => ({
                       ...current,
                       visibility: event.target.value === 'private' ? 'private' : 'public',
                     }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="public">Public</option>
                     <option value="private">Private</option>
@@ -5437,9 +5642,10 @@ function MediaPage() {
                             min="0"
                             value={providerAnalyticsRequests}
                             onChange={(event) => setProviderAnalyticsRequests(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="0"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5449,9 +5655,10 @@ function MediaPage() {
                             min="0"
                             value={providerAnalyticsBytes}
                             onChange={(event) => setProviderAnalyticsBytes(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="0"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5459,9 +5666,10 @@ function MediaPage() {
                           <input
                             value={providerAnalyticsSource}
                             onChange={(event) => setProviderAnalyticsSource(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="cloudfront"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5469,9 +5677,10 @@ function MediaPage() {
                           <input
                             value={providerAnalyticsWindow}
                             onChange={(event) => setProviderAnalyticsWindow(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="last-30-days"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5481,9 +5690,10 @@ function MediaPage() {
                             min="0"
                             value={providerAnalyticsConversions}
                             onChange={(event) => setProviderAnalyticsConversions(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="0"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5494,9 +5704,10 @@ function MediaPage() {
                             step="0.01"
                             value={providerAnalyticsValue}
                             onChange={(event) => setProviderAnalyticsValue(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="0"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5504,9 +5715,10 @@ function MediaPage() {
                           <input
                             value={providerAnalyticsCurrency}
                             onChange={(event) => setProviderAnalyticsCurrency(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="USD"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                         <label className="space-y-1 text-sm">
@@ -5514,9 +5726,10 @@ function MediaPage() {
                           <input
                             value={providerAnalyticsAttributionWindow}
                             onChange={(event) => setProviderAnalyticsAttributionWindow(event.target.value)}
-                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             placeholder="last-click"
-                            disabled={isMediaMutationBusy}
+                            disabled={isMediaMutationBusy || !canEditMedia}
+                            title={canEditMedia ? undefined : editPermissionTitle}
                           />
                         </label>
                       </div>
@@ -5553,7 +5766,8 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={isMediaMutationBusy}
+                          disabled={isMediaMutationBusy || !canEditMedia}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onClick={() => void handleSaveProviderAnalytics()}
                         >
                           <Cloud className="size-4" />
@@ -5582,15 +5796,17 @@ function MediaPage() {
                   </div>
                   <label className={cn(
                     'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted',
-                    isMediaMutationBusy && 'pointer-events-none opacity-60',
-                  )}>
+                    (isMediaMutationBusy || !canEditMedia) && 'pointer-events-none opacity-60',
+                  )}
+                    title={canEditMedia ? undefined : editPermissionTitle}
+                  >
                     <Upload className="size-4" />
                     {isReplacingAsset ? 'Replacing...' : 'Replace file'}
                     <input
                       type="file"
                       className="sr-only"
                       accept={replacementAcceptForAsset(selectedAsset.type)}
-                      disabled={isMediaMutationBusy}
+                      disabled={isMediaMutationBusy || !canEditMedia}
                       onChange={(event) => {
                         void handleReplaceAsset(event.target.files);
                         event.currentTarget.value = '';
@@ -5682,9 +5898,9 @@ function MediaPage() {
                                   type="button"
                                   size="sm"
                                   variant={pendingRestoreVersionId === version.id ? 'primary' : 'outline'}
-                                  disabled={isMediaMutationBusy || !version.id}
+                                  disabled={isMediaMutationBusy || !canEditMedia || !version.id}
                                   onClick={() => void handleRestoreAssetVersion(version)}
-                                  title={version.id ? 'Restore retained version' : 'This retained version cannot be restored because it has no version id.'}
+                                  title={!canEditMedia ? editPermissionTitle : version.id ? 'Restore retained version' : 'This retained version cannot be restored because it has no version id.'}
                                 >
                                   <RefreshCw className="size-3.5" />
                                   {pendingRestoreVersionId === version.id
@@ -5695,9 +5911,9 @@ function MediaPage() {
                                   type="button"
                                   size="sm"
                                   variant={pendingDeleteVersionId === version.id ? 'danger' : 'outline'}
-                                  disabled={isMediaMutationBusy || !version.id}
+                                  disabled={isMediaMutationBusy || !canDeleteMedia || !version.id}
                                   onClick={() => void handleDeleteAssetVersion(version)}
-                                  title={version.id ? 'Delete retained version' : 'This retained version cannot be deleted because it has no version id.'}
+                                  title={!canDeleteMedia ? deletePermissionTitle : version.id ? 'Delete retained version' : 'This retained version cannot be deleted because it has no version id.'}
                                 >
                                   <Trash2 className="size-3.5" />
                                   {pendingDeleteVersionId === version.id
@@ -5807,7 +6023,8 @@ function MediaPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isMediaMutationBusy}
+                        disabled={isMediaMutationBusy || !canEditMedia}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onClick={() => void handleReleaseQuarantine()}
                       >
                         {isUpdatingSafety ? 'Releasing...' : 'Release quarantine'}
@@ -5817,7 +6034,8 @@ function MediaPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isMediaMutationBusy}
+                        disabled={isMediaMutationBusy || !canEditMedia}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onClick={() => void handleQuarantineAsset()}
                       >
                         {isUpdatingSafety ? 'Quarantining...' : 'Quarantine asset'}
@@ -5975,7 +6193,8 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={isMediaMutationBusy || selectedMediaSecurity.status === 'quarantined'}
+                          disabled={isMediaMutationBusy || !canViewMedia || selectedMediaSecurity.status === 'quarantined'}
+                          title={canViewMedia ? undefined : viewPermissionTitle}
                           onClick={() => void handleCreateSignedUrl()}
                           iconStart={<KeyRound className="size-4" />}
                           className="w-full whitespace-nowrap"
@@ -6084,7 +6303,8 @@ function MediaPage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={isMediaMutationBusy || selectedAsset.visibility === 'private' || selectedMediaSecurity.status === 'quarantined'}
+                                disabled={isMediaMutationBusy || !canEditMedia || selectedAsset.visibility === 'private' || selectedMediaSecurity.status === 'quarantined'}
+                                title={canEditMedia ? undefined : editPermissionTitle}
                                 onClick={() => void handlePrepareTransforms()}
                               >
                                 {isPreparingTransforms ? 'Preparing...' : 'Prepare variants'}
@@ -6152,8 +6372,10 @@ function MediaPage() {
                       Type
                       <select
                         value={bindingTargetType}
+                        disabled={!canEditMedia || isMediaMutationBusy}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onChange={(event) => setBindingTargetType(event.target.value === 'post' ? 'post' : 'page')}
-                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="page">Page</option>
                         <option value="post">Post</option>
@@ -6163,8 +6385,10 @@ function MediaPage() {
                       Target
                       <select
                         value={bindingTargetId}
+                        disabled={!canEditMedia || isMediaMutationBusy}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onChange={(event) => setBindingTargetId(event.target.value)}
-                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="">Select {bindingTargetType}</option>
                         {bindingTargets.map((target) => (
@@ -6178,8 +6402,10 @@ function MediaPage() {
                       Usage
                       <select
                         value={bindingUsageType}
+                        disabled={!canEditMedia || isMediaMutationBusy}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onChange={(event) => setBindingUsageType(event.target.value as typeof bindingUsageType)}
-                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="content">Content</option>
                         <option value="background">Background</option>
@@ -6196,7 +6422,8 @@ function MediaPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isMediaMutationBusy || !bindingTargetId}
+                        disabled={isMediaMutationBusy || !canEditMedia || !bindingTargetId}
+                        title={canEditMedia ? undefined : editPermissionTitle}
                         onClick={() => void handleBindTarget()}
                         className="w-full"
                       >
@@ -6240,7 +6467,8 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          disabled={isMediaMutationBusy}
+                          disabled={isMediaMutationBusy || !canEditMedia}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onClick={() => void handleUnbindTarget('page', id)}
                         >
                           Remove
@@ -6271,7 +6499,8 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          disabled={isMediaMutationBusy}
+                          disabled={isMediaMutationBusy || !canEditMedia}
+                          title={canEditMedia ? undefined : editPermissionTitle}
                           onClick={() => void handleUnbindTarget('post', id)}
                         >
                           Remove
@@ -6389,10 +6618,11 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (isMediaMutationBusy) return;
+                  if (isMediaMutationBusy || !canDeleteMedia) return;
                   setPendingDeleteAsset(selectedAsset);
                 }}
-                disabled={isMediaMutationBusy}
+                disabled={isMediaMutationBusy || !canDeleteMedia}
+                title={canDeleteMedia ? undefined : deletePermissionTitle}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash2 className="h-4 w-4" />
@@ -6400,7 +6630,8 @@ function MediaPage() {
               </button>
               <button
                 type="button"
-                disabled={isMediaMutationBusy}
+                disabled={isMediaMutationBusy || !canEditMedia}
+                title={canEditMedia ? undefined : editPermissionTitle}
                 onClick={() => void handleSaveMetadata()}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -6444,7 +6675,8 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteAsset(pendingDeleteAsset)}
-                disabled={isDeletingAsset}
+                disabled={isDeletingAsset || !canDeleteMedia}
+                title={canDeleteMedia ? undefined : deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isDeletingAsset ? 'Deleting...' : 'Delete asset'}
@@ -6482,7 +6714,8 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => void handleBulkDelete()}
-                disabled={isBulkUpdating}
+                disabled={isBulkUpdating || !canDeleteMedia}
+                title={canDeleteMedia ? undefined : deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkUpdating ? 'Deleting...' : 'Delete assets'}
@@ -6521,7 +6754,8 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteFolder(pendingDeleteFolder.id)}
-                disabled={isDeletingFolder}
+                disabled={isDeletingFolder || !canDeleteMedia}
+                title={canDeleteMedia ? undefined : deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isDeletingFolder ? 'Deleting...' : 'Delete folder'}
@@ -7594,10 +7828,55 @@ const MEDIA_ACCESS_RULES: Array<{
   { permission: 'activity.export', label: 'Read audit feed', roles: ['owner', 'admin'] },
 ];
 
-const getMediaAccessRows = (role: string | undefined) => (
+const mediaPermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: MediaPermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isMediaPermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: { role: string } | null,
+  key: MediaPermissionKey,
+): boolean => {
+  const matrixRule = mediaPermissionRule(permissionMatrix, key);
+  if (matrixRule) {
+    return matrixRule.allowed;
+  }
+  return Boolean(currentAdmin && MEDIA_ACCESS_RULES
+    .find((rule) => rule.permission === key)
+    ?.roles.includes(currentAdmin.role as MediaAdminRole));
+};
+
+const mediaPermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: { role: string } | null,
+  key: MediaPermissionKey,
+): string => {
+  const matrixRule = mediaPermissionRule(permissionMatrix, key);
+  if (matrixRule) {
+    return matrixRule.reason;
+  }
+  if (!currentAdmin) {
+    return 'Sign in with an admin account to use this capability.';
+  }
+  const defaultAllowed = MEDIA_ACCESS_RULES
+    .find((rule) => rule.permission === key)
+    ?.roles.includes(currentAdmin.role as MediaAdminRole);
+  return defaultAllowed
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
+
+const getMediaAccessRows = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: { role: string } | null,
+) => (
   MEDIA_ACCESS_RULES.map((rule) => ({
     ...rule,
-    allowed: Boolean(role && rule.roles.includes(role as MediaAdminRole)),
+    allowed: isMediaPermissionAllowed(permissionMatrix, currentAdmin, rule.permission),
+    reason: mediaPermissionReason(permissionMatrix, currentAdmin, rule.permission),
   }))
 );
 
