@@ -2,13 +2,15 @@
  * BACKY CMS - NEW USER PAGE
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import { createUser, getAdminApiBase } from '@/lib/adminContentApi';
+import { createUser, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
 
 interface NewUserSearch {
@@ -24,6 +26,11 @@ export const Route = createFileRoute('/users/new')({
 
 type UserRole = User['role'];
 type UserStatus = User['status'];
+type UserInvitePermissionKey = 'users.create';
+
+const USER_INVITE_PERMISSION_ROLE_DEFAULTS: Record<UserInvitePermissionKey, Array<AuthUser['role']>> = {
+  'users.create': ['owner', 'admin'],
+};
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string; detail: string }> = [
   { value: 'owner', label: 'Owner', detail: 'Controls billing, integrations, team access, publishing, and destructive settings.' },
@@ -75,17 +82,31 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.
 function NewUserPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
+  const currentAdmin = useAuthStore((state) => state.user);
   const { setUsers, users } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     role: 'editor' as UserRole,
     status: 'invited' as UserStatus,
   });
-  const isInviteBusy = isLoading;
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canCreateUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(
+    permissionMatrix,
+    currentAdmin,
+    'users.create',
+    USER_INVITE_PERMISSION_ROLE_DEFAULTS,
+  );
+  const createPermissionTitle = canCreateUsers
+    ? undefined
+    : adminPermissionReason(permissionMatrix, currentAdmin, 'users.create', USER_INVITE_PERMISSION_ROLE_DEFAULTS);
+  const isInviteBusy = isLoading || isPermissionMatrixPending;
   const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
   const usersRouteSearch = useMemo(
     () => (search.siteId ? { siteId: search.siteId } : undefined),
@@ -218,6 +239,43 @@ function NewUserPage() {
   ]);
   const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load user permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const copyInviteText = async (value: string, label: string) => {
     if (isInviteBusy) return;
 
@@ -247,6 +305,11 @@ function NewUserPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isInviteBusy) return;
+    if (!canCreateUsers) {
+      setErrorMessage(createPermissionTitle || 'Your account cannot invite users.');
+      setNoticeMessage(null);
+      return;
+    }
 
     if (!canSubmit) {
       setErrorMessage('Enter a full name and a valid email address before sending the invite.');
@@ -269,6 +332,30 @@ function NewUserPage() {
       setIsLoading(false);
     }
   };
+
+  if (!isPermissionMatrixPending && !canCreateUsers) {
+    return (
+      <PageShell
+        title="Invite unavailable"
+        description={createPermissionTitle || 'Your account cannot invite or create users.'}
+        action={
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to users
+          </button>
+        }
+        className="w-full"
+      >
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {permissionError || createPermissionTitle || 'Ask an owner or admin with users.create access to open this page.'}
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell
@@ -331,7 +418,8 @@ function NewUserPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isInviteBusy || !canSubmit}
+                disabled={isInviteBusy || !canSubmit || !canCreateUsers}
+                title={!canCreateUsers ? createPermissionTitle : undefined}
                 iconStart={<UserPlus className="size-4" />}
               >
                 {submitLabel}
@@ -419,7 +507,8 @@ function NewUserPage() {
               <input
                 type="text"
                 value={formData.fullName}
-                disabled={isInviteBusy}
+                disabled={isInviteBusy || !canCreateUsers}
+                title={!canCreateUsers ? createPermissionTitle : undefined}
                 onChange={(e) => {
                   if (isInviteBusy) return;
                   setFormData({ ...formData, fullName: e.target.value });
@@ -437,7 +526,8 @@ function NewUserPage() {
                 <input
                   type="email"
                   value={formData.email}
-                  disabled={isInviteBusy}
+                  disabled={isInviteBusy || !canCreateUsers}
+                  title={!canCreateUsers ? createPermissionTitle : undefined}
                   onChange={(e) => {
                     if (isInviteBusy) return;
                     setFormData({ ...formData, email: e.target.value });
@@ -476,7 +566,7 @@ function NewUserPage() {
                     name="role"
                     value={role.value}
                     checked={formData.role === role.value}
-                    disabled={isInviteBusy}
+                    disabled={isInviteBusy || !canCreateUsers}
                     onChange={(e) => {
                       if (isInviteBusy) return;
                       setFormData({ ...formData, role: e.target.value as UserRole });
@@ -526,7 +616,7 @@ function NewUserPage() {
                     name="status"
                     value={status.value}
                     checked={formData.status === status.value}
-                    disabled={isInviteBusy}
+                    disabled={isInviteBusy || !canCreateUsers}
                     onChange={(e) => {
                       if (isInviteBusy) return;
                       setFormData({ ...formData, status: e.target.value as UserStatus });

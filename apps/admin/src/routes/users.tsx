@@ -44,15 +44,18 @@ import { cn } from '@/lib/utils';
 import {
   bulkUpdateUsers,
   deleteUser as deleteBackendUser,
+  getUserPermissions,
   importUsersCsv,
   listAdminAuditLogs,
   listUsers,
   updateUser as updateBackendUser,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
   type UserImportResult,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users')({
@@ -61,6 +64,7 @@ export const Route = createFileRoute('/users')({
 
 type UserRole = UserType['role'];
 type UserStatus = UserType['status'];
+type UserPermissionKey = 'users.view' | 'users.create' | 'users.manage' | 'users.delete' | 'activity.export';
 type UserReviewFilter =
   | 'all'
   | 'admin-authority'
@@ -97,6 +101,14 @@ const ROLE_ACCESS_SUMMARY: Record<UserRole, string> = {
   admin: 'Operational admin authority',
   editor: 'Content and commerce production',
   viewer: 'Read-only review access',
+};
+
+const USER_PERMISSION_ROLE_DEFAULTS: Record<UserPermissionKey, Array<AuthUser['role']>> = {
+  'users.view': ['owner', 'admin'],
+  'users.create': ['owner', 'admin'],
+  'users.manage': ['owner', 'admin'],
+  'users.delete': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
 };
 
 const getInitials = (name: string) => (
@@ -289,11 +301,25 @@ function UsersListView() {
   const [isImportingUsers, setIsImportingUsers] = useState(false);
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);
+  const canCreateUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);
+  const canManageUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.delete', USER_PERMISSION_ROLE_DEFAULTS);
+  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', USER_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);
+  const createPermissionTitle = canCreateUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);
+  const managePermissionTitle = canManageUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.delete', USER_PERMISSION_ROLE_DEFAULTS);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', USER_PERMISSION_ROLE_DEFAULTS);
   const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport;
-  const isUsersBusy = isLoading || isUserMutationBusy;
+  const isUsersBusy = isLoading || isUserMutationBusy || isPermissionMatrixPending;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const selectedMembershipSiteId = useMemo(() => getSiteSelectionFromSearch(sites), [sites]);
@@ -316,20 +342,78 @@ function UsersListView() {
     ))
   ), [currentAdmin]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load user permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
   const loadUsers = useCallback(async () => {
+    if (isPermissionMatrixPending) return;
+    if (!canViewUsers) {
+      setUsers([]);
+      setNotice(viewPermissionTitle || 'Your account cannot view users.');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const backendUsers = await listUsers();
       setUsers(backendUsers);
       setNotice(null);
-    } catch {
+    } catch (error) {
+      if (isAdminPermissionDeniedError(error)) {
+        setUsers([]);
+        setNotice(error instanceof Error ? error.message : viewPermissionTitle || 'Your account cannot view users.');
+        return;
+      }
+
       setNotice('Using local fallback users because the backend users API is unavailable.');
     } finally {
       setIsLoading(false);
     }
-  }, [setUsers]);
+  }, [canViewUsers, isPermissionMatrixPending, setUsers, viewPermissionTitle]);
 
   const loadUserAuditLogs = useCallback(async () => {
+    if (isPermissionMatrixPending) return;
+    if (!canExportActivity) {
+      setUserAuditLogs([]);
+      setUserAuditError(null);
+      return;
+    }
+
     setIsLoadingUserAudit(true);
     setUserAuditError(null);
     try {
@@ -340,7 +424,7 @@ function UsersListView() {
     } finally {
       setIsLoadingUserAudit(false);
     }
-  }, []);
+  }, [canExportActivity, isPermissionMatrixPending]);
 
   useEffect(() => {
     void loadUsers();
@@ -459,7 +543,7 @@ function UsersListView() {
   ), [isCurrentUser, selectedUsers]);
 
   const toggleUserSelection = (user: UserType, checked: boolean) => {
-    if (isUsersBusy || isCurrentUser(user)) return;
+    if (isUsersBusy || isCurrentUser(user) || (!canManageUsers && !canDeleteUsers)) return;
 
     setSelectedUserIds((current) => {
       if (checked) {
@@ -472,6 +556,11 @@ function UsersListView() {
 
   const handlePatchUser = async (user: UserType, updates: Partial<Pick<UserType, 'role' | 'status'>>) => {
     if (isUsersBusy) return;
+    if (!canManageUsers) {
+      setNotice(managePermissionTitle || 'Your account cannot change users.');
+      return;
+    }
+
     if (isCurrentUser(user) && (updates.role || updates.status)) {
       setNotice('Use another owner/admin account to change your own role or account status.');
       return;
@@ -494,6 +583,12 @@ function UsersListView() {
 
   const handleDeleteUser = async () => {
     if (!pendingDelete || isUserMutationBusy) return;
+    if (!canDeleteUsers) {
+      setNotice(deletePermissionTitle || 'Your account cannot remove users.');
+      setPendingDelete(null);
+      return;
+    }
+
     if (isCurrentUser(pendingDelete)) {
       setNotice('Use another owner/admin account to remove your own access.');
       setPendingDelete(null);
@@ -517,6 +612,11 @@ function UsersListView() {
 
   const handleBulkStatusUpdate = async () => {
     if (isUsersBusy) return;
+    if (!canManageUsers) {
+      setNotice(managePermissionTitle || 'Your account cannot change users.');
+      return;
+    }
+
     const userIds = selectedActionableUsers.map((user) => user.id);
     if (userIds.length === 0) {
       setNotice('Select at least one non-current user before running a bulk action.');
@@ -542,6 +642,12 @@ function UsersListView() {
 
   const handleBulkDeleteUsers = async () => {
     if (isUsersBusy) return;
+    if (!canDeleteUsers) {
+      setNotice(deletePermissionTitle || 'Your account cannot remove users.');
+      setPendingBulkDelete(false);
+      return;
+    }
+
     const userIds = selectedActionableUsers.map((user) => user.id);
     if (userIds.length === 0) {
       setNotice('Select at least one non-current user before running a bulk action.');
@@ -580,6 +686,10 @@ function UsersListView() {
 
   const handleExportUsers = () => {
     if (data.length === 0 || isUsersBusy) return;
+    if (!canViewUsers) {
+      setNotice(viewPermissionTitle || 'Your account cannot export users.');
+      return;
+    }
 
     const header = [
       'user_id',
@@ -613,6 +723,10 @@ function UsersListView() {
 
   const downloadUserImportTemplate = () => {
     if (isUsersBusy) return;
+    if (!canCreateUsers) {
+      setNotice(createPermissionTitle || 'Your account cannot import users.');
+      return;
+    }
 
     const csv = [
       ['full_name', 'email', 'role', 'status'].join(','),
@@ -631,6 +745,12 @@ function UsersListView() {
 
   const openImportFile = (dryRun: boolean) => {
     if (isUsersBusy || !importInputRef.current) return;
+    if (!canCreateUsers || (importMode === 'upsert' && !canManageUsers)) {
+      setNotice(importMode === 'upsert'
+        ? managePermissionTitle || 'Updating existing users from CSV requires user management access.'
+        : createPermissionTitle || 'Your account cannot import users.');
+      return;
+    }
 
     importInputRef.current.dataset.importDryRun = dryRun ? 'true' : 'false';
     importInputRef.current.click();
@@ -638,6 +758,12 @@ function UsersListView() {
 
   const handleImportUsers = async (file: File | null | undefined, dryRun: boolean) => {
     if (!file || isUsersBusy) return;
+    if (!canCreateUsers || (importMode === 'upsert' && !canManageUsers)) {
+      setNotice(importMode === 'upsert'
+        ? managePermissionTitle || 'Updating existing users from CSV requires user management access.'
+        : createPermissionTitle || 'Your account cannot import users.');
+      return;
+    }
 
     if (dryRun) {
       setIsPreviewingImport(true);
@@ -751,7 +877,8 @@ function UsersListView() {
           </span>
           <select
             value={user.role}
-            disabled={isUsersBusy || isCurrentUser(user)}
+            disabled={isUsersBusy || isCurrentUser(user) || !canManageUsers}
+            title={!canManageUsers ? managePermissionTitle : undefined}
             onChange={(event) => void handlePatchUser(user, { role: event.target.value as UserRole })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change role for ${user.fullName}`}
@@ -775,7 +902,8 @@ function UsersListView() {
           <StatusBadge status={user.status} />
           <select
             value={user.status}
-            disabled={isUsersBusy || isCurrentUser(user)}
+            disabled={isUsersBusy || isCurrentUser(user) || !canManageUsers}
+            title={!canManageUsers ? managePermissionTitle : undefined}
             onChange={(event) => void handlePatchUser(user, { status: event.target.value as UserStatus })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change status for ${user.fullName}`}
@@ -816,11 +944,12 @@ function UsersListView() {
           <button
             type="button"
             onClick={() => {
-              if (!isUsersBusy && !isCurrentUser(user)) {
+              if (!isUsersBusy && !isCurrentUser(user) && canDeleteUsers) {
                 setPendingDelete(user);
               }
             }}
-            disabled={isUsersBusy || isCurrentUser(user)}
+            disabled={isUsersBusy || isCurrentUser(user) || !canDeleteUsers}
+            title={!canDeleteUsers ? deletePermissionTitle : undefined}
             className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={isCurrentUser(user) ? `Self removal locked for ${user.fullName}` : `Remove ${user.fullName}`}
           >
@@ -853,7 +982,7 @@ function UsersListView() {
   const allVisibleSelected = visibleSelectableUsers.length > 0
     && visibleSelectableUsers.every((user) => selectedUserIds.includes(user.id));
   const toggleVisibleSelection = (checked: boolean) => {
-    if (isUsersBusy) return;
+    if (isUsersBusy || (!canManageUsers && !canDeleteUsers)) return;
 
     setSelectedUserIds((current) => {
       const visibleIds = visibleSelectableUsers.map((user) => user.id);
@@ -866,6 +995,10 @@ function UsersListView() {
   };
   const openInviteUser = () => {
     if (isUsersBusy) return;
+    if (!canCreateUsers) {
+      setNotice(createPermissionTitle || 'Your account cannot invite users.');
+      return;
+    }
 
     navigate({ to: '/users/new', search: { siteId: membershipSiteId } });
   };
@@ -1041,6 +1174,20 @@ function UsersListView() {
 
   const hasActiveFilters = Boolean(searchQuery || roleFilter !== 'all' || statusFilter !== 'all' || reviewFilter !== 'all');
 
+  if (!isPermissionMatrixPending && !canViewUsers) {
+    return (
+      <PageShell
+        title="Users unavailable"
+        description={viewPermissionTitle || 'Your account cannot view workspace users.'}
+        className="w-full"
+      >
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {permissionError || viewPermissionTitle || 'Ask an owner or admin with users.view access to open this page.'}
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title="Users"
@@ -1050,7 +1197,8 @@ function UsersListView() {
           type="button"
           variant="primary"
           onClick={openInviteUser}
-          disabled={isUsersBusy}
+          disabled={isUsersBusy || !canCreateUsers}
+          title={!canCreateUsers ? createPermissionTitle : undefined}
           iconStart={<Send className="h-4 w-4" />}
         >
           Invite user
@@ -1108,7 +1256,8 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
-              disabled={data.length === 0 || isUsersBusy}
+              disabled={data.length === 0 || isUsersBusy || !canViewUsers}
+              title={!canViewUsers ? viewPermissionTitle : undefined}
               onClick={handleExportUsers}
               iconStart={<Download className="size-4" />}
             >
@@ -1117,7 +1266,8 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
-              disabled={isUsersBusy}
+              disabled={isUsersBusy || !canCreateUsers}
+              title={!canCreateUsers ? createPermissionTitle : undefined}
               onClick={downloadUserImportTemplate}
               iconStart={<Download className="size-4" />}
             >
@@ -1125,7 +1275,8 @@ function UsersListView() {
             </Button>
             <select
               value={importMode}
-              disabled={isUsersBusy}
+              disabled={isUsersBusy || !canCreateUsers}
+              title={!canCreateUsers ? createPermissionTitle : undefined}
               onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
               className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="User import duplicate handling"
@@ -1136,7 +1287,8 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
-              disabled={isUsersBusy}
+              disabled={isUsersBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers)}
+              title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
               onClick={() => openImportFile(true)}
               iconStart={<ClipboardList className="size-4" />}
             >
@@ -1145,7 +1297,8 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
-              disabled={isUsersBusy}
+              disabled={isUsersBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers)}
+              title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
               onClick={() => openImportFile(false)}
               iconStart={<Upload className="size-4" />}
             >
@@ -1155,12 +1308,13 @@ function UsersListView() {
               type="button"
               variant="outline"
               onClick={() => void loadUsers()}
-              disabled={isUsersBusy}
+              disabled={isUsersBusy || !canViewUsers}
+              title={!canViewUsers ? viewPermissionTitle : undefined}
               iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
             >
               Refresh users
             </Button>
-            <Button onClick={openInviteUser} disabled={isUsersBusy} iconStart={<Send className="size-4" />}>
+            <Button onClick={openInviteUser} disabled={isUsersBusy || !canCreateUsers} title={!canCreateUsers ? createPermissionTitle : undefined} iconStart={<Send className="size-4" />}>
               Invite user
             </Button>
           </div>
@@ -1245,7 +1399,8 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={data.length === 0 || isUsersBusy}
+                    disabled={data.length === 0 || isUsersBusy || !canViewUsers}
+                    title={!canViewUsers ? viewPermissionTitle : undefined}
                     onClick={handleExportUsers}
                     iconStart={<Download className="size-4" />}
                   >
@@ -1254,7 +1409,8 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers)}
+                    title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
                     onClick={() => openImportFile(true)}
                     iconStart={<ClipboardList className="size-4" />}
                   >
@@ -1263,7 +1419,8 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers)}
+                    title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
                     onClick={() => openImportFile(false)}
                     iconStart={<Upload className="size-4" />}
                   >
@@ -1271,7 +1428,8 @@ function UsersListView() {
                   </Button>
                   <select
                     value={importMode}
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || !canCreateUsers}
+                    title={!canCreateUsers ? createPermissionTitle : undefined}
                     onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="User API import duplicate handling"
@@ -1465,6 +1623,12 @@ function UsersListView() {
               </div>
             </div>
 
+            {permissionError && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {permissionError}
+              </div>
+            )}
+
             {notice && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {notice}
@@ -1521,7 +1685,8 @@ function UsersListView() {
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
-                      disabled={isUsersBusy || visibleSelectableUsers.length === 0}
+                      disabled={isUsersBusy || visibleSelectableUsers.length === 0 || (!canManageUsers && !canDeleteUsers)}
+                      title={!canManageUsers && !canDeleteUsers ? managePermissionTitle || deletePermissionTitle : undefined}
                       onChange={(event) => toggleVisibleSelection(event.target.checked)}
                       className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label="Select visible non-current users"
@@ -1547,7 +1712,8 @@ function UsersListView() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <select
                     value={bulkStatus}
-                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0 || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     onChange={(event) => setBulkStatus(event.target.value as UserStatus)}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Bulk status"
@@ -1559,7 +1725,8 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0 || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     onClick={() => void handleBulkStatusUpdate()}
                     iconStart={<Check className="size-4" />}
                   >
@@ -1568,7 +1735,8 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="danger"
-                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0 || !canDeleteUsers}
+                    title={!canDeleteUsers ? deletePermissionTitle : undefined}
                     onClick={() => setPendingBulkDelete(true)}
                     iconStart={<Trash2 className="size-4" />}
                   >
@@ -1620,7 +1788,8 @@ function UsersListView() {
                         type="button"
                         variant="primary"
                         onClick={openInviteUser}
-                        disabled={isUsersBusy}
+                        disabled={isUsersBusy || !canCreateUsers}
+                        title={!canCreateUsers ? createPermissionTitle : undefined}
                         className="mt-4"
                         iconStart={<Plus className="h-4 w-4" />}
                       >
@@ -1819,7 +1988,8 @@ function UsersListView() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={isLoadingUserAudit}
+                  disabled={isLoadingUserAudit || !canExportActivity}
+                  title={!canExportActivity ? activityPermissionTitle : undefined}
                   onClick={() => void loadUserAuditLogs()}
                   iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserAudit && 'animate-spin')} />}
                 >

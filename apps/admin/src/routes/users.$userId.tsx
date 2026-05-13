@@ -42,6 +42,7 @@ import {
   type AdminPermissionOverrideValue,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import {
   createAdminInviteToken,
   createAdminPasswordResetToken,
@@ -51,7 +52,7 @@ import {
   type AdminPasswordResetToken,
   type AdminSessionSummary,
 } from '@/lib/adminAuthApi';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users/$userId')({
@@ -60,6 +61,14 @@ export const Route = createFileRoute('/users/$userId')({
 
 type UserRole = User['role'];
 type UserStatus = User['status'];
+type UserDetailPermissionKey = 'users.view' | 'users.manage' | 'users.delete' | 'activity.export';
+
+const USER_DETAIL_PERMISSION_ROLE_DEFAULTS: Record<UserDetailPermissionKey, Array<AuthUser['role']>> = {
+  'users.view': ['owner', 'admin'],
+  'users.manage': ['owner', 'admin'],
+  'users.delete': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+};
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string; detail: string }> = [
   { value: 'owner', label: 'Owner', detail: 'Complete workspace authority, billing, settings, users, and publishing.' },
@@ -171,9 +180,13 @@ function EditUserPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(Boolean(user));
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isUserAccessDenied, setIsUserAccessDenied] = useState(false);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const [currentAdminPermissionMatrix, setCurrentAdminPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isLoadingCurrentAdminPermissions, setIsLoadingCurrentAdminPermissions] = useState(Boolean(currentAdmin?.id));
+  const [currentAdminPermissionError, setCurrentAdminPermissionError] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -203,7 +216,36 @@ function EditUserPage() {
     role: 'editor',
     status: 'invited',
   });
-  const isUserDetailBusy = isLoadingUser || isLoading;
+  const isCurrentAdminPermissionMatrixPending = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix;
+  const canViewUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
+    currentAdminPermissionMatrix,
+    currentAdmin,
+    'users.view',
+    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
+  );
+  const canManageUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
+    currentAdminPermissionMatrix,
+    currentAdmin,
+    'users.manage',
+    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
+  );
+  const canDeleteUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
+    currentAdminPermissionMatrix,
+    currentAdmin,
+    'users.delete',
+    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
+  );
+  const canExportActivity = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
+    currentAdminPermissionMatrix,
+    currentAdmin,
+    'activity.export',
+    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
+  );
+  const viewPermissionTitle = canViewUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.view', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
+  const managePermissionTitle = canManageUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.manage', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
+  const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.delete', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'activity.export', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
+  const isUserDetailBusy = isLoadingUser || isLoading || isCurrentAdminPermissionMatrixPending;
 
   useEffect(() => {
     if (user) {
@@ -218,8 +260,52 @@ function EditUserPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setCurrentAdminPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setCurrentAdminPermissionMatrix(null);
+      setIsLoadingCurrentAdminPermissions(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsLoadingCurrentAdminPermissions(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setCurrentAdminPermissionMatrix(matrix);
+          setCurrentAdminPermissionError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCurrentAdminPermissionMatrix(null);
+          setCurrentAdminPermissionError(error instanceof Error ? error.message : 'Unable to load your user permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingCurrentAdminPermissions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     const loadUser = async () => {
+      if (isCurrentAdminPermissionMatrixPending) return;
+      if (!canViewUsers) {
+        setNotice(viewPermissionTitle || 'Your account cannot view users.');
+        setIsLoadingUser(false);
+        return;
+      }
+
       setIsLoadingUser(true);
       try {
         const backendUser = await getBackendUser(userId);
@@ -228,11 +314,16 @@ function EditUserPage() {
             backendUser,
             ...users.filter((item) => item.id !== backendUser.id),
           ]);
+          setIsUserAccessDenied(false);
           setNotice(null);
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setNotice('Using local fallback user data because the backend users API is unavailable.');
+          const denied = isAdminPermissionDeniedError(error);
+          setIsUserAccessDenied(denied);
+          setNotice(denied
+            ? error instanceof Error ? error.message : viewPermissionTitle || 'Your account cannot view users.'
+            : 'Using local fallback user data because the backend users API is unavailable.');
         }
       } finally {
         if (!cancelled) {
@@ -246,9 +337,16 @@ function EditUserPage() {
     return () => {
       cancelled = true;
     };
-  }, [setUsers, userId]);
+  }, [canViewUsers, isCurrentAdminPermissionMatrixPending, setUsers, userId, viewPermissionTitle]);
 
   const loadUserAuditLogs = useCallback(async () => {
+    if (isCurrentAdminPermissionMatrixPending) return;
+    if (!canExportActivity) {
+      setUserAuditLogs([]);
+      setUserAuditError(null);
+      return;
+    }
+
     setIsLoadingUserAudit(true);
     setUserAuditError(null);
 
@@ -261,13 +359,20 @@ function EditUserPage() {
     } finally {
       setIsLoadingUserAudit(false);
     }
-  }, [userId]);
+  }, [canExportActivity, isCurrentAdminPermissionMatrixPending, userId]);
 
   useEffect(() => {
     void loadUserAuditLogs();
   }, [loadUserAuditLogs]);
 
   const loadPermissionMatrix = useCallback(async () => {
+    if (isCurrentAdminPermissionMatrixPending) return;
+    if (!canViewUsers) {
+      setPermissionMatrix(null);
+      setPermissionError(viewPermissionTitle || 'Your account cannot view user permissions.');
+      return;
+    }
+
     setIsLoadingPermissions(true);
     setPermissionError(null);
 
@@ -280,7 +385,7 @@ function EditUserPage() {
     } finally {
       setIsLoadingPermissions(false);
     }
-  }, [userId]);
+  }, [canViewUsers, isCurrentAdminPermissionMatrixPending, userId, viewPermissionTitle]);
 
   useEffect(() => {
     void loadPermissionMatrix();
@@ -290,6 +395,11 @@ function EditUserPage() {
     permissionKey: string,
     value: AdminPermissionOverrideValue | null,
   ) => {
+    if (!canManageUsers) {
+      setPermissionError(managePermissionTitle || 'Your account cannot change user permissions.');
+      return;
+    }
+
     setSavingPermissionKey(permissionKey);
     setPermissionError(null);
     setPermissionNotice(null);
@@ -304,9 +414,10 @@ function EditUserPage() {
     } finally {
       setSavingPermissionKey(null);
     }
-  }, [loadUserAuditLogs, userId]);
+  }, [canManageUsers, loadUserAuditLogs, managePermissionTitle, userId]);
 
   const loadUserSessions = useCallback(async () => {
+    if (isCurrentAdminPermissionMatrixPending) return;
     if (!user) {
       setUserSessions([]);
       return;
@@ -315,6 +426,12 @@ function EditUserPage() {
     if (!currentSessionToken) {
       setUserSessions([]);
       setSessionNotice('Sign in with a valid admin session to review active sessions.');
+      return;
+    }
+
+    if (!canManageUsers) {
+      setUserSessions([]);
+      setSessionNotice(managePermissionTitle || 'Your account cannot review user sessions.');
       return;
     }
 
@@ -330,7 +447,7 @@ function EditUserPage() {
     } finally {
       setIsLoadingSessions(false);
     }
-  }, [currentSessionToken, user]);
+  }, [canManageUsers, currentSessionToken, isCurrentAdminPermissionMatrixPending, managePermissionTitle, user]);
 
   useEffect(() => {
     void loadUserSessions();
@@ -366,6 +483,7 @@ function EditUserPage() {
   ));
   const canCreateResetToken = Boolean(
     currentSessionToken &&
+    canManageUsers &&
     !isUserDetailBusy &&
     !isCreatingResetToken &&
     formData.status !== 'inactive' &&
@@ -373,11 +491,12 @@ function EditUserPage() {
   );
   const canCreateInviteToken = Boolean(
     currentSessionToken &&
+    canManageUsers &&
     !isUserDetailBusy &&
     !isCreatingInviteToken &&
     formData.status === 'invited',
   );
-  const canSaveUserDetail = canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
+  const canSaveUserDetail = canManageUsers && canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
     const isPrivileged = formData.role === 'owner' || formData.role === 'admin';
@@ -442,6 +561,24 @@ function EditUserPage() {
     };
   }, [canSubmit, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user]);
 
+  if (!isCurrentAdminPermissionMatrixPending && (!canViewUsers || isUserAccessDenied)) {
+    return (
+      <PageShell title="User unavailable" description={notice || viewPermissionTitle || 'Your account cannot view users.'}>
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/users' })}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to users
+        </button>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {notice || currentAdminPermissionError || viewPermissionTitle || 'Ask an owner or admin with users.view access to open this page.'}
+        </div>
+      </PageShell>
+    );
+  }
+
   if (!user) {
     return (
       <PageShell title="User not found" description="The user you requested does not exist.">
@@ -460,6 +597,10 @@ function EditUserPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isUserDetailBusy) return;
+    if (!canManageUsers) {
+      setNotice(managePermissionTitle || 'Your account cannot change users.');
+      return;
+    }
 
     if (!canSubmit) {
       setNotice('Enter a full name and a valid email address before saving.');
@@ -496,6 +637,12 @@ function EditUserPage() {
 
   const handleDelete = async () => {
     if (isUserDetailBusy) return;
+    if (!canDeleteUsers) {
+      setNotice(deletePermissionTitle || 'Your account cannot remove users.');
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     if (isCurrentUser) {
       setNotice('Use another owner/admin account to remove your own access.');
       setShowDeleteConfirm(false);
@@ -518,6 +665,11 @@ function EditUserPage() {
 
   const handleLifecycleAction = async (status: UserStatus) => {
     if (isUserDetailBusy || status === formData.status) return;
+    if (!canManageUsers) {
+      setNotice(managePermissionTitle || 'Your account cannot change users.');
+      return;
+    }
+
     if (isCurrentUser) {
       setNotice('Use another owner/admin account to change your own account status.');
       return;
@@ -541,6 +693,10 @@ function EditUserPage() {
 
   const resetForm = () => {
     if (isUserDetailBusy) return;
+    if (!canManageUsers) {
+      setNotice(managePermissionTitle || 'Your account cannot change users.');
+      return;
+    }
 
     setFormData({
       fullName: user.fullName,
@@ -671,6 +827,10 @@ function EditUserPage() {
 
   const revokeSession = async (session: AdminSessionSummary) => {
     if (!currentSessionToken || session.current || revokingSessionId) return;
+    if (!canManageUsers) {
+      setSessionNotice(managePermissionTitle || 'Your account cannot revoke user sessions.');
+      return;
+    }
 
     setRevokingSessionId(session.id);
     setSessionNotice(null);
@@ -687,6 +847,11 @@ function EditUserPage() {
   };
 
   const createInviteToken = async () => {
+    if (!canManageUsers) {
+      setInviteTokenNotice(managePermissionTitle || 'Your account cannot generate invite links.');
+      return;
+    }
+
     if (!currentSessionToken || isCreatingInviteToken) {
       setInviteTokenNotice('Sign in with a valid admin session to generate invite links.');
       return;
@@ -713,6 +878,11 @@ function EditUserPage() {
   };
 
   const createResetToken = async () => {
+    if (!canManageUsers) {
+      setResetTokenNotice(managePermissionTitle || 'Your account cannot generate reset tokens.');
+      return;
+    }
+
     if (!currentSessionToken || isCreatingResetToken) {
       setResetTokenNotice('Sign in with a valid admin session to generate reset tokens.');
       return;
@@ -801,7 +971,8 @@ function EditUserPage() {
                   type="button"
                   variant="outline"
                   onClick={resetForm}
-                  disabled={isUserDetailBusy}
+                  disabled={isUserDetailBusy || !canManageUsers}
+                  title={!canManageUsers ? managePermissionTitle : undefined}
                 >
                   Reset changes
                 </Button>
@@ -810,6 +981,7 @@ function EditUserPage() {
                 type="submit"
                 variant="primary"
                 disabled={isUserDetailBusy || !canSaveUserDetail}
+                title={!canManageUsers ? managePermissionTitle : undefined}
                 iconStart={<Save className="size-4" />}
               >
                 {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
@@ -886,6 +1058,11 @@ function EditUserPage() {
                 {notice}
               </div>
             )}
+            {currentAdminPermissionError && (
+              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {currentAdminPermissionError}
+              </div>
+            )}
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <label className="block">
@@ -895,7 +1072,8 @@ function EditUserPage() {
                   <input
                     type="text"
                     value={formData.fullName}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     onChange={(e) => {
                       if (isUserDetailBusy) return;
                       setFormData({ ...formData, fullName: e.target.value });
@@ -913,7 +1091,8 @@ function EditUserPage() {
                   <input
                     type="email"
                     value={formData.email}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     onChange={(e) => {
                       if (isUserDetailBusy) return;
                       setFormData({ ...formData, email: e.target.value });
@@ -947,7 +1126,8 @@ function EditUserPage() {
                 <span className="text-sm font-medium">Role</span>
                 <select
                   value={formData.role}
-                  disabled={isUserDetailBusy || isCurrentUser}
+                  disabled={isUserDetailBusy || isCurrentUser || !canManageUsers}
+                  title={!canManageUsers ? managePermissionTitle : undefined}
                   onChange={(e) => {
                     if (isUserDetailBusy || isCurrentUser) return;
                     setFormData({ ...formData, role: e.target.value as UserRole });
@@ -965,7 +1145,8 @@ function EditUserPage() {
                 <span className="text-sm font-medium">Status</span>
                 <select
                   value={formData.status}
-                  disabled={isUserDetailBusy || isCurrentUser}
+                  disabled={isUserDetailBusy || isCurrentUser || !canManageUsers}
+                  title={!canManageUsers ? managePermissionTitle : undefined}
                   onChange={(e) => {
                     if (isUserDetailBusy || isCurrentUser) return;
                     setFormData({ ...formData, status: e.target.value as UserStatus });
@@ -999,7 +1180,8 @@ function EditUserPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => void loadPermissionMatrix()}
-                disabled={isLoadingPermissions}
+                disabled={isLoadingPermissions || !canViewUsers}
+                title={!canViewUsers ? viewPermissionTitle : undefined}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingPermissions && 'animate-spin')} />}
               >
                 Refresh
@@ -1050,6 +1232,8 @@ function EditUserPage() {
                       key={group.key}
                       group={group}
                       savingPermissionKey={savingPermissionKey}
+                      canManageUsers={canManageUsers}
+                      disabledReason={managePermissionTitle}
                       onOverrideChange={savePermissionOverride}
                     />
                   ))}
@@ -1158,7 +1342,8 @@ function EditUserPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => void loadUserAuditLogs()}
-                disabled={isLoadingUserAudit}
+                disabled={isLoadingUserAudit || !canExportActivity}
+                title={!canExportActivity ? activityPermissionTitle : undefined}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserAudit && 'animate-spin')} />}
               >
                 Refresh
@@ -1208,7 +1393,8 @@ function EditUserPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => void loadUserSessions()}
-                disabled={isLoadingSessions}
+                disabled={isLoadingSessions || !canManageUsers}
+                title={!canManageUsers ? managePermissionTitle : undefined}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingSessions && 'animate-spin')} />}
               >
                 Refresh
@@ -1238,6 +1424,8 @@ function EditUserPage() {
                     key={session.id}
                     session={session}
                     isRevoking={revokingSessionId === session.id}
+                    canManageUsers={canManageUsers}
+                    disabledReason={managePermissionTitle}
                     onRevoke={() => void revokeSession(session)}
                   />
                 ))}
@@ -1273,7 +1461,8 @@ function EditUserPage() {
                 <select
                   aria-label="Invite link expiry"
                   value={inviteExpiresInMinutes}
-                  disabled={isUserDetailBusy || isCreatingInviteToken}
+                  disabled={isUserDetailBusy || isCreatingInviteToken || !canManageUsers}
+                  title={!canManageUsers ? managePermissionTitle : undefined}
                   onChange={(event) => setInviteExpiresInMinutes(Number(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1288,7 +1477,8 @@ function EditUserPage() {
                 <select
                   aria-label="Reset link expiry"
                   value={resetExpiresInMinutes}
-                  disabled={isUserDetailBusy || isCreatingResetToken}
+                  disabled={isUserDetailBusy || isCreatingResetToken || !canManageUsers}
+                  title={!canManageUsers ? managePermissionTitle : undefined}
                   onChange={(event) => setResetExpiresInMinutes(Number(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1305,6 +1495,7 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void createInviteToken()}
                 disabled={!canCreateInviteToken}
+                title={!canManageUsers ? managePermissionTitle : undefined}
                 iconStart={<Mail className="size-4" />}
               >
                 {isCreatingInviteToken ? 'Generating...' : inviteToken ? 'Generate new invite link' : 'Generate invite link'}
@@ -1314,16 +1505,17 @@ function EditUserPage() {
                 variant="primary"
                 onClick={() => void createResetToken()}
                 disabled={!canCreateResetToken}
+                title={!canManageUsers ? managePermissionTitle : undefined}
                 iconStart={<KeyRound className="size-4" />}
               >
                 {isCreatingResetToken ? 'Generating...' : passwordResetToken ? 'Generate new reset token' : 'Generate reset token'}
               </Button>
               <a
                 href={resetMailTo}
-                aria-disabled={isUserDetailBusy}
+                aria-disabled={isUserDetailBusy || !canManageUsers}
                 className={cn(
                   'inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
-                  isUserDetailBusy && 'pointer-events-none opacity-60',
+                  (isUserDetailBusy || !canManageUsers) && 'pointer-events-none opacity-60',
                 )}
               >
                 <Mail className="h-4 w-4" />
@@ -1361,7 +1553,8 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(inviteToken.inviteUrl, 'Invite URL')}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     iconStart={<Copy className="size-3.5" />}
                   >
                     Copy invite URL
@@ -1371,7 +1564,8 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(inviteToken.token, 'Invite token')}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     iconStart={<Copy className="size-3.5" />}
                   >
                     Copy invite token
@@ -1413,7 +1607,8 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(passwordResetToken.resetUrl, 'Reset URL')}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     iconStart={<Copy className="size-3.5" />}
                   >
                     Copy reset URL
@@ -1423,7 +1618,8 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(passwordResetToken.token, 'Reset token')}
-                    disabled={isUserDetailBusy}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     iconStart={<Copy className="size-3.5" />}
                   >
                     Copy token
@@ -1453,7 +1649,8 @@ function EditUserPage() {
                     key={action.status}
                     type="button"
                     onClick={() => void handleLifecycleAction(action.status)}
-                    disabled={isUserDetailBusy || active || isCurrentUser}
+                    disabled={isUserDetailBusy || active || isCurrentUser || !canManageUsers}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
                     className={cn(
                       'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
                       active ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:bg-accent',
@@ -1483,7 +1680,8 @@ function EditUserPage() {
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              disabled={isUserDetailBusy || isCurrentUser}
+              disabled={isUserDetailBusy || isCurrentUser || !canDeleteUsers}
+              title={!canDeleteUsers ? deletePermissionTitle : undefined}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
@@ -1495,6 +1693,7 @@ function EditUserPage() {
             <button
               type="submit"
               disabled={isUserDetailBusy || !canSaveUserDetail}
+              title={!canManageUsers ? managePermissionTitle : undefined}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',
@@ -1519,7 +1718,8 @@ function EditUserPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                disabled={isUserDetailBusy}
+                disabled={isUserDetailBusy || !canManageUsers}
+                title={!canManageUsers ? managePermissionTitle : undefined}
                 className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Reset changes
@@ -1556,7 +1756,8 @@ function EditUserPage() {
               <button
                 type="button"
                 onClick={() => void handleDelete()}
-                disabled={isUserDetailBusy}
+                disabled={isUserDetailBusy || !canDeleteUsers}
+                title={!canDeleteUsers ? deletePermissionTitle : undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? 'Removing...' : 'Remove user'}
@@ -1630,10 +1831,14 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
 function AdminSessionCard({
   session,
   isRevoking,
+  canManageUsers,
+  disabledReason,
   onRevoke,
 }: {
   session: AdminSessionSummary;
   isRevoking: boolean;
+  canManageUsers: boolean;
+  disabledReason?: string;
   onRevoke: () => void;
 }) {
   return (
@@ -1670,7 +1875,8 @@ function AdminSessionCard({
           type="button"
           size="sm"
           variant="outline"
-          disabled={session.current || isRevoking}
+          disabled={session.current || isRevoking || !canManageUsers}
+          title={!canManageUsers ? disabledReason : undefined}
           onClick={onRevoke}
           iconStart={<LogOut className="size-3.5" />}
         >
@@ -1684,10 +1890,14 @@ function AdminSessionCard({
 function PermissionMatrixGroup({
   group,
   savingPermissionKey,
+  canManageUsers,
+  disabledReason,
   onOverrideChange,
 }: {
   group: AdminPermissionGroup;
   savingPermissionKey: string | null;
+  canManageUsers: boolean;
+  disabledReason?: string;
   onOverrideChange: (permissionKey: string, value: AdminPermissionOverrideValue | null) => void;
 }) {
   const allowedCount = group.permissions.filter((permission) => permission.allowed).length;
@@ -1761,7 +1971,8 @@ function PermissionMatrixGroup({
                     type="button"
                     data-testid={`permission-${permission.key}-${option.testId}`}
                     aria-pressed={selected}
-                    disabled={isSaving}
+                    disabled={isSaving || !canManageUsers}
+                    title={!canManageUsers ? disabledReason : undefined}
                     onClick={() => onOverrideChange(permission.key, option.value)}
                     className={cn(
                       'min-w-14 px-2 text-[11px] font-semibold transition disabled:cursor-wait disabled:opacity-60',
