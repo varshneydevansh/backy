@@ -618,6 +618,11 @@ function EditBlogPostPage() {
 
         try {
             if (action === 'publish') {
+                if (editorHasUnsavedChanges) {
+                    setSaveWarning('Save the post before publishing so the backend publishes the latest title, SEO, taxonomy, media, and canvas changes.');
+                    return;
+                }
+
                 if (isCheckingRoutes || routeCheckError || routeConflict) {
                     setSaveWarning(routeCheckError
                         ? 'Backy could not verify existing blog routes for this site. Retry the route check before publishing.'
@@ -632,6 +637,11 @@ function EditBlogPostPage() {
                     setSaveWarning('Resolve post readiness errors before publishing.');
                     return;
                 }
+            }
+
+            if (action === 'archive' && editorHasUnsavedChanges) {
+                setSaveWarning('Save or discard local post changes before archiving.');
+                return;
             }
 
             const nextPost = action === 'publish'
@@ -654,6 +664,11 @@ function EditBlogPostPage() {
         setSaveWarning(null);
 
         try {
+            if (editorHasUnsavedChanges) {
+                setSaveWarning('Save the post before generating a preview so the preview uses the latest editor changes.');
+                return;
+            }
+
             const preview = await createBlogPostPreview(activeSiteId, postId);
             setPreviewUrl(preview.url);
             setPreviewExpiresAt(preview.expiresAt);
@@ -686,6 +701,11 @@ function EditBlogPostPage() {
         setWorkflowNotice(null);
 
         try {
+            if (editorHasUnsavedChanges) {
+                setSaveWarning('Save or discard local post changes before restoring a revision.');
+                return;
+            }
+
             const restoredPost = await rollbackBlogPost(activeSiteId, postId, revision.id);
             syncPostState(restoredPost);
             setWorkflowNotice('Post revision restored.');
@@ -820,6 +840,49 @@ function EditBlogPostPage() {
         .filter((comment) => comment.status === 'pending')
         .map((comment) => comment.id);
     const commentsModerated = !commentError && commentMetrics.pending === 0 && flaggedCommentCount === 0;
+    const savedEditorSnapshot = {
+        title: post.title || '',
+        slug: slugify(post.slug || ''),
+        excerpt: post.excerpt || '',
+        status: post.status,
+        scheduledAt: post.status === 'scheduled' ? post.scheduledAt || null : null,
+        seoTitle: getMetaString(post.meta, 'title') || post.title || '',
+        seoDescription: getMetaString(post.meta, 'description') || post.excerpt || '',
+        canonicalPath: normalizeCanonicalPath(getMetaString(post.meta, 'canonical') || `/blog/${post.slug}`),
+        ogImage: getMetaString(post.meta, 'ogImage'),
+        noIndex: getMetaBoolean(post.meta, 'noIndex'),
+        noFollow: getMetaBoolean(post.meta, 'noFollow'),
+        featuredImageId: post.featuredImageId || null,
+        authorId: post.author || 'admin',
+        categoryIds: post.categoryIds || [],
+        tagIds: post.tagIds || [],
+        content: {
+            elements: initialElements,
+            canvasSize: savedCanvasSize,
+        },
+    };
+    const currentEditorSnapshot = {
+        title,
+        slug: normalizedSlug,
+        excerpt,
+        status,
+        scheduledAt: status === 'scheduled' ? scheduledAt || null : null,
+        seoTitle: seoTitle.trim() || title,
+        seoDescription: seoDescription.trim() || excerpt,
+        canonicalPath: normalizedCanonicalPath,
+        ogImage: ogImage.trim(),
+        noIndex,
+        noFollow,
+        featuredImageId,
+        authorId: selectedAuthorId || 'admin',
+        categoryIds: selectedCategoryIds,
+        tagIds: selectedTagIds,
+        content: {
+            elements: canvasElements,
+            canvasSize,
+        },
+    };
+    const editorHasUnsavedChanges = JSON.stringify(savedEditorSnapshot) !== JSON.stringify(currentEditorSnapshot);
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
@@ -1741,6 +1804,12 @@ function EditBlogPostPage() {
                                     </div>
                                 )}
 
+                                {editorHasUnsavedChanges && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="blog-editor-unsaved-workflow-guard">
+                                        Save this post before preview, publish, archive, or revision restore. Workflow actions use the latest saved backend copy.
+                                    </div>
+                                )}
+
                                 <div className="grid gap-2">
                                     <Button type="submit" disabled={editorActionBusy || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
@@ -1748,18 +1817,19 @@ function EditBlogPostPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void generatePreview()}
-                                            disabled={editorActionBusy}
+                                            disabled={editorActionBusy || editorHasUnsavedChanges}
                                             variant="outline"
                                             iconStart={<Eye className="size-4" />}
+                                            title={editorHasUnsavedChanges ? 'Save this post before generating a preview.' : undefined}
                                         >
                                             Preview
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={editorActionBusy || readinessBlocked || routeBlocked || status === 'published'}
+                                            disabled={editorActionBusy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || status === 'published'}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
-                                            title={routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
+                                            title={editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
                                         >
                                             Publish
                                         </Button>
@@ -1767,9 +1837,10 @@ function EditBlogPostPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void applyWorkflow('archive')}
-                                            disabled={editorActionBusy || status === 'archived'}
+                                            disabled={editorActionBusy || editorHasUnsavedChanges || status === 'archived'}
                                             variant="outline"
                                             iconStart={<Archive className="size-4" />}
+                                            title={editorHasUnsavedChanges ? 'Save or discard local changes before archiving.' : undefined}
                                         >
                                             Archive
                                         </Button>
@@ -2133,10 +2204,10 @@ function EditBlogPostPage() {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        disabled={editorActionBusy}
+                                                        disabled={editorActionBusy || editorHasUnsavedChanges}
                                                         onClick={() => setPendingRestoreRevision(revision)}
                                                         className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                        title="Restore revision"
+                                                        title={editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
                                                     >
                                                         <RotateCcw className="w-4 h-4" />
                                                     </button>
@@ -2215,8 +2286,9 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => void restoreRevision(pendingRestoreRevision)}
-                                    disabled={editorActionBusy}
+                                    disabled={editorActionBusy || editorHasUnsavedChanges}
                                     className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    title={editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : undefined}
                                 >
                                     {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
                                 </button>

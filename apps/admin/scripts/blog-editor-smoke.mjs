@@ -425,6 +425,62 @@ const assertFocusMode = async (client) => {
   return null;
 };
 
+const assertUnsavedWorkflowGuard = async (client, originalTitle) => {
+  const changed = await evaluate(client, `(() => {
+    const draftPanel = document.querySelector('#blog-editor-draft');
+    const titleInput = draftPanel?.querySelector('input[type="text"]');
+    if (!(titleInput instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'title-input-missing', body: document.body?.innerText?.slice(0, 1200) || '' };
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    descriptor?.set?.call(titleInput, ${JSON.stringify(`${originalTitle} unsaved`)});
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true };
+  })()`);
+  assert(changed.ok, `Unable to create unsaved blog editor change: ${JSON.stringify(changed)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const guard = document.querySelector('[data-testid="blog-editor-unsaved-workflow-guard"]');
+      const buttons = Array.from(document.querySelectorAll('#blog-editor-publish button'));
+      const buttonState = (label) => {
+        const button = buttons.find((candidate) => (candidate.textContent || '').trim() === label);
+        return button instanceof HTMLButtonElement ? { found: true, disabled: button.disabled, title: button.getAttribute('title') || '' } : { found: false };
+      };
+      return {
+        hasGuard: Boolean(guard),
+        guardText: guard?.textContent || '',
+        preview: buttonState('Preview'),
+        publish: buttonState('Publish'),
+        archive: buttonState('Archive'),
+      };
+    })()`);
+
+    if (
+      state.hasGuard &&
+      state.guardText.includes('Save this post before preview') &&
+      state.preview.found &&
+      state.preview.disabled === true &&
+      state.publish.found &&
+      state.publish.disabled === true &&
+      state.archive.found &&
+      state.archive.disabled === true
+    ) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unsaved blog workflow guard did not activate: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const captureScreenshot = async (client, screenshotPath) => {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
@@ -482,6 +538,7 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     const editorState = await waitForEditor(client, post.id);
+    const unsavedGuardState = await assertUnsavedWorkflowGuard(client, post.title);
     const focusState = await assertFocusMode(client);
     const screenshotPath = await captureScreenshot(client, SCREENSHOT_PATH);
 
@@ -499,6 +556,7 @@ const main = async () => {
       postId: post.id,
       slug,
       editorState,
+      unsavedGuardState,
       focusState,
       screenshotPath,
     }, null, 2));
