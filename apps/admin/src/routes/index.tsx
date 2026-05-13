@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowUpRight,
+  BarChart3,
   CheckCircle2,
   ClipboardList,
   Code2,
@@ -361,6 +362,22 @@ const loadCommerceMetricsForDashboard = async (
   };
 };
 
+const countDashboardStatuses = (items: Array<{ status?: string }>) => (
+  items.reduce((counts, item) => {
+    const status = item.status === 'published' || item.status === 'draft' || item.status === 'scheduled' || item.status === 'archived'
+      ? item.status
+      : 'other';
+    counts[status] += 1;
+    return counts;
+  }, {
+    published: 0,
+    draft: 0,
+    scheduled: 0,
+    archived: 0,
+    other: 0,
+  })
+);
+
 function buildDashboardIssues(data: DashboardData, error: string | null): DashboardIssue[] {
   const readinessErrors = data.readiness.reduce((total, item) => total + item.summary.errors, 0);
   const readinessWarnings = data.readiness.reduce((total, item) => total + item.summary.warnings, 0);
@@ -502,6 +519,22 @@ function SignalMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-border bg-muted/30 px-2 py-2">
       <div className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function AnalyticsBar({ label, value, total }: { label: string; value: number; total: number }) {
+  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="tabular-nums text-muted-foreground">{value} · {percent}%</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }
@@ -1134,6 +1167,46 @@ function Index() {
     currency: dashboard.commerce.currency || 'USD',
     maximumFractionDigits: 0,
   }).format(dashboard.commerce.loadedOrderValue);
+  const aggregateAnalytics = useMemo(() => {
+    const pageStatusCounts = countDashboardStatuses(dashboard.pages);
+    const postStatusCounts = countDashboardStatuses(dashboard.posts);
+    const collectionStatusCounts = countDashboardStatuses(dashboard.collections);
+    const contentTotal = dashboard.pages.length + dashboard.posts.length + dashboard.collections.length;
+    const publishedContent = pageStatusCounts.published + postStatusCounts.published + collectionStatusCounts.published;
+    const readinessAverage = dashboard.readiness.length > 0
+      ? Math.round(dashboard.readiness.reduce((total, item) => total + item.score, 0) / dashboard.readiness.length)
+      : 0;
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const recentAuditLogs = dashboard.auditLogs.filter((log) => new Date(log.createdAt).getTime() >= sevenDaysAgo);
+    const creates = recentAuditLogs.filter((log) => log.action.toLowerCase().includes('create')).length;
+    const updates = recentAuditLogs.filter((log) => log.action.toLowerCase().includes('update')).length;
+    const deletes = recentAuditLogs.filter((log) => log.action.toLowerCase().includes('delete')).length;
+
+    return {
+      contentTotal,
+      publishedContent,
+      draftContent: pageStatusCounts.draft + postStatusCounts.draft + collectionStatusCounts.draft,
+      scheduledContent: pageStatusCounts.scheduled + postStatusCounts.scheduled + collectionStatusCounts.scheduled,
+      archivedContent: pageStatusCounts.archived + postStatusCounts.archived + collectionStatusCounts.archived,
+      readinessAverage,
+      recentActivity: recentAuditLogs.length,
+      creates,
+      updates,
+      deletes,
+      contactsPerForm: dashboard.forms.length > 0 ? Math.round(dashboard.contacts / dashboard.forms.length) : 0,
+      pendingCommentRate: dashboard.comments > 0 ? Math.round((dashboard.pendingComments / dashboard.comments) * 100) : 0,
+    };
+  }, [
+    dashboard.auditLogs,
+    dashboard.collections,
+    dashboard.comments,
+    dashboard.contacts,
+    dashboard.forms.length,
+    dashboard.pages,
+    dashboard.pendingComments,
+    dashboard.posts,
+    dashboard.readiness,
+  ]);
 
   const stats = [
     {
@@ -1549,6 +1622,67 @@ function Index() {
                   : 'No failed workflow signals in loaded activity.'}
               </div>
             </Link>
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          data-testid="dashboard-aggregate-analytics"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="size-4 text-primary" />
+                <h2 className="font-semibold">Aggregate analytics</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Backend-derived rollups across content publishing, activity velocity, moderation, leads, and commerce health.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {aggregateAnalytics.readinessAverage}% average site readiness
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="text-sm font-semibold text-foreground">Publishing mix</div>
+              <p className="mt-1 text-xs text-muted-foreground">Pages, posts, and collections grouped by delivery state.</p>
+              <div className="mt-4 grid gap-3">
+                <AnalyticsBar label="Published" value={aggregateAnalytics.publishedContent} total={aggregateAnalytics.contentTotal} />
+                <AnalyticsBar label="Draft" value={aggregateAnalytics.draftContent} total={aggregateAnalytics.contentTotal} />
+                <AnalyticsBar label="Scheduled" value={aggregateAnalytics.scheduledContent} total={aggregateAnalytics.contentTotal} />
+                <AnalyticsBar label="Archived" value={aggregateAnalytics.archivedContent} total={aggregateAnalytics.contentTotal} />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="text-sm font-semibold text-foreground">Activity velocity</div>
+              <p className="mt-1 text-xs text-muted-foreground">Recent audit-backed changes from the last seven days.</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Recent events" value={`${aggregateAnalytics.recentActivity}`} />
+                <SignalMetric label="Creates" value={`${aggregateAnalytics.creates}`} />
+                <SignalMetric label="Updates" value={`${aggregateAnalytics.updates}`} />
+                <SignalMetric label="Deletes" value={`${aggregateAnalytics.deletes}`} />
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Activity is sourced from admin audit logs and keeps request IDs in the Recent backend activity feed.
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="text-sm font-semibold text-foreground">Engagement and commerce</div>
+              <p className="mt-1 text-xs text-muted-foreground">Lead capture, moderation pressure, and storefront order totals.</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <SignalMetric label="Contacts/form" value={`${aggregateAnalytics.contactsPerForm}`} />
+                <SignalMetric label="Pending comments" value={`${aggregateAnalytics.pendingCommentRate}%`} />
+                <SignalMetric label="Products" value={`${dashboard.commerce.productCount}`} />
+                <SignalMetric label="Order value" value={commerceValueLabel} />
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Uses loaded form contacts, comment counts, product records, and order totals from Backy APIs.
+              </div>
+            </div>
           </div>
         </section>
 

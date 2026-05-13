@@ -382,6 +382,11 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Commerce catalog') &&
       document.body?.innerText?.includes('Moderation queue') &&
       document.body?.innerText?.includes('Workflow alerts'),
+    hasAggregateAnalytics: Boolean(document.querySelector('[data-testid="dashboard-aggregate-analytics"]')) &&
+      document.body?.innerText?.includes('Aggregate analytics') &&
+      document.body?.innerText?.includes('Publishing mix') &&
+      document.body?.innerText?.includes('Activity velocity') &&
+      document.body?.innerText?.includes('Engagement and commerce'),
     hasReadiness: Boolean(document.querySelector('#dashboard-readiness')) && document.body?.innerText?.includes('Backy platform readiness'),
     hasInfrastructureDiagnostics: Boolean(document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]') && document.body?.innerText?.includes('Infrastructure diagnostics')),
     hasWorkflows: Boolean(document.querySelector('#dashboard-workflows')) && document.body?.innerText?.includes('Build and manage'),
@@ -400,6 +405,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSite &&
       layout.hasStats &&
       layout.hasOperationsSignals &&
+      layout.hasAggregateAnalytics &&
       layout.hasReadiness &&
       layout.hasInfrastructureDiagnostics &&
       layout.hasWorkflows &&
