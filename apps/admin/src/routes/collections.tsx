@@ -614,6 +614,11 @@ const normalizeSlug = (value: string, fallback: string) => {
 
 const createCollectionFieldId = (seed: string | number) => `field_${normalizeSlug(String(seed), 'field').replace(/-/g, '_')}`;
 
+const stableCollectionFieldId = (field: Partial<CollectionField>, fallback: string | number) => {
+  const id = typeof field.id === 'string' ? field.id.trim() : '';
+  return id || createCollectionFieldId(field.key || fallback);
+};
+
 const createEmptyField = (sortOrder: number): CollectionField => ({
   id: createCollectionFieldId(sortOrder),
   key: `field_${sortOrder}`,
@@ -789,7 +794,7 @@ const parseFieldOptions = (value: string) => (
 const cloneTemplateFields = (fields: CollectionField[]) => (
   fields.map((field, index) => ({
     ...field,
-    id: field.id || `field-${index + 1}`,
+    id: stableCollectionFieldId(field, index + 1),
     options: field.options ? [...field.options] : undefined,
     sortOrder: (index + 1) * 10,
   }))
@@ -2560,7 +2565,7 @@ function CollectionsPage() {
   ]);
 
   const applyCollectionTemplate = (template: CollectionTemplate) => {
-    if (isCollectionsBusy) return;
+    if (schemaMutationDisabled) return;
     if (!canEditCollections) {
       showPermissionDenied('collections.edit', 'prepare a collection template');
       return;
@@ -2611,7 +2616,7 @@ function CollectionsPage() {
     template: SiteFrontendDesignTemplate,
     blueprint: FrontendCollectionTemplateBlueprint,
   ) => {
-    if (isCollectionsBusy) return;
+    if (schemaMutationDisabled) return;
     if (!canEditCollections) {
       showPermissionDenied('collections.edit', 'create a collection from a frontend template');
       return;
@@ -3052,7 +3057,7 @@ function CollectionsPage() {
       .filter((field) => field.key.trim() && field.label.trim())
       .map((field, index) => ({
         ...field,
-        id: field.id || createCollectionFieldId(field.key || index + 1),
+        id: stableCollectionFieldId(field, index + 1),
         key: normalizeSlug(field.key, `field_${index + 1}`).replace(/-/g, '_'),
         label: field.label.trim(),
         sortOrder: (index + 1) * 10,

@@ -936,6 +936,82 @@ const assertNewRecordButtonReset = async (client, recordSlug) => {
   return null;
 };
 
+const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => {
+  const name = `Smoke Draft Schema ${suffix}`;
+  const slug = `smoke-draft-schema-${suffix}`;
+  const customFieldKey = `custom_note_${suffix.replace(/[^a-z0-9_]/gi, '_').toLowerCase()}`;
+  const customFieldLabel = `Custom note ${suffix}`;
+
+  await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
+
+  const filled = await evaluate(client, `(() => {
+    const setNativeValue = (element, value) => {
+      const prototype = Object.getPrototypeOf(element);
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+      descriptor?.set?.call(element, value);
+    };
+    const form = document.querySelector('#collections-schema');
+    const nameInput = document.querySelector('#collections-schema-name');
+    const slugInput = Array.from(form?.querySelectorAll('label') || [])
+      .find((label) => (label.textContent || '').includes('Slug'))
+      ?.querySelector('input');
+    const statusSelect = Array.from(form?.querySelectorAll('select') || [])
+      .find((select) => Array.from(select.options).some((option) => option.value === 'draft'));
+    const firstFieldRow = form?.querySelector('tbody tr');
+    const fieldInputs = Array.from(firstFieldRow?.querySelectorAll('input') || []);
+    const fieldKeyInput = fieldInputs[0];
+    const fieldLabelInput = fieldInputs[1];
+    const saveButton = form
+      ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
+      : null;
+
+    if (!(nameInput instanceof HTMLInputElement)) return { ok: false, reason: 'name-input-missing' };
+    if (!(slugInput instanceof HTMLInputElement)) return { ok: false, reason: 'slug-input-missing' };
+    if (!(statusSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'status-select-missing' };
+    if (!(fieldKeyInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-key-input-missing' };
+    if (!(fieldLabelInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-label-input-missing' };
+    if (!(saveButton instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+    if (saveButton.disabled) return { ok: false, reason: 'save-button-disabled' };
+
+    setNativeValue(nameInput, ${JSON.stringify(name)});
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setNativeValue(slugInput, ${JSON.stringify(slug)});
+    slugInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setNativeValue(statusSelect, 'draft');
+    statusSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    setNativeValue(fieldKeyInput, ${JSON.stringify(customFieldKey)});
+    fieldKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setNativeValue(fieldLabelInput, ${JSON.stringify(customFieldLabel)});
+    fieldLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
+    saveButton.click();
+
+    return {
+      ok: true,
+      name: nameInput.value,
+      slug: slugInput.value,
+      status: statusSelect.value,
+      fieldKey: fieldKeyInput.value,
+      fieldLabel: fieldLabelInput.value,
+    };
+  })()`);
+  assert(filled.ok, `Unable to fill and save custom draft collection: ${JSON.stringify(filled)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const collections = await fetchCollections();
+    const collection = collections.find((candidate) => candidate.slug === slug);
+    const customField = collection?.fields?.find((field) => field.key === customFieldKey);
+    if (collection && customField) {
+      assert(collection.status === 'draft', `Draft collection status was not persisted: ${JSON.stringify(collection)}`);
+      assert(customField.label === customFieldLabel, `Custom field label was not persisted: ${JSON.stringify(customField)}`);
+      assert(typeof customField.id === 'string' && customField.id.trim(), `Custom field id was not a stable string: ${JSON.stringify(customField)}`);
+      return collection;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Draft collection custom field did not persist');
+};
+
 const configureVisitorMutationPolicyThroughUi = async (client, collectionId, token) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const configured = await evaluate(client, `(() => {
@@ -1444,6 +1520,7 @@ const main = async () => {
   let targetCollectionId;
   let incomingCollectionId;
   let frontendTemplateCollectionId;
+  let draftCollectionId;
   let authoredListPageId;
   let authoredItemPageId;
   let originalFrontendDesign;
@@ -1526,6 +1603,8 @@ const main = async () => {
     await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertNewCollectionButtonReset(client, 'collections-library-new-collection-button');
+    const draftCollection = await createDraftCollectionWithCustomFieldThroughUi(client, suffix);
+    draftCollectionId = draftCollection.id;
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertNewRecordButtonReset(client, recordSlug);
     await navigateToCollections(client, { collectionId, recordSlug });
@@ -1551,6 +1630,8 @@ const main = async () => {
     targetCollectionId = null;
     await deleteCollection(frontendTemplateCollectionId);
     frontendTemplateCollectionId = null;
+    await deleteCollection(draftCollectionId);
+    draftCollectionId = null;
     await deletePage(authoredListPageId);
     authoredListPageId = null;
     await deletePage(authoredItemPageId);
@@ -1565,6 +1646,7 @@ const main = async () => {
       collectionSlug,
       recordSlug,
       frontendTemplateCollectionId: frontendTemplateCollection.id,
+      draftCollectionId: draftCollection.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
@@ -1572,7 +1654,7 @@ const main = async () => {
       client,
       childProcess,
       userDataDir,
-      collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId],
+      collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId, draftCollectionId],
       pageIds: [authoredListPageId, authoredItemPageId],
       originalFrontendDesign,
     });
