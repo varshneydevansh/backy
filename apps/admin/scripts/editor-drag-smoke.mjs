@@ -4847,6 +4847,77 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedMultiCellFillRange = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCellRange !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-range-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCellRange(1, 0, 1, 1);
+  })()`);
+  assert(selectedMultiCellFillRange?.ok, `Unable to select multi-cell table range before fill control: ${JSON.stringify(selectedMultiCellFillRange)}`);
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#d9ead3');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedMultiCellBorderRange = await evaluate(client, `window.__backySelectActiveEditorTableCellRange?.(1, 0, 1, 1) || { ok: false, reason: 'missing-active-editor-table-cell-range-helper' }`);
+  assert(selectedMultiCellBorderRange?.ok, `Unable to select multi-cell table range before border control: ${JSON.stringify(selectedMultiCellBorderRange)}`);
+  await selectColorPickerValue(client, 'rich-text-table-cell-border', '#b6d7a8');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedMultiCellVerticalRange = await evaluate(client, `window.__backySelectActiveEditorTableCellRange?.(1, 0, 1, 1) || { ok: false, reason: 'missing-active-editor-table-cell-range-helper' }`);
+  assert(selectedMultiCellVerticalRange?.ok, `Unable to select multi-cell table range before vertical alignment control: ${JSON.stringify(selectedMultiCellVerticalRange)}`);
+  await mouseDownControlByTestId(client, 'rich-text-table-cell-vertical-middle');
+  await sleep(500);
+
+  const tableMultiCellStyleState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const readCell = (needle) => {
+      const domCell = cells.find((cell) => (cell.textContent || '').includes(needle));
+      const slateCell = slateState?.types?.find((node) => (
+        (node.type === 'td' || node.type === 'th') &&
+        (node.text || '').includes(needle)
+      ));
+      return {
+        text: domCell?.textContent || '',
+        backgroundColor: domCell ? window.getComputedStyle(domCell).backgroundColor : '',
+        borderColor: domCell ? window.getComputedStyle(domCell).borderTopColor : '',
+        verticalAlign: domCell ? window.getComputedStyle(domCell).verticalAlign : '',
+        slateBackgroundColor: slateCell?.backgroundColor || '',
+        slateBorderColor: slateCell?.borderColor || '',
+        slateVerticalAlign: slateCell?.verticalAlign || '',
+      };
+    };
+
+    return {
+      column1: readCell('Column 1'),
+      value1: readCell('Value 1'),
+      value2: readCell('Value 2'),
+      slateState,
+    };
+  })()`);
+  assert(
+    tableMultiCellStyleState.value1.backgroundColor === 'rgb(217, 234, 211)' &&
+      tableMultiCellStyleState.value2.backgroundColor === 'rgb(217, 234, 211)' &&
+      tableMultiCellStyleState.value1.borderColor === 'rgb(182, 215, 168)' &&
+      tableMultiCellStyleState.value2.borderColor === 'rgb(182, 215, 168)' &&
+      tableMultiCellStyleState.value1.verticalAlign === 'middle' &&
+      tableMultiCellStyleState.value2.verticalAlign === 'middle' &&
+      tableMultiCellStyleState.value1.slateBackgroundColor === '#d9ead3' &&
+      tableMultiCellStyleState.value2.slateBackgroundColor === '#d9ead3' &&
+      tableMultiCellStyleState.value1.slateBorderColor === '#b6d7a8' &&
+      tableMultiCellStyleState.value2.slateBorderColor === '#b6d7a8' &&
+      tableMultiCellStyleState.value1.slateVerticalAlign === 'middle' &&
+      tableMultiCellStyleState.value2.slateVerticalAlign === 'middle' &&
+      tableMultiCellStyleState.column1.slateBackgroundColor !== '#d9ead3',
+    `Rich-text multi-cell table style controls did not apply to the selected cell range only: ${JSON.stringify(tableMultiCellStyleState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedFillTableCell = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -5245,6 +5316,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     restoredHeaderCell,
     selectedCaptionTableCell,
     tableCaptionState,
+    selectedMultiCellFillRange,
+    selectedMultiCellBorderRange,
+    selectedMultiCellVerticalRange,
+    tableMultiCellStyleState,
     selectedFillTableCell,
     reselectedFillTableCell,
     tableCellFillState,

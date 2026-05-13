@@ -351,6 +351,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     const cellEntry = Editor.above(editor as any, {
       at: selection,
       match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+    }) || Editor.above(editor as any, {
+      at: selection.anchor,
+      match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+    }) || Editor.above(editor as any, {
+      at: selection.focus,
+      match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
     });
 
     if (!cellEntry) {
@@ -388,6 +394,53 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       columnCount,
     };
   }, []);
+
+  const getSelectedTableCellPaths = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    const selection = (editor as any).selection;
+    if (!context || !selection || !Range.isRange(selection)) {
+      return [];
+    }
+
+    const readCellPathAtPoint = (point: { path: number[]; offset: number }) => {
+      const cellEntry = Editor.above(editor as any, {
+        at: point,
+        match: (node) => SlateElement.isElement(node) && ((node as any).type === 'td' || (node as any).type === 'th'),
+      });
+      return cellEntry ? (cellEntry[1] as number[]) : null;
+    };
+    const isSamePath = (left: number[], right: number[]) => (
+      left.length === right.length && left.every((part, index) => part === right[index])
+    );
+
+    const anchorCellPath = readCellPathAtPoint(selection.anchor) || context.cellPath;
+    const focusCellPath = readCellPathAtPoint(selection.focus) || context.cellPath;
+    const anchorTablePath = anchorCellPath.slice(0, -2);
+    const focusTablePath = focusCellPath.slice(0, -2);
+    if (!isSamePath(anchorTablePath, focusTablePath) || !isSamePath(anchorTablePath, context.tablePath)) {
+      return [context.cellPath];
+    }
+
+    const minRowIndex = Math.min(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
+    const maxRowIndex = Math.max(anchorCellPath[anchorCellPath.length - 2] || 0, focusCellPath[focusCellPath.length - 2] || 0);
+    const minCellIndex = Math.min(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
+    const maxCellIndex = Math.max(anchorCellPath[anchorCellPath.length - 1] || 0, focusCellPath[focusCellPath.length - 1] || 0);
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const cellPaths: number[][] = [];
+
+    for (let rowIndex = minRowIndex; rowIndex <= maxRowIndex; rowIndex += 1) {
+      const row = rows[rowIndex] as { children?: unknown[] } | undefined;
+      const rowCells = Array.isArray(row?.children) ? row.children : [];
+      for (let cellIndex = minCellIndex; cellIndex <= maxCellIndex; cellIndex += 1) {
+        const cell = rowCells[cellIndex] as { type?: unknown } | undefined;
+        if (cell?.type === 'td' || cell?.type === 'th') {
+          cellPaths.push([...context.tablePath, rowIndex, cellIndex]);
+        }
+      }
+    }
+
+    return cellPaths.length > 0 ? cellPaths : [context.cellPath];
+  }, [getSelectedTableContext]);
 
   const insertTableRowBelow = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
@@ -1012,14 +1065,17 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const normalizedColor = color.trim();
-    if (normalizedColor) {
-      Transforms.setNodes(editor as any, { backgroundColor: normalizedColor } as any, {
-        at: context.cellPath,
-      });
-    } else {
-      Transforms.unsetNodes(editor as any, 'backgroundColor' as any, {
-        at: context.cellPath,
-      } as any);
+    const cellPaths = getSelectedTableCellPaths(editor);
+    for (const cellPath of cellPaths) {
+      if (normalizedColor) {
+        Transforms.setNodes(editor as any, { backgroundColor: normalizedColor } as any, {
+          at: cellPath,
+        });
+      } else {
+        Transforms.unsetNodes(editor as any, 'backgroundColor' as any, {
+          at: cellPath,
+        } as any);
+      }
     }
 
     try {
@@ -1028,7 +1084,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after cell style changes.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [getSelectedTableCellPaths, getSelectedTableContext]);
 
   const setSelectedTableCellBorderColor = useCallback((editor: PlateEditor, color: string) => {
     const context = getSelectedTableContext(editor);
@@ -1037,14 +1093,17 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const normalizedColor = color.trim();
-    if (normalizedColor) {
-      Transforms.setNodes(editor as any, { borderColor: normalizedColor } as any, {
-        at: context.cellPath,
-      });
-    } else {
-      Transforms.unsetNodes(editor as any, 'borderColor' as any, {
-        at: context.cellPath,
-      } as any);
+    const cellPaths = getSelectedTableCellPaths(editor);
+    for (const cellPath of cellPaths) {
+      if (normalizedColor) {
+        Transforms.setNodes(editor as any, { borderColor: normalizedColor } as any, {
+          at: cellPath,
+        });
+      } else {
+        Transforms.unsetNodes(editor as any, 'borderColor' as any, {
+          at: cellPath,
+        } as any);
+      }
     }
 
     try {
@@ -1053,7 +1112,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after cell style changes.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [getSelectedTableCellPaths, getSelectedTableContext]);
 
   const setSelectedTableCellVerticalAlign = useCallback((editor: PlateEditor, align: 'top' | 'middle' | 'bottom') => {
     const context = getSelectedTableContext(editor);
@@ -1061,9 +1120,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       return false;
     }
 
-    Transforms.setNodes(editor as any, { verticalAlign: align } as any, {
-      at: context.cellPath,
-    });
+    const cellPaths = getSelectedTableCellPaths(editor);
+    for (const cellPath of cellPaths) {
+      Transforms.setNodes(editor as any, { verticalAlign: align } as any, {
+        at: cellPath,
+      });
+    }
 
     try {
       Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
@@ -1071,7 +1133,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       // Selection is best-effort after cell style changes.
     }
     return true;
-  }, [getSelectedTableContext]);
+  }, [getSelectedTableCellPaths, getSelectedTableContext]);
 
   const setSelectedTableCaption = useCallback((editor: PlateEditor, caption: string) => {
     const context = getSelectedTableContext(editor);
@@ -1257,6 +1319,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       __backyInsertActiveEditorTable?: () => unknown;
       __backySelectActiveEditorTableCell?: (needle: string) => unknown;
       __backySelectActiveEditorTableCellAt?: (rowIndex: number, cellIndex: number) => unknown;
+      __backySelectActiveEditorTableCellRange?: (startRowIndex: number, startCellIndex: number, endRowIndex: number, endCellIndex: number) => unknown;
       __backySetActiveEditorTableCaption?: (caption: string) => unknown;
       __backyReadActiveEditorTableState?: () => unknown;
     };
@@ -1477,6 +1540,78 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
     };
 
+    targetWindow.__backySelectActiveEditorTableCellRange = (
+      startRowIndex: number,
+      startCellIndex: number,
+      endRowIndex: number,
+      endCellIndex: number,
+    ) => {
+      const editor = getActiveEditor();
+      if (!editor) {
+        return { ok: false, reason: 'missing-editor' };
+      }
+
+      try {
+        const tableEntry = Array.from(
+          Editor.nodes(editor as any, {
+            at: [],
+            match: (node) => SlateElement.isElement(node) && (node as any).type === 'table',
+          })
+        ).at(-1) as [unknown, number[]] | undefined;
+
+        if (!tableEntry) {
+          return { ok: false, reason: 'missing-table', text: Editor.string(editor as any, []) };
+        }
+
+        const [tableNode, tablePath] = tableEntry as [SlateElement, number[]];
+        const rows = Array.isArray((tableNode as any).children) ? (tableNode as any).children : [];
+        if (rows.length === 0) {
+          return { ok: false, reason: 'empty-table', rowCount: rows.length };
+        }
+
+        const boundRowIndex = (value: number) => Math.max(0, Math.min(value, rows.length - 1));
+        const boundedStartRowIndex = boundRowIndex(startRowIndex);
+        const boundedEndRowIndex = boundRowIndex(endRowIndex);
+        const readBoundedCellIndex = (rowIndex: number, value: number) => {
+          const row = rows[rowIndex] as { children?: unknown[] } | undefined;
+          const cells = Array.isArray(row?.children) ? row.children : [];
+          return Math.max(0, Math.min(value, Math.max(0, cells.length - 1)));
+        };
+        const boundedStartCellIndex = readBoundedCellIndex(boundedStartRowIndex, startCellIndex);
+        const boundedEndCellIndex = readBoundedCellIndex(boundedEndRowIndex, endCellIndex);
+        const startCellPath = [...tablePath, boundedStartRowIndex, boundedStartCellIndex];
+        const endCellPath = [...tablePath, boundedEndRowIndex, boundedEndCellIndex];
+        if (!Node.has(editor as any, startCellPath) || !Node.has(editor as any, endCellPath)) {
+          return {
+            ok: false,
+            reason: 'missing-cell',
+            startCellPath,
+            endCellPath,
+          };
+        }
+
+        const nextSelection = {
+          anchor: Editor.start(editor as any, startCellPath),
+          focus: Editor.end(editor as any, endCellPath),
+        };
+        Transforms.select(editor as any, nextSelection);
+        setStoredSelection(nextSelection);
+        return {
+          ok: true,
+          text: Editor.string(editor as any, nextSelection),
+          selection: describeSelection(nextSelection),
+          startCellPath,
+          endCellPath,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'select-table-cell-range-failed',
+          error: (error as Error)?.message || String(error),
+        };
+      }
+    };
+
     targetWindow.__backySetActiveEditorTableCaption = (caption: string) => {
       const editor = getActiveEditor();
       if (!editor) {
@@ -1680,6 +1815,9 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
       if (targetWindow.__backySelectActiveEditorTableCellAt) {
         delete targetWindow.__backySelectActiveEditorTableCellAt;
+      }
+      if (targetWindow.__backySelectActiveEditorTableCellRange) {
+        delete targetWindow.__backySelectActiveEditorTableCellRange;
       }
       if (targetWindow.__backySetActiveEditorTableCaption) {
         delete targetWindow.__backySetActiveEditorTableCaption;
