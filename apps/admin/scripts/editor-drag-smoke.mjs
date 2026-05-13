@@ -8358,6 +8358,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
         fields: optionValues('editor-data-field'),
         filterFields: optionValues('editor-data-query-filter-field'),
         sortFields: optionValues('editor-data-query-sort-by'),
+        presetText: document.querySelector('[data-testid="editor-data-binding-presets"]')?.textContent || '',
         recordOptions: optionValues('editor-data-record-picker'),
         recordLabels: (() => {
           const select = document.querySelector('[data-testid="editor-data-record-picker"]');
@@ -8371,6 +8372,9 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       queryControlsReady.fields.includes('title') &&
       queryControlsReady.filterFields.includes('category') &&
       queryControlsReady.sortFields.includes('rank') &&
+      /Title/i.test(queryControlsReady.presetText) &&
+      /Summary/i.test(queryControlsReady.presetText) &&
+      /Image/i.test(queryControlsReady.presetText) &&
       queryControlsReady.recordLabels.some((label) => /Beta featured item/i.test(label))
     ) {
       break;
@@ -8381,6 +8385,9 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       queryControlsReady?.fields?.includes('title') &&
       queryControlsReady?.filterFields?.includes('category') &&
       queryControlsReady?.sortFields?.includes('rank') &&
+      /Title/i.test(queryControlsReady?.presetText || '') &&
+      /Summary/i.test(queryControlsReady?.presetText || '') &&
+      /Image/i.test(queryControlsReady?.presetText || '') &&
       queryControlsReady?.recordLabels?.some((label) => /Beta featured item/i.test(label)),
     `Collection binding field/query options did not render: ${JSON.stringify(queryControlsReady)}`,
   );
@@ -8391,6 +8398,12 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     return option?.value || '';
   })()`);
   assert(targetRecordId, `Collection record picker did not expose the created records: ${JSON.stringify(queryControlsReady)}`);
+  await clickControlByTestId(client, 'editor-data-preset-summary');
+  const summaryPresetState = await evaluate(client, `(() => ({
+    field: document.querySelector('[data-testid="editor-data-field"]')?.value || '',
+    target: document.querySelector('[data-testid="editor-data-target"]')?.value || '',
+  }))()`);
+  assert(summaryPresetState.field === 'summary' && summaryPresetState.target === 'props.html', `Collection binding summary preset mismatch: ${JSON.stringify(summaryPresetState)}`);
   await setFormControlByTestId(client, 'editor-data-field', 'title');
   await setFormControlByTestId(client, 'editor-data-target', 'props.content');
   await setFormControlByTestId(client, 'editor-data-record-picker', targetRecordId);
@@ -8413,6 +8426,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
     const summary = Array.from(document.querySelectorAll('[data-testid="editor-data-query-controls"] ~ div, [data-testid="editor-data-query-controls"]'))
       .map((node) => node.textContent || '')
       .join(' ');
+    const preview = document.querySelector('[data-testid="editor-data-record-preview"]')?.textContent || '';
     return {
       collectionId: value('editor-data-collection'),
       field: value('editor-data-field'),
@@ -8428,6 +8442,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       limit: value('editor-data-query-limit'),
       offset: value('editor-data-query-offset'),
       summary,
+      preview,
     };
   })()`);
 
@@ -8438,6 +8453,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Collection query filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
   assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
+  assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
 
   return state;
 };

@@ -4331,6 +4331,85 @@ const collectionRecordLabel = (
   return `${label} (${record.status})`;
 };
 
+const recordPreviewValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.map(recordPreviewValue).filter(Boolean).join(', ');
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+};
+
+const getRecordPreviewFields = (
+  record: CollectionRecord | null,
+  collection: Collection | null,
+) => {
+  if (!record || !collection) return [];
+
+  return collection.fields
+    .map((field) => ({
+      field,
+      value: recordPreviewValue(record.values?.[field.key]),
+    }))
+    .filter((item) => item.value.trim().length > 0)
+    .sort((a, b) => a.field.sortOrder - b.field.sortOrder)
+    .slice(0, 6);
+};
+
+const firstExistingTargetPath = (
+  targetPathOptions: Array<{ value: string; label: string }>,
+  candidates: string[],
+  fallback = targetPathOptions[0]?.value || 'props.content',
+) => (
+  candidates.find((candidate) => targetPathOptions.some((option) => option.value === candidate))
+  || fallback
+);
+
+const collectionBindingPresetOptions = (
+  collection: Collection | null,
+  targetPathOptions: Array<{ value: string; label: string }>,
+) => {
+  if (!collection) return [];
+
+  const presets = [
+    {
+      id: 'title',
+      label: 'Title',
+      fieldKey: defaultFieldKey(collection, ['title', 'name', 'label'], ['text'], { fallbackToFirst: false }),
+      targetPath: firstExistingTargetPath(targetPathOptions, ['props.content', 'props.label', 'props.alt']),
+    },
+    {
+      id: 'summary',
+      label: 'Summary',
+      fieldKey: defaultFieldKey(collection, ['summary', 'description', 'excerpt', 'body'], ['richText', 'text'], { fallbackToFirst: false }),
+      targetPath: firstExistingTargetPath(targetPathOptions, ['props.html', 'props.content', 'props.label']),
+    },
+    {
+      id: 'image',
+      label: 'Image',
+      fieldKey: defaultFieldKey(collection, ['image', 'coverImage', 'thumbnail', 'media'], ['image'], { fallbackToFirst: false }),
+      targetPath: firstExistingTargetPath(targetPathOptions, ['props.assetId', 'props.src', 'props.href']),
+    },
+    {
+      id: 'link',
+      label: 'Link',
+      fieldKey: defaultFieldKey(collection, ['url', 'link', 'href', 'website', 'file'], ['url', 'file'], { fallbackToFirst: false }),
+      targetPath: firstExistingTargetPath(targetPathOptions, ['props.href', 'props.src', 'props.content']),
+    },
+  ];
+
+  return presets.filter((preset, index, allPresets) => (
+    Boolean(preset.fieldKey)
+    && allPresets.findIndex((candidate) => (
+      candidate.fieldKey === preset.fieldKey && candidate.targetPath === preset.targetPath
+    )) === index
+  ));
+};
+
 function CollectionFilterValueControl({
   testId,
   field,
@@ -4883,6 +4962,11 @@ function DataBindingProperties({
   const selectedRecordOptionValue = recordOptions.find((record) => (
     record.id === selectedRecordId || record.slug === selectedRecordId
   ))?.id || '';
+  const selectedRecordPreview = recordOptions.find((record) => (
+    record.id === selectedRecordId || record.slug === selectedRecordId
+  )) || null;
+  const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
+  const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
 
   const updateBinding = (updates: {
     collectionId?: string;
@@ -5024,6 +5108,29 @@ function DataBindingProperties({
 
       {selectedCollection && (
         <>
+          {bindingPresets.length > 0 && (
+            <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-presets">
+              <div className="mb-2 text-xs font-medium text-foreground">Binding presets</div>
+              <div className="grid grid-cols-2 gap-2">
+                {bindingPresets.map((preset) => (
+                  <button
+                    key={`${preset.id}-${preset.fieldKey}-${preset.targetPath}`}
+                    type="button"
+                    onClick={() => updateBinding({ fieldKey: preset.fieldKey, targetPath: preset.targetPath })}
+                    data-testid={`editor-data-preset-${preset.id}`}
+                    className={cn(
+                      'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted',
+                      selectedFieldKey === preset.fieldKey && selectedTargetPath === preset.targetPath && 'border-primary text-primary'
+                    )}
+                  >
+                    <span className="block font-medium">{preset.label}</span>
+                    <span className="block truncate text-muted-foreground">{preset.fieldKey}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Field
@@ -5109,6 +5216,28 @@ function DataBindingProperties({
               )}
               placeholder="Optional"
             />
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-record-preview">
+            <div className="mb-2 text-xs font-medium text-foreground">Selected record preview</div>
+            {selectedRecordPreview ? (
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">{collectionRecordLabel(selectedRecordPreview, selectedCollection)}</span>
+                  <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-muted-foreground">{selectedRecordPreview.slug}</span>
+                </div>
+                {selectedRecordPreviewFields.map(({ field, value }) => (
+                  <div key={field.key} className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                    <span className="truncate text-muted-foreground">{field.label}</span>
+                    <span className="truncate text-foreground">{value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Choose a preview record to inspect resolved field values while configuring this binding.
+              </p>
+            )}
           </div>
 
           <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-query-controls">
