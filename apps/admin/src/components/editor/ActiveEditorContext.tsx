@@ -82,6 +82,8 @@ interface ActiveEditorContextType {
   toggleTableHeaderCell: () => boolean;
   /** Merge the current table cell with the cell immediately to its right */
   mergeTableCellRight: () => boolean;
+  /** Merge the current table cell with the cell immediately below it */
+  mergeTableCellDown: () => boolean;
   /** Split the current table cell when it has a column span */
   splitTableCell: () => boolean;
   /** Set or clear the current table cell fill color */
@@ -153,6 +155,7 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
   toggleTableHeaderColumn: () => false,
   toggleTableHeaderCell: () => false,
   mergeTableCellRight: () => false,
+  mergeTableCellDown: () => false,
   splitTableCell: () => false,
   setTableCellBackgroundColor: () => false,
   setTableCellBorderColor: () => false,
@@ -863,6 +866,59 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     return true;
   }, [getSelectedTableContext]);
 
+  const mergeSelectedTableCellDown = useCallback((editor: PlateEditor) => {
+    const context = getSelectedTableContext(editor);
+    if (!context) {
+      return false;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const cellNode = Node.get(editor as any, context.cellPath) as any;
+    if (cellNode?.type !== 'td' && cellNode?.type !== 'th') {
+      return false;
+    }
+
+    const currentRowSpan = Number.isInteger(cellNode.rowSpan) && cellNode.rowSpan > 1 ? cellNode.rowSpan : 1;
+    const targetRowIndex = context.rowIndex + currentRowSpan;
+    if (targetRowIndex >= rows.length) {
+      return false;
+    }
+
+    const targetRowPath = [...context.tablePath, targetRowIndex];
+    const targetRowNode = Node.get(editor as any, targetRowPath) as any;
+    const targetRowChildren = Array.isArray(targetRowNode?.children) ? targetRowNode.children : [];
+    if (context.cellIndex >= targetRowChildren.length) {
+      return false;
+    }
+
+    const targetCellPath = [...targetRowPath, context.cellIndex];
+    const targetCellNode = Node.get(editor as any, targetCellPath) as any;
+    if (targetCellNode?.type !== cellNode.type) {
+      return false;
+    }
+
+    const targetRowSpan = Number.isInteger(targetCellNode.rowSpan) && targetCellNode.rowSpan > 1 ? targetCellNode.rowSpan : 1;
+    const mergedCell = {
+      ...JSON.parse(JSON.stringify(cellNode)),
+      rowSpan: currentRowSpan + targetRowSpan,
+      children: [
+        ...(Array.isArray(cellNode.children) ? JSON.parse(JSON.stringify(cellNode.children)) : []),
+        ...(Array.isArray(targetCellNode.children) ? JSON.parse(JSON.stringify(targetCellNode.children)) : []),
+      ],
+    } as any;
+
+    Transforms.removeNodes(editor as any, { at: targetCellPath });
+    Transforms.removeNodes(editor as any, { at: context.cellPath });
+    Transforms.insertNodes(editor as any, mergedCell, { at: context.cellPath });
+
+    try {
+      Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+    } catch {
+      // Selection is best-effort after table cell merge.
+    }
+    return true;
+  }, [getSelectedTableContext]);
+
   const splitSelectedTableCell = useCallback((editor: PlateEditor) => {
     const context = getSelectedTableContext(editor);
     if (!context) {
@@ -875,30 +931,71 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const colSpan = Number.isInteger(cellNode.colSpan) && cellNode.colSpan > 1 ? cellNode.colSpan : 1;
-    if (colSpan <= 1) {
+    const rowSpan = Number.isInteger(cellNode.rowSpan) && cellNode.rowSpan > 1 ? cellNode.rowSpan : 1;
+    if (colSpan <= 1 && rowSpan <= 1) {
       return false;
     }
 
     const children = Array.isArray(cellNode.children) ? JSON.parse(JSON.stringify(cellNode.children)) : [];
+    if (colSpan > 1) {
+      const currentCell = {
+        ...JSON.parse(JSON.stringify(cellNode)),
+        children: children.length > 0 ? [children[0]] : createEmptyTableCellNode().children,
+      } as any;
+      const nextColSpan = colSpan - 1;
+      if (nextColSpan > 1) {
+        currentCell.colSpan = nextColSpan;
+      } else {
+        delete currentCell.colSpan;
+      }
+
+      const splitCell = {
+        ...JSON.parse(JSON.stringify(cellNode)),
+        children: children.length > 1 ? children.slice(1) : createEmptyTableCellNode().children,
+      } as any;
+      delete splitCell.colSpan;
+
+      Transforms.removeNodes(editor as any, { at: context.cellPath });
+      Transforms.insertNodes(editor as any, [currentCell, splitCell], { at: context.cellPath });
+
+      try {
+        Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
+      } catch {
+        // Selection is best-effort after table cell split.
+      }
+      return true;
+    }
+
+    const rows = Array.isArray((context.tableNode as any).children) ? (context.tableNode as any).children : [];
+    const nextRowSpan = rowSpan - 1;
+    const targetRowIndex = context.rowIndex + nextRowSpan;
+    if (targetRowIndex >= rows.length) {
+      return false;
+    }
+
     const currentCell = {
       ...JSON.parse(JSON.stringify(cellNode)),
       children: children.length > 0 ? [children[0]] : createEmptyTableCellNode().children,
     } as any;
-    const nextColSpan = colSpan - 1;
-    if (nextColSpan > 1) {
-      currentCell.colSpan = nextColSpan;
+    if (nextRowSpan > 1) {
+      currentCell.rowSpan = nextRowSpan;
     } else {
-      delete currentCell.colSpan;
+      delete currentCell.rowSpan;
     }
 
     const splitCell = {
       ...JSON.parse(JSON.stringify(cellNode)),
       children: children.length > 1 ? children.slice(1) : createEmptyTableCellNode().children,
     } as any;
-    delete splitCell.colSpan;
+    delete splitCell.rowSpan;
 
     Transforms.removeNodes(editor as any, { at: context.cellPath });
-    Transforms.insertNodes(editor as any, [currentCell, splitCell], { at: context.cellPath });
+    Transforms.insertNodes(editor as any, currentCell, { at: context.cellPath });
+    const targetRowPath = [...context.tablePath, targetRowIndex];
+    const targetRowNode = Node.get(editor as any, targetRowPath) as any;
+    const targetRowChildren = Array.isArray(targetRowNode?.children) ? targetRowNode.children : [];
+    const targetCellIndex = Math.max(0, Math.min(context.cellIndex, targetRowChildren.length));
+    Transforms.insertNodes(editor as any, splitCell, { at: [...targetRowPath, targetCellIndex] });
 
     try {
       Transforms.select(editor as any, Editor.start(editor as any, context.cellPath));
@@ -1265,6 +1362,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           borderColor: typeof (node as { borderColor?: unknown }).borderColor === 'string' ? (node as { borderColor?: string }).borderColor : undefined,
           verticalAlign: typeof (node as { verticalAlign?: unknown }).verticalAlign === 'string' ? (node as { verticalAlign?: string }).verticalAlign : undefined,
           colSpan: typeof (node as { colSpan?: unknown }).colSpan === 'number' ? (node as { colSpan?: number }).colSpan : undefined,
+          rowSpan: typeof (node as { rowSpan?: unknown }).rowSpan === 'number' ? (node as { rowSpan?: number }).rowSpan : undefined,
           align: typeof (node as { align?: unknown }).align === 'string' ? (node as { align?: string }).align : undefined,
           indent: typeof (node as { indent?: unknown }).indent === 'number' ? (node as { indent?: number }).indent : undefined,
           path,
@@ -2440,6 +2538,31 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
   }, [debug, describeSelection, getActiveEditor, mergeSelectedTableCellRight, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
 
+  const mergeTableCellDown = useCallback(() => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      debug('mergeTableCellDown.start', {
+        selection: describeSelection(editor.selection || null),
+      });
+      if (!restoreSelection({ requireTextSelection: false })) return false;
+      if (!mergeSelectedTableCellDown(editor)) return false;
+
+      debug('mergeTableCellDown.success', {
+        selection: describeSelection(editor.selection || null),
+      });
+      setStoredSelection(editor.selection || null);
+      syncActiveEditorContentSoon();
+      return true;
+    } catch (e) {
+      console.warn('mergeTableCellDown failed:', e);
+      return false;
+    }
+  }, [debug, describeSelection, getActiveEditor, mergeSelectedTableCellDown, restoreSelection, setStoredSelection, syncActiveEditorContentSoon]);
+
   const splitTableCell = useCallback(() => {
     const editor = getActiveEditor();
     if (!editor) {
@@ -2915,6 +3038,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       toggleTableHeaderColumn,
       toggleTableHeaderCell,
       mergeTableCellRight,
+      mergeTableCellDown,
       splitTableCell,
       setTableCellBackgroundColor,
       setTableCellBorderColor,

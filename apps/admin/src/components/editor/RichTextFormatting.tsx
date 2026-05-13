@@ -137,6 +137,7 @@ export function RichTextFormatting({
     toggleTableHeaderColumn,
     toggleTableHeaderCell,
     mergeTableCellRight,
+    mergeTableCellDown,
     splitTableCell,
     setTableCellBackgroundColor,
     setTableCellBorderColor,
@@ -1894,6 +1895,12 @@ export function RichTextFormatting({
     });
   }, [mergeTableCellRight, runOrActivateTextEditor]);
 
+  const mergeTableCellDownAtSelection = useCallback(() => {
+    runOrActivateTextEditor('table-merge-cell-down', () => {
+      mergeTableCellDown();
+    });
+  }, [mergeTableCellDown, runOrActivateTextEditor]);
+
   const splitTableCellAtSelection = useCallback(() => {
     runOrActivateTextEditor('table-split-cell', () => {
       splitTableCell();
@@ -2592,6 +2599,19 @@ export function RichTextFormatting({
             title="Add table column"
           >
             <Columns3 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              runContentProperty('table-merge-cell-down', () => mergeTableCellDownAtSelection(), { requireActiveEditor: false });
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            data-testid="rich-text-table-merge-cell-down"
+            title="Merge table cell down"
+          >
+            <Rows3 className="w-4 h-4" />
           </button>
           <button
             type="button"

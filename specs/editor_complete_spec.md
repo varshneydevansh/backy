@@ -132,7 +132,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
     - Rich-text tables support authored captions that render above the table, remain outside the editable Slate cell flow, sync to table metadata, and persist through save/reload smoke coverage.
-    - Selected rich-text table cells can merge with the right sibling and split a spanned cell back into sibling cells using persisted `colSpan` metadata.
+    - Selected rich-text table cells can merge with the right sibling or cell below, then split spanned cells back into sibling cells using persisted `colSpan`/`rowSpan` metadata.
     - Selected table cells can receive an independent fill color from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
     - Selected table cells can receive an independent border color from the rich-text toolbar, render on the cell border, and persist without leaking to adjacent cells.
     - Table cell fill and border color controls can clear previously applied selected-cell colors and persist the removed metadata.
@@ -256,7 +256,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can toggle the active table row between body cells and semantic header cells with persisted `th` Slate nodes.
   - Right-panel rich-text controls can toggle the active table column between body cells and semantic header cells.
   - Right-panel rich-text controls can toggle the active table cell between body and semantic header cell without changing sibling cells.
-  - Right-panel rich-text controls can merge the active table cell with its right sibling and split a spanned cell back into sibling cells with rendered and persisted `colSpan` metadata.
+  - Right-panel rich-text controls can merge the active table cell with its right sibling or the cell below, then split spanned cells back into sibling cells with rendered and persisted `colSpan`/`rowSpan` metadata.
   - Right-panel rich-text alignment controls render and persist paragraph alignment inside selected table cells.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
@@ -391,7 +391,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added Property Panel table header-row toggle controls, with browser smoke coverage proving selected rows render and persist as semantic `th` cells.
 - Added Property Panel table header-column toggle controls, with browser smoke coverage proving selected columns render as semantic `th` cells and can be restored to body cells.
 - Added Property Panel table header-cell toggle controls, with browser smoke coverage proving one selected cell can render as semantic `th` and be restored without affecting sibling cells.
-- Added Property Panel table-cell merge-right and split-cell controls, with browser smoke coverage proving selected cells render `colspan="2"` after merge and return to sibling cells after split.
+- Added Property Panel table-cell merge-right/merge-down and split-cell controls, with browser smoke coverage proving selected cells render `colspan="2"`/`rowspan="2"` after merge and return to sibling cells after split.
 - Added Property Panel table-cell alignment coverage, proving selected cell paragraphs render centered and persist `align: "center"` in Slate content.
 - Added Property Panel whole-table removal controls, with browser smoke coverage proving the active table can be removed without deleting surrounding blockquote content.
 - Added Tab and Shift+Tab canvas selection cycling through visible elements, with keyboard shortcut smoke coverage and focused-control guard coverage.

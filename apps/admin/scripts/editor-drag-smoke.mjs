@@ -4049,6 +4049,86 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedTableCellBeforeMergeDown = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedTableCellBeforeMergeDown?.ok, `Unable to select table cell before merge-down control: ${JSON.stringify(selectedTableCellBeforeMergeDown)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-merge-cell-down');
+  await sleep(500);
+
+  const mergedDownCellState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const rowCells = rows.map((row) => Array.from(row.querySelectorAll('td, th')));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const mergedCellNode = slateState?.types?.find((node) => (node.type === 'td' || node.type === 'th') && node.text.includes('Column 1') && node.text.includes('Value 1'));
+    return {
+      firstRowCellCount: rowCells[0]?.length || 0,
+      secondRowCellCount: rowCells[1]?.length || 0,
+      firstCellRowSpan: rowCells[0]?.[0]?.getAttribute('rowspan') || '',
+      firstCellText: rowCells[0]?.[0]?.textContent || '',
+      mergedCellRowSpan: mergedCellNode?.rowSpan,
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    mergedDownCellState.firstRowCellCount === 2 &&
+      mergedDownCellState.secondRowCellCount === 1 &&
+      mergedDownCellState.firstCellRowSpan === '2' &&
+      mergedDownCellState.firstCellText.includes('Column 1') &&
+      mergedDownCellState.firstCellText.includes('Value 1') &&
+      mergedDownCellState.mergedCellRowSpan === 2,
+    `Table merge-down control did not merge the selected cell with the cell below: ${JSON.stringify(mergedDownCellState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedDownTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(selectedMergedDownTableCell?.ok, `Unable to reselect row-spanned table cell before split control: ${JSON.stringify(selectedMergedDownTableCell)}`);
+
+  await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
+  await sleep(500);
+
+  const splitDownCellState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const rows = Array.from(host?.querySelectorAll('tr') || []);
+    const rowCells = rows.map((row) => Array.from(row.querySelectorAll('td, th')));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    return {
+      firstRowCellCount: rowCells[0]?.length || 0,
+      secondRowCellCount: rowCells[1]?.length || 0,
+      firstCellRowSpan: rowCells[0]?.[0]?.getAttribute('rowspan') || '',
+      firstRowCellTexts: (rowCells[0] || []).map((node) => node.textContent || ''),
+      secondRowCellTexts: (rowCells[1] || []).map((node) => node.textContent || ''),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    splitDownCellState.firstRowCellCount === 2 &&
+      splitDownCellState.secondRowCellCount === 2 &&
+      splitDownCellState.firstCellRowSpan === '' &&
+      splitDownCellState.firstRowCellTexts[0]?.includes('Column 1') &&
+      splitDownCellState.secondRowCellTexts[0]?.includes('Value 1'),
+    `Table split-cell control did not restore row-spanned sibling cells: ${JSON.stringify(splitDownCellState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
   const selectedTableCellBeforeDuplicateRow = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
@@ -4877,6 +4957,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     mergedCellState,
     selectedMergedTableCell,
     splitCellState,
+    selectedTableCellBeforeMergeDown,
+    mergedDownCellState,
+    selectedMergedDownTableCell,
+    splitDownCellState,
     selectedTableCellBeforeDuplicateRow,
     duplicatedRowState,
     restoredDuplicateRowState,
