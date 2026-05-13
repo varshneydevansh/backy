@@ -307,6 +307,8 @@ try {
   const tagSlug = `admin-contract-tag-${unique}`;
   const collectionSlug = `admin-contract-collection-${unique}`;
   const collectionRecordSlug = `admin-contract-record-${unique}`;
+  const dynamicTemplateCollectionSlug = `admin-contract-template-${unique}`;
+  const dynamicTemplateRecordSlug = `admin-contract-template-record-${unique}`;
   const futureProductSlug = `admin-contract-future-product-${unique}`;
   const pastProductSlug = `admin-contract-past-product-${unique}`;
   const boundPageSlug = `admin-contract-bound-page-${unique}`;
@@ -3135,6 +3137,109 @@ try {
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionSlug, `${collectionCreateAudit.url} missing collection create slug metadata`);
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.after?.status === 'published', `${collectionCreateAudit.url} missing collection create after snapshot`);
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.publicCreate === false, `${collectionCreateAudit.url} missing collection create permission metadata`);
+
+    const createDynamicTemplateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Dynamic Template Collection',
+        slug: dynamicTemplateCollectionSlug,
+        listRoutePattern: `/template-directory-${unique}`,
+        routePattern: `/template-directory-${unique}/:recordSlug`,
+        status: 'published',
+        metadata: {
+          dynamicTemplates: {
+            list: {
+              variant: 'compact',
+              titleField: 'title',
+              descriptionField: 'summary',
+              imageField: 'image',
+              limit: 6,
+            },
+            item: {
+              variant: 'directory',
+              titleField: 'title',
+              descriptionField: 'summary',
+              detailFields: ['rank', 'category'],
+            },
+          },
+        },
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
+          { key: 'summary', label: 'Summary', type: 'text' },
+          { key: 'image', label: 'Image', type: 'image' },
+          { key: 'rank', label: 'Rank', type: 'number' },
+          { key: 'category', label: 'Category', type: 'select', options: ['Featured', 'Standard'] },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(createDynamicTemplateCollection.response.status === 201, `${createDynamicTemplateCollection.url} expected dynamic template collection`);
+    const dynamicTemplateCollectionId = createDynamicTemplateCollection.json?.data?.collection?.id;
+    assert(dynamicTemplateCollectionId, `${createDynamicTemplateCollection.url} missing dynamic template collection id`);
+    assert(createDynamicTemplateCollection.json?.data?.collection?.metadata?.dynamicTemplates?.list?.variant === 'compact', `${createDynamicTemplateCollection.url} missing saved list template metadata`);
+    assert(createDynamicTemplateCollection.json?.data?.collection?.metadata?.dynamicTemplates?.item?.variant === 'directory', `${createDynamicTemplateCollection.url} missing saved item template metadata`);
+    const createDynamicTemplateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${dynamicTemplateCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: dynamicTemplateRecordSlug,
+        status: 'published',
+        values: {
+          title: 'Dynamic Template Record',
+          summary: 'Metadata-driven fallback rendering',
+          image: '/uploads/dynamic-template.png',
+          rank: 7,
+          category: 'Featured',
+        },
+      }),
+    });
+    assert(createDynamicTemplateRecord.response.status === 201, `${createDynamicTemplateRecord.url} expected dynamic template record`);
+    const dynamicTemplateRecordId = createDynamicTemplateRecord.json?.data?.record?.id;
+    assert(dynamicTemplateRecordId, `${createDynamicTemplateRecord.url} missing dynamic template record id`);
+    const dynamicTemplateListRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/template-directory-${unique}`)}`);
+    assert(dynamicTemplateListRender.response.status === 200, `${dynamicTemplateListRender.url} expected dynamic template list render`);
+    validateAiRenderPayload(dynamicTemplateListRender.json, 'collection dynamic template list render payload');
+    assert(!dynamicTemplateListRender.json?.data?.frontendDesign?.content?.templateId, `${dynamicTemplateListRender.url} should use generated fallback instead of frontend design template`);
+    assert(dynamicTemplateListRender.json?.data?.content?.elements?.some((element) => (
+      element.id?.startsWith('dynamic_list_')
+      && element.id?.endsWith('_image')
+      && element.type === 'image'
+      && element.props?.assetId === '/uploads/dynamic-template.png'
+    )), `${dynamicTemplateListRender.url} missing compact list image from dynamic template metadata`);
+    assert(dynamicTemplateListRender.json?.data?.content?.elements?.some((element) => (
+      element.id?.startsWith('dynamic_list_')
+      && element.id?.endsWith('_description')
+      && element.props?.content === 'Metadata-driven fallback rendering'
+    )), `${dynamicTemplateListRender.url} missing configured list summary field`);
+    const dynamicTemplateItemRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/template-directory-${unique}/${dynamicTemplateRecordSlug}`)}`);
+    assert(dynamicTemplateItemRender.response.status === 200, `${dynamicTemplateItemRender.url} expected dynamic template item render`);
+    validateAiRenderPayload(dynamicTemplateItemRender.json, 'collection dynamic template item render payload');
+    assert(dynamicTemplateItemRender.json?.data?.content?.elements?.some((element) => (
+      element.id?.startsWith('dynamic_')
+      && element.id?.endsWith('_rank')
+      && element.x === 96
+      && element.width === 488
+      && element.props?.content === 'Rank: 7'
+    )), `${dynamicTemplateItemRender.url} missing directory item rank detail field`);
+    assert(dynamicTemplateItemRender.json?.data?.content?.elements?.some((element) => (
+      element.id?.startsWith('dynamic_')
+      && element.id?.endsWith('_category')
+      && element.x === 616
+      && element.width === 488
+      && element.props?.content === 'Category: Featured'
+    )), `${dynamicTemplateItemRender.url} missing directory item second-column detail field`);
+    await request(`/api/admin/sites/${createdSiteId}/collections/${dynamicTemplateCollectionId}/records/${dynamicTemplateRecordId}`, { method: 'DELETE' });
+    await request(`/api/admin/sites/${createdSiteId}/collections/${dynamicTemplateCollectionId}`, { method: 'DELETE' });
 
     const capturedCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
       method: 'POST',

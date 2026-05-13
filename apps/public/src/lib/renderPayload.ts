@@ -1427,13 +1427,105 @@ const buildCollectionItemDataset = (
   records: normalizeResolvedCollectionRecords([record]),
 });
 
+type DynamicCollectionListVariant = 'cards' | 'compact' | 'showcase';
+type DynamicCollectionItemVariant = 'split' | 'centered' | 'directory';
+
+const collectionDynamicTemplateRecord = (collection: StoreCollection): JsonObject => {
+  const metadata = isRecord(collection.metadata) ? collection.metadata : {};
+  return isRecord(metadata.dynamicTemplates) ? metadata.dynamicTemplates : {};
+};
+
+const collectionDynamicTemplateSection = (
+  collection: StoreCollection,
+  section: 'list' | 'item',
+): JsonObject => {
+  const dynamicTemplates = collectionDynamicTemplateRecord(collection);
+  return isRecord(dynamicTemplates[section]) ? dynamicTemplates[section] as JsonObject : {};
+};
+
+const stringSetting = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const stringListSetting = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+);
+
+const configuredField = (
+  collection: StoreCollection,
+  key: unknown,
+): StoreCollection['fields'][number] | undefined => {
+  const fieldKey = stringSetting(key);
+  return fieldKey ? collection.fields.find((field) => field.key === fieldKey) : undefined;
+};
+
+const selectedTitleField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  configuredField(collection, collectionDynamicTemplateSection(collection, 'item').titleField)
+  || configuredField(collection, collectionDynamicTemplateSection(collection, 'list').titleField)
+  || preferredTitleField(collection, record)
+);
+
+const selectedDescriptionField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  configuredField(collection, collectionDynamicTemplateSection(collection, 'item').descriptionField)
+  || configuredField(collection, collectionDynamicTemplateSection(collection, 'list').descriptionField)
+  || preferredDescriptionField(collection, record)
+);
+
+const selectedImageField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  configuredField(collection, collectionDynamicTemplateSection(collection, 'item').imageField)
+  || configuredField(collection, collectionDynamicTemplateSection(collection, 'list').imageField)
+  || preferredImageField(collection, record)
+);
+
+const collectionListVariant = (collection: StoreCollection): DynamicCollectionListVariant => {
+  const variant = stringSetting(collectionDynamicTemplateSection(collection, 'list').variant);
+  return variant === 'compact' || variant === 'showcase' ? variant : 'cards';
+};
+
+const collectionItemVariant = (collection: StoreCollection): DynamicCollectionItemVariant => {
+  const variant = stringSetting(collectionDynamicTemplateSection(collection, 'item').variant);
+  return variant === 'centered' || variant === 'directory' ? variant : 'split';
+};
+
+const collectionListLimit = (collection: StoreCollection): number => {
+  const limit = Number(collectionDynamicTemplateSection(collection, 'list').limit);
+  return Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 48) : 24;
+};
+
+const collectionDetailFields = (
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  titleField?: StoreCollection['fields'][number],
+  descriptionField?: StoreCollection['fields'][number],
+  imageField?: StoreCollection['fields'][number],
+) => {
+  const configured = stringListSetting(collectionDynamicTemplateSection(collection, 'item').detailFields)
+    .map((key) => collection.fields.find((field) => field.key === key))
+    .filter((field): field is StoreCollection['fields'][number] => Boolean(field));
+  const fields = configured.length > 0
+    ? configured
+    : collection.fields.filter((field) => (
+      field.key !== titleField?.key
+      && field.key !== descriptionField?.key
+      && field.key !== imageField?.key
+    ));
+
+  return fields
+    .filter((field) => stringifyRecordValue(record.values[field.key]).length > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, 10);
+};
+
 export const buildCollectionListContent = (
-  _site: StoreSite,
+  site: StoreSite,
   collection: StoreCollection,
   records: StoreCollectionRecord[],
 ): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
   const safeCollectionId = safeIdPart(collection.id);
-  const visibleRecords = records.slice(0, 24);
+  const variant = collectionListVariant(collection);
+  const visibleRecords = records.slice(0, collectionListLimit(collection));
   const elements: RenderElement[] = [
     {
       id: `dynamic_list_${safeCollectionId}_eyebrow`,
@@ -1495,14 +1587,27 @@ export const buildCollectionListContent = (
   ];
 
   visibleRecords.forEach((record, index) => {
-    const column = index % 3;
-    const row = Math.floor(index / 3);
-    const x = 96 + column * 344;
-    const y = 312 + row * 220;
-    const title = getCollectionRecordTitle(collection, record);
-    const description = getCollectionRecordDescription(collection, record);
+    const titleField = selectedTitleField(collection, record);
+    const descriptionField = selectedDescriptionField(collection, record);
+    const imageField = selectedImageField(collection, record);
+    const title = titleField ? stringifyRecordValue(record.values[titleField.key]) : getCollectionRecordTitle(collection, record);
+    const description = descriptionField ? stringifyRecordValue(record.values[descriptionField.key]) : getCollectionRecordDescription(collection, record);
+    const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
+    const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
+    const imageSrc = media ? publicMediaFilePath(site.id, media.id) : (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
     const href = buildCollectionItemPath(collection, record.slug);
     const cardId = `dynamic_list_${safeCollectionId}_${safeIdPart(record.id)}`;
+    const isCompact = variant === 'compact';
+    const isShowcase = variant === 'showcase';
+    const column = isCompact || isShowcase ? 0 : index % 3;
+    const row = isCompact || isShowcase ? index : Math.floor(index / 3);
+    const x = isCompact || isShowcase ? 96 : 96 + column * 344;
+    const y = isCompact ? 312 + row * 118 : isShowcase ? 312 + row * 238 : 312 + row * 220;
+    const width = isCompact || isShowcase ? 1008 : 312;
+    const height = isCompact ? 92 : isShowcase ? 202 : 184;
+    const hasInlineImage = Boolean(imageSrc && (isCompact || isShowcase));
+    const textX = x + (hasInlineImage ? 180 : 24);
+    const textWidth = width - (hasInlineImage ? 220 : 48);
 
     elements.push(
       {
@@ -1510,8 +1615,8 @@ export const buildCollectionListContent = (
         type: 'box',
         x,
         y,
-        width: 312,
-        height: 184,
+        width,
+        height,
         children: [],
         props: {
           href,
@@ -1533,12 +1638,34 @@ export const buildCollectionListContent = (
         ],
         dataBindings: [],
       },
+      ...(hasInlineImage
+        ? [{
+            id: `${cardId}_image`,
+            type: 'image',
+            x: x + 20,
+            y: y + 18,
+            width: isShowcase ? 132 : 120,
+            height: isShowcase ? 166 : 56,
+            children: [],
+            props: {
+              src: imageSrc,
+              mediaId: media?.id || imageValue,
+              assetId: media?.id || imageValue,
+              alt: title,
+              objectFit: 'cover',
+              borderRadius: '8px',
+            },
+            styles: {},
+            actions: [],
+            dataBindings: imageField ? collectionBindingForField(collection, record, imageField.key, 'props.assetId') : [],
+          } as RenderElement]
+        : []),
       {
         id: `${cardId}_title`,
         type: 'heading',
-        x: x + 24,
+        x: textX,
         y: y + 24,
-        width: 264,
+        width: textWidth,
         height: 42,
         children: [],
         props: {
@@ -1560,15 +1687,15 @@ export const buildCollectionListContent = (
             href,
           },
         ],
-        dataBindings: [],
+        dataBindings: titleField ? collectionBindingForField(collection, record, titleField.key, 'props.content') : [],
       },
       {
         id: `${cardId}_description`,
         type: 'text',
-        x: x + 24,
-        y: y + 78,
-        width: 264,
-        height: 72,
+        x: textX,
+        y: isCompact ? y + 44 : y + 78,
+        width: textWidth,
+        height: isCompact ? 34 : 72,
         children: [],
         props: {
           content: description,
@@ -1578,7 +1705,7 @@ export const buildCollectionListContent = (
         },
         styles: {},
         actions: [],
-        dataBindings: [],
+        dataBindings: descriptionField ? collectionBindingForField(collection, record, descriptionField.key, 'props.content') : [],
       },
     );
   });
@@ -1607,7 +1734,14 @@ export const buildCollectionListContent = (
   return {
     canvasSize: {
       width: pageDefaultWidth,
-      height: Math.max(720, 360 + Math.ceil(Math.max(visibleRecords.length, 1) / 3) * 220),
+      height: Math.max(
+        720,
+        variant === 'compact'
+          ? 360 + Math.max(visibleRecords.length, 1) * 118
+          : variant === 'showcase'
+            ? 360 + Math.max(visibleRecords.length, 1) * 238
+            : 360 + Math.ceil(Math.max(visibleRecords.length, 1) / 3) * 220,
+      ),
     },
     elements,
   };
@@ -1618,30 +1752,25 @@ export const buildCollectionItemContent = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
 ): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
-  const titleField = preferredTitleField(collection, record);
-  const descriptionField = preferredDescriptionField(collection, record);
-  const imageField = preferredImageField(collection, record);
-  const title = getCollectionRecordTitle(collection, record);
+  const variant = collectionItemVariant(collection);
+  const titleField = selectedTitleField(collection, record);
+  const descriptionField = selectedDescriptionField(collection, record);
+  const imageField = selectedImageField(collection, record);
+  const title = titleField ? stringifyRecordValue(record.values[titleField.key]) : getCollectionRecordTitle(collection, record);
   const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
   const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
   const imageSrc = media ? publicMediaFilePath(site.id, media.id) : (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
-  const contentLeft = imageSrc ? 536 : 96;
-  const detailFields = collection.fields
-    .filter((field) => (
-      field.key !== titleField?.key
-      && field.key !== descriptionField?.key
-      && field.key !== imageField?.key
-      && stringifyRecordValue(record.values[field.key]).length > 0
-    ))
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .slice(0, 6);
+  const contentLeft = variant === 'centered' ? 260 : imageSrc && variant === 'split' ? 536 : 96;
+  const contentWidth = variant === 'centered' ? 680 : variant === 'directory' ? 1008 : 568;
+  const detailFields = collectionDetailFields(collection, record, titleField, descriptionField, imageField)
+    .slice(0, variant === 'directory' ? 10 : 6);
   const elements: RenderElement[] = [
     {
       id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_eyebrow`,
       type: 'text',
       x: contentLeft,
       y: 96,
-      width: 568,
+      width: contentWidth,
       height: 32,
       children: [],
       props: {
@@ -1660,7 +1789,7 @@ export const buildCollectionItemContent = (
       type: 'heading',
       x: contentLeft,
       y: 136,
-      width: 568,
+      width: contentWidth,
       height: 104,
       children: [],
       props: {
@@ -1679,14 +1808,14 @@ export const buildCollectionItemContent = (
     },
   ];
 
-  if (imageSrc && imageField) {
+  if (imageSrc && imageField && variant !== 'directory') {
     elements.unshift({
       id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(imageField.key)}`,
       type: 'image',
-      x: 96,
-      y: 96,
-      width: 376,
-      height: 420,
+      x: variant === 'centered' ? 260 : 96,
+      y: variant === 'centered' ? 276 : 96,
+      width: variant === 'centered' ? 680 : 376,
+      height: variant === 'centered' ? 320 : 420,
       children: [],
       props: {
         src: imageSrc,
@@ -1708,8 +1837,8 @@ export const buildCollectionItemContent = (
       id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(descriptionField.key)}`,
       type: descriptionField.type === 'richText' ? 'html' : 'text',
       x: contentLeft,
-      y: 264,
-      width: 568,
+      y: variant === 'centered' && imageSrc ? 636 : 264,
+      width: contentWidth,
       height: 148,
       children: [],
       props: descriptionField.type === 'richText'
@@ -1732,14 +1861,20 @@ export const buildCollectionItemContent = (
   }
 
   detailFields.forEach((field, index) => {
-    const y = 456 + index * 64;
+    const gridColumn = variant === 'directory' ? index % 2 : 0;
+    const gridRow = variant === 'directory' ? Math.floor(index / 2) : index;
+    const y = variant === 'centered' && imageSrc
+      ? 820 + index * 64
+      : variant === 'directory'
+        ? 360 + gridRow * 82
+        : 456 + index * 64;
     elements.push({
       id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(field.key)}`,
       type: 'text',
-      x: contentLeft,
+      x: variant === 'directory' ? 96 + gridColumn * 520 : contentLeft,
       y,
-      width: 568,
-      height: 48,
+      width: variant === 'directory' ? 488 : contentWidth,
+      height: variant === 'directory' ? 62 : 48,
       children: [],
       props: {
         content: `${field.label}: ${stringifyRecordValue(record.values[field.key])}`,
@@ -1756,7 +1891,14 @@ export const buildCollectionItemContent = (
   return {
     canvasSize: {
       width: pageDefaultWidth,
-      height: Math.max(760, 560 + detailFields.length * 64),
+      height: Math.max(
+        760,
+        variant === 'centered' && imageSrc
+          ? 900 + detailFields.length * 64
+          : variant === 'directory'
+            ? 460 + Math.ceil(Math.max(detailFields.length, 1) / 2) * 82
+            : 560 + detailFields.length * 64,
+      ),
     },
     elements,
   };

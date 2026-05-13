@@ -419,6 +419,79 @@ const COLLECTION_BINDING_TARGETS = [
   },
 ] as const;
 
+const COLLECTION_DYNAMIC_LIST_VARIANTS = [
+  {
+    value: 'cards',
+    label: 'Card grid',
+    detail: 'Three-column card grid for directories and catalogs.',
+  },
+  {
+    value: 'compact',
+    label: 'Compact list',
+    detail: 'Dense rows for FAQs, indexes, and resources.',
+  },
+  {
+    value: 'showcase',
+    label: 'Showcase list',
+    detail: 'Large media-forward rows for portfolios and features.',
+  },
+] as const;
+
+const COLLECTION_DYNAMIC_ITEM_VARIANTS = [
+  {
+    value: 'split',
+    label: 'Split hero',
+    detail: 'Media beside title, summary, and key facts.',
+  },
+  {
+    value: 'centered',
+    label: 'Centered story',
+    detail: 'Centered long-form detail page with optional hero image.',
+  },
+  {
+    value: 'directory',
+    label: 'Field directory',
+    detail: 'Two-column field directory for structured profiles.',
+  },
+] as const;
+
+type CollectionDynamicListVariant = typeof COLLECTION_DYNAMIC_LIST_VARIANTS[number]['value'];
+type CollectionDynamicItemVariant = typeof COLLECTION_DYNAMIC_ITEM_VARIANTS[number]['value'];
+
+interface CollectionDynamicTemplatesForm {
+  list: {
+    variant: CollectionDynamicListVariant;
+    titleField: string;
+    descriptionField: string;
+    imageField: string;
+    limit: number;
+  };
+  item: {
+    variant: CollectionDynamicItemVariant;
+    titleField: string;
+    descriptionField: string;
+    imageField: string;
+    detailFields: string[];
+  };
+}
+
+const defaultDynamicTemplates = (): CollectionDynamicTemplatesForm => ({
+  list: {
+    variant: 'cards',
+    titleField: '',
+    descriptionField: '',
+    imageField: '',
+    limit: 24,
+  },
+  item: {
+    variant: 'split',
+    titleField: '',
+    descriptionField: '',
+    imageField: '',
+    detailFields: [],
+  },
+});
+
 const COLLECTION_SCHEMA_EXPORT_COLUMNS = [
   'collection_id',
   'active_site_id',
@@ -640,6 +713,57 @@ const optionalStringListFromRecord = (record: Record<string, unknown> | undefine
   return strings.length > 0 ? strings : undefined;
 };
 
+const dynamicListVariantFromValue = (value: unknown): CollectionDynamicListVariant => (
+  typeof value === 'string' && COLLECTION_DYNAMIC_LIST_VARIANTS.some((variant) => variant.value === value)
+    ? value as CollectionDynamicListVariant
+    : 'cards'
+);
+
+const dynamicItemVariantFromValue = (value: unknown): CollectionDynamicItemVariant => (
+  typeof value === 'string' && COLLECTION_DYNAMIC_ITEM_VARIANTS.some((variant) => variant.value === value)
+    ? value as CollectionDynamicItemVariant
+    : 'split'
+);
+
+const normalizeDynamicTemplateLimit = (value: unknown): number => {
+  const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 48) : 24;
+};
+
+const normalizeDynamicTemplates = (
+  metadata: Record<string, unknown> | null | undefined,
+): CollectionDynamicTemplatesForm => {
+  const defaults = defaultDynamicTemplates();
+  const dynamicTemplates = isPlainRecord(metadata?.dynamicTemplates) ? metadata.dynamicTemplates : {};
+  const list = isPlainRecord(dynamicTemplates.list) ? dynamicTemplates.list : {};
+  const item = isPlainRecord(dynamicTemplates.item) ? dynamicTemplates.item : {};
+
+  return {
+    list: {
+      variant: dynamicListVariantFromValue(list.variant),
+      titleField: optionalStringFromRecord(list, 'titleField') || defaults.list.titleField,
+      descriptionField: optionalStringFromRecord(list, 'descriptionField') || defaults.list.descriptionField,
+      imageField: optionalStringFromRecord(list, 'imageField') || defaults.list.imageField,
+      limit: normalizeDynamicTemplateLimit(list.limit),
+    },
+    item: {
+      variant: dynamicItemVariantFromValue(item.variant),
+      titleField: optionalStringFromRecord(item, 'titleField') || defaults.item.titleField,
+      descriptionField: optionalStringFromRecord(item, 'descriptionField') || defaults.item.descriptionField,
+      imageField: optionalStringFromRecord(item, 'imageField') || defaults.item.imageField,
+      detailFields: optionalStringListFromRecord(item, 'detailFields') || defaults.item.detailFields,
+    },
+  };
+};
+
+const collectionMetadataWithDynamicTemplates = (
+  currentMetadata: Record<string, unknown> | undefined,
+  dynamicTemplates: CollectionDynamicTemplatesForm,
+) => ({
+  ...(currentMetadata || {}),
+  dynamicTemplates,
+});
+
 const asCollectionFieldType = (value: unknown): CollectionFieldType => (
   typeof value === 'string' && FIELD_TYPES.includes(value as CollectionFieldType)
     ? value as CollectionFieldType
@@ -827,6 +951,7 @@ function CollectionsPage() {
     description: '',
     status: 'published' as Collection['status'],
     permissions: DEFAULT_PERMISSIONS,
+    dynamicTemplates: defaultDynamicTemplates(),
     fields: [createEmptyField(10)],
   });
   const [recordForm, setRecordForm] = useState({
@@ -873,7 +998,7 @@ function CollectionsPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
-  const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending || isAuditLoading;
+  const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1472,6 +1597,7 @@ function CollectionsPage() {
       description: '',
       status: 'published',
       permissions: DEFAULT_PERMISSIONS,
+      dynamicTemplates: defaultDynamicTemplates(),
       fields: [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -1599,6 +1725,7 @@ function CollectionsPage() {
       description: template.description,
       status: 'published',
       permissions: { ...template.permissions },
+      dynamicTemplates: defaultDynamicTemplates(),
       fields: cloneTemplateFields(template.fields),
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -1627,7 +1754,10 @@ function CollectionsPage() {
     setNotice(null);
 
     try {
-      const metadata = buildFrontendCollectionTemplateMetadata(template, frontendDesign);
+      const metadata = collectionMetadataWithDynamicTemplates(
+        buildFrontendCollectionTemplateMetadata(template, frontendDesign),
+        defaultDynamicTemplates(),
+      );
       const saved = await createCollection(activeSiteId, {
         name: blueprint.name,
         slug: blueprint.slug,
@@ -1672,6 +1802,7 @@ function CollectionsPage() {
       description: collection.description || '',
       status: collection.status,
       permissions: collection.permissions,
+      dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
@@ -1834,6 +1965,40 @@ function CollectionsPage() {
     }));
   };
 
+  const updateDynamicListTemplate = (updates: Partial<CollectionDynamicTemplatesForm['list']>) => {
+    setCollectionForm((prev) => ({
+      ...prev,
+      dynamicTemplates: {
+        ...prev.dynamicTemplates,
+        list: {
+          ...prev.dynamicTemplates.list,
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const updateDynamicItemTemplate = (updates: Partial<CollectionDynamicTemplatesForm['item']>) => {
+    setCollectionForm((prev) => ({
+      ...prev,
+      dynamicTemplates: {
+        ...prev.dynamicTemplates,
+        item: {
+          ...prev.dynamicTemplates.item,
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const toggleDynamicDetailField = (fieldKey: string, checked: boolean) => {
+    updateDynamicItemTemplate({
+      detailFields: checked
+        ? [...collectionForm.dynamicTemplates.item.detailFields, fieldKey]
+        : collectionForm.dynamicTemplates.item.detailFields.filter((key) => key !== fieldKey),
+    });
+  };
+
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isCollectionsBusy) return;
@@ -1858,6 +2023,7 @@ function CollectionsPage() {
 
     try {
       const collectionSlug = normalizeSlug(collectionForm.slug || collectionForm.name, 'collection');
+      const currentMetadata = activeCollection?.metadata;
       const payload = {
         name: collectionForm.name.trim(),
         slug: collectionSlug,
@@ -1866,6 +2032,7 @@ function CollectionsPage() {
         description: collectionForm.description.trim() || null,
         status: collectionForm.status,
         permissions: collectionForm.permissions,
+        metadata: collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
         fields,
       };
       const saved = selectedCollectionId
@@ -2137,6 +2304,26 @@ function CollectionsPage() {
       event.target.value = '';
     }
   };
+
+  const dynamicTemplateFields = collectionForm.fields
+    .filter((field) => field.key.trim() && field.label.trim())
+    .map((field, index) => ({
+      ...field,
+      key: normalizeSlug(field.key, `field_${index + 1}`).replace(/-/g, '_'),
+      label: field.label.trim(),
+      sortOrder: field.sortOrder || (index + 1) * 10,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const dynamicTemplateMediaFields = dynamicTemplateFields.filter((field) => MEDIA_FIELD_TYPES.includes(field.type));
+  const dynamicTemplateImageFields = dynamicTemplateMediaFields.length > 0 ? dynamicTemplateMediaFields : dynamicTemplateFields;
+  const dynamicListRoutePreview = normalizeCollectionListRoutePattern(
+    collectionForm.listRoutePattern,
+    collectionForm.slug || 'collection',
+  );
+  const dynamicItemRoutePreview = normalizeCollectionRoutePattern(
+    collectionForm.routePattern,
+    collectionForm.slug || 'collection',
+  ).replace(':recordSlug', '{recordSlug}');
 
   return (
     <PageShell
@@ -2494,7 +2681,10 @@ function CollectionsPage() {
             {frontendCollectionTemplateBlueprints.length > 0 ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {frontendCollectionTemplateBlueprints.map(({ template, blueprint }) => {
-                  const metadata = buildFrontendCollectionTemplateMetadata(template, frontendDesign);
+                  const metadata = collectionMetadataWithDynamicTemplates(
+                    buildFrontendCollectionTemplateMetadata(template, frontendDesign),
+                    defaultDynamicTemplates(),
+                  );
                   const manifestText = JSON.stringify({
                     schemaVersion: 'backy.frontend-collection-template.v1',
                     template,
@@ -3007,6 +3197,195 @@ function CollectionsPage() {
                   className="min-h-20 w-full rounded-lg border bg-background px-3 py-2"
                 />
               </label>
+            </div>
+
+            <div className="border-t border-border px-4 py-4" data-testid="collections-dynamic-template-controls">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Dynamic list and item templates</h3>
+                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    Save generated-route layout presets and field roles for public collection pages that do not use a captured frontend design template.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                  <div>List {dynamicListRoutePreview}</div>
+                  <div>Item {dynamicItemRoutePreview}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold">List route</h4>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Controls generated collection index pages and record-card field roles.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                      {collectionForm.dynamicTemplates.list.limit} records
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span className="font-medium">Layout</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.list.variant}
+                        onChange={(event) => updateDynamicListTemplate({ variant: event.target.value as CollectionDynamicListVariant })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                        data-testid="collections-list-template-variant"
+                      >
+                        {COLLECTION_DYNAMIC_LIST_VARIANTS.map((variant) => (
+                          <option key={variant.value} value={variant.value}>{variant.label}</option>
+                        ))}
+                      </select>
+                      <span className="block text-xs text-muted-foreground">
+                        {COLLECTION_DYNAMIC_LIST_VARIANTS.find((variant) => variant.value === collectionForm.dynamicTemplates.list.variant)?.detail}
+                      </span>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Title field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.list.titleField}
+                        onChange={(event) => updateDynamicListTemplate({ titleField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Automatic</option>
+                        {dynamicTemplateFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Summary field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.list.descriptionField}
+                        onChange={(event) => updateDynamicListTemplate({ descriptionField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Automatic</option>
+                        {dynamicTemplateFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Image field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.list.imageField}
+                        onChange={(event) => updateDynamicListTemplate({ imageField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Automatic</option>
+                        {dynamicTemplateImageFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Record limit</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={48}
+                        value={collectionForm.dynamicTemplates.list.limit}
+                        onChange={(event) => updateDynamicListTemplate({ limit: normalizeDynamicTemplateLimit(event.target.value) })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div>
+                    <h4 className="text-sm font-semibold">Item route</h4>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Controls generated detail pages and the field set rendered below the hero content.
+                    </p>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span className="font-medium">Layout</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.item.variant}
+                        onChange={(event) => updateDynamicItemTemplate({ variant: event.target.value as CollectionDynamicItemVariant })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                        data-testid="collections-item-template-variant"
+                      >
+                        {COLLECTION_DYNAMIC_ITEM_VARIANTS.map((variant) => (
+                          <option key={variant.value} value={variant.value}>{variant.label}</option>
+                        ))}
+                      </select>
+                      <span className="block text-xs text-muted-foreground">
+                        {COLLECTION_DYNAMIC_ITEM_VARIANTS.find((variant) => variant.value === collectionForm.dynamicTemplates.item.variant)?.detail}
+                      </span>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Title field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.item.titleField}
+                        onChange={(event) => updateDynamicItemTemplate({ titleField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Use list setting</option>
+                        {dynamicTemplateFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Summary field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.item.descriptionField}
+                        onChange={(event) => updateDynamicItemTemplate({ descriptionField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Use list setting</option>
+                        {dynamicTemplateFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span className="font-medium">Image field</span>
+                      <select
+                        value={collectionForm.dynamicTemplates.item.imageField}
+                        onChange={(event) => updateDynamicItemTemplate({ imageField: event.target.value })}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                      >
+                        <option value="">Use list setting</option>
+                        {dynamicTemplateImageFields.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-medium">Detail fields</span>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {dynamicTemplateFields.map((field) => (
+                          <label key={field.key} className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={collectionForm.dynamicTemplates.item.detailFields.includes(field.key)}
+                              onChange={(event) => toggleDynamicDetailField(field.key, event.target.checked)}
+                              className="mt-0.5"
+                            />
+                            <span>
+                              <span className="block font-medium text-foreground">{field.label}</span>
+                              <span className="block text-muted-foreground">{field.key} · {field.type}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      {dynamicTemplateFields.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Add at least one field before choosing detail fields.</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Leave all unchecked to show every non-title, non-summary, non-image field with values.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="border-t border-border">
