@@ -8427,6 +8427,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       .map((node) => node.textContent || '')
       .join(' ');
     const preview = document.querySelector('[data-testid="editor-data-record-preview"]')?.textContent || '';
+    const thumbnail = document.querySelector('[data-testid="editor-data-record-preview-thumbnail"] img');
     return {
       collectionId: value('editor-data-collection'),
       field: value('editor-data-field'),
@@ -8443,6 +8444,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       offset: value('editor-data-query-offset'),
       summary,
       preview,
+      thumbnailSrc: thumbnail instanceof HTMLImageElement ? thumbnail.getAttribute('src') || thumbnail.currentSrc || '' : '',
     };
   })()`);
 
@@ -8454,6 +8456,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
   assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
   assert(/Beta featured item/i.test(state.preview) && /Featured/i.test(state.preview) && /Beta featured item summary/i.test(state.preview), `Collection record preview missing selected record values: ${JSON.stringify(state)}`);
+  assert(/editor-smoke-dataset-.*-2\.jpg/i.test(state.thumbnailSrc), `Collection record preview thumbnail missing selected image: ${JSON.stringify(state)}`);
 
   return state;
 };

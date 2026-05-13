@@ -44,6 +44,7 @@ import {
   type CollectionField,
   type CollectionRecord,
 } from '@/lib/adminContentApi';
+import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import {
   buildListContentFromItems,
   normalizeListContent,
@@ -4360,6 +4361,30 @@ const getRecordPreviewFields = (
     .slice(0, 6);
 };
 
+const selectedRecordPreviewImage = (
+  record: CollectionRecord | null,
+  collection: Collection | null,
+  siteId?: string,
+) => {
+  if (!record || !collection) return null;
+  const imageField = collection.fields.find((field) => ['image', 'coverImage', 'thumbnail', 'media'].includes(field.key) && field.type === 'image')
+    || collection.fields.find((field) => field.type === 'image');
+  const rawValue = imageField ? recordPreviewValue(record.values?.[imageField.key]).trim() : '';
+  if (!imageField || !rawValue) return null;
+  const src = /^(https?:)?\/\//.test(rawValue) || rawValue.startsWith('/')
+    ? rawValue
+    : siteId
+      ? getPublicMediaFileUrl(rawValue, siteId)
+      : '';
+  if (!src) return null;
+
+  return {
+    field: imageField,
+    src,
+    value: rawValue,
+  };
+};
+
 const firstExistingTargetPath = (
   targetPathOptions: Array<{ value: string; label: string }>,
   candidates: string[],
@@ -4966,6 +4991,7 @@ function DataBindingProperties({
     record.id === selectedRecordId || record.slug === selectedRecordId
   )) || null;
   const selectedRecordPreviewFields = getRecordPreviewFields(selectedRecordPreview, selectedCollection);
+  const selectedRecordPreviewMedia = selectedRecordPreviewImage(selectedRecordPreview, selectedCollection, siteId);
   const bindingPresets = collectionBindingPresetOptions(selectedCollection, targetPathOptions);
 
   const updateBinding = (updates: {
@@ -5222,6 +5248,20 @@ function DataBindingProperties({
             <div className="mb-2 text-xs font-medium text-foreground">Selected record preview</div>
             {selectedRecordPreview ? (
               <div className="space-y-1.5 text-xs">
+                {selectedRecordPreviewMedia ? (
+                  <div className="mb-2 overflow-hidden rounded-md border border-border bg-background" data-testid="editor-data-record-preview-thumbnail">
+                    <img
+                      src={selectedRecordPreviewMedia.src}
+                      alt={`${collectionRecordLabel(selectedRecordPreview, selectedCollection)} ${selectedRecordPreviewMedia.field.label}`}
+                      className="h-24 w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div className="mb-2 flex h-16 items-center justify-center rounded-md border border-dashed border-border bg-background text-[11px] text-muted-foreground" data-testid="editor-data-record-preview-thumbnail-empty">
+                    No image field value
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">{collectionRecordLabel(selectedRecordPreview, selectedCollection)}</span>
                   <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-muted-foreground">{selectedRecordPreview.slug}</span>
