@@ -82,6 +82,42 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
+const createUser = async (input) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const user = payload.data?.user || payload.user;
+  assert(user?.id, `Create sites RBAC user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return user;
+};
+
+const createInviteToken = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/invite-link`, {
+    method: 'POST',
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  const invite = payload.data?.invite || payload.invite;
+  assert(invite?.token, `Invite link endpoint did not return a token: ${JSON.stringify(payload).slice(0, 500)}`);
+  return invite;
+};
+
+const acceptInviteToken = async (token) => {
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  const session = payload.data?.session;
+  const user = payload.data?.user;
+  assert(session?.token && user?.id, `Invite accept did not return a user session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { session, user };
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
+
 const listSites = async () => {
   const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
   return payload.data?.sites || payload.sites || [];
@@ -211,10 +247,13 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = (sessionToken) => `
+const authStorageScript = (
+  sessionToken,
+  user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    user,
     session: {
       token: sessionToken,
       issuedAt: new Date().toISOString(),
@@ -462,7 +501,28 @@ const setSitesFilter = async (client, ariaLabel, value) => {
   return result;
 };
 
+const waitForSitesControlsEnabled = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const search = document.querySelector('[aria-label="Search sites"]');
+      return {
+        ready: search instanceof HTMLInputElement && !search.disabled,
+        disabled: search instanceof HTMLInputElement ? search.disabled : null,
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+    if (state.ready) return state;
+    if (attempt === 79) {
+      throw new Error(`Sites controls did not become enabled: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const exerciseSitesFilters = async (client, siteName) => {
+  await waitForSitesControlsEnabled(client);
   await setSitesFilter(client, 'Search sites', siteName);
   await waitForSitesPageSite(client, siteName);
   await setSitesFilter(client, 'Filter sites by domain', 'custom');
@@ -628,6 +688,72 @@ const assertSiteAuditTrail = async (client, { siteId, siteName }) => {
   }
 };
 
+const assertSitesRbacFiltering = async (client, viewerSession, siteName, preloadScriptIdentifier) => {
+  if (preloadScriptIdentifier) {
+    await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: preloadScriptIdentifier });
+  }
+  const viewerPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: authStorageScript(viewerSession.session.token, viewerSession.user),
+  });
+  await navigateToSites(client, siteName);
+  await waitForSitesPageSite(client, siteName);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const bodyText = document.body?.innerText || '';
+      const rbacPanel = document.querySelector('[data-testid="sites-rbac-scope"]');
+      const rbacText = rbacPanel?.textContent || '';
+      const newSiteButtons = Array.from(document.querySelectorAll('button')).filter((button) => (
+        (button.textContent || '').trim() === 'New site'
+      ));
+      const statusSelect = Array.from(document.querySelectorAll('select')).find((select) => (
+        (select.getAttribute('aria-label') || '') === ${JSON.stringify(`Change status for ${siteName}`)}
+      ));
+      const duplicateButton = document.querySelector(${JSON.stringify(`[aria-label="Duplicate ${siteName}"]`)});
+      const archiveButton = document.querySelector(${JSON.stringify(`[aria-label="Archive ${siteName}"]`)});
+      const deleteButton = document.querySelector(${JSON.stringify(`[aria-label="Delete ${siteName}"]`)});
+      const auditPanel = document.querySelector('[data-testid="sites-audit-panel"]');
+      const auditText = auditPanel?.textContent || '';
+      const auditRefreshButton = Array.from(auditPanel?.querySelectorAll('button') || []).find((button) => (
+        (button.textContent || '').includes('Refresh activity')
+      ));
+      return {
+        ready: Boolean(rbacPanel) && bodyText.includes(${JSON.stringify(siteName)}),
+        rbacText,
+        newSiteDisabled: newSiteButtons.length > 0 && newSiteButtons.every((button) => button.disabled),
+        statusDisabled: statusSelect instanceof HTMLSelectElement ? statusSelect.disabled : null,
+        duplicateDisabled: duplicateButton instanceof HTMLButtonElement ? duplicateButton.disabled : null,
+        archiveDisabled: archiveButton instanceof HTMLButtonElement ? archiveButton.disabled : null,
+        deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+        auditRefreshDisabled: auditRefreshButton instanceof HTMLButtonElement ? auditRefreshButton.disabled : null,
+        auditDenied: auditText.includes('role does not include') || auditText.includes('Blocked by viewer'),
+        hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+        body: bodyText.slice(0, 2600),
+      };
+    })()`);
+    if (state.ready) {
+      assert(/viewer/i.test(state.rbacText), `Viewer sites page did not show viewer RBAC scope: ${JSON.stringify(state)}`);
+      assert(state.rbacText.includes('Create sites') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide create permission: ${JSON.stringify(state)}`);
+      assert(state.rbacText.includes('Configure sites') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide configure permission: ${JSON.stringify(state)}`);
+      assert(state.rbacText.includes('Archive/delete') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide delete permission: ${JSON.stringify(state)}`);
+      assert(state.newSiteDisabled === true, `Viewer sites page left New site enabled: ${JSON.stringify(state)}`);
+      assert(state.statusDisabled === true, `Viewer sites page left status control enabled: ${JSON.stringify(state)}`);
+      assert(state.duplicateDisabled === true, `Viewer sites page left duplicate enabled: ${JSON.stringify(state)}`);
+      assert(state.archiveDisabled === true, `Viewer sites page left archive enabled: ${JSON.stringify(state)}`);
+      assert(state.deleteDisabled === true, `Viewer sites page left delete enabled: ${JSON.stringify(state)}`);
+      assert(state.auditRefreshDisabled === true && state.auditDenied, `Viewer sites page did not hide audit activity: ${JSON.stringify(state)}`);
+      assert(!state.hasFrameworkOverlay, `Viewer sites page rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+      return { state, preloadScriptIdentifier: viewerPreload.identifier };
+    }
+    if (attempt === 79) {
+      throw new Error(`Viewer sites RBAC scope did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return { state: null, preloadScriptIdentifier: viewerPreload.identifier };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -682,15 +808,37 @@ const main = async () => {
   let userDataDir;
   let createdSiteId;
   let duplicatedSiteId;
+  let ownerUserId;
+  let viewerUserId;
   const suffix = Date.now().toString(36);
   const siteName = `Sites Smoke ${suffix}`;
   const slug = `sites-smoke-${suffix}`;
   const customDomain = `${slug}.example.com`;
+  const ownerEmail = `sites-owner-${suffix}@example.com`;
+  const viewerEmail = `sites-viewer-${suffix}@example.com`;
 
   try {
     await loginAdminApi();
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
+    const owner = await createUser({
+      fullName: `Sites Owner ${suffix}`,
+      email: ownerEmail,
+      role: 'owner',
+      status: 'invited',
+    });
+    ownerUserId = owner.id;
+    const ownerInvite = await createInviteToken(owner.id);
+    const ownerSession = await acceptInviteToken(ownerInvite.token);
+    const viewer = await createUser({
+      fullName: `Sites Viewer ${suffix}`,
+      email: viewerEmail,
+      role: 'viewer',
+      status: 'invited',
+    });
+    viewerUserId = viewer.id;
+    const invite = await createInviteToken(viewer.id);
+    const viewerSession = await acceptInviteToken(invite.token);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -704,7 +852,9 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
+    const authPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authStorageScript(ownerSession.session.token, ownerSession.user),
+    });
 
     await navigateToCreateSite(client);
     const { site: created, pages } = await createSiteThroughUi(client, { siteName, slug, customDomain });
@@ -730,6 +880,20 @@ const main = async () => {
     await archiveSiteThroughUi(client, siteName, slug);
     assert((await getSite(createdSiteId)).status === 'archived', 'Archive action did not persist through the admin API.');
     await assertSiteAuditTrail(client, { siteId: createdSiteId, siteName });
+    const viewerRbac = await assertSitesRbacFiltering(client, viewerSession, siteName, authPreload.identifier);
+    if (viewerRbac?.preloadScriptIdentifier) {
+      await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: viewerRbac.preloadScriptIdentifier });
+    }
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authStorageScript(ownerSession.session.token, ownerSession.user),
+    });
+    await navigateToSites(client, siteName);
+    await waitForSitesPageSite(client, siteName);
+    await waitForSitesControlsEnabled(client);
+    await setSitesFilter(client, 'Search sites', siteName);
+    await setSitesFilter(client, 'Filter sites by status', 'all');
+    await setSitesFilter(client, 'Filter sites by domain', 'all');
+    await setSitesFilter(client, 'Filter sites by page coverage', 'all');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -741,6 +905,10 @@ const main = async () => {
 
     await deleteSite(duplicatedSiteId);
     duplicatedSiteId = null;
+    await deleteUser(viewerUserId);
+    viewerUserId = null;
+    await deleteUser(ownerUserId);
+    ownerUserId = null;
 
     console.log(JSON.stringify({
       ok: true,
@@ -753,6 +921,12 @@ const main = async () => {
     await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId });
     if (duplicatedSiteId) {
       await deleteSite(duplicatedSiteId).catch(() => {});
+    }
+    if (viewerUserId) {
+      await deleteUser(viewerUserId).catch(() => {});
+    }
+    if (ownerUserId) {
+      await deleteUser(ownerUserId).catch(() => {});
     }
   }
 };

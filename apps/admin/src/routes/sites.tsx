@@ -28,12 +28,15 @@ import {
 import {
   createSite as createSiteFromApi,
   deleteSite as deleteSiteFromApi,
+  getUserPermissions,
   listAdminAuditLogs,
   listPages,
   listSites,
   updateSite as updateSiteFromApi,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
+import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type Site } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { DataGrid } from '@/components/ui/DataGrid';
@@ -52,6 +55,47 @@ export const Route = createFileRoute('/sites')({
 type SiteStatusFilter = 'all' | Site['status'];
 type SiteDomainFilter = 'all' | 'custom' | 'backy';
 type SitePageCoverageFilter = 'all' | 'with-pages' | 'empty';
+type SitePermissionKey = 'sites.view' | 'sites.create' | 'sites.configure' | 'sites.delete' | 'activity.export';
+
+const SITE_PERMISSION_ROLE_DEFAULTS: Record<SitePermissionKey, Array<User['role']>> = {
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.create': ['owner', 'admin'],
+  'sites.configure': ['owner', 'admin'],
+  'sites.delete': ['owner'],
+  'activity.export': ['owner', 'admin'],
+};
+
+const sitePermissionRule = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  key: SitePermissionKey,
+) => permissionMatrix?.groups
+  .flatMap((group) => group.permissions)
+  .find((permission) => permission.key === key) || null;
+
+const isSitePermissionAllowed = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SitePermissionKey,
+): boolean => {
+  const matrixRule = sitePermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.allowed;
+
+  return Boolean(currentAdmin && SITE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+};
+
+const sitePermissionReason = (
+  permissionMatrix: AdminUserPermissionMatrix | null,
+  currentAdmin: User | null,
+  key: SitePermissionKey,
+): string => {
+  const matrixRule = sitePermissionRule(permissionMatrix, key);
+  if (matrixRule) return matrixRule.reason;
+  if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+
+  return SITE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
+    ? `Allowed by ${currentAdmin.role} role defaults.`
+    : `Blocked by ${currentAdmin.role} role defaults.`;
+};
 
 const STATUS_OPTIONS: Array<{ value: Site['status']; label: string }> = [
   { value: 'published', label: 'Published' },
@@ -361,23 +405,44 @@ function SitesLayout() {
 function SitesListView() {
   const navigate = useNavigate();
   const { sites, setSites, deleteSite } = useStore();
+  const currentAdmin = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<SiteStatusFilter>('all');
   const [domainFilter, setDomainFilter] = useState<SiteDomainFilter>('all');
   const [pageCoverageFilter, setPageCoverageFilter] = useState<SitePageCoverageFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [siteAuditLogs, setSiteAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.view');
+  const canCreateSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
+  const canConfigureSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure');
+  const canDeleteSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.delete');
+  const canExportActivity = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
+  const viewPermissionTitle = canViewSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.view');
+  const createPermissionTitle = canCreateSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.create');
+  const configurePermissionTitle = canConfigureSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.configure');
+  const deletePermissionTitle = canDeleteSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.delete');
+  const activityPermissionTitle = canExportActivity ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'activity.export');
   const isSiteMutationBusy = updatingSiteId !== null;
-  const isSitesBusy = isLoading || isSiteMutationBusy;
+  const isSitesBusy = isLoading || isSiteMutationBusy || isPermissionMatrixPending;
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
   const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
 
   const loadSiteAuditLogs = useCallback(async () => {
+    if (!canExportActivity) {
+      setSiteAuditLogs([]);
+      setAuditError(null);
+      return;
+    }
+
     setIsAuditLoading(true);
     setAuditError(null);
 
@@ -390,9 +455,15 @@ function SitesListView() {
     } finally {
       setIsAuditLoading(false);
     }
-  }, []);
+  }, [canExportActivity]);
 
   const loadSites = useCallback(async () => {
+    if (!canViewSites) {
+      setSites([]);
+      setNotice(viewPermissionTitle || 'Your account cannot view sites.');
+      return;
+    }
+
     setIsLoading(true);
     setNotice(null);
 
@@ -414,12 +485,48 @@ function SitesListView() {
     } finally {
       setIsLoading(false);
     }
-  }, [setSites]);
+  }, [canViewSites, setSites, viewPermissionTitle]);
 
   useEffect(() => {
     void loadSites();
     void loadSiteAuditLogs();
   }, [loadSiteAuditLogs, loadSites]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((permissionsError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load site permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   const metrics = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
@@ -514,6 +621,10 @@ function SitesListView() {
 
   const handleStatusChange = async (site: Site, status: Site['status']) => {
     if (isSitesBusy) return;
+    if (!canConfigureSites) {
+      setNotice(`Your account needs sites.configure to change site status. ${configurePermissionTitle}`);
+      return;
+    }
 
     setUpdatingSiteId(site.id);
     setNotice(null);
@@ -532,6 +643,10 @@ function SitesListView() {
 
   const handleDuplicateSite = async (site: Site) => {
     if (isSitesBusy) return;
+    if (!canCreateSites) {
+      setNotice(`Your account needs sites.create to duplicate a site. ${createPermissionTitle}`);
+      return;
+    }
 
     setUpdatingSiteId(site.id);
     setNotice(null);
@@ -562,6 +677,10 @@ function SitesListView() {
 
   const handleArchiveSite = async (site: Site) => {
     if (isSitesBusy) return;
+    if (!canDeleteSites) {
+      setNotice(`Your account needs sites.delete to archive a site. ${deletePermissionTitle}`);
+      return;
+    }
 
     await handleStatusChange(site, 'archived');
   };
@@ -569,6 +688,10 @@ function SitesListView() {
   const handleDeleteSite = async () => {
     if (!pendingDelete || isSiteMutationBusy) return;
     if (deleteConfirmationText.trim() !== pendingDelete.name) return;
+    if (!canDeleteSites) {
+      setNotice(`Your account needs sites.delete to delete a site. ${deletePermissionTitle}`);
+      return;
+    }
 
     setUpdatingSiteId(pendingDelete.id);
     setNotice(null);
@@ -643,7 +766,8 @@ function SitesListView() {
           <StatusBadge status={site.status} />
           <select
             value={site.status}
-            disabled={isSitesBusy}
+            disabled={isSitesBusy || !canConfigureSites}
+            title={configurePermissionTitle}
             onChange={(event) => void handleStatusChange(site, event.target.value as Site['status'])}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change status for ${site.name}`}
@@ -708,20 +832,20 @@ function SitesListView() {
           <button
             type="button"
             onClick={() => void handleDuplicateSite(site)}
-            disabled={isSitesBusy}
+            disabled={isSitesBusy || !canCreateSites}
             className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Duplicate ${site.name}`}
-            title="Duplicate site"
+            title={canCreateSites ? 'Duplicate site' : createPermissionTitle}
           >
             <Copy className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={() => void handleArchiveSite(site)}
-            disabled={isSitesBusy || site.status === 'archived'}
+            disabled={isSitesBusy || !canDeleteSites || site.status === 'archived'}
             className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Archive ${site.name}`}
-            title="Archive site"
+            title={canDeleteSites ? 'Archive site' : deletePermissionTitle}
           >
             <Archive className="h-4 w-4" />
           </button>
@@ -733,10 +857,10 @@ function SitesListView() {
                 setPendingDelete(site);
               }
             }}
-            disabled={isSitesBusy}
+            disabled={isSitesBusy || !canDeleteSites}
             className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Delete ${site.name}`}
-            title="Delete site"
+            title={canDeleteSites ? 'Delete site' : deletePermissionTitle}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -773,6 +897,10 @@ function SitesListView() {
 
   const handleExportSites = () => {
     if (data.length === 0 || isSitesBusy) return;
+    if (!canViewSites) {
+      setNotice(`Your account needs sites.view to export sites. ${viewPermissionTitle}`);
+      return;
+    }
 
     const rows = data.map((site) => {
       const contract = buildSiteFrontendContract(site, publicApiBase, adminApiBase);
@@ -824,6 +952,10 @@ function SitesListView() {
   };
   const openNewSite = () => {
     if (isSitesBusy) return;
+    if (!canCreateSites) {
+      setNotice(`Your account needs sites.create to create a site. ${createPermissionTitle}`);
+      return;
+    }
 
     void navigate({ to: '/sites/new' });
   };
@@ -906,7 +1038,8 @@ function SitesListView() {
         <button
           type="button"
           onClick={openNewSite}
-          disabled={isSitesBusy}
+          disabled={isSitesBusy || !canCreateSites}
+          title={createPermissionTitle}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="h-4 w-4" />
@@ -945,12 +1078,55 @@ function SitesListView() {
             <button
               type="button"
               onClick={openNewSite}
-              disabled={isSitesBusy}
+              disabled={isSitesBusy || !canCreateSites}
+              title={createPermissionTitle}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="size-4" />
               New site
             </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="sites-rbac-scope">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Workspace RBAC scope</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Effective role {permissionMatrix?.role || currentAdmin?.role || 'unknown'} controls site creation, configuration, destructive actions, and activity visibility.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {permissionMatrix ? `${permissionMatrix.summary.allowed}/${permissionMatrix.summary.total} allowed` : 'role defaults'}
+            </span>
+          </div>
+          {permissionError && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {permissionError}
+            </div>
+          )}
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {([
+              ['sites.view', 'View sites', canViewSites, viewPermissionTitle],
+              ['sites.create', 'Create sites', canCreateSites, createPermissionTitle],
+              ['sites.configure', 'Configure sites', canConfigureSites, configurePermissionTitle],
+              ['sites.delete', 'Archive/delete', canDeleteSites, deletePermissionTitle],
+              ['activity.export', 'Activity trail', canExportActivity, activityPermissionTitle],
+            ] as const).map(([key, label, allowed, reason]) => (
+              <div key={key} className="rounded-lg border border-border bg-card px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-foreground">{label}</span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    allowed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                  )}
+                  >
+                    {allowed ? 'Allowed' : 'Hidden'}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] leading-4 text-muted-foreground">{reason}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -1031,7 +1207,8 @@ function SitesListView() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={data.length === 0 || isSitesBusy}
+                disabled={data.length === 0 || isSitesBusy || !canViewSites}
+                title={viewPermissionTitle}
                 onClick={handleExportSites}
                 iconStart={<Download className="size-4" />}
               >
@@ -1236,7 +1413,8 @@ function SitesListView() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={isAuditLoading}
+              disabled={isAuditLoading || !canExportActivity}
+              title={activityPermissionTitle}
               onClick={() => void loadSiteAuditLogs()}
               iconStart={<RefreshCw className={cn('size-3.5', isAuditLoading && 'animate-spin')} />}
             >
@@ -1261,12 +1439,17 @@ function SitesListView() {
             </div>
 
             <div className="rounded-lg border border-border bg-background p-4" data-testid="sites-audit-list">
+              {!canExportActivity && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {activityPermissionTitle}
+                </div>
+              )}
               {auditError && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {auditError}
                 </div>
               )}
-              {isAuditLoading && siteAuditLogs.length === 0 ? (
+              {!canExportActivity ? null : isAuditLoading && siteAuditLogs.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
                   Loading site activity...
                 </div>
@@ -1428,7 +1611,8 @@ function SitesListView() {
                   <button
                     type="button"
                     onClick={openNewSite}
-                    disabled={isSitesBusy}
+                    disabled={isSitesBusy || !canCreateSites}
+                    title={createPermissionTitle}
                     className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="h-4 w-4" />
@@ -1487,7 +1671,8 @@ function SitesListView() {
               <button
                 type="button"
                 onClick={() => void handleDeleteSite()}
-                disabled={isSiteMutationBusy || deleteConfirmationText.trim() !== pendingDelete.name}
+                disabled={isSiteMutationBusy || !canDeleteSites || deleteConfirmationText.trim() !== pendingDelete.name}
+                title={deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSiteMutationBusy ? 'Deleting...' : 'Delete site'}
