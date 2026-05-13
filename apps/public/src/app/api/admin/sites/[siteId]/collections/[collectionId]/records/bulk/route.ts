@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { PublishStatus } from '@backy-cms/core';
+import type { BackyJsonObject, PublishStatus } from '@backy-cms/core';
 import {
   deleteAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -14,6 +14,7 @@ import {
   updateAdminCollectionRecord,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -26,10 +27,32 @@ interface RouteParams {
   }>;
 }
 
+interface CollectionAuditSource {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface CollectionRecordAuditSource {
+  id: string;
+  collectionId: string;
+  slug: string;
+  status: string;
+  values?: Record<string, unknown> | null;
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+}
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
+);
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
 );
 
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
@@ -54,6 +77,44 @@ const parseRecordStatus = (value: unknown): PublishStatus | null => (
     ? value
     : null
 );
+
+const collectionRecordAuditMetadata = (
+  collection: CollectionAuditSource,
+  record: CollectionRecordAuditSource,
+): BackyJsonObject => {
+  const valueKeys = Object.keys(toRecord(record.values)).sort();
+  return {
+    collectionId: collection.id,
+    collectionName: collection.name,
+    collectionSlug: collection.slug,
+    recordId: record.id,
+    slug: record.slug,
+    status: record.status,
+    valueKeys,
+    valueCount: valueKeys.length,
+    scheduledAt: record.scheduledAt || null,
+    publishedAt: record.publishedAt || null,
+  };
+};
+
+const bulkRecordAuditMetadata = (
+  collection: CollectionAuditSource,
+  record: CollectionRecordAuditSource,
+  input: {
+    action: string;
+    requestedRecordIds: string[];
+    matchedCount: number;
+    changedFields?: string[];
+  },
+): BackyJsonObject => ({
+  ...collectionRecordAuditMetadata(collection, record),
+  bulk: true,
+  bulkAction: input.action,
+  requestedRecordIds: input.requestedRecordIds,
+  requestedCount: input.requestedRecordIds.length,
+  matchedCount: input.matchedCount,
+  changedFields: input.changedFields || [],
+});
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -89,6 +150,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (action === 'delete') {
         let deleted = 0;
         let skipped = 0;
+        const deletedRecords: CollectionRecordAuditSource[] = [];
 
         for (const recordId of recordIds) {
           const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
@@ -99,11 +161,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
 
           if (await repositories.collections.deleteRecord(site.id, collection.id, record.id)) {
+            deletedRecords.push(record);
             deleted += 1;
           } else {
             skipped += 1;
           }
         }
+
+        for (const record of deletedRecords) {
+          await recordAdminAudit({
+            repositories,
+            siteId: site.id,
+            entity: 'collectionRecord',
+            entityId: record.id,
+            action: 'delete',
+            before: collectionRecordAuditMetadata(collection, record),
+            metadata: bulkRecordAuditMetadata(collection, record, {
+              action,
+              requestedRecordIds: recordIds,
+              matchedCount: deleted,
+            }),
+            requestId,
+          });
+        }
+
         const cacheInvalidation = deleted > 0
           ? await recordSiteCacheInvalidation(repositories, {
               siteId: site.id,
@@ -136,6 +217,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         const records = [];
+        const updatedRecords: Array<{
+          before: CollectionRecordAuditSource;
+          after: CollectionRecordAuditSource;
+        }> = [];
         let updated = 0;
         let skipped = 0;
 
@@ -149,8 +234,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
           const saved = (await repositories.collections.updateRecord(site.id, collection.id, record.id, { status })).item;
           records.push(saved);
+          updatedRecords.push({ before: record, after: saved });
           updated += 1;
         }
+
+        for (const { before, after } of updatedRecords) {
+          await recordAdminAudit({
+            repositories,
+            siteId: site.id,
+            entity: 'collectionRecord',
+            entityId: after.id,
+            action: 'update',
+            before: collectionRecordAuditMetadata(collection, before),
+            after: collectionRecordAuditMetadata(collection, after),
+            metadata: bulkRecordAuditMetadata(collection, after, {
+              action,
+              requestedRecordIds: recordIds,
+              matchedCount: updated,
+              changedFields: ['status'],
+            }),
+            requestId,
+          });
+        }
+
         const cacheInvalidation = updated > 0
           ? await recordSiteCacheInvalidation(repositories, {
               siteId: site.id,
@@ -199,6 +305,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (action === 'delete') {
       let deleted = 0;
       let skipped = 0;
+      const deletedRecords: CollectionRecordAuditSource[] = [];
 
       for (const recordId of recordIds) {
         const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });
@@ -208,10 +315,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         if (deleteAdminCollectionRecord(site.id, collection.id, record.id)) {
+          deletedRecords.push(record);
           deleted += 1;
         } else {
           skipped += 1;
         }
+      }
+
+      for (const record of deletedRecords) {
+        await recordAdminAudit({
+          siteId: site.id,
+          entity: 'collectionRecord',
+          entityId: record.id,
+          action: 'delete',
+          before: collectionRecordAuditMetadata(collection, record),
+          metadata: bulkRecordAuditMetadata(collection, record, {
+            action,
+            requestedRecordIds: recordIds,
+            matchedCount: deleted,
+          }),
+          requestId,
+        });
       }
 
       return NextResponse.json({
@@ -234,6 +358,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const records = [];
+      const updatedRecords: Array<{
+        before: CollectionRecordAuditSource;
+        after: CollectionRecordAuditSource;
+      }> = [];
       let updated = 0;
       let skipped = 0;
 
@@ -247,10 +375,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const saved = updateAdminCollectionRecord(site.id, collection.id, record.id, { status });
         if (saved) {
           records.push(saved);
+          updatedRecords.push({ before: record, after: saved });
           updated += 1;
         } else {
           skipped += 1;
         }
+      }
+
+      for (const { before, after } of updatedRecords) {
+        await recordAdminAudit({
+          siteId: site.id,
+          entity: 'collectionRecord',
+          entityId: after.id,
+          action: 'update',
+          before: collectionRecordAuditMetadata(collection, before),
+          after: collectionRecordAuditMetadata(collection, after),
+          metadata: bulkRecordAuditMetadata(collection, after, {
+            action,
+            requestedRecordIds: recordIds,
+            matchedCount: updated,
+            changedFields: ['status'],
+          }),
+          requestId,
+        });
       }
 
       return NextResponse.json({

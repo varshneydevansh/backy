@@ -4430,6 +4430,15 @@ try {
     assert(bulkPublish.response.status === 200, `${bulkPublish.url} expected 200, got ${bulkPublish.response.status}`);
     assert(bulkPublish.json?.data?.updated === 2, `${bulkPublish.url} expected two bulk-updated records`);
     assert(bulkPublish.json?.data?.records?.every((record) => record.status === 'published'), `${bulkPublish.url} expected published records`);
+    const bulkPublishAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${bulkRecordIds[0]}&action=update&requestId=${bulkPublish.json.requestId}`);
+    assert(bulkPublishAudit.response.status === 200, `${bulkPublishAudit.url} expected bulk publish audit readback`);
+    assert(bulkPublishAudit.json?.data?.logs?.some((entry) => (
+      entry.metadata?.bulk === true
+      && entry.metadata?.bulkAction === 'updateStatus'
+      && entry.metadata?.matchedCount === 2
+      && entry.before?.status === 'draft'
+      && entry.after?.status === 'published'
+    )), `${bulkPublishAudit.url} missing bulk publish audit log`);
 
     const bulkDelete = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/bulk`, {
       method: 'POST',
@@ -4443,6 +4452,14 @@ try {
     });
     assert(bulkDelete.response.status === 200, `${bulkDelete.url} expected 200, got ${bulkDelete.response.status}`);
     assert(bulkDelete.json?.data?.deleted === 2, `${bulkDelete.url} expected two bulk-deleted records`);
+    const bulkDeleteAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=collectionRecord&entityId=${bulkRecordIds[0]}&action=delete&requestId=${bulkDelete.json.requestId}`);
+    assert(bulkDeleteAudit.response.status === 200, `${bulkDeleteAudit.url} expected bulk delete audit readback`);
+    assert(bulkDeleteAudit.json?.data?.logs?.some((entry) => (
+      entry.metadata?.bulk === true
+      && entry.metadata?.bulkAction === 'delete'
+      && entry.metadata?.matchedCount === 2
+      && entry.before?.status === 'published'
+    )), `${bulkDeleteAudit.url} missing bulk delete audit log`);
 
     const dynamicListPath = `/directory`;
     const dynamicListResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicListPath)}`);
