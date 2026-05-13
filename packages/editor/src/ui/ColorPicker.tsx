@@ -188,6 +188,7 @@ export const ColorPicker = ({
       <button
         type="button"
         className="w-full mt-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md"
+        data-testid={testId ? `${testId}-clear` : undefined}
         onMouseDown={(e) => {
           e.preventDefault();
           onChange('');

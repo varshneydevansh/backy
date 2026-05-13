@@ -2073,8 +2073,12 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       const restoredSelection = restoreSelection({ requireTextSelection: false });
       if (!restoredSelection) {
         if (!removeEmptyTableColumn(editor)) return false;
-      } else if (!removeEmptyTableColumn(editor) && !removeSelectedTableColumn(editor)) {
-        return false;
+      } else {
+        const removedSelectedColumn = removeSelectedTableColumn(editor);
+        const removedEmptyColumn = removeEmptyTableColumn(editor);
+        if (!removedSelectedColumn && !removedEmptyColumn) {
+          return false;
+        }
       }
 
       debug('removeTableColumn.success', {

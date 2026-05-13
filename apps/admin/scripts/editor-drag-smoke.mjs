@@ -4512,6 +4512,92 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `Rich-text table cell vertical alignment control did not apply only to the selected cell: ${JSON.stringify(tableCellVerticalState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const selectedClearTableCell = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 2');
+  })()`);
+  assert(selectedClearTableCell?.ok, `Unable to select table cell before color clear check: ${JSON.stringify(selectedClearTableCell)}`);
+
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#fce5cd');
+  await activateTextEditing(client, elementId);
+  const reselectedClearBorderSetTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedClearBorderSetTableCell?.ok, `Unable to reselect table cell before border set for clear check: ${JSON.stringify(reselectedClearBorderSetTableCell)}`);
+  await selectColorPickerValue(client, 'rich-text-table-cell-border', '#ea9999');
+  await sleep(500);
+
+  const tableCellClearSetState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const targetCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 2')
+    ));
+    return {
+      targetBackgroundColor: targetCell ? window.getComputedStyle(targetCell).backgroundColor : '',
+      targetBorderColor: targetCell ? window.getComputedStyle(targetCell).borderTopColor : '',
+      targetCellBackgroundColor: targetCellNode?.backgroundColor || '',
+      targetCellBorderColor: targetCellNode?.borderColor || '',
+      html: targetCell?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCellClearSetState.targetBackgroundColor === 'rgb(252, 229, 205)' &&
+      tableCellClearSetState.targetBorderColor === 'rgb(234, 153, 153)' &&
+      tableCellClearSetState.targetCellBackgroundColor === '#fce5cd' &&
+      tableCellClearSetState.targetCellBorderColor === '#ea9999',
+    `Rich-text table cell color setup before clear did not apply: ${JSON.stringify(tableCellClearSetState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const reselectedClearFillTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedClearFillTableCell?.ok, `Unable to reselect table cell before fill clear: ${JSON.stringify(reselectedClearFillTableCell)}`);
+  await clearColorPickerValue(client, 'rich-text-table-cell-fill');
+  await activateTextEditing(client, elementId);
+  const reselectedClearBorderTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 2') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedClearBorderTableCell?.ok, `Unable to reselect table cell before border clear: ${JSON.stringify(reselectedClearBorderTableCell)}`);
+  await clearColorPickerValue(client, 'rich-text-table-cell-border');
+  await sleep(500);
+
+  const tableCellClearState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const targetCell = cells.find((cell) => (cell.textContent || '').includes('Column 2'));
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const targetCellNode = slateState?.types?.find((node) => (
+      (node.type === 'td' || node.type === 'th') &&
+      (node.text || '').includes('Column 2')
+    ));
+    return {
+      targetBackgroundColor: targetCell ? window.getComputedStyle(targetCell).backgroundColor : '',
+      targetBorderColor: targetCell ? window.getComputedStyle(targetCell).borderTopColor : '',
+      targetCellBackgroundColor: targetCellNode?.backgroundColor || '',
+      targetCellBorderColor: targetCellNode?.borderColor || '',
+      html: targetCell?.outerHTML || '',
+      slateState,
+    };
+  })()`);
+  assert(
+    tableCellClearState.targetBackgroundColor !== 'rgb(252, 229, 205)' &&
+      tableCellClearState.targetBorderColor !== 'rgb(234, 153, 153)' &&
+      tableCellClearState.targetCellBackgroundColor === '' &&
+      tableCellClearState.targetCellBorderColor === '',
+    `Rich-text table cell color clear did not remove selected cell colors: ${JSON.stringify(tableCellClearState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const reselectedAlignedTableCell = await evaluate(client, `window.__backySelectActiveEditorTableCell?.('Column 1') || { ok: false, reason: 'missing-active-editor-table-cell-helper' }`);
+  assert(reselectedAlignedTableCell?.ok, `Unable to reselect table cell before alignment control: ${JSON.stringify(reselectedAlignedTableCell)}`);
   await mouseDownControlByTestId(client, 'rich-text-align-center');
   await sleep(500);
 
@@ -4621,6 +4707,13 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     selectedVerticalTableCell,
     reselectedVerticalTableCell,
     tableCellVerticalState,
+    selectedClearTableCell,
+    reselectedClearBorderSetTableCell,
+    reselectedClearFillTableCell,
+    reselectedClearBorderTableCell,
+    tableCellClearSetState,
+    tableCellClearState,
+    reselectedAlignedTableCell,
     tableCellAlignmentState,
     reselectedHeaderCell,
     restoredHeaderTableState,
@@ -4775,6 +4868,36 @@ const selectColorPickerValue = async (client, testId, color) => {
   assert(selected?.ok, `Unable to select ${color} from ${testId}: ${JSON.stringify(selected)}`);
   await sleep(350);
   return selected;
+};
+
+const clearColorPickerValue = async (client, testId) => {
+  await mouseDownControlByTestId(client, testId);
+  await sleep(150);
+
+  const cleared = await evaluate(client, `(() => {
+    const clearButton = document.querySelector('[data-testid="${testId}-clear"]');
+    if (!(clearButton instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-clear-button',
+        testId: ${JSON.stringify(testId)},
+        openPopoverText: document.body.textContent?.slice(-1000) || '',
+      };
+    }
+
+    clearButton.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      view: window,
+    }));
+    return { ok: true, testId: ${JSON.stringify(testId)} };
+  })()`);
+
+  assert(cleared?.ok, `Unable to clear ${testId}: ${JSON.stringify(cleared)}`);
+  await sleep(350);
+  return cleared;
 };
 
 const clickSave = async (client) => {
