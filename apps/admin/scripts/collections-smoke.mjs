@@ -730,6 +730,7 @@ const assertNewCollectionButtonReset = async (client) => {
       const form = document.querySelector('#collections-schema');
       return {
         hasNotice: body.includes('New collection draft ready'),
+        hasDraftState: Boolean(document.querySelector('[data-testid="collections-new-draft-state"]')),
         nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
         activeElementId: document.activeElement?.id || '',
         formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
@@ -738,6 +739,7 @@ const assertNewCollectionButtonReset = async (client) => {
     })()`);
     if (
       state.hasNotice &&
+      state.hasDraftState &&
       state.nameValue === '' &&
       (state.activeElementId === 'collections-schema-name' || (state.formTop !== null && state.formTop < state.viewportHeight))
     ) {
