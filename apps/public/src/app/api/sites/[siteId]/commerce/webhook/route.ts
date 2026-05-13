@@ -2,12 +2,17 @@ import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
+import {
+  findProcessedCommerceWebhookAuditEvent,
+  isProcessedCommerceWebhookAuditEvent,
+} from '@/lib/commerceWebhookIdempotency';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import {
   getAdminSettings,
   getCollectionByIdOrSlug,
   getSiteByIdOrSlug,
+  listAuditEvents,
   listCollectionRecords,
   trackWebhookEvent,
   updateAdminCollectionRecord,
@@ -179,6 +184,27 @@ const hasProcessedEvent = (notes: unknown, eventIdValue: string): boolean => (
   Boolean(eventIdValue) && textValue(notes).includes(`(${eventIdValue})`)
 );
 
+const hasProcessedDemoWebhookEvent = (siteId: string, orderId: string, providerEventId: string): boolean => {
+  let offset = 0;
+  do {
+    const result = listAuditEvents(siteId, {
+      kind: 'commerce-webhook',
+      limit: 100,
+      offset,
+    });
+    if (result.events.some((event) => (
+      isProcessedCommerceWebhookAuditEvent(event, {
+        providerEventId,
+        orderId,
+      })
+    ))) {
+      return true;
+    }
+    if (!result.pagination.hasMore) return false;
+    offset += result.pagination.limit;
+  } while (true);
+};
+
 const eventAllowed = (allowlist: string[], type: string): boolean => (
   allowlist.length === 0 || allowlist.includes(type)
 );
@@ -296,7 +322,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!order) {
         return errorResponse(404, 'COMMERCE_WEBHOOK_ORDER_NOT_FOUND', 'No private order matched the provider webhook event.', requestId, { sessionId, orderNumber, orderSlug, paymentReference });
       }
-      if (hasProcessedEvent(order.values.notes, providerEventId)) {
+      const processedAuditEvent = await findProcessedCommerceWebhookAuditEvent(repositories, {
+        siteId: site.id,
+        orderId: order.id,
+        providerEventId,
+      });
+      if (processedAuditEvent || hasProcessedEvent(order.values.notes, providerEventId)) {
         return publicContractJson({
           success: true,
           requestId,
@@ -422,7 +453,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
       return errorResponse(404, 'COMMERCE_WEBHOOK_ORDER_NOT_FOUND', 'No private order matched the provider webhook event.', requestId, { sessionId, orderNumber, orderSlug, paymentReference });
     }
-    if (hasProcessedEvent(order.values.notes, providerEventId)) {
+    if (hasProcessedDemoWebhookEvent(site.id, order.id, providerEventId) || hasProcessedEvent(order.values.notes, providerEventId)) {
       trackWebhookEvent({
         kind: 'commerce-webhook',
         siteId: site.id,
