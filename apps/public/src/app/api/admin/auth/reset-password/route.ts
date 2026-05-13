@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
+import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 
 export const runtime = 'nodejs';
@@ -31,6 +31,28 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const getClientAddress = (request: NextRequest) => (
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  || request.headers.get('x-real-ip')?.trim()
+  || 'unknown'
+);
+
+const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
+  const response = NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many password reset attempts. Please wait before trying again.',
+      },
+    },
+    { status: 429 },
+  );
+  response.headers.set('Retry-After', String(retryAfterSeconds));
+  return response;
+};
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
@@ -43,6 +65,25 @@ export async function POST(request: NextRequest) {
 
   if (password.length < 8) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Password must be at least 8 characters.', requestId);
+  }
+
+  const clientAddress = getClientAddress(request);
+  const clientLimit = checkAdminAuthRateLimit({
+    scope: 'password-reset',
+    identifier: `client:${clientAddress}`,
+    bucket: 'client',
+  });
+  if (!clientLimit.allowed) {
+    return rateLimitResponse(requestId, clientLimit.retryAfterSeconds);
+  }
+
+  const principalLimit = checkAdminAuthRateLimit({
+    scope: 'password-reset',
+    identifier: `token:${token}`,
+    bucket: 'principal',
+  });
+  if (!principalLimit.allowed) {
+    return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
   const result = resetAdminPasswordToken(token, password);

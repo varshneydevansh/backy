@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLocalRecoveryAccount } from '@/lib/admin-auth/sessionStore';
+import { checkAdminAuthRateLimit } from '@/lib/admin-auth/sessionStore';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +14,28 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   } catch {
     return {};
   }
+};
+
+const getClientAddress = (request: NextRequest) => (
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  || request.headers.get('x-real-ip')?.trim()
+  || 'unknown'
+);
+
+const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
+  const response = NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many recovery requests. Please wait before trying again.',
+      },
+    },
+    { status: 429 },
+  );
+  response.headers.set('Retry-After', String(retryAfterSeconds));
+  return response;
 };
 
 export async function POST(request: NextRequest) {
@@ -35,7 +57,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const localRecovery = getLocalRecoveryAccount(email);
+  const clientAddress = getClientAddress(request);
+  const clientLimit = checkAdminAuthRateLimit({
+    scope: 'password-recovery',
+    identifier: `client:${clientAddress}`,
+    bucket: 'client',
+  });
+  if (!clientLimit.allowed) {
+    return rateLimitResponse(requestId, clientLimit.retryAfterSeconds);
+  }
+
+  const principalLimit = checkAdminAuthRateLimit({
+    scope: 'password-recovery',
+    identifier: `email:${email}`,
+    bucket: 'principal',
+  });
+  if (!principalLimit.allowed) {
+    return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
+  }
 
   return NextResponse.json({
     success: true,
@@ -43,10 +82,7 @@ export async function POST(request: NextRequest) {
     data: {
       accepted: true,
       deliveryConfigured: false,
-      localRecovery,
-      message: localRecovery
-        ? 'Local demo recovery is available for this active account.'
-        : 'No local recovery credential is available. Connect email delivery for production password reset.',
+      message: 'If recovery is available for this account, the next steps will be sent through the configured recovery channel.',
     },
   });
 }

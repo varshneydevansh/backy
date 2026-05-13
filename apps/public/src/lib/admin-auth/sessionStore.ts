@@ -1,4 +1,4 @@
-import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 
 export interface AdminAuthUser {
@@ -95,6 +95,7 @@ const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
   __BACKY_ADMIN_INVITE_TOKENS__?: Map<string, AdminInviteToken>;
   __BACKY_ADMIN_LOCAL_CREDENTIALS__?: Map<string, LocalCredential>;
+  __BACKY_ADMIN_AUTH_RATE_LIMITS__?: Map<string, { count: number; resetAt: number }>;
 };
 
 const ADMIN_SESSIONS = globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ ?? new Map<string, StoredSession>();
@@ -108,6 +109,9 @@ globalAdminSessionStore.__BACKY_ADMIN_INVITE_TOKENS__ = INVITE_TOKENS;
 
 const LOCAL_CREDENTIALS = globalAdminSessionStore.__BACKY_ADMIN_LOCAL_CREDENTIALS__ ?? new Map<string, LocalCredential>();
 globalAdminSessionStore.__BACKY_ADMIN_LOCAL_CREDENTIALS__ = LOCAL_CREDENTIALS;
+
+const AUTH_RATE_LIMITS = globalAdminSessionStore.__BACKY_ADMIN_AUTH_RATE_LIMITS__ ?? new Map<string, { count: number; resetAt: number }>();
+globalAdminSessionStore.__BACKY_ADMIN_AUTH_RATE_LIMITS__ = AUTH_RATE_LIMITS;
 
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
@@ -129,6 +133,22 @@ const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; la
 
 const normalizeEmail = (value: unknown) => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
+);
+
+const readPositiveInteger = (value: string | undefined, fallback: number, min: number, max: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.floor(parsed), min), max);
+};
+
+const authRateLimitConfig = () => ({
+  max: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_MAX, 5, 1, 100),
+  clientMax: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_CLIENT_RATE_LIMIT_MAX, 25, 1, 500),
+  windowMs: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1_000, 24 * 60 * 60 * 1000),
+});
+
+const hashRateLimitKey = (value: string) => (
+  createHash('sha256').update(value).digest('hex').slice(0, 32)
 );
 
 const hashPassword = (password: string, salt: string) => (
@@ -194,6 +214,46 @@ const pruneExpiredSessions = () => {
     }
   }
 };
+
+export function checkAdminAuthRateLimit(input: {
+  scope: 'password-recovery' | 'password-reset';
+  identifier: string;
+  bucket?: 'principal' | 'client';
+}): { allowed: true; remaining: number; resetAt: string } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
+  const { max, clientMax, windowMs } = authRateLimitConfig();
+  const effectiveMax = input.bucket === 'client' ? clientMax : max;
+  const now = Date.now();
+  const normalizedIdentifier = input.identifier.trim().toLowerCase() || 'anonymous';
+  const key = `${input.scope}:${hashRateLimitKey(normalizedIdentifier)}`;
+
+  for (const [storedKey, state] of AUTH_RATE_LIMITS.entries()) {
+    if (state.resetAt <= now) {
+      AUTH_RATE_LIMITS.delete(storedKey);
+    }
+  }
+
+  const current = AUTH_RATE_LIMITS.get(key);
+  const state = current && current.resetAt > now
+    ? current
+    : { count: 0, resetAt: now + windowMs };
+
+  state.count += 1;
+  AUTH_RATE_LIMITS.set(key, state);
+
+  if (state.count > effectiveMax) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((state.resetAt - now) / 1000)),
+      resetAt: new Date(state.resetAt).toISOString(),
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, effectiveMax - state.count),
+    resetAt: new Date(state.resetAt).toISOString(),
+  };
+}
 
 export function authenticateAdminCredentials(email: string, password: string): AdminSession | null {
   pruneExpiredSessions();
@@ -486,32 +546,5 @@ export function acceptAdminInviteToken(token: string | null | undefined): AdminI
     user,
     session,
     previousStatus,
-  };
-}
-
-export function getLocalRecoveryAccount(email: string) {
-  const normalizedEmail = normalizeEmail(email);
-  const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
-  if (localCredential) {
-    const user = getAdminUserByEmail(localCredential.userEmail);
-    if (!user || user.status !== 'active') return null;
-
-    return {
-      email: normalizedEmail,
-      label: localCredential.label,
-      demoPassword: null,
-    };
-  }
-
-  const credential = DEMO_CREDENTIALS[normalizedEmail];
-  if (!credential) return null;
-
-  const user = getAdminUserByEmail(credential.userEmail);
-  if (!user || user.status !== 'active') return null;
-
-  return {
-    email: normalizedEmail,
-    label: credential.label,
-    demoPassword: credential.password,
   };
 }

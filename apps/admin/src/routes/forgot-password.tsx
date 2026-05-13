@@ -24,7 +24,6 @@ function ForgotPasswordPage() {
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
   const [recoveryState, setRecoveryState] = useState<RecoveryState>('ready');
   const [message, setMessage] = useState<string | null>(null);
-  const [demoPassword, setDemoPassword] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const readiness = useMemo(() => Math.round(([emailIsValid, !isSubmitting].filter(Boolean).length / 2) * 100), [emailIsValid, isSubmitting]);
@@ -35,7 +34,6 @@ function ForgotPasswordPage() {
 
     const normalizedEmail = email.trim().toLowerCase();
     setEmail(normalizedEmail);
-    setDemoPassword(null);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setRecoveryState('error');
@@ -50,13 +48,6 @@ function ForgotPasswordPage() {
     try {
       const recovery = await requestAdminPasswordRecovery(normalizedEmail);
       setRecoveryState('sent');
-
-      if (recovery.localRecovery?.demoPassword) {
-        setDemoPassword(recovery.localRecovery.demoPassword);
-        setMessage(`${recovery.localRecovery.label} local recovery is ready. Use the demo password below to sign in.`);
-        return;
-      }
-
       setMessage(recovery.message || 'Password recovery was requested. Check your configured delivery channel for next steps.');
     } catch (error) {
       setRecoveryState('error');
@@ -89,7 +80,7 @@ function ForgotPasswordPage() {
               Request workspace password recovery and return to Backy when your credential is ready.
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-              Recovery checks the admin auth API for local-demo credentials and keeps production delivery messaging in the same unauthenticated flow.
+              Recovery keeps account lookup private and uses the same unauthenticated flow for every workspace email request.
             </p>
           </div>
         </div>
@@ -154,7 +145,6 @@ function ForgotPasswordPage() {
                     setEmail(event.target.value);
                     setRecoveryState('ready');
                     setMessage(null);
-                    setDemoPassword(null);
                   }}
                   placeholder="admin@backy.io"
                   className={cn(
@@ -179,13 +169,6 @@ function ForgotPasswordPage() {
               )}
               >
                 {message}
-              </div>
-            )}
-
-            {demoPassword && (
-              <div className="mt-4 rounded-lg border border-border bg-background p-3">
-                <div className="text-xs font-medium text-muted-foreground">Demo password</div>
-                <div className="mt-1 font-mono text-sm font-semibold text-foreground">{demoPassword}</div>
               </div>
             )}
 

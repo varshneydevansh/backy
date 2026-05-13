@@ -3,6 +3,7 @@
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 const adminDevOrigin = 'http://localhost:5173';
+const recoveryRateLimitMax = Math.min(Math.max(Number.parseInt(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_MAX || '5', 10) || 5, 1), 100);
 
 function assert(condition, message) {
   if (!condition) {
@@ -116,6 +117,69 @@ await record('admin api key cannot use owner-only permissions', async () => {
   assert(result.json?.success === false, `${result.url} expected error envelope`);
   assert(result.json?.error?.code === 'FORBIDDEN_PERMISSION', `${result.url} expected FORBIDDEN_PERMISSION error code`);
   assertCorsAndRequestId(result);
+});
+
+await record('password recovery does not enumerate local accounts', async () => {
+  const known = await request('/api/admin/auth/password-recovery', {
+    method: 'POST',
+    headers: {
+      origin: adminDevOrigin,
+      'content-type': 'application/json',
+      'x-forwarded-for': '203.0.113.10',
+    },
+    body: JSON.stringify({ email: 'admin@backy.io' }),
+  });
+  const unknown = await request('/api/admin/auth/password-recovery', {
+    method: 'POST',
+    headers: {
+      origin: adminDevOrigin,
+      'content-type': 'application/json',
+      'x-forwarded-for': '203.0.113.11',
+    },
+    body: JSON.stringify({ email: `missing-${Date.now()}@example.invalid` }),
+  });
+
+  assert(known.response.status === 200, `${known.url} expected 200 for known recovery request, got ${known.response.status}`);
+  assert(unknown.response.status === 200, `${unknown.url} expected 200 for unknown recovery request, got ${unknown.response.status}`);
+  assert(known.json?.success === true && unknown.json?.success === true, 'recovery requests should return success envelopes');
+  assert(known.json?.data?.accepted === true && unknown.json?.data?.accepted === true, 'recovery requests should be accepted generically');
+  assert(!Object.hasOwn(known.json?.data || {}, 'localRecovery'), 'known recovery response must not include localRecovery');
+  assert(!Object.hasOwn(unknown.json?.data || {}, 'localRecovery'), 'unknown recovery response must not include localRecovery');
+  assert(
+    JSON.stringify(known.json.data) === JSON.stringify(unknown.json.data),
+    'known and unknown recovery responses should have the same data envelope',
+  );
+  assertCorsAndRequestId(known);
+  assertCorsAndRequestId(unknown);
+});
+
+await record('password recovery rate limits repeated requests', async () => {
+  const email = `rate-limit-${Date.now()}@example.invalid`;
+  const headers = {
+    origin: adminDevOrigin,
+    'content-type': 'application/json',
+    'x-forwarded-for': '203.0.113.12',
+  };
+  let limited = null;
+
+  for (let attempt = 0; attempt < recoveryRateLimitMax + 1; attempt += 1) {
+    const result = await request('/api/admin/auth/password-recovery', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email }),
+    });
+    if (result.response.status === 429) {
+      limited = result;
+      break;
+    }
+  }
+
+  assert(limited, 'expected repeated password recovery requests to be rate limited');
+  assert(limited.response.status === 429, `${limited.url} expected 429, got ${limited.response.status}`);
+  assert(limited.json?.success === false, `${limited.url} expected error envelope`);
+  assert(limited.json?.error?.code === 'RATE_LIMITED', `${limited.url} expected RATE_LIMITED error code`);
+  assert(Number(limited.response.headers.get('retry-after')) > 0, `${limited.url} expected retry-after header`);
+  assertCorsAndRequestId(limited);
 });
 
 console.log(`Admin auth smoke passed against ${baseUrl}`);

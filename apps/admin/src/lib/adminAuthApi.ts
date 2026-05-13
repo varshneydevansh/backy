@@ -140,11 +140,6 @@ interface AdminPasswordRecoveryResponse {
   data?: {
     accepted: boolean;
     deliveryConfigured: boolean;
-    localRecovery?: {
-      email: string;
-      label: string;
-      demoPassword: string | null;
-    } | null;
     message?: string;
   };
   error?: {
