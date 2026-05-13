@@ -40,13 +40,16 @@ import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import { useAuthStore } from '@/stores/authStore';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
+  getUserPermissions,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
   validateSettingsInfrastructure,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
   updateSettings as updateBackendSettings,
@@ -57,6 +60,15 @@ import {
 // ============================================
 
 type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'commerce' | 'notifications' | 'security';
+type SettingsPermissionKey = 'settings.view' | 'settings.configure' | 'settings.manageKeys' | 'media.configure' | 'activity.export';
+
+const SETTINGS_PERMISSION_ROLE_DEFAULTS: Record<SettingsPermissionKey, Array<'owner' | 'admin' | 'editor' | 'viewer'>> = {
+  'settings.view': ['owner', 'admin'],
+  'settings.configure': ['owner', 'admin'],
+  'settings.manageKeys': ['owner'],
+  'media.configure': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
+};
 
 interface SettingsSearch {
   tab?: SettingsTab;
@@ -604,11 +616,26 @@ function SettingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<SettingsDraftSnapshot | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentUser?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const persistedDeliveryMode = useStore((state) => state.settings.deliveryMode);
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
-  const canManageApiKeys = currentUser?.role === 'owner';
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canManageApiKeys = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.view', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const configurePermissionTitle = canConfigureSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const manageKeysPermissionTitle = canManageApiKeys ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const mediaConfigurePermissionTitle = canConfigureMedia ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const activityExportPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const settingsFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureSettings;
+  const infrastructureFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureSettings;
 
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
     const snapshot = createSettingsDraftSnapshot(backendSettings);
@@ -633,7 +660,51 @@ function SettingsPage() {
     }
   }, [activeTab, search.tab]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentUser?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentUser.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(error instanceof Error ? error.message : 'Unable to load settings permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
+
   const loadSettingsAuditLogs = useCallback(async () => {
+    if (isPermissionMatrixPending) return;
+    if (!canExportActivity) {
+      setSettingsAuditLogs([]);
+      setAuditNotice(null);
+      return;
+    }
+
     setIsAuditLoading(true);
     setAuditNotice(null);
 
@@ -649,12 +720,18 @@ function SettingsPage() {
     } finally {
       setIsAuditLoading(false);
     }
-  }, []);
+  }, [canExportActivity, isPermissionMatrixPending]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadSettings = async () => {
+      if (isPermissionMatrixPending) return;
+      if (!canViewSettings) {
+        setNotice(viewPermissionTitle || 'Your account cannot view settings.');
+        return;
+      }
+
       try {
         const backendSettings = await getSettings();
         if (!cancelled) {
@@ -673,14 +750,20 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyBackendSettings]);
+  }, [applyBackendSettings, canViewSettings, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
-    void loadSettingsAuditLogs();
-  }, [loadSettingsAuditLogs]);
+    if (!isPermissionMatrixPending) {
+      void loadSettingsAuditLogs();
+    }
+  }, [isPermissionMatrixPending, loadSettingsAuditLogs]);
 
   const handleSave = async () => {
     if (isSaving) return;
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot configure settings.');
+      return;
+    }
 
     if (blockingValidationIssues.length > 0) {
       setNotice('Fix settings validation issues before saving.');
@@ -706,6 +789,10 @@ function SettingsPage() {
 
   const handleRegenerateKeys = async (scope: 'all' | 'public' | 'admin' = 'all') => {
     setNotice(null);
+    if (!canManageApiKeys) {
+      setNotice(manageKeysPermissionTitle || 'Your account cannot regenerate API keys.');
+      return;
+    }
 
     try {
       const backendSettings = await regenerateSettingsApiKeys(scope);
@@ -1019,6 +1106,10 @@ function SettingsPage() {
 
   const copySettingsHandoffText = async (value: string, label: string) => {
     if (isSaving) return;
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot export settings handoff manifests.');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1030,6 +1121,10 @@ function SettingsPage() {
 
   const downloadSettingsHandoff = () => {
     if (isSaving) return;
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot export settings handoff manifests.');
+      return;
+    }
 
     const blob = new Blob([settingsHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1044,6 +1139,7 @@ function SettingsPage() {
   };
 
   const updateNotificationSettings = (next: Partial<NotificationSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     setIntegrations((current) => ({
       ...current,
       notifications: {
@@ -1055,6 +1151,7 @@ function SettingsPage() {
     }));
   };
   const updateGeneralSettings = (next: Partial<GeneralSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     setIntegrations((current) => ({
       ...current,
       general: {
@@ -1064,6 +1161,7 @@ function SettingsPage() {
     }));
   };
   const updateAppearanceSettings = (next: Partial<AppearanceSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     setIntegrations((current) => ({
       ...current,
       appearance: {
@@ -1073,6 +1171,7 @@ function SettingsPage() {
     }));
   };
   const updateSeoSettings = (next: Partial<SeoSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     setIntegrations((current) => ({
       ...current,
       seo: {
@@ -1082,6 +1181,7 @@ function SettingsPage() {
     }));
   };
   const updateCommerceSettings = (next: Partial<CommerceSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     setIntegrations((current) => ({
       ...current,
       commerce: {
@@ -1098,6 +1198,22 @@ function SettingsPage() {
     });
   };
 
+  if (!isPermissionMatrixPending && !canViewSettings) {
+    return (
+      <div className="flex animate-fade-in flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold">Settings unavailable</h1>
+          <p className="mt-1 text-muted-foreground">
+            {viewPermissionTitle || 'Your account cannot view settings.'}
+          </p>
+        </div>
+        <Notice tone="warning">
+          {permissionError || viewPermissionTitle || 'Ask an owner or admin to grant settings.view access.'}
+        </Notice>
+      </div>
+    );
+  }
+
   return (
     <div className="flex animate-fade-in flex-col gap-6">
       {/* Page Header */}
@@ -1113,7 +1229,8 @@ function SettingsPage() {
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
-              disabled={isSaving}
+              disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
+              title={configurePermissionTitle}
               onClick={discardUnsavedChanges}
             >
               Discard changes
@@ -1121,7 +1238,8 @@ function SettingsPage() {
           )}
           <Button
             variant="outline"
-            disabled={isSaving}
+            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
+            title={configurePermissionTitle}
             onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
             iconStart={<Copy className="size-4" />}
           >
@@ -1129,7 +1247,8 @@ function SettingsPage() {
           </Button>
           <Button
             variant="outline"
-            disabled={isSaving}
+            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
+            title={configurePermissionTitle}
             onClick={downloadSettingsHandoff}
             iconStart={<Download className="size-4" />}
           >
@@ -1138,7 +1257,8 @@ function SettingsPage() {
           <Button
             variant="primary"
             onClick={() => void handleSave()}
-            disabled={isSaving || !hasUnsavedChanges || blockingValidationIssues.length > 0}
+            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings || !hasUnsavedChanges || blockingValidationIssues.length > 0}
+            title={configurePermissionTitle}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
           >
             {saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes'}
@@ -1148,6 +1268,10 @@ function SettingsPage() {
 
       {notice && (
         <Notice tone="warning">{notice}</Notice>
+      )}
+
+      {permissionError && (
+        <Notice tone="warning">{permissionError}</Notice>
       )}
 
       {hasUnsavedChanges && blockingValidationIssues.length === 0 && (
@@ -1318,6 +1442,15 @@ function SettingsPage() {
       {/* Tab Content */}
       <Panel id="settings-tab-content" className="scroll-mt-24" role="tabpanel">
         <PanelContent className="pt-5">
+        <fieldset
+          disabled={activeTab === 'security'
+            ? isSaving || isPermissionMatrixPending || (!canConfigureSettings && !canManageApiKeys)
+            : activeTab === 'infrastructure'
+              ? infrastructureFormDisabled
+              : settingsFormDisabled}
+          className="contents disabled:cursor-not-allowed"
+          title={activeTab === 'infrastructure' ? mediaConfigurePermissionTitle || configurePermissionTitle : configurePermissionTitle}
+        >
         {activeTab === 'general' && (
           <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
         )}
@@ -1343,7 +1476,7 @@ function SettingsPage() {
             runtimeSupabase={runtimeSupabase}
             runtimeVercel={runtimeVercel}
             envContract={infrastructureEnvContract}
-            disabled={isSaving}
+            disabled={infrastructureFormDisabled}
             onChange={setIntegrations}
           />
         )}
@@ -1367,12 +1500,18 @@ function SettingsPage() {
             onAuthSettingsChange={setAuthSettings}
             onRegenerateKeys={handleRegenerateKeys}
             canManageApiKeys={canManageApiKeys}
+            canConfigureSettings={canConfigureSettings}
+            manageKeysPermissionTitle={manageKeysPermissionTitle}
+            configurePermissionTitle={configurePermissionTitle}
             auditLogs={settingsAuditLogs}
             isAuditLoading={isAuditLoading}
             auditNotice={auditNotice}
+            canExportActivity={canExportActivity}
+            activityExportPermissionTitle={activityExportPermissionTitle}
             onRefreshAudit={() => void loadSettingsAuditLogs()}
           />
         )}
+        </fieldset>
         </PanelContent>
       </Panel>
     </div>
@@ -4102,9 +4241,14 @@ function SecuritySettings({
   onAuthSettingsChange,
   onRegenerateKeys,
   canManageApiKeys,
+  canConfigureSettings,
+  manageKeysPermissionTitle,
+  configurePermissionTitle,
   auditLogs,
   isAuditLoading,
   auditNotice,
+  canExportActivity,
+  activityExportPermissionTitle,
   onRefreshAudit,
 }: {
   publicApiKey: string;
@@ -4113,9 +4257,14 @@ function SecuritySettings({
   onAuthSettingsChange: Dispatch<SetStateAction<SiteSettingsInput['auth']>>;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
   canManageApiKeys: boolean;
+  canConfigureSettings: boolean;
+  manageKeysPermissionTitle?: string;
+  configurePermissionTitle?: string;
   auditLogs: AdminAuditLog[];
   isAuditLoading: boolean;
   auditNotice: string | null;
+  canExportActivity: boolean;
+  activityExportPermissionTitle?: string;
   onRefreshAudit: () => void;
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
@@ -4126,6 +4275,7 @@ function SecuritySettings({
   };
 
   const updatePolicy = (next: Partial<AuthSettingsConfig>) => {
+    if (!canConfigureSettings) return;
     onAuthSettingsChange((current) => ({
       ...DEFAULT_AUTH_SETTINGS,
       ...(current || {}),
@@ -4169,6 +4319,8 @@ function SecuritySettings({
               <input
                 type="checkbox"
                 checked={policy.requireTwoFactor}
+                disabled={!canConfigureSettings}
+                title={configurePermissionTitle}
                 onChange={(event) => updatePolicy({ requireTwoFactor: event.target.checked })}
                 className="size-4 rounded border-input"
               />
@@ -4178,6 +4330,8 @@ function SecuritySettings({
               <input
                 type="checkbox"
                 checked={policy.inviteOnly}
+                disabled={!canConfigureSettings}
+                title={configurePermissionTitle}
                 onChange={(event) => updatePolicy({ inviteOnly: event.target.checked })}
                 className="size-4 rounded border-input"
               />
@@ -4189,6 +4343,8 @@ function SecuritySettings({
                 min={8}
                 max={128}
                 value={policy.minPasswordLength}
+                disabled={!canConfigureSettings}
+                title={configurePermissionTitle}
                 onChange={(event) => updatePolicy({ minPasswordLength: Number(event.target.value) })}
                 className={inputClassName}
               />
@@ -4201,6 +4357,8 @@ function SecuritySettings({
                   min={15}
                   max={10080}
                   value={policy.sessionTimeoutMinutes}
+                  disabled={!canConfigureSettings}
+                  title={configurePermissionTitle}
                   onChange={(event) => updatePolicy({ sessionTimeoutMinutes: Number(event.target.value) })}
                   className={inputClassName}
                 />
@@ -4211,6 +4369,8 @@ function SecuritySettings({
               <span className="font-medium">Allowed email domains</span>
               <input
                 value={policy.allowedEmailDomains}
+                disabled={!canConfigureSettings}
+                title={configurePermissionTitle}
                 onChange={(event) => updatePolicy({ allowedEmailDomains: event.target.value })}
                 placeholder="example.com, agency.dev"
                 className={inputClassName}
@@ -4251,10 +4411,16 @@ function SecuritySettings({
                 </span>
               </div>
               <p className="mt-3 break-all rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
-                {item.value}
+                {item.value || (item.scope === 'admin' && !canManageApiKeys ? 'Hidden without settings.manageKeys' : 'Not configured')}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => void copyKey(item.scope, item.value)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyKey(item.scope, item.value)}
+                  disabled={!item.value || (item.scope === 'admin' && !canManageApiKeys)}
+                  title={item.scope === 'admin' ? manageKeysPermissionTitle : undefined}
+                >
                   {copiedKey === item.scope ? 'Copied' : 'Copy'}
                 </Button>
                 <Button
@@ -4262,7 +4428,7 @@ function SecuritySettings({
                   variant="outline"
                   onClick={() => void rotateKey(item.scope)}
                   disabled={!canManageApiKeys || rotatingKey !== null}
-                  title={canManageApiKeys ? undefined : 'Only owners can regenerate API keys.'}
+                  title={manageKeysPermissionTitle}
                 >
                   {rotatingKey === item.scope ? 'Regenerating...' : `Regenerate ${item.scope}`}
                 </Button>
@@ -4282,7 +4448,7 @@ function SecuritySettings({
               variant="outline"
               onClick={() => void rotateKey('all')}
               disabled={!canManageApiKeys || rotatingKey !== null}
-              title={canManageApiKeys ? undefined : 'Only owners can regenerate API keys.'}
+              title={manageKeysPermissionTitle}
             >
               {rotatingKey === 'all' ? 'Regenerating...' : 'Regenerate all keys'}
             </Button>
@@ -4299,6 +4465,8 @@ function SecuritySettings({
         logs={auditLogs}
         isLoading={isAuditLoading}
         notice={auditNotice}
+        disabled={!canExportActivity}
+        disabledTitle={activityExportPermissionTitle}
         onRefresh={onRefreshAudit}
       />
     </div>
@@ -4368,11 +4536,15 @@ function AuditTrail({
   logs,
   isLoading,
   notice,
+  disabled = false,
+  disabledTitle,
   onRefresh,
 }: {
   logs: AdminAuditLog[];
   isLoading: boolean;
   notice: string | null;
+  disabled?: boolean;
+  disabledTitle?: string;
   onRefresh: () => void;
 }) {
   return (
@@ -4390,7 +4562,8 @@ function AuditTrail({
         <button
           type="button"
           onClick={onRefresh}
-          disabled={isLoading}
+          disabled={isLoading || disabled}
+          title={disabledTitle}
           className={cn(
             'inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium',
             'hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed'

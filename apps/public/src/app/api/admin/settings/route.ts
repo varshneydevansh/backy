@@ -7,9 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
+import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
+import { getAdminSettings, listAdminUserPermissionOverrides, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
 import { getMediaStorageAdapter, getMediaStorageConfigSummary } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import {
@@ -211,13 +212,42 @@ const getMediaScannerRuntimeSummary = () => {
   }
 };
 
-const toAdminSettings = (settings: BackySettings) => ({
-  deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
+const canExposeAdminApiKey = (access: AdminAccessContext) => {
+  if (access.type !== 'session' || !access.session) return false;
+
+  const overrides = listAdminUserPermissionOverrides(access.session.user.id);
+  const matrix = buildUserPermissionMatrix(access.session.user, overrides);
+  return Boolean(matrix.groups
+    .flatMap((group) => group.permissions)
+    .find((permission) => permission.key === 'settings.manageKeys')?.allowed);
+};
+
+type AdminSettingsSource = BackySettings | ReturnType<typeof getAdminSettings>;
+
+const settingsApiKeys = (settings: AdminSettingsSource) => {
+  const apiKeys = settings.apiKeys as {
+    publicKey?: string;
+    publicApiKey?: string;
+    secretKeyId?: string;
+    adminApiKey?: string;
+  };
+
+  return {
+    publicApiKey: apiKeys.publicKey || apiKeys.publicApiKey || '',
+    adminApiKey: apiKeys.secretKeyId || apiKeys.adminApiKey || '',
+  };
+};
+
+const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminApiKey?: boolean } = {}) => {
+  const apiKeys = settingsApiKeys(settings);
+
+  return {
+    deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
   apiKeys: {
-    publicApiKey: settings.apiKeys.publicKey || '',
-    adminApiKey: settings.apiKeys.secretKeyId || '',
+    publicApiKey: apiKeys.publicApiKey,
+    adminApiKey: options.includeAdminApiKey ? apiKeys.adminApiKey : '',
   },
-  storage: settings.storage || {},
+  storage: 'storage' in settings ? settings.storage || {} : {},
   runtimeStorage: getMediaStorageConfigSummary(),
   auth: settings.auth || {},
   integrations: settings.integrations || {},
@@ -226,7 +256,8 @@ const toAdminSettings = (settings: BackySettings) => ({
   runtimeMediaScanner: getMediaScannerRuntimeSummary(),
   runtimeVercel: getVercelRuntimeSummary(),
   updatedAt: settings.updatedAt,
-});
+  };
+};
 
 const parseJsonObject = (value: unknown): BackyJsonObject | undefined => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
@@ -711,7 +742,7 @@ export async function GET(request: NextRequest) {
         success: true,
         requestId,
         data: {
-          settings: toAdminSettings(settings),
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
         },
       });
     }
@@ -721,9 +752,10 @@ export async function GET(request: NextRequest) {
       requestId,
       data: {
         settings: {
-          ...getAdminSettings(),
+          ...toAdminSettings(getAdminSettings(), { includeAdminApiKey: canExposeAdminApiKey(access) }),
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
+          runtimeMediaScanner: getMediaScannerRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
           runtimeVercel: getVercelRuntimeSummary(),
         },
@@ -807,7 +839,7 @@ export async function PATCH(request: NextRequest) {
         success: true,
         requestId,
         data: {
-          settings: toAdminSettings(settings),
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
         },
       });
     }
@@ -839,7 +871,7 @@ export async function PATCH(request: NextRequest) {
       requestId,
       data: {
         settings: {
-          ...settings,
+          ...toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
@@ -896,9 +928,9 @@ export async function POST(request: NextRequest) {
 
     if (body.action === 'validate-infrastructure') {
       const currentSettings = !shouldUseDemoStoreFallback()
-        ? toAdminSettings(await (await getRequiredDatabaseRepositories()).settings.get())
+        ? toAdminSettings(await (await getRequiredDatabaseRepositories()).settings.get(), { includeAdminApiKey: canExposeAdminApiKey(access) })
         : {
-          ...getAdminSettings(),
+          ...toAdminSettings(getAdminSettings(), { includeAdminApiKey: canExposeAdminApiKey(access) }),
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
@@ -969,7 +1001,7 @@ export async function POST(request: NextRequest) {
         success: true,
         requestId,
         data: {
-          settings: toAdminSettings(settings),
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
         },
       });
     }
@@ -993,7 +1025,7 @@ export async function POST(request: NextRequest) {
       requestId,
       data: {
         settings: {
-          ...settings,
+          ...toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeSupabase: getSupabaseRuntimeSummary(),
