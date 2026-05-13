@@ -39,8 +39,10 @@ import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
 import type { CanvasElement, ElementProps } from '@/types/editor';
 import {
   listCollections,
+  listCollectionRecords,
   type Collection,
   type CollectionField,
+  type CollectionRecord,
 } from '@/lib/adminContentApi';
 import {
   buildListContentFromItems,
@@ -781,6 +783,7 @@ export function PropertyPanel({
         >
           <DataBindingProperties
             element={element}
+            siteId={siteId}
             collections={collections}
             collectionsError={collectionsError}
             onChange={guardedOnChange}
@@ -4184,6 +4187,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
 
 interface DataBindingPropertiesProps {
   element: CanvasElement;
+  siteId?: string;
   collections: Collection[];
   collectionsError: string | null;
   onChange: (updates: Partial<CanvasElement>) => void;
@@ -4310,6 +4314,21 @@ const filterValueOptionsForField = (field?: CollectionField | null): Array<{ val
   }
 
   return [];
+};
+
+const collectionRecordLabel = (
+  record: CollectionRecord,
+  collection: Collection | null,
+): string => {
+  const titleField = collection?.fields.find((field) => ['title', 'name', 'label'].includes(field.key))
+    || collection?.fields.find((field) => (
+      typeof record.values?.[field.key] === 'string'
+      && String(record.values[field.key]).trim().length > 0
+    ));
+  const titleValue = titleField ? String(record.values?.[titleField.key] || '').trim() : '';
+  const label = titleValue || record.slug || record.id;
+
+  return `${label} (${record.status})`;
 };
 
 function CollectionFilterValueControl({
@@ -4778,6 +4797,7 @@ function RepeaterDataProperties({
 
 function DataBindingProperties({
   element,
+  siteId,
   collections,
   collectionsError,
   onChange,
@@ -4817,6 +4837,52 @@ function DataBindingProperties({
   const selectedField = selectedCollection?.fields.find((field) => field.key === selectedFieldKey) || null;
   const selectedFilterFieldDefinition = selectedCollection?.fields.find((field) => field.key === selectedFilterField) || null;
   const targetPathOptions = getTargetPathOptions(element.type);
+  const [recordOptions, setRecordOptions] = useState<CollectionRecord[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!siteId || !selectedCollectionId) {
+      setRecordOptions([]);
+      setRecordsError(null);
+      setRecordsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRecordsLoading(true);
+    setRecordsError(null);
+    listCollectionRecords(siteId, selectedCollectionId, {
+      status: '',
+      sortBy: 'updatedAt',
+      sortDirection: 'desc',
+      limit: 50,
+      offset: 0,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setRecordOptions(result.records);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRecordOptions([]);
+          setRecordsError(error instanceof Error ? error.message : 'Unable to load collection records');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRecordsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCollectionId, siteId]);
+  const selectedRecordOptionValue = recordOptions.find((record) => (
+    record.id === selectedRecordId || record.slug === selectedRecordId
+  ))?.id || '';
 
   const updateBinding = (updates: {
     collectionId?: string;
@@ -5002,7 +5068,35 @@ function DataBindingProperties({
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Record ID or slug
+              Preview record
+            </label>
+            <select
+              value={selectedRecordOptionValue}
+              onChange={(event) => updateBinding({ recordId: event.target.value })}
+              data-testid="editor-data-record-picker"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="">First matching record at render time</option>
+              {recordOptions.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {collectionRecordLabel(record, selectedCollection)}
+                </option>
+              ))}
+            </select>
+            {recordsLoading && (
+              <p className="mt-1 text-xs text-muted-foreground">Loading records...</p>
+            )}
+            {recordsError && (
+              <p className="mt-1 text-xs text-amber-600">{recordsError}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Custom record ID or slug
             </label>
             <input
               type="text"
@@ -5159,6 +5253,7 @@ function DataBindingProperties({
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             Dataset: dataset_{selectedCollection.id}
             {selectedField ? ` • ${selectedField.key}` : ''}
+            {selectedRecordId ? ` • record ${selectedRecordId}` : ''}
             {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
             {selectedLimit ? ` • limit ${selectedLimit}` : ''}
           </div>

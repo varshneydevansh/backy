@@ -8358,25 +8358,42 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
         fields: optionValues('editor-data-field'),
         filterFields: optionValues('editor-data-query-filter-field'),
         sortFields: optionValues('editor-data-query-sort-by'),
+        recordOptions: optionValues('editor-data-record-picker'),
+        recordLabels: (() => {
+          const select = document.querySelector('[data-testid="editor-data-record-picker"]');
+          return select instanceof HTMLSelectElement
+            ? Array.from(select.options).map((option) => option.textContent || '')
+            : [];
+        })(),
       };
     })()`);
     if (
       queryControlsReady.fields.includes('title') &&
       queryControlsReady.filterFields.includes('category') &&
-      queryControlsReady.sortFields.includes('rank')
+      queryControlsReady.sortFields.includes('rank') &&
+      queryControlsReady.recordLabels.some((label) => /Beta featured item/i.test(label))
     ) {
       break;
     }
     await sleep(200);
   }
   assert(
-    queryControlsReady?.fields?.includes('title') &&
+      queryControlsReady?.fields?.includes('title') &&
       queryControlsReady?.filterFields?.includes('category') &&
-      queryControlsReady?.sortFields?.includes('rank'),
+      queryControlsReady?.sortFields?.includes('rank') &&
+      queryControlsReady?.recordLabels?.some((label) => /Beta featured item/i.test(label)),
     `Collection binding field/query options did not render: ${JSON.stringify(queryControlsReady)}`,
   );
+  const targetRecordId = await evaluate(client, `(() => {
+    const select = document.querySelector('[data-testid="editor-data-record-picker"]');
+    if (!(select instanceof HTMLSelectElement)) return '';
+    const option = Array.from(select.options).find((candidate) => /Beta featured item/i.test(candidate.textContent || ''));
+    return option?.value || '';
+  })()`);
+  assert(targetRecordId, `Collection record picker did not expose the created records: ${JSON.stringify(queryControlsReady)}`);
   await setFormControlByTestId(client, 'editor-data-field', 'title');
   await setFormControlByTestId(client, 'editor-data-target', 'props.content');
+  await setFormControlByTestId(client, 'editor-data-record-picker', targetRecordId);
   await setFormControlByTestId(client, 'editor-data-query-search', 'featured');
   await setFormControlByTestId(client, 'editor-data-query-filter-field', 'category');
   await setFormControlByTestId(client, 'editor-data-query-filter-value', 'Featured');
@@ -8400,6 +8417,8 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       collectionId: value('editor-data-collection'),
       field: value('editor-data-field'),
       target: value('editor-data-target'),
+      recordPicker: value('editor-data-record-picker'),
+      recordId: value('editor-data-record-id'),
       search: value('editor-data-query-search'),
       filterField: value('editor-data-query-filter-field'),
       filterValue: value('editor-data-query-filter-value'),
@@ -8414,6 +8433,7 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
 
   assert(state.collectionId === collectionId, `Collection binding did not select collection: ${JSON.stringify(state)}`);
   assert(state.field === 'title' && state.target === 'props.content', `Collection binding field/target mismatch: ${JSON.stringify(state)}`);
+  assert(state.recordPicker === targetRecordId && state.recordId === targetRecordId, `Collection binding record picker mismatch: ${JSON.stringify(state)}`);
   assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Collection query filter mismatch: ${JSON.stringify(state)}`);
   assert(state.filterValueOptions.includes('Featured') && state.filterValueOptions.includes('Reference'), `Collection query filter value options missing: ${JSON.stringify(state)}`);
   assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
@@ -8434,6 +8454,7 @@ const assertPersistedDataBinding = async (pageId, collectionId) => {
   assert(binding.datasetId === `dataset_${collectionId}`, `Persisted dataset id mismatch: ${JSON.stringify(binding)}`);
   assert(binding.targetPath === 'props.content', `Persisted binding target mismatch: ${JSON.stringify(binding)}`);
   assert(binding.source?.collectionId === collectionId && binding.source?.field === 'title', `Persisted binding source mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.source?.recordId && binding.query?.recordId === binding.source.recordId, `Persisted binding record picker mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.q === 'featured', `Persisted binding search query mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.fieldKey === 'category' && binding.query?.fieldValue === 'Featured', `Persisted binding filter mismatch: ${JSON.stringify(binding)}`);
   assert(binding.query?.sortBy === 'rank' && binding.query?.sortDirection === 'desc', `Persisted binding sort mismatch: ${JSON.stringify(binding)}`);
