@@ -32,7 +32,7 @@ import {
   getUserPermissions,
   adminFetch,
   importCollectionRecordsCsv,
-  listAllCollectionRecords,
+  listCollectionRecords,
   listCollections,
   reconcileCommerceOrders,
   updateCollection,
@@ -41,6 +41,7 @@ import {
   type Collection,
   type CollectionField,
   type CollectionRecord,
+  type CollectionRecordPagination,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
@@ -82,6 +83,8 @@ const ORDER_CONTROL_AREAS = [
     href: '#orders-editor',
   },
 ] as const;
+
+const ORDER_RECORD_PAGE_SIZE = 100;
 
 type OrderFilter = 'all' | 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refunded';
 type OrderWorkflowStatus = 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refunded';
@@ -412,6 +415,7 @@ function OrdersRoute() {
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
+  const [orderPagination, setOrderPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(routeSearch.orderId || null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
@@ -516,6 +520,9 @@ function OrdersRoute() {
     fulfillmentFilter !== 'all' ||
     sourceFilter !== 'all',
   );
+  const loadedOrderCount = orders.length;
+  const totalOrderCount = orderPagination?.total ?? loadedOrderCount;
+  const hasMoreOrders = orderPagination?.hasMore === true;
   const filteredOrders = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -556,7 +563,7 @@ function OrdersRoute() {
   );
   const allVisibleOrdersSelected = filteredOrders.length > 0 && selectedVisibleOrders.length === filteredOrders.length;
   const metrics = useMemo(() => ({
-    orders: orders.length,
+    orders: totalOrderCount,
     revenue: orders
       .filter((order) => String(readOrderValue(order.values, 'paymentstatus', '')) === 'paid')
       .reduce((sum, order) => sum + toNumber(order.values.total), 0),
@@ -567,7 +574,7 @@ function OrdersRoute() {
       && String(readOrderValue(order.values, 'fulfillmentstatus', '')) !== 'fulfilled'
     )).length,
     processing: orders.filter((order) => String(readOrderValue(order.values, 'fulfillmentstatus', '')) === 'processing').length,
-  }), [orders]);
+  }), [orders, totalOrderCount]);
   const orderReadiness = useMemo(() => {
     const hasSchema = Boolean(ordersCollection);
     const hasOrders = orders.length > 0;
@@ -714,7 +721,9 @@ function OrdersRoute() {
       fulfillment: fulfillmentFilter,
       source: sourceFilter,
       visible: filteredOrders.length,
-      total: orders.length,
+      loaded: loadedOrderCount,
+      total: totalOrderCount,
+      hasMore: hasMoreOrders,
     },
     export: {
       csvIncludesCustomerIdentity: true,
@@ -784,6 +793,8 @@ function OrdersRoute() {
     filter,
     filteredOrders.length,
     fulfillmentFilter,
+    hasMoreOrders,
+    loadedOrderCount,
     metrics,
     missingOrderFields,
     orderReadiness.checks,
@@ -796,6 +807,7 @@ function OrdersRoute() {
     publicOrdersApiUrl,
     searchQuery,
     sourceFilter,
+    totalOrderCount,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
   const ordersRouteSearch = useMemo<OrdersSearch>(() => ({
@@ -832,6 +844,7 @@ function OrdersRoute() {
     if (!canViewOrders) {
       setOrdersCollection(null);
       setOrders([]);
+      setOrderPagination(null);
       clearOrderEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
       return;
@@ -847,18 +860,50 @@ function OrdersRoute() {
 
       if (!collection) {
         setOrders([]);
+        setOrderPagination(null);
         clearOrderEditorState();
         return;
       }
 
-      const result = await listAllCollectionRecords(activeSiteId, collection.id, {
-        limit: 100,
+      const result = await listCollectionRecords(activeSiteId, collection.id, {
+        limit: ORDER_RECORD_PAGE_SIZE,
+        offset: 0,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
       setOrders(result.records);
+      setOrderPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load orders');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadMoreOrders = async () => {
+    if (!ordersCollection || !orderPagination?.hasMore || isOrdersBusy || !canViewOrders) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextOffset = orderPagination.offset + orderPagination.limit;
+      const result = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+        limit: ORDER_RECORD_PAGE_SIZE,
+        offset: nextOffset,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      });
+      setOrders((current) => {
+        const existingIds = new Set(current.map((order) => order.id));
+        return [
+          ...current,
+          ...result.records.filter((order) => !existingIds.has(order.id)),
+        ];
+      });
+      setOrderPagination(result.pagination);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load more orders');
     } finally {
       setIsLoading(false);
     }
@@ -1078,6 +1123,12 @@ function OrdersRoute() {
       });
       setOrdersCollection(collection);
       setOrders([]);
+      setOrderPagination({
+        total: 0,
+        limit: ORDER_RECORD_PAGE_SIZE,
+        offset: 0,
+        hasMore: false,
+      });
       clearOrderEditorState({
         ...EMPTY_ORDER_FORM,
         orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
@@ -1202,6 +1253,12 @@ function OrdersRoute() {
         : await createCollectionRecord(activeSiteId, ordersCollection.id, input);
 
       setOrders((current) => [saved, ...current.filter((order) => order.id !== saved.id)]);
+      if (!selectedOrder) {
+        setOrderPagination((current) => (current ? {
+          ...current,
+          total: current.total + 1,
+        } : current));
+      }
       setSelectedOrderId(saved.id);
       updateOrdersRouteSearch({ orderId: saved.id });
       setNotice(selectedOrder ? 'Order updated.' : 'Order recorded.');
@@ -1378,12 +1435,14 @@ function OrdersRoute() {
     try {
       const result = await reconcileCommerceOrders(activeSiteId, 100);
       setReconciliationResult(result);
-      const refreshed = await listAllCollectionRecords(activeSiteId, ordersCollection.id, {
-        limit: 100,
+      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+        limit: ORDER_RECORD_PAGE_SIZE,
+        offset: 0,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
       setOrders(refreshed.records);
+      setOrderPagination(refreshed.pagination);
       const updateLabel = `${result.updatedCount} order${result.updatedCount === 1 ? '' : 's'}`;
       const eventLabel = `${result.eventCount} event${result.eventCount === 1 ? '' : 's'}`;
       setNotice(`Reconciled ${eventLabel}; updated ${updateLabel}.`);
@@ -1409,6 +1468,10 @@ function OrdersRoute() {
     try {
       await deleteCollectionRecord(activeSiteId, ordersCollection.id, order.id);
       setOrders((current) => current.filter((item) => item.id !== order.id));
+      setOrderPagination((current) => (current ? {
+        ...current,
+        total: Math.max(0, current.total - 1),
+      } : current));
       if (selectedOrderId === order.id) {
         clearOrderEditorState({
           ...EMPTY_ORDER_FORM,
@@ -1577,12 +1640,14 @@ function OrdersRoute() {
     try {
       const csv = await file.text();
       const result = await importCollectionRecordsCsv(activeSiteId, ordersCollection.id, csv, { upsert: true });
-      const refreshed = await listAllCollectionRecords(activeSiteId, ordersCollection.id, {
-        limit: 100,
+      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+        limit: ORDER_RECORD_PAGE_SIZE,
+        offset: 0,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
       setOrders(refreshed.records);
+      setOrderPagination(refreshed.pagination);
       setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
@@ -1904,7 +1969,7 @@ function OrdersRoute() {
                   {ordersApiReady ? 'Workflow ready' : 'Schema needs sync'}
                 </span>
                 <StatusBadge status={ordersCollection.status} />
-                <span>{orders.length} internal records</span>
+                <span>{loadedOrderCount} loaded / {totalOrderCount} internal records</span>
               </div>
               {missingOrderFields.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -2015,7 +2080,7 @@ function OrdersRoute() {
           <Panel id="orders-queue" className="scroll-mt-24">
             <PanelHeader
               title="Order Queue"
-              description={`${filteredOrders.length}/${orders.length} visible orders`}
+              description={`${filteredOrders.length}/${loadedOrderCount} visible loaded orders${totalOrderCount > loadedOrderCount ? `, ${totalOrderCount} total` : ''}`}
               icon={<ClipboardCheck className="size-4" />}
               action={<Button onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>New Order</Button>}
             />
@@ -2120,6 +2185,23 @@ function OrdersRoute() {
                 {hasActiveOrderFilters && (
                   <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersAccessBusy || !canViewOrders}>
                     Clear filters
+                  </Button>
+                )}
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                <span>
+                  Loaded {loadedOrderCount} of {totalOrderCount} order records. Filters, bulk actions, and CSV export apply to loaded rows.
+                </span>
+                {hasMoreOrders && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void loadMoreOrders()}
+                    disabled={isOrdersAccessBusy || !canViewOrders}
+                    title={!canViewOrders ? viewPermissionTitle : undefined}
+                  >
+                    {isLoading ? 'Loading...' : 'Load more'}
                   </Button>
                 )}
               </div>

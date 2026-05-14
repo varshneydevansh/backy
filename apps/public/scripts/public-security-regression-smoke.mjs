@@ -681,6 +681,12 @@ assertIncludes(productsAdminRoute, 'PRODUCT_RECORD_PAGE_SIZE', 'products admin r
 assertIncludes(productsAdminRoute, 'loadMoreProducts', 'products admin route must expose incremental catalog loading');
 assertExcludes(productsAdminRoute, 'listAllCollectionRecords', 'products admin route must not walk every product record on page load');
 
+const ordersAdminRoute = read('apps/admin/src/routes/orders.tsx');
+assertIncludes(ordersAdminRoute, 'listCollectionRecords', 'orders admin route must use paged collection record loads');
+assertIncludes(ordersAdminRoute, 'ORDER_RECORD_PAGE_SIZE', 'orders admin route must use an explicit order page size');
+assertIncludes(ordersAdminRoute, 'loadMoreOrders', 'orders admin route must expose incremental queue loading');
+assertExcludes(ordersAdminRoute, 'listAllCollectionRecords', 'orders admin route must not walk every order record on page load');
+
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
   'CATALOG_RECORD_PAGE_SIZE',
