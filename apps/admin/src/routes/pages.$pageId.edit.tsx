@@ -21,6 +21,7 @@ import {
   getPage,
   getPageReadiness,
   getUserPermissions,
+  listPages,
   listPageRevisions,
   publishPage,
   rollbackPage,
@@ -232,6 +233,10 @@ function PageEditorRoute() {
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
+  const [routeCheckPages, setRouteCheckPages] = useState<Page[] | null>(null);
+  const [routeCheckSiteId, setRouteCheckSiteId] = useState<string | null>(null);
+  const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
+  const [isRouteCheckLoading, setIsRouteCheckLoading] = useState(false);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -395,6 +400,46 @@ function PageEditorRoute() {
     };
   }, [canViewPage, page, pageId, siteId]);
 
+  useEffect(() => {
+    if (!canViewPage || isPermissionMatrixPending) {
+      setRouteCheckPages(null);
+      setRouteCheckSiteId(null);
+      setRouteCheckError(null);
+      setIsRouteCheckLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setRouteCheckPages(null);
+    setRouteCheckSiteId(null);
+    setRouteCheckError(null);
+    setIsRouteCheckLoading(true);
+
+    listPages(siteId)
+      .then((backendPages) => {
+        if (!cancelled) {
+          setRouteCheckPages(backendPages);
+          setRouteCheckSiteId(siteId);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRouteCheckPages(null);
+          setRouteCheckError(error instanceof Error ? error.message : 'Unable to verify page routes.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsRouteCheckLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewPage, isPermissionMatrixPending, siteId]);
+
   const loadPageReadiness = async () => {
     if (!page) {
       return null;
@@ -537,7 +582,17 @@ function PageEditorRoute() {
   const selectedSiteIdentifiers = new Set(
     [siteId, selectedSite?.id, selectedSite?.publicSiteId, selectedSite?.slug].filter(Boolean),
   );
-  const selectedSitePages = pages.filter((candidate) => selectedSiteIdentifiers.has(candidate.siteId));
+  const localSelectedSitePages = pages.filter((candidate) => selectedSiteIdentifiers.has(candidate.siteId));
+  const siteRouteCheckPages = routeCheckSiteId === siteId ? routeCheckPages : null;
+  const selectedSitePages = siteRouteCheckPages || localSelectedSitePages;
+  const isRouteCheckBackendVerified = Boolean(siteRouteCheckPages);
+  const routeCheckBlockedMessage = !isRouteCheckBackendVerified
+    ? isRouteCheckLoading
+      ? 'Checking backend page routes before confirming availability.'
+      : routeCheckError
+        ? `Unable to verify route against backend pages: ${routeCheckError}`
+        : 'Load backend page routes before confirming availability.'
+    : null;
   const getPublicPathForSettings = (settings: PageSettings) => (
     page.isHomepage || settings.slug === 'home' || settings.slug.trim() === ''
       ? '/'
@@ -551,6 +606,8 @@ function PageEditorRoute() {
   const currentRouteConflict = findRouteConflict(initialSettings);
   const publishDisabledReason = currentRouteConflict
     ? `${publicPath} conflicts with "${currentRouteConflict.title}". Choose another slug before publishing.`
+    : routeCheckBlockedMessage
+      ? routeCheckBlockedMessage
     : isReadinessBlocked
       ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
       : null;
@@ -582,6 +639,10 @@ function PageEditorRoute() {
       return 'Use lowercase letters, numbers, and hyphens for the URL slug.';
     }
 
+    if (routeCheckBlockedMessage) {
+      return routeCheckBlockedMessage;
+    }
+
     if (conflict) {
       return `${nextPath} is already used by "${conflict.title}". Choose another slug before saving.`;
     }
@@ -603,8 +664,10 @@ function PageEditorRoute() {
       label: 'Route availability',
       detail: currentRouteConflict
         ? `${publicPath} conflicts with "${currentRouteConflict.title}".`
+        : routeCheckBlockedMessage
+          ? routeCheckBlockedMessage
         : `${publicPath} is unique across ${selectedSitePages.length} page${selectedSitePages.length === 1 ? '' : 's'} in this site.`,
-      ready: !currentRouteConflict,
+      ready: !currentRouteConflict && isRouteCheckBackendVerified,
     },
     {
       label: 'Canvas content',
@@ -668,8 +731,15 @@ function PageEditorRoute() {
             title: currentRouteConflict.title,
             path: getPagePublicPath(currentRouteConflict),
           }
+        : routeCheckBlockedMessage
+          ? {
+              status: 'unverified',
+              reason: routeCheckBlockedMessage,
+              checkedPages: selectedSitePages.length,
+            }
         : {
             status: 'available',
+            source: 'backend',
             checkedPages: selectedSitePages.length,
           },
     },
@@ -833,6 +903,10 @@ function PageEditorRoute() {
         ? await publishPage(siteId, pageId, { expectedUpdatedAt: savedPage.lastUpdated })
         : savedPage;
       setPage(nextPage);
+      setRouteCheckPages((currentPages) => currentPages?.map((candidate) => (
+        candidate.id === nextPage.id ? nextPage : candidate
+      )) || currentPages);
+      setRouteCheckSiteId(siteId);
       updatePage(pageId, nextPage);
       setSaveConflict(null);
       setSaveWarning(null);
