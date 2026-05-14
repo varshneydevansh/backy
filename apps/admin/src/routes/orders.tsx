@@ -83,7 +83,7 @@ const ORDER_CONTROL_AREAS = [
   },
 ] as const;
 
-type OrderFilter = 'all' | 'open' | 'paid' | 'fulfilled' | 'cancelled';
+type OrderFilter = 'all' | 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refunded';
 type OrderWorkflowStatus = 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refunded';
 type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 type FulfillmentStatus = 'unfulfilled' | 'processing' | 'fulfilled' | 'cancelled';
@@ -181,7 +181,7 @@ interface OrderFormState {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
-const ORDER_FILTERS: OrderFilter[] = ['all', 'open', 'paid', 'fulfilled', 'cancelled'];
+const ORDER_FILTERS: OrderFilter[] = ['all', 'open', 'paid', 'fulfilled', 'cancelled', 'refunded'];
 const PAYMENT_STATUS_FILTERS: PaymentStatusFilter[] = ['all', 'pending', 'paid', 'failed', 'refunded'];
 const FULFILLMENT_STATUS_FILTERS: FulfillmentStatusFilter[] = ['all', 'unfulfilled', 'processing', 'fulfilled', 'cancelled'];
 const ORDER_SOURCE_FILTERS: OrderSourceFilter[] = ['all', 'web', 'manual', 'api', 'import', 'pos'];
@@ -1997,7 +1997,7 @@ function OrdersRoute() {
                   />
                 </div>
                 <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
-                  {(['all', 'open', 'paid', 'fulfilled', 'cancelled'] as const).map((status) => (
+                  {ORDER_FILTERS.map((status) => (
                     <button
                       key={status}
                       type="button"
