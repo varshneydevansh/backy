@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -479,6 +479,22 @@ function ReusableSectionsRoute() {
       description: formState.description || activeSection?.description || '',
     },
   }), [activeSection?.description, activeSection?.name, activeSection?.slug, formState.description, formState.name, formState.slug, formState.status]);
+  const handleVisualEditorChange = useCallback((
+    elements: CanvasElement[],
+    _settings: PageSettings,
+    canvasSize: CanvasSize = DEFAULT_SECTION_CANVAS_SIZE,
+  ) => {
+    setFormState((prev) => {
+      const nextContent: ReusableSectionContent = {
+        ...(prev.content || EMPTY_CONTENT),
+        elements,
+        canvasSize,
+      };
+      const nextJson = JSON.stringify(nextContent, null, 2);
+      setContentJson((current) => (current === nextJson ? current : nextJson));
+      return { ...prev, content: nextContent };
+    });
+  }, []);
   const handoffManifest = useMemo(() => ({
     schemaVersion: 'backy.reusable-sections.handoff.v1',
     site: { id: activeSiteId, slug: activeSiteSlug, name: activeSite?.name || activeSiteId },
@@ -1027,8 +1043,8 @@ function ReusableSectionsRoute() {
       throw new Error(message);
     }
 
-    const nextName = settings.title.trim() || formState.name.trim() || activeSection?.name || 'Reusable section';
-    const nextSlug = normalizeSlug(settings.slug || formState.slug || nextName, 'section');
+    const nextName = formState.name.trim() || settings.title.trim() || activeSection?.name || 'Reusable section';
+    const nextSlug = normalizeSlug(formState.slug || settings.slug || nextName, 'section');
     const nextContent: ReusableSectionContent = {
       ...visualEditorContent,
       elements,
@@ -1549,6 +1565,7 @@ function ReusableSectionsRoute() {
               initialSize={visualEditorContent.canvasSize || DEFAULT_SECTION_CANVAS_SIZE}
               initialSettings={visualEditorSettings}
               onSave={saveVisualEditorSection}
+              onChange={handleVisualEditorChange}
               hideNavigation
               hideSettings
               saveOwnerLabel="section editor"

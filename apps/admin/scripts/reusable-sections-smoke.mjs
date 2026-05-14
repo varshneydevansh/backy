@@ -629,6 +629,10 @@ const createFrontendTemplateSectionThroughUi = async (client) => {
 };
 
 const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) => {
+  const visualSaved = await clickReusableSectionControl(client, 'editor-save-page');
+  assert(visualSaved.ok, `Unable to save reusable section through visual editor: ${JSON.stringify(visualSaved)}`);
+  await waitForPageText(client, `${section.name} saved from the visual editor.`, 'visual reusable section save notice');
+
   const exported = await exportReusableSections([section.id]);
   assert(exported.export.sectionCount === 1, `Selected reusable section export should contain one section: ${JSON.stringify(exported.export)}`);
   assert(exported.sections?.[0]?.slug === section.slug, `Selected reusable section export did not include expected slug: ${JSON.stringify(exported.sections?.[0])}`);
@@ -690,8 +694,8 @@ const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) =
       const state = await evaluate(client, `(() => {
         const body = document.body?.innerText || '';
         return {
-          hasCurrentVersion: body.includes('v3 current'),
-          hasPreviousVersion: body.includes('v2') && body.includes('v1'),
+          hasCurrentVersion: body.includes('v4 current'),
+          hasPreviousVersion: body.includes('v3') && body.includes('v2') && body.includes('v1'),
           body: body.slice(0, 1800),
         };
       })()`);
