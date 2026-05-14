@@ -11,6 +11,7 @@ import type {
   SiteNavigationLayoutConfig,
   SiteRedirectRule,
   SiteSettings,
+  ThemeConfig,
 } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
@@ -23,6 +24,7 @@ export interface ApiSite {
   customDomain?: string | null;
   status?: AdminSiteStatus;
   isPublished?: boolean;
+  theme?: ThemeConfig;
   settings?: SiteSettings;
   updatedAt?: string;
   createdAt?: string;
@@ -1492,6 +1494,7 @@ export interface SiteCreateInput {
   description?: string;
   customDomain?: string | null;
   status?: Site['status'];
+  theme?: Partial<ThemeConfig>;
   settings?: Partial<SiteSettings>;
 }
 
@@ -2959,6 +2962,7 @@ const toStoreSite = (site: ApiSite): Site => ({
   description: site.description || '',
   customDomain: site.customDomain || null,
   status: toAdminSiteStatus(site.status, site.isPublished),
+  theme: site.theme,
   settings: site.settings,
   publicSiteId: site.id,
   pageCount: 0,

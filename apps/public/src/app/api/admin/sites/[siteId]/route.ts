@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Site, SiteSettings } from '@backy-cms/core';
+import type { Site, SiteSettings, ThemeConfig } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
@@ -338,6 +338,17 @@ const isDomainVerificationPatch = (body: Record<string, unknown>): boolean => {
   return isRecord(settings) && isRecord(settings.domainVerification);
 };
 
+const isThemePublishPatch = (body: Record<string, unknown>): boolean => isRecord(body.theme);
+
+const auditActionForSitePatch = (
+  domainVerificationPatch: boolean,
+  themePublishPatch: boolean,
+): string => {
+  if (domainVerificationPatch) return 'site.domainVerification.updated';
+  if (themePublishPatch) return 'site.themePublish.updated';
+  return 'site.updated';
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
@@ -388,6 +399,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const body = await parseJsonBody(request);
   const commentPolicyOnlyPatch = isCommentPolicyOnlyPatch(body);
   const domainVerificationPatch = isDomainVerificationPatch(body);
+  const themePublishPatch = isThemePublishPatch(body);
   const access = await requireAdminAccess(request, requestId, {
     permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
   });
@@ -407,6 +419,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const settings = mergeSiteSettings(site.settings, body.settings);
       const nextStatus = normalizeSiteStatus(body.status);
+      const themeInput = isRecord(body.theme) ? body.theme as Partial<ThemeConfig> : undefined;
       const nextSettings = nextStatus
         ? { ...settings, siteStatus: nextStatus } as SiteSettings
         : settings;
@@ -415,6 +428,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         slug: typeof body.slug === 'string' ? body.slug : undefined,
         description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
         customDomain: typeof body.customDomain === 'string' || body.customDomain === null ? body.customDomain : undefined,
+        theme: themeInput,
         status: nextStatus === 'published' ? 'published' : nextStatus === 'draft' || nextStatus === 'archived' ? 'draft' : undefined,
         isPublished: typeof body.isPublished === 'boolean' ? body.isPublished : undefined,
         settings: nextSettings,
@@ -443,7 +457,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           actorId: access.session?.user.id,
           entity: 'site',
           entityId: site.id,
-          action: domainVerificationPatch ? 'site.domainVerification.updated' : 'site.updated',
+          action: auditActionForSitePatch(domainVerificationPatch, themePublishPatch),
           before: adminSiteFromRepositorySite(site) || {},
           after: adminSiteFromRepositorySite(updated.item) || {},
           metadata: {
@@ -454,6 +468,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
               ? {
                   domainVerificationStatus: domainVerification?.status || 'not_started',
                   domainVerificationDomain: domainVerification?.domain || updated.item.customDomain || null,
+                }
+              : {}),
+            ...(themePublishPatch
+              ? {
+                  themeColors: Object.keys(updated.item.theme?.colors || {}).length,
+                  themeFonts: Object.keys(updated.item.theme?.fonts || {}).length,
+                  isPublished: updated.item.isPublished,
                 }
               : {}),
           },
@@ -502,7 +523,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         actorId: access.session?.user.id,
         entity: 'site',
         entityId: site.id,
-        action: domainVerificationPatch ? 'site.domainVerification.updated' : 'site.updated',
+        action: auditActionForSitePatch(domainVerificationPatch, themePublishPatch),
         before: site,
         after: updated,
         metadata: {
@@ -513,6 +534,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             ? {
                 domainVerificationStatus: domainVerification?.status || 'not_started',
                 domainVerificationDomain: domainVerification?.domain || updated.customDomain || null,
+              }
+            : {}),
+          ...(themePublishPatch
+            ? {
+                themeColors: Object.keys(updated.theme?.colors || {}).length,
+                themeFonts: Object.keys(updated.theme?.fonts || {}).length,
+                isPublished: updated.isPublished,
               }
             : {}),
         },

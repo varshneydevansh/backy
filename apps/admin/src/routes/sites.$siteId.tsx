@@ -81,6 +81,7 @@ import type {
   SiteCommentPolicy,
   SiteSettings,
   SiteRedirectRule,
+  ThemeConfig,
 } from '@backy-cms/core';
 
 type Contact = AdminContact;
@@ -110,6 +111,26 @@ type SiteStatusFilter = 'published' | 'draft' | 'archived';
 type CommentTargetFilter = 'all' | 'page' | 'post';
 type NavigationMenuKey = 'primary' | 'footer';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteThemeDraft = {
+  colors: {
+    primary: string;
+    secondary: string;
+    background: string;
+    surface: string;
+    text: string;
+    textMuted: string;
+  };
+  fonts: {
+    heading: string;
+    body: string;
+    mono: string;
+  };
+  spacing: {
+    unit: number;
+    scale: number;
+  };
+  customCSS: string;
+};
 type SiteDetailPermissionKey =
   | 'sites.view'
   | 'sites.configure'
@@ -183,6 +204,11 @@ const SITE_WORKSPACE_AREAS = [
     title: 'Domain',
     detail: 'Custom-domain DNS ownership, TXT/CNAME handoff, and verification status.',
     href: '#site-domain',
+  },
+  {
+    title: 'Theme & publish',
+    detail: 'Site-level brand tokens, typography, spacing, CSS, and public delivery state.',
+    href: '#site-theme-publish',
   },
   {
     title: 'Frontend design',
@@ -300,6 +326,42 @@ const DEFAULT_SITE_COMMENT_POLICY: SiteCommentPolicyDraft = {
   sort: 'newest',
 };
 
+const DEFAULT_SITE_THEME_DRAFT: SiteThemeDraft = {
+  colors: {
+    primary: '#2563eb',
+    secondary: '#7c3aed',
+    background: '#ffffff',
+    surface: '#f8fafc',
+    text: '#0f172a',
+    textMuted: '#64748b',
+  },
+  fonts: {
+    heading: 'Inter',
+    body: 'Inter',
+    mono: 'JetBrains Mono',
+  },
+  spacing: {
+    unit: 4,
+    scale: 1,
+  },
+  customCSS: '',
+};
+
+const SITE_THEME_COLOR_CONTROLS = [
+  { key: 'primary', label: 'Primary' },
+  { key: 'secondary', label: 'Secondary' },
+  { key: 'background', label: 'Background' },
+  { key: 'surface', label: 'Surface' },
+  { key: 'text', label: 'Text' },
+  { key: 'textMuted', label: 'Muted text' },
+] as const;
+
+const SITE_THEME_FONT_CONTROLS = [
+  { key: 'heading', label: 'Heading font' },
+  { key: 'body', label: 'Body font' },
+  { key: 'mono', label: 'Mono font' },
+] as const;
+
 type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
 
 const domainVerificationStatusClass: Record<SiteDomainVerification['status'], string> = {
@@ -348,6 +410,45 @@ const getDomainVerification = (
     lastError: current?.lastError || null,
   };
 };
+
+const normalizeSiteThemeDraft = (theme?: Partial<ThemeConfig> | null): SiteThemeDraft => ({
+  colors: {
+    ...DEFAULT_SITE_THEME_DRAFT.colors,
+    ...(theme?.colors || {}),
+  },
+  fonts: {
+    ...DEFAULT_SITE_THEME_DRAFT.fonts,
+    heading: theme?.fonts?.heading || DEFAULT_SITE_THEME_DRAFT.fonts.heading,
+    body: theme?.fonts?.body || DEFAULT_SITE_THEME_DRAFT.fonts.body,
+    mono: theme?.fonts?.mono || DEFAULT_SITE_THEME_DRAFT.fonts.mono,
+  },
+  spacing: {
+    unit: typeof theme?.spacing?.unit === 'number' ? theme.spacing.unit : DEFAULT_SITE_THEME_DRAFT.spacing.unit,
+    scale: typeof theme?.spacing?.scale === 'number' ? theme.spacing.scale : DEFAULT_SITE_THEME_DRAFT.spacing.scale,
+  },
+  customCSS: theme?.customCSS || '',
+});
+
+const siteThemeDraftToTheme = (draft: SiteThemeDraft): ThemeConfig => ({
+  colors: {
+    primary: draft.colors.primary.trim() || DEFAULT_SITE_THEME_DRAFT.colors.primary,
+    secondary: draft.colors.secondary.trim() || DEFAULT_SITE_THEME_DRAFT.colors.secondary,
+    background: draft.colors.background.trim() || DEFAULT_SITE_THEME_DRAFT.colors.background,
+    surface: draft.colors.surface.trim() || DEFAULT_SITE_THEME_DRAFT.colors.surface,
+    text: draft.colors.text.trim() || DEFAULT_SITE_THEME_DRAFT.colors.text,
+    textMuted: draft.colors.textMuted.trim() || DEFAULT_SITE_THEME_DRAFT.colors.textMuted,
+  },
+  fonts: {
+    heading: draft.fonts.heading.trim() || DEFAULT_SITE_THEME_DRAFT.fonts.heading,
+    body: draft.fonts.body.trim() || DEFAULT_SITE_THEME_DRAFT.fonts.body,
+    mono: draft.fonts.mono.trim() || DEFAULT_SITE_THEME_DRAFT.fonts.mono,
+  },
+  spacing: {
+    unit: Number.isFinite(draft.spacing.unit) ? Math.max(1, Math.round(draft.spacing.unit)) : DEFAULT_SITE_THEME_DRAFT.spacing.unit,
+    scale: Number.isFinite(draft.spacing.scale) ? Math.max(0.5, Number(draft.spacing.scale.toFixed(2))) : DEFAULT_SITE_THEME_DRAFT.spacing.scale,
+  },
+  customCSS: draft.customCSS,
+});
 
 const normalizeSiteCommentPolicyDraft = (policy?: SiteCommentPolicy | null): SiteCommentPolicyDraft => ({
   ...DEFAULT_SITE_COMMENT_POLICY,
@@ -736,6 +837,7 @@ function apiSiteToStoreSite(site: ApiSite): Site {
     description: site.description || '',
     customDomain: site.customDomain || null,
     status: site.status === 'archived' ? 'archived' : site.status === 'published' || site.isPublished ? 'published' : 'draft',
+    theme: site.theme,
     settings: site.settings,
     publicSiteId: site.id,
     pageCount: 0,
@@ -829,6 +931,7 @@ function EditSitePage() {
   const [frontendDesignState, setFrontendDesignState] = useState<SiteFrontendDesignEditorState>(
     () => createFrontendDesignState(),
   );
+  const [themeDraft, setThemeDraft] = useState<SiteThemeDraft>(() => normalizeSiteThemeDraft());
   const [auditState, setAuditState] = useState<SiteAuditPanelState>({
     logs: [],
     loading: false,
@@ -935,6 +1038,7 @@ function EditSitePage() {
         description: site.description,
         status: site.status as SiteStatusFilter,
       });
+      setThemeDraft(normalizeSiteThemeDraft(site.theme));
     }
   }, [site]);
 
@@ -1526,6 +1630,75 @@ function EditSitePage() {
       void loadSiteAuditEvents();
     } catch (error) {
       setSiteSettingsError(error instanceof Error ? error.message : 'Unable to update domain verification.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const patchThemeColor = (key: keyof SiteThemeDraft['colors'], value: string) => {
+    if (!canConfigureSite) return;
+    setThemeDraft((current) => ({
+      ...current,
+      colors: {
+        ...current.colors,
+        [key]: value,
+      },
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const patchThemeFont = (key: keyof SiteThemeDraft['fonts'], value: string) => {
+    if (!canConfigureSite) return;
+    setThemeDraft((current) => ({
+      ...current,
+      fonts: {
+        ...current.fonts,
+        [key]: value,
+      },
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const patchThemeSpacing = (key: keyof SiteThemeDraft['spacing'], value: number) => {
+    if (!canConfigureSite) return;
+    setThemeDraft((current) => ({
+      ...current,
+      spacing: {
+        ...current.spacing,
+        [key]: value,
+      },
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const saveThemePublishSettings = async () => {
+    if (!siteApiId || !site) return;
+    if (!canConfigureSite) {
+      setSiteSettingsError(siteConfigureDeniedMessage);
+      return;
+    }
+
+    setIsLoading(true);
+    setSiteSettingsError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const savedSite = await updateSiteFromApi(siteApiId, {
+        status: formData.status,
+        theme: siteThemeDraftToTheme(themeDraft),
+        settings: {
+          siteStatus: formData.status,
+        },
+      });
+      updateSite(storeSiteId, savedSite);
+      setFetchedSite(savedSite);
+      setThemeDraft(normalizeSiteThemeDraft(savedSite.theme));
+      setSiteWorkspaceNotice(`${savedSite.name} theme and publish settings saved.`);
+      void loadReadiness();
+      void loadFrontendDesignEditor();
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setSiteSettingsError(error instanceof Error ? error.message : 'Unable to save theme and publish settings.');
     } finally {
       setIsLoading(false);
     }
@@ -2323,6 +2496,7 @@ function EditSitePage() {
     const hasNavigation = navigationItems.length > 0;
     const hasGlobalLayout = Boolean(navigationLayout.header?.variant && navigationLayout.footer?.variant);
     const redirectsClean = redirectState.conflicts.length === 0;
+    const hasThemeTokens = Boolean(themeDraft.colors.primary && themeDraft.colors.background && themeDraft.fonts.heading && themeDraft.fonts.body);
     const hasSeoDefaults = Boolean(
       seoState.seo.titleTemplate ||
       seoState.seo.defaultDescription ||
@@ -2364,6 +2538,13 @@ function EditSitePage() {
           ? `${redirectState.rules.length} redirect/gone rule${redirectState.rules.length === 1 ? '' : 's'} without conflicts`
           : `${redirectState.conflicts.length} redirect conflict${redirectState.conflicts.length === 1 ? '' : 's'} found`,
         ready: redirectsClean,
+      },
+      {
+        label: 'Theme tokens',
+        detail: hasThemeTokens
+          ? `${themeDraft.colors.primary} brand, ${themeDraft.fonts.heading}/${themeDraft.fonts.body} fonts, ${themeDraft.spacing.unit}px spacing unit`
+          : 'Set brand colors, fonts, and spacing for public render tokens.',
+        ready: hasThemeTokens,
       },
       {
         label: 'SEO defaults',
@@ -2411,6 +2592,7 @@ function EditSitePage() {
   }, [
     formData.customDomain,
     formData.slug,
+    formData.status,
     domainVerification?.status,
     hasCustomDomain,
     savedCustomDomain,
@@ -2439,6 +2621,11 @@ function EditSitePage() {
     state.contactCount,
     state.forms.length,
     state.submissionCount,
+    themeDraft.colors.background,
+    themeDraft.colors.primary,
+    themeDraft.fonts.body,
+    themeDraft.fonts.heading,
+    themeDraft.spacing.unit,
   ]);
 
   const publicSiteUrl = `https://${formData.customDomain || site?.customDomain || `${formData.slug || site?.slug || siteId}.backy.app`}`;
@@ -2496,6 +2683,7 @@ function EditSitePage() {
       editableBindings: frontendDesignState.frontendDesign.editableMap,
       notes: frontendDesignState.frontendDesign.notes || '',
     },
+    theme: siteThemeDraftToTheme(themeDraft),
     navigation: {
       primaryItems: navigationState.navigation.primary.length,
       footerItems: navigationState.navigation.footer?.length || 0,
@@ -2598,6 +2786,7 @@ function EditSitePage() {
     state.selectedFormId,
     state.submissionCount,
     submissionStatus,
+    themeDraft,
   ]);
   const siteWorkspaceHandoffText = useMemo(() => JSON.stringify(siteWorkspaceHandoff, null, 2), [siteWorkspaceHandoff]);
 
@@ -3062,6 +3251,219 @@ function EditSitePage() {
             ) : null}
           </section>
         )}
+
+        <section id="site-theme-publish" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-theme-publish-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">Theme and publish settings</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  formData.status === 'published' ? 'bg-emerald-50 text-emerald-700' : formData.status === 'archived' ? 'bg-muted text-muted-foreground' : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {formData.status}
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Site-level brand tokens and delivery state used by hosted pages, render payloads, readiness checks, and custom frontend handoff.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setThemeDraft(normalizeSiteThemeDraft(site.theme))}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Reset theme
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveThemePublishSettings()}
+                disabled={isSiteConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {isLoading ? 'Saving...' : 'Save theme & publish'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
+            <div className="space-y-5">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Publish state</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Draft keeps the site private, published opens public delivery, archived removes it from active workspaces.
+                    </p>
+                  </div>
+                  <select
+                    value={formData.status}
+                    disabled={isSiteConfigurationDisabled}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    onChange={(event) => setFormData({ ...formData, status: event.target.value as SiteStatusFilter })}
+                    className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Site publish state"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Brand colors</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {SITE_THEME_COLOR_CONTROLS.map((control) => (
+                    <label key={control.key} className="space-y-1 text-sm">
+                      <span className="font-medium">{control.label}</span>
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={themeDraft.colors[control.key]}
+                          onChange={(event) => patchThemeColor(control.key, event.target.value)}
+                          disabled={isSiteConfigurationDisabled}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                          className="h-10 w-12 rounded-md border bg-background p-1 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label={`Theme ${control.label.toLowerCase()} color swatch`}
+                        />
+                        <input
+                          value={themeDraft.colors[control.key]}
+                          onChange={(event) => patchThemeColor(control.key, event.target.value)}
+                          disabled={isSiteConfigurationDisabled}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                          className="min-w-0 flex-1 rounded-md border bg-background px-2 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label={`Theme ${control.label.toLowerCase()} color`}
+                        />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Typography and spacing</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {SITE_THEME_FONT_CONTROLS.map((control) => (
+                    <label key={control.key} className="space-y-1 text-sm">
+                      <span className="font-medium">{control.label}</span>
+                      <input
+                        value={themeDraft.fonts[control.key]}
+                        onChange={(event) => patchThemeFont(control.key, event.target.value)}
+                        disabled={isSiteConfigurationDisabled}
+                        title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label={`Theme ${control.label.toLowerCase()}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Spacing unit</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={themeDraft.spacing.unit}
+                      onChange={(event) => patchThemeSpacing('unit', Number(event.target.value))}
+                      disabled={isSiteConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Theme spacing unit"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Spacing scale</span>
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={3}
+                      step={0.1}
+                      value={themeDraft.spacing.scale}
+                      onChange={(event) => patchThemeSpacing('scale', Number(event.target.value))}
+                      disabled={isSiteConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Theme spacing scale"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <label className="block rounded-lg border border-border bg-background p-4 text-sm">
+                <span className="font-semibold">Custom CSS</span>
+                <textarea
+                  value={themeDraft.customCSS}
+                  onChange={(event) => {
+                    if (!canConfigureSite) return;
+                    setThemeDraft((current) => ({ ...current, customCSS: event.target.value }));
+                    setSiteWorkspaceNotice(null);
+                  }}
+                  disabled={isSiteConfigurationDisabled}
+                  title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                  rows={6}
+                  spellCheck={false}
+                  className="mt-3 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs leading-5 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder=":root { --brand-radius: 12px; }"
+                  aria-label="Theme custom CSS"
+                />
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Public token preview</h3>
+              <div
+                className="mt-3 rounded-lg border p-4"
+                style={{
+                  backgroundColor: themeDraft.colors.background,
+                  color: themeDraft.colors.text,
+                  borderColor: themeDraft.colors.surface,
+                  fontFamily: themeDraft.fonts.body,
+                }}
+              >
+                <div
+                  className="rounded-md px-3 py-2"
+                  style={{ backgroundColor: themeDraft.colors.surface }}
+                >
+                  <div style={{ fontFamily: themeDraft.fonts.heading }} className="text-lg font-semibold">
+                    {formData.name || site.name}
+                  </div>
+                  <p className="mt-1 text-sm" style={{ color: themeDraft.colors.textMuted }}>
+                    Render payloads receive these tokens for custom frontend theming.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span
+                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+                      style={{ backgroundColor: themeDraft.colors.primary }}
+                    >
+                      Primary action
+                    </span>
+                    <span
+                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+                      style={{ backgroundColor: themeDraft.colors.secondary }}
+                    >
+                      Secondary
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <SiteDomainVerificationValue label="Spacing unit" value={`${themeDraft.spacing.unit}px`} />
+                  <SiteDomainVerificationValue label="Spacing scale" value={`${themeDraft.spacing.scale}x`} />
+                  <SiteDomainVerificationValue label="Heading" value={themeDraft.fonts.heading} />
+                  <SiteDomainVerificationValue label="Body" value={themeDraft.fonts.body} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section id="site-readiness" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-readiness-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

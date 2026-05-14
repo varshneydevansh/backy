@@ -337,6 +337,7 @@ const navigateToSiteDetail = (client, siteId, siteName) => navigate(
   `(() => ({
       ready: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) &&
       Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
+      Boolean(document.querySelector('[data-testid="site-theme-publish-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-seo-panel"]')) &&
@@ -471,6 +472,11 @@ const assertSiteDetailLayout = async (client, siteName) => {
         body.includes('TXT host') &&
         body.includes('Prepare DNS record') &&
         body.includes('Mark verified'),
+      hasThemePublish: Boolean(document.querySelector('[data-testid="site-theme-publish-panel"]')) &&
+        body.includes('Theme and publish settings') &&
+        body.includes('Brand colors') &&
+        body.includes('Custom CSS') &&
+        body.includes('Save theme & publish'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
       hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) && body.includes('Frontend design contract') && body.includes('Capture current design') && body.includes('Save contract'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
@@ -490,6 +496,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasCommandCenter &&
       layout.hasReadiness &&
       layout.hasDomainVerification &&
+      layout.hasThemePublish &&
       layout.hasNavigation &&
       layout.hasFrontendDesign &&
       layout.hasRedirects &&
@@ -534,6 +541,70 @@ const configureDomainVerificationThroughUi = async (client) => {
     'Domain verification verified notice',
   );
   await waitForText(client, '[data-testid="site-domain-verification-panel"]', 'Verified', 'Domain verified state');
+};
+
+const configureThemePublishThroughUi = async (client, expected) => {
+  await waitForText(client, '[data-testid="site-theme-publish-panel"]', 'Theme and publish settings', 'Theme publish panel');
+  const result = await evaluate(client, `(() => {
+    ${setInputValue}
+    const section = document.querySelector('[data-testid="site-theme-publish-panel"]');
+    if (!section) return { ok: false, reason: 'section-missing' };
+    const publishState = section.querySelector('[aria-label="Site publish state"]');
+    const primary = section.querySelector('[aria-label="Theme primary color"]');
+    const secondary = section.querySelector('[aria-label="Theme secondary color"]');
+    const background = section.querySelector('[aria-label="Theme background color"]');
+    const surface = section.querySelector('[aria-label="Theme surface color"]');
+    const text = section.querySelector('[aria-label="Theme text color"]');
+    const muted = section.querySelector('[aria-label="Theme muted text color"]');
+    const heading = section.querySelector('[aria-label="Theme heading font"]');
+    const body = section.querySelector('[aria-label="Theme body font"]');
+    const mono = section.querySelector('[aria-label="Theme mono font"]');
+    const unit = section.querySelector('[aria-label="Theme spacing unit"]');
+    const scale = section.querySelector('[aria-label="Theme spacing scale"]');
+    const customCss = section.querySelector('[aria-label="Theme custom CSS"]');
+    const controls = [publishState, primary, secondary, background, surface, text, muted, heading, body, mono, unit, scale, customCss];
+    if (
+      !(publishState instanceof HTMLSelectElement) ||
+      controls.some((control) => !(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement))
+    ) {
+      return {
+        ok: false,
+        reason: 'controls-missing',
+        labels: Array.from(section.querySelectorAll('[aria-label]')).map((node) => node.getAttribute('aria-label')),
+      };
+    }
+    setNativeValue(publishState, 'published');
+    setNativeValue(primary, ${JSON.stringify(expected.themePrimary)});
+    setNativeValue(secondary, ${JSON.stringify(expected.themeSecondary)});
+    setNativeValue(background, ${JSON.stringify(expected.themeBackground)});
+    setNativeValue(surface, ${JSON.stringify(expected.themeSurface)});
+    setNativeValue(text, ${JSON.stringify(expected.themeText)});
+    setNativeValue(muted, ${JSON.stringify(expected.themeTextMuted)});
+    setNativeValue(heading, ${JSON.stringify(expected.themeHeading)});
+    setNativeValue(body, ${JSON.stringify(expected.themeBody)});
+    setNativeValue(mono, ${JSON.stringify(expected.themeMono)});
+    setNativeValue(unit, String(${JSON.stringify(expected.themeSpacingUnit)}));
+    setNativeValue(scale, String(${JSON.stringify(expected.themeSpacingScale)}));
+    setNativeValue(customCss, ${JSON.stringify(expected.themeCustomCss)});
+    return {
+      ok: true,
+      publishState: publishState.value,
+      primary: primary.value,
+      heading: heading.value,
+      unit: unit.value,
+      customCss: customCss.value,
+    };
+  })()`);
+  assert(result.ok, `Unable to configure theme and publish settings through UI: ${JSON.stringify(result)}`);
+
+  await clickButtonByText(client, '[data-testid="site-theme-publish-panel"]', 'Save theme & publish');
+  await waitForText(
+    client,
+    '[data-testid="site-workspace-command-center"]',
+    'theme and publish settings saved.',
+    'Theme publish save notice',
+  );
+  await waitForText(client, '[data-testid="site-theme-publish-panel"]', 'published', 'Published theme state');
 };
 
 const configureNavigationThroughUi = async (client, { routeLabel, routePath, footerLabel, footerHref }) => {
@@ -963,6 +1034,24 @@ const assertApiReadback = async (siteId, expected) => {
     `Site API did not include verified domain verification state: ${JSON.stringify(domainVerification).slice(0, 1000)}`,
   );
   assert(
+    site?.status === 'published' &&
+      site?.isPublished === true &&
+      site?.settings?.siteStatus === 'published' &&
+      site?.theme?.colors?.primary === expected.themePrimary &&
+      site?.theme?.colors?.secondary === expected.themeSecondary &&
+      site?.theme?.colors?.background === expected.themeBackground &&
+      site?.theme?.colors?.surface === expected.themeSurface &&
+      site?.theme?.colors?.text === expected.themeText &&
+      site?.theme?.colors?.textMuted === expected.themeTextMuted &&
+      site?.theme?.fonts?.heading === expected.themeHeading &&
+      site?.theme?.fonts?.body === expected.themeBody &&
+      site?.theme?.fonts?.mono === expected.themeMono &&
+      Number(site?.theme?.spacing?.unit) === expected.themeSpacingUnit &&
+      Number(site?.theme?.spacing?.scale) === expected.themeSpacingScale &&
+      site?.theme?.customCSS === expected.themeCustomCss,
+    `Site API did not include saved theme and publish settings: ${JSON.stringify({ status: site?.status, isPublished: site?.isPublished, theme: site?.theme, siteStatus: site?.settings?.siteStatus }).slice(0, 1500)}`,
+  );
+  assert(
     site?.settings?.commentPolicy?.requireEmail === true &&
       site?.settings?.commentPolicy?.enableReports === false &&
       site?.settings?.commentPolicy?.moderationMode === 'auto-approve' &&
@@ -991,6 +1080,7 @@ const assertApiReadback = async (siteId, expected) => {
     'site.redirects.updated',
     'site.seo.updated',
     'site.domainVerification.updated',
+    'site.themePublish.updated',
     'commentPolicy.update',
     'frontendDesign.capture',
     'frontendDesign.update',
@@ -1085,6 +1175,18 @@ const main = async () => {
     frontendUrl: `https://${slug}.example.com`,
     frontendRepository: `backy/smoke-${suffix}`,
     frontendBranch: `design-${suffix}`,
+    themePrimary: '#0f766e',
+    themeSecondary: '#7c3aed',
+    themeBackground: '#f8fafc',
+    themeSurface: '#e0f2fe',
+    themeText: '#111827',
+    themeTextMuted: '#475569',
+    themeHeading: 'Inter Tight',
+    themeBody: 'Inter',
+    themeMono: 'JetBrains Mono',
+    themeSpacingUnit: 6,
+    themeSpacingScale: 1.2,
+    themeCustomCss: `.site-${slug} { scroll-behavior: smooth; }`,
   };
 
   try {
@@ -1127,6 +1229,7 @@ const main = async () => {
     await assertSiteDetailLayout(client, siteName);
 
     await configureDomainVerificationThroughUi(client);
+    await configureThemePublishThroughUi(client, expected);
     await configureNavigationThroughUi(client, expected);
     await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {
