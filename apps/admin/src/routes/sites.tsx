@@ -264,19 +264,6 @@ const SITE_EXPORT_COLUMNS = [
 
 const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
 
-const getPublicPreviewHref = (site: Site) => {
-  const domain = getDisplayDomain(site);
-  if (site.customDomain) {
-    return `https://${domain}`;
-  }
-
-  if (typeof window !== 'undefined' && window.location.port === '5173') {
-    return `http://localhost:3001/sites/${site.slug}`;
-  }
-
-  return `/sites/${site.slug}`;
-};
-
 type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
 type SiteVercelDeployment = NonNullable<NonNullable<Site['settings']>['vercelDeployment']>;
 type SiteBillingQuota = NonNullable<NonNullable<Site['settings']>['billingQuota']>;
@@ -501,6 +488,19 @@ const getApiBaseUrl = (kind: 'public' | 'admin'): string => {
 
   const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api${kind === 'admin' ? '/admin' : ''}`;
+};
+
+const getPublicWebBaseUrl = (): string => (
+  getApiBaseUrl('public').replace(/\/api$/, '')
+);
+
+const getPublicPreviewHref = (site: Site) => {
+  const domain = getDisplayDomain(site);
+  if (site.customDomain) {
+    return `https://${domain}`;
+  }
+
+  return `${getPublicWebBaseUrl()}/sites/${site.slug}`;
 };
 
 const csvEscape = (value: unknown): string => {
