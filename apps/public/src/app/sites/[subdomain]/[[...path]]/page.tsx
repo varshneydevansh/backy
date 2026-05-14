@@ -67,11 +67,11 @@ async function getSite(subdomain: string) {
     if (!shouldUseDemoStoreFallback()) {
         const repositories = await getRequiredDatabaseRepositories();
         const site = await repositories.sites.getById(subdomain) || await repositories.sites.getBySlug(subdomain);
-        return site ? { mode: 'database', site, repositories } as HostedSite : null;
+        return site?.isPublished ? { mode: 'database', site, repositories } as HostedSite : null;
     }
 
     const site = getSiteByIdOrSlug(subdomain);
-    return site ? { mode: 'demo', site, repositories: null } as HostedSite : null;
+    return site?.isPublished ? { mode: 'demo', site, repositories: null } as HostedSite : null;
 }
 
 async function getPage(siteId: string, pageSlug: string, previewToken?: string) {

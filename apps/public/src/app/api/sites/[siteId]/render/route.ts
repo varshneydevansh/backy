@@ -326,7 +326,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
 
-      if (!site) {
+      if (!site || !site.isPublished) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
@@ -460,7 +460,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 

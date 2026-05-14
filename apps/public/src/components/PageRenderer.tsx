@@ -1306,6 +1306,31 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const getSafeFormRedirectUrl = (value: unknown): string => {
+  const source = sanitizeText(value);
+  if (!source) return '';
+
+  if (source.startsWith('/') && !source.startsWith('//')) {
+    return source;
+  }
+
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(source, window.location.href);
+    const isHttpProtocol = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    if (!isHttpProtocol || parsed.origin !== window.location.origin) {
+      return '';
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return '';
+  }
+};
+
 const sanitizeHtmlMarkup = (value: unknown): string => {
   const source = sanitizeText(value);
   if (!source) return '';
@@ -2558,6 +2583,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const collectionWriteSlugField = getNameClass(props.collectionWriteSlugField);
   const collectionWriteFieldMap = serializeFormFieldMap(props.collectionWriteFieldMap);
   const successRedirectUrl = getNameClass(props.successRedirectUrl || props.redirectUrl);
+  const safeSuccessRedirectUrl = getSafeFormRedirectUrl(successRedirectUrl);
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
     'Thanks. Your message was sent.';
@@ -2811,12 +2837,12 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
               : 'Submission accepted.'),
       );
 
-      if (status === 'pending' && !successRedirectUrl) {
+      if (status === 'pending' && !safeSuccessRedirectUrl) {
         return;
       }
 
-      if (status === 'approved' && successRedirectUrl) {
-        window.location.assign(successRedirectUrl);
+      if (status === 'approved' && safeSuccessRedirectUrl) {
+        window.location.assign(safeSuccessRedirectUrl);
       }
       event.currentTarget.reset();
     } catch {

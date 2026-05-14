@@ -619,6 +619,15 @@ assertIncludes(canvasSource, 'editor-form-preview-feedback', 'editor form previe
 assertIncludes(canvasSource, 'new FormData(form)', 'editor form preview must collect configured field values before submitting');
 assertIncludes(canvasSource, 'await fetch(actionUrl', 'editor form preview must call the configured action URL');
 assertExcludes(canvasSource, 'data-testid="editor-form-schema"\n              data-form-id={formId}\n              data-form-active={formActive ? \'true\' : \'false\'}\n              data-form-field-count={schemaFields.length}\n              onSubmit={(event) => event.preventDefault()}', 'editor form preview must not silently swallow schema form submissions');
+const publicRenderRoute = read('apps/public/src/app/api/sites/[siteId]/render/route.ts');
+assertIncludes(publicRenderRoute, 'if (!site || !site.isPublished)', 'public render endpoint must not expose unpublished sites');
+const hostedSiteRoute = read('apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx');
+assertIncludes(hostedSiteRoute, 'return site?.isPublished ? { mode: \'database\', site, repositories } as HostedSite : null;', 'hosted database site renderer must not render unpublished sites');
+assertIncludes(hostedSiteRoute, 'return site?.isPublished ? { mode: \'demo\', site, repositories: null } as HostedSite : null;', 'hosted demo site renderer must not render unpublished sites');
+const pageRendererSource = read('apps/public/src/components/PageRenderer.tsx');
+assertIncludes(pageRendererSource, 'const getSafeFormRedirectUrl = (value: unknown): string =>', 'public form renderer must sanitize success redirects');
+assertIncludes(pageRendererSource, 'parsed.origin !== window.location.origin', 'public form renderer must reject unsafe cross-origin success redirects');
+assertIncludes(pageRendererSource, 'window.location.assign(safeSuccessRedirectUrl)', 'public form renderer must only navigate to sanitized success redirects');
 const pageCreateRoute = read('apps/admin/src/routes/pages.new.tsx');
 assertIncludes(pageCreateRoute, 'page-create-dataset-selector', 'page creation must expose a first-class dataset selector');
 assertIncludes(pageCreateRoute, 'page-dataset-collection-select', 'page creation must let users choose a collection without URL params');
