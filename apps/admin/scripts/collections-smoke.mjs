@@ -67,6 +67,30 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestApiRaw = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json')
+    ? await response.json().catch(() => ({}))
+    : await response.text();
+
+  return {
+    response,
+    payload,
+  };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -1296,6 +1320,119 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
   throw new Error(`Visitor mutation policy did not persist: ${JSON.stringify(lastPersistedState)}`);
 };
 
+const assertVisitorMutationPolicyPublicApi = async ({
+  collectionId,
+  collectionSlug,
+  recordSlug,
+  token,
+  suffix,
+}) => {
+  const originalRecord = await fetchRecordBySlug(collectionId, recordSlug);
+  assert(originalRecord?.id, `Visitor mutation policy record missing before public API checks: ${JSON.stringify(originalRecord)}`);
+
+  const rejectedUpdate = await requestApiRaw(
+    `/api/sites/${SITE_ID}/collections/${collectionSlug}/records/${recordSlug}`,
+    {
+      method: 'PATCH',
+      headers: { 'x-backy-public-write-token': 'wrong-token' },
+      body: JSON.stringify({
+        values: {
+          summary: 'This update should be rejected.',
+        },
+      }),
+    },
+  );
+  assert(
+    rejectedUpdate.response.status === 403 &&
+      rejectedUpdate.payload?.error?.code === 'PUBLIC_UPDATE_AUTH_REQUIRED',
+    `Public update should reject an invalid token: ${JSON.stringify({ status: rejectedUpdate.response.status, payload: rejectedUpdate.payload }).slice(0, 800)}`,
+  );
+
+  const updatedSummary = `Public visitor summary ${suffix}`;
+  const ignoredWebsite = `https://ignored-${suffix}.example.com`;
+  const acceptedUpdate = await requestApiRaw(
+    `/api/sites/${SITE_ID}/collections/${collectionSlug}/records/${recordSlug}`,
+    {
+      method: 'PATCH',
+      headers: { 'x-backy-public-write-token': token },
+      body: JSON.stringify({
+        values: {
+          summary: updatedSummary,
+          website: ignoredWebsite,
+        },
+      }),
+    },
+  );
+  assert(
+    acceptedUpdate.response.ok && acceptedUpdate.payload?.success === true,
+    `Public update with valid token failed: ${JSON.stringify({ status: acceptedUpdate.response.status, payload: acceptedUpdate.payload }).slice(0, 1000)}`,
+  );
+  const updatePolicy = acceptedUpdate.payload?.data?.visitorWritePolicy || acceptedUpdate.payload?.visitorWritePolicy;
+  assert(
+    Array.isArray(updatePolicy?.ignoredFields) &&
+      updatePolicy.ignoredFields.includes('website') &&
+      updatePolicy.values?.summary === updatedSummary &&
+      updatePolicy.values?.website === undefined,
+    `Public update field policy did not report ignored disallowed fields: ${JSON.stringify(updatePolicy).slice(0, 800)}`,
+  );
+
+  const updatedRecord = await fetchRecordBySlug(collectionId, recordSlug);
+  assert(
+    updatedRecord?.values?.summary === updatedSummary,
+    `Public update did not persist allowed summary field: ${JSON.stringify(updatedRecord).slice(0, 800)}`,
+  );
+  assert(
+    updatedRecord?.values?.website === originalRecord.values?.website,
+    `Public update should not persist disallowed website field: ${JSON.stringify({ before: originalRecord.values?.website, after: updatedRecord?.values?.website }).slice(0, 500)}`,
+  );
+
+  const deleteRecordSlug = `smoke-delete-${suffix}`;
+  const deleteRecord = await createRecord({
+    collectionId,
+    slug: deleteRecordSlug,
+    title: `Smoke delete ${suffix}`,
+  });
+
+  const rejectedDelete = await requestApiRaw(
+    `/api/sites/${SITE_ID}/collections/${collectionSlug}/records/${deleteRecordSlug}`,
+    {
+      method: 'DELETE',
+      headers: { 'x-backy-public-write-token': 'wrong-token' },
+    },
+  );
+  assert(
+    rejectedDelete.response.status === 403 &&
+      rejectedDelete.payload?.error?.code === 'PUBLIC_DELETE_AUTH_REQUIRED',
+    `Public delete should reject an invalid token: ${JSON.stringify({ status: rejectedDelete.response.status, payload: rejectedDelete.payload }).slice(0, 800)}`,
+  );
+  assert(
+    await fetchRecordBySlug(collectionId, deleteRecordSlug),
+    `Public delete invalid-token attempt removed the record unexpectedly: ${JSON.stringify(deleteRecord).slice(0, 500)}`,
+  );
+
+  const acceptedDelete = await requestApiRaw(
+    `/api/sites/${SITE_ID}/collections/${collectionSlug}/records/${deleteRecordSlug}`,
+    {
+      method: 'DELETE',
+      headers: { 'x-backy-public-write-token': token },
+    },
+  );
+  assert(
+    acceptedDelete.response.ok &&
+      acceptedDelete.payload?.success === true &&
+      (acceptedDelete.payload?.data?.deleted === true || acceptedDelete.payload?.deleted === true),
+    `Public delete with valid token failed: ${JSON.stringify({ status: acceptedDelete.response.status, payload: acceptedDelete.payload }).slice(0, 1000)}`,
+  );
+  assert(
+    !(await fetchRecordBySlug(collectionId, deleteRecordSlug)),
+    `Public delete did not remove temporary record ${deleteRecordSlug}`,
+  );
+
+  return {
+    updatedSummary,
+  };
+};
+
 const createFrontendTemplateCollectionThroughUi = async (client) => {
   const before = await fetchCollections();
   const beforeIds = new Set(before.map((collection) => collection.id));
@@ -1507,7 +1644,14 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
   throw new Error('Authored dynamic template selection did not persist');
 };
 
-const assertAuthoredDynamicTemplateRender = async ({ collectionId, collectionSlug, collectionName, recordSlug, recordTitle }) => {
+const assertAuthoredDynamicTemplateRender = async ({
+  collectionId,
+  collectionSlug,
+  collectionName,
+  recordSlug,
+  recordTitle,
+  expectedSummary = 'Record created by the Collections smoke test.',
+}) => {
   const listPayload = await requestApi(`/api/sites/${SITE_ID}/render?path=${encodeURIComponent(`/${collectionSlug}`)}`);
   const listElements = listPayload.data?.content?.elements || [];
   const listRoot = listElements.find((element) => element.id === 'authored-dynamic-list-root');
@@ -1525,7 +1669,7 @@ const assertAuthoredDynamicTemplateRender = async ({ collectionId, collectionSlu
   assert(itemPayload.data?.route?.type === 'dynamicItem', `Authored item route did not render dynamic item: ${JSON.stringify(itemPayload.data?.route)}`);
   assert(itemTitle?.props?.content === recordTitle, `Authored item title was not bound to record title: ${JSON.stringify(itemTitle)}`);
   assert(
-    `${itemSummary?.props?.content || ''} ${itemSummary?.props?.html || ''}`.includes('Record created by the Collections smoke test.'),
+    `${itemSummary?.props?.content || ''} ${itemSummary?.props?.html || ''}`.includes(expectedSummary),
     `Authored item summary was not bound to record summary: ${JSON.stringify(itemSummary)}`,
   );
   assert(
@@ -1785,7 +1929,15 @@ const main = async () => {
     await assertAuthoringShortcutCopy(client);
     await assertCollectionBackupControls(client, collectionId);
     await navigateToCollections(client, { collectionId, recordSlug });
-    await configureVisitorMutationPolicyThroughUi(client, collectionId, `smoke-public-write-${suffix}`);
+    const visitorWriteToken = `smoke-public-write-${suffix}`;
+    await configureVisitorMutationPolicyThroughUi(client, collectionId, visitorWriteToken);
+    const visitorMutationResult = await assertVisitorMutationPolicyPublicApi({
+      collectionId,
+      collectionSlug,
+      recordSlug,
+      token: visitorWriteToken,
+      suffix,
+    });
     await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertNewCollectionButtonReset(client, 'collections-library-new-collection-button');
@@ -1797,7 +1949,14 @@ const main = async () => {
     await captureAuthoredTemplatesThroughUi(client, collectionId, { listPageId: authoredListPageId, itemPageId: authoredItemPageId });
     await publishRecordThroughUi(client, recordSlug);
     await waitForRecordStatus(collectionId, recordSlug, 'published');
-    await assertAuthoredDynamicTemplateRender({ collectionId, collectionSlug, collectionName, recordSlug, recordTitle });
+    await assertAuthoredDynamicTemplateRender({
+      collectionId,
+      collectionSlug,
+      collectionName,
+      recordSlug,
+      recordTitle,
+      expectedSummary: visitorMutationResult.updatedSummary,
+    });
     await assertPublicRecord(collectionSlug, recordSlug);
     await attachFrontendTemplateThroughUi(client, collectionId);
     const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
