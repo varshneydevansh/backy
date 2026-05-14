@@ -41,7 +41,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 function parseLimit(value: string | null): number {
   const parsed = value ? Number.parseInt(value, 10) : 20;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : 20;
 }
 
 function parseOffset(value: string | null): number {

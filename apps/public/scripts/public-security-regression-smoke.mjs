@@ -594,6 +594,20 @@ for (const route of [
 }
 
 for (const route of [
+  'apps/public/src/app/api/sites/[siteId]/events/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/forms/[formId]/contacts/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/blog/rss/route.ts',
+]) {
+  const source = read(route);
+  assert(
+    source.includes('Math.min(100') || source.includes('Math.min(parsed, 100)'),
+    `${route} must cap caller-provided list limits at 100`,
+  );
+  assertExcludes(source, 'Number.isFinite(parsed) && parsed > 0 ? parsed', `${route} must not return unbounded positive limits`);
+}
+
+for (const route of [
   'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',
   'apps/public/src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts',
 ]) {
