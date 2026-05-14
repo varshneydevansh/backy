@@ -800,6 +800,12 @@ const adminSitesLifecycleRoute = read('apps/public/src/app/api/admin/sites/route
 assertIncludes(adminSitesLifecycleRoute, 'settings: { siteStatus: status }', 'admin sites route must persist site lifecycle status on create');
 const siteRepository = read('packages/db/src/repositories/site-page-post.ts');
 assertIncludes(siteRepository, 'normalizeSiteStatus(site) === status', 'site repository status filters must distinguish archived from draft');
+const auditLogRepository = read('packages/db/src/repositories/audit-logs.ts');
+assertIncludes(auditLogRepository, 'if (input.actorId) conditions.push(eq(activityLogs.userId, input.actorId));', 'audit log repository must push actor filters into the database query');
+assertIncludes(auditLogRepository, 'if (input.entity) conditions.push(eq(activityLogs.entityType, input.entity));', 'audit log repository must push entity filters into the database query');
+assertIncludes(auditLogRepository, 'if (input.action) conditions.push(eq(activityLogs.action, input.action));', 'audit log repository must push action filters into the database query');
+assertIncludes(auditLogRepository, "if (input.teamId) conditions.push(sql`${activityLogs.details}->>'teamId' = ${input.teamId}`);", 'audit log repository must push team metadata filters into the database query');
+assertIncludes(auditLogRepository, "if (input.requestId) conditions.push(sql`${activityLogs.details}->>'requestId' = ${input.requestId}`);", 'audit log repository must push request metadata filters into the database query');
 
 const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');

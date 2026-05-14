@@ -6,7 +6,7 @@ import {
     type BackyRepositoryEntity,
     type BackyAuditLogRepository,
 } from '@backy-cms/core';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQLWrapper } from 'drizzle-orm';
 import { activityLogs } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
@@ -128,20 +128,19 @@ export function createAuditLogRepository(db: DatabaseInstance): BackyAuditLogRep
 
     return {
         async list(input: BackyAuditLogListInput): Promise<BackyListResult<BackyAuditLogEntry>> {
-            const baseQuery = input.siteId
-                ? database.select().from(activityLogs).where(eq(activityLogs.siteId, input.siteId))
+            const conditions: SQLWrapper[] = [];
+            if (input.siteId) conditions.push(eq(activityLogs.siteId, input.siteId));
+            if (input.teamId) conditions.push(sql`${activityLogs.details}->>'teamId' = ${input.teamId}`);
+            if (input.actorId) conditions.push(eq(activityLogs.userId, input.actorId));
+            if (input.entity) conditions.push(eq(activityLogs.entityType, input.entity));
+            if (input.entityId) conditions.push(eq(activityLogs.entityId, input.entityId));
+            if (input.action) conditions.push(eq(activityLogs.action, input.action));
+            if (input.requestId) conditions.push(sql`${activityLogs.details}->>'requestId' = ${input.requestId}`);
+            const baseQuery = conditions.length > 0
+                ? database.select().from(activityLogs).where(and(...conditions))
                 : database.select().from(activityLogs);
             const rows = await baseQuery.orderBy(desc(activityLogs.createdAt)) as AuditLogRow[];
-            const filtered = rows
-                .map(toAuditLogEntry)
-                .filter((entry) => input.siteId ? entry.siteId === input.siteId : true)
-                .filter((entry) => input.teamId ? entry.teamId === input.teamId : true)
-                .filter((entry) => input.actorId ? entry.actorId === input.actorId : true)
-                .filter((entry) => input.entity ? entry.entity === input.entity : true)
-                .filter((entry) => input.entityId ? entry.entityId === input.entityId : true)
-                .filter((entry) => input.action ? entry.action === input.action : true)
-                .filter((entry) => input.requestId ? entry.requestId === input.requestId : true);
-            return paginate(filtered, input.limit, input.offset);
+            return paginate(rows.map(toAuditLogEntry), input.limit, input.offset);
         },
 
         async record(input: Omit<BackyAuditLogEntry, 'id' | 'createdAt'>): Promise<BackyAuditLogEntry> {
