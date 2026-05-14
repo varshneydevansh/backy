@@ -982,12 +982,9 @@ function ContentProperties({
   );
   const updateTextContent = useCallback((content: unknown) => {
     onChange({
-      props: {
-        ...element.props,
-        content: content as ElementProps['content'],
-      },
+      content: content as ElementProps['content'],
     });
-  }, [element.props, onChange]);
+  }, [onChange]);
   useEffect(() => {
     // BackyTextProperties diagnostics disabled.
   }, [element.id, element.type, elementId, hasTextContent, hasImageContent, hasVideoContent, hasLinkContent, hasButtonContent, onChange]);
