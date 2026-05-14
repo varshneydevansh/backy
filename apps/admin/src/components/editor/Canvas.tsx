@@ -2958,7 +2958,11 @@ function CanvasElementComponent({
               <input
                 type={inputType}
                 placeholder={placeholder || 'Enter text...'}
-                {...(inputType === 'file' ? {} : { value: inputValue })}
+                {...(inputType === 'file'
+                  ? {}
+                  : isPreview
+                    ? { defaultValue: inputValue }
+                    : { value: inputValue, readOnly: true })}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
@@ -2980,7 +2984,6 @@ function CanvasElementComponent({
                   backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
                   pointerEvents: isPreview ? 'auto' : 'none',
                 }}
-                readOnly
               />
               {helpText ? (
                 <p style={getFormHelpStyle(p)}>
@@ -3024,7 +3027,9 @@ function CanvasElementComponent({
               <textarea
                 rows={rows || 4}
                 placeholder={placeholder || 'Enter text...'}
-                value={textareaValue}
+                {...(isPreview
+                  ? { defaultValue: textareaValue }
+                  : { value: textareaValue, readOnly: true })}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
@@ -3043,7 +3048,6 @@ function CanvasElementComponent({
                   pointerEvents: isPreview ? 'auto' : 'none',
                   resize: normalizeTextareaResize(p.resize),
                 }}
-                readOnly
               />
               {helpText ? (
                 <p style={getFormHelpStyle(p)}>
@@ -3083,7 +3087,9 @@ function CanvasElementComponent({
                 </label>
               ) : null}
               <select
-                value={selectedValue}
+                {...(isPreview
+                  ? { defaultValue: selectedValue }
+                  : { value: selectedValue })}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}

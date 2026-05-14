@@ -10308,6 +10308,52 @@ const assertPersistedSpacerBehavior = async (pageId) => {
   return { width: spacer.width, height: spacer.height, props };
 };
 
+const testStandaloneFieldPreviewInteractivity = async (client, elementId, selector, nextValue) => {
+  await clickControlByTestId(client, 'editor-preview-toggle');
+  const state = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const control = node?.querySelector(${JSON.stringify(selector)});
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) {
+      return {
+        ok: false,
+        reason: 'missing-preview-control',
+        selector: ${JSON.stringify(selector)},
+        elementText: node?.textContent || '',
+      };
+    }
+
+    const before = {
+      value: control.value,
+      disabled: control.disabled,
+      readOnly: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement ? control.readOnly : false,
+    };
+    control.focus();
+    control.value = ${JSON.stringify(nextValue)};
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    const after = {
+      value: control.value,
+      disabled: control.disabled,
+      readOnly: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement ? control.readOnly : false,
+    };
+
+    return {
+      ok: true,
+      selector: ${JSON.stringify(selector)},
+      before,
+      after,
+    };
+  })()`);
+  await clickControlByTestId(client, 'editor-preview-toggle');
+
+  assert(state?.ok, `Preview control missing for ${elementId}: ${JSON.stringify(state)}`);
+  assert(state.before.disabled === false && state.after.disabled === false, `Preview control remained disabled for ${elementId}: ${JSON.stringify(state)}`);
+  assert(state.before.readOnly === false && state.after.readOnly === false, `Preview control remained read-only for ${elementId}: ${JSON.stringify(state)}`);
+  assert(state.after.value === nextValue, `Preview control value did not update for ${elementId}: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
 const testQuoteBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-quote');
   await switchToPropertiesPanel(client);
@@ -10423,7 +10469,12 @@ const testInputFieldBehaviorControls = async (client) => {
   assert(state.maxLength === '64' && state.previewMaxLength === '64', `Input maxLength mismatch: ${JSON.stringify(state)}`);
   assert(state.defaultValue === 'test@example.com' && state.previewValue === 'test@example.com', `Input default value mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  const previewInteraction = await testStandaloneFieldPreviewInteractivity(client, 'smoke-input', 'input', 'typed@example.com');
+
+  return {
+    ...state,
+    previewInteraction,
+  };
 };
 
 const assertPersistedInputFieldBehavior = async (pageId) => {
@@ -10504,7 +10555,12 @@ const testTextareaFieldBehaviorControls = async (client) => {
   assert(state.maxLength === '240' && state.previewMaxLength === '240', `Textarea maxLength mismatch: ${JSON.stringify(state)}`);
   assert(state.defaultValue === 'Textarea default body' && state.previewValue === 'Textarea default body', `Textarea default value mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  const previewInteraction = await testStandaloneFieldPreviewInteractivity(client, 'smoke-textarea', 'textarea', 'Typed textarea preview body');
+
+  return {
+    ...state,
+    previewInteraction,
+  };
 };
 
 const assertPersistedTextareaFieldBehavior = async (pageId) => {
@@ -10575,7 +10631,12 @@ const testSelectFieldBehaviorControls = async (client) => {
   assert(JSON.stringify(state.previewOptions) === JSON.stringify(['', 'Starter', 'Growth', 'Scale']), `Select preview options mismatch: ${JSON.stringify(state)}`);
   assert(state.defaultValue === 'Growth' && state.previewValue === 'Growth', `Select default value mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  const previewInteraction = await testStandaloneFieldPreviewInteractivity(client, 'smoke-select', 'select', 'Scale');
+
+  return {
+    ...state,
+    previewInteraction,
+  };
 };
 
 const assertPersistedSelectFieldBehavior = async (pageId) => {
