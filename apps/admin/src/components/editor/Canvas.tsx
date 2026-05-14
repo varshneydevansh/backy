@@ -1347,8 +1347,6 @@ type DragInteraction = {
   pointerId?: number;
   startX: number;
   startY: number;
-  raisedZIndex: number;
-  zIndexOffset: number;
 };
 
 type ResizeInteraction = {
@@ -1685,9 +1683,6 @@ export function Canvas({
         return;
       }
       const isMultiDrag = dragSnapshots.length > 1;
-      const minSelectedZIndex = Math.min(...dragSnapshots.map((snapshot) => snapshot.zIndex));
-      const zIndexOffset = Math.max(0, getMaxZIndex(elementsRef.current) - minSelectedZIndex + 1);
-
       if (!isMultiDrag) {
         onSelect(elementId);
       }
@@ -1702,8 +1697,6 @@ export function Canvas({
         ...getPointerDetails(e),
         startX: e.clientX,
         startY: e.clientY,
-        raisedZIndex: Math.max(clickedElement.zIndex || 1, getMaxZIndex(elementsRef.current) + 1),
-        zIndexOffset,
       };
 
       dragStateRef.current = nextDragState;
@@ -1928,9 +1921,6 @@ export function Canvas({
         ...element,
         x: clampToCanvas(snapshot.x + moveDeltaX, snapshot.width, snapshot.boundsWidth),
         y: clampToCanvas(snapshot.y + moveDeltaY, snapshot.height, snapshot.boundsHeight),
-        zIndex: activeDragState.elementIds.length > 1
-          ? snapshot.zIndex + activeDragState.zIndexOffset
-          : activeDragState.raisedZIndex,
       }));
 
       nextElements = result.elements;
