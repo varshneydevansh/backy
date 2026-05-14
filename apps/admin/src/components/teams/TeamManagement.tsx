@@ -41,6 +41,9 @@ export interface Team {
 interface TeamManagementProps {
     teams: Team[];
     currentTeamId: string;
+    canManageTeams?: boolean;
+    mutationDisabledReason?: string;
+    isMutating?: boolean;
     onCreateTeam: (name: string) => Promise<void>;
     onUpdateTeam: (teamId: string, updates: Partial<Team>) => Promise<void>;
     onDeleteTeam: (teamId: string) => Promise<void>;
@@ -470,6 +473,9 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
 export function TeamManagement({
     teams,
     currentTeamId,
+    canManageTeams = true,
+    mutationDisabledReason = 'You do not have permission to manage teams.',
+    isMutating = false,
     onCreateTeam,
     onUpdateTeam,
     onDeleteTeam,
@@ -483,36 +489,55 @@ export function TeamManagement({
     const [editTeam, setEditTeam] = useState<Team | null>(null);
     const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
     const [actionError, setActionError] = useState('');
+    const [busyMemberAction, setBusyMemberAction] = useState<string | null>(null);
 
     const currentTeam = teams.find((t) => t.id === currentTeamId);
+    const mutationsDisabled = isMutating || !canManageTeams;
+    const mutationTitle = canManageTeams ? undefined : mutationDisabledReason;
 
     const handleInvite = useCallback(
         async (email: string, role: TeamRole) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
             if (inviteTeamId) {
                 await onInviteMember(inviteTeamId, email, role);
             }
         },
-        [inviteTeamId, onInviteMember]
+        [canManageTeams, inviteTeamId, mutationDisabledReason, onInviteMember]
     );
 
     const handleCreate = useCallback(
         async (name: string) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
             await onCreateTeam(name);
         },
-        [onCreateTeam]
+        [canManageTeams, mutationDisabledReason, onCreateTeam]
     );
 
     const handleUpdate = useCallback(
         async (updates: Partial<Team>) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
             if (editTeam) {
                 await onUpdateTeam(editTeam.id, updates);
             }
         },
-        [editTeam, onUpdateTeam]
+        [canManageTeams, editTeam, mutationDisabledReason, onUpdateTeam]
     );
 
     const handleDelete = useCallback(
         async (team: Team) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
             const confirmed = window.confirm(`Delete "${team.name}"? This cannot be undone.`);
             if (!confirmed) return;
 
@@ -523,7 +548,47 @@ export function TeamManagement({
                 setActionError(deleteError instanceof Error ? deleteError.message : 'Unable to delete team');
             }
         },
-        [onDeleteTeam]
+        [canManageTeams, mutationDisabledReason, onDeleteTeam]
+    );
+
+    const handleUpdateMemberRole = useCallback(
+        async (teamId: string, memberId: string, role: TeamRole) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
+            const actionId = `role:${memberId}`;
+            setActionError('');
+            setBusyMemberAction(actionId);
+            try {
+                await onUpdateMemberRole(teamId, memberId, role);
+            } catch (updateError) {
+                setActionError(updateError instanceof Error ? updateError.message : 'Unable to update team member role');
+            } finally {
+                setBusyMemberAction(null);
+            }
+        },
+        [canManageTeams, mutationDisabledReason, onUpdateMemberRole]
+    );
+
+    const handleRemoveMember = useCallback(
+        async (teamId: string, memberId: string) => {
+            if (!canManageTeams) {
+                setActionError(mutationDisabledReason);
+                return;
+            }
+            const actionId = `remove:${memberId}`;
+            setActionError('');
+            setBusyMemberAction(actionId);
+            try {
+                await onRemoveMember(teamId, memberId);
+            } catch (removeError) {
+                setActionError(removeError instanceof Error ? removeError.message : 'Unable to remove team member');
+            } finally {
+                setBusyMemberAction(null);
+            }
+        },
+        [canManageTeams, mutationDisabledReason, onRemoveMember]
     );
 
     return (
@@ -533,6 +598,8 @@ export function TeamManagement({
                 <button
                     style={{ ...styles.button, ...styles.primaryButton }}
                     onClick={() => setShowCreateModal(true)}
+                    disabled={mutationsDisabled}
+                    title={mutationTitle}
                 >
                     + Create Team
                 </button>
@@ -606,12 +673,16 @@ export function TeamManagement({
                         <button
                             style={{ ...styles.button, ...styles.secondaryButton }}
                             onClick={() => setEditTeam(currentTeam)}
+                            disabled={mutationsDisabled}
+                            title={mutationTitle}
                         >
                             Edit
                         </button>
                         <button
                             style={{ ...styles.button, ...styles.dangerButton }}
                             onClick={() => handleDelete(currentTeam)}
+                            disabled={mutationsDisabled}
+                            title={mutationTitle}
                         >
                             Delete
                         </button>
@@ -635,6 +706,8 @@ export function TeamManagement({
                                 setInviteTeamId(currentTeam.id);
                                 setShowInviteModal(true);
                             }}
+                            disabled={mutationsDisabled}
+                            title={mutationTitle}
                         >
                             + Invite Member
                         </button>
@@ -672,9 +745,9 @@ export function TeamManagement({
                                     <select
                                         style={styles.select}
                                         value={member.role}
-                                        onChange={(e) =>
-                                            onUpdateMemberRole(currentTeam.id, member.id, e.target.value as TeamRole)
-                                        }
+                                        onChange={(e) => handleUpdateMemberRole(currentTeam.id, member.id, e.target.value as TeamRole)}
+                                        disabled={mutationsDisabled || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`}
+                                        title={mutationTitle}
                                     >
                                         <option value="viewer">Viewer</option>
                                         <option value="editor">Editor</option>
@@ -682,9 +755,11 @@ export function TeamManagement({
                                     </select>
                                     <button
                                         style={{ ...styles.button, ...styles.dangerButton }}
-                                        onClick={() => onRemoveMember(currentTeam.id, member.id)}
+                                        onClick={() => handleRemoveMember(currentTeam.id, member.id)}
+                                        disabled={mutationsDisabled || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`}
+                                        title={mutationTitle}
                                     >
-                                        Remove
+                                        {busyMemberAction === `remove:${member.id}` ? 'Removing...' : 'Remove'}
                                     </button>
                                 </>
                             )}

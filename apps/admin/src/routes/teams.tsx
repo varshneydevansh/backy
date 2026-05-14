@@ -8,13 +8,17 @@ import TeamManagement, { type Team, type TeamRole } from '@/components/teams/Tea
 import {
   createTeam,
   deleteTeam,
+  getUserPermissions,
   inviteTeamMember,
   listTeams,
   removeTeamMember,
   updateTeam,
   updateTeamMemberRole,
   type AdminTeam,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
+import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 
 export const Route = createFileRoute('/teams')({
   component: TeamsPage,
@@ -38,13 +42,31 @@ const toTeam = (team: AdminTeam): Team => ({
   plan: team.plan,
 });
 
+type TeamPermissionKey = 'users.view' | 'users.manage';
+
+const TEAM_PERMISSION_ROLE_DEFAULTS: Record<TeamPermissionKey, Array<AuthUser['role']>> = {
+  'users.view': ['owner', 'admin'],
+  'users.manage': ['owner', 'admin'],
+};
+
 function TeamsPage() {
+  const currentAdmin = useAuthStore((state) => state.user);
   const [teams, setTeams] = useState<Team[]>([]);
   const [currentTeamId, setCurrentTeamId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canViewTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const canManageTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const viewPermissionTitle = canViewTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const managePermissionTitle = canManageTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const isTeamsBusy = isLoading || isRefreshing || isPermissionMatrixPending;
 
   const currentTeamExists = useMemo(
     () => teams.some((team) => team.id === currentTeamId),
@@ -52,6 +74,16 @@ function TeamsPage() {
   );
 
   const loadTeams = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
+    if (isPermissionMatrixPending) return;
+    if (!canViewTeams) {
+      setTeams([]);
+      setCurrentTeamId('');
+      setError(viewPermissionTitle || 'Your account cannot view teams.');
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
+
     if (mode === 'initial') {
       setIsLoading(true);
     } else {
@@ -74,7 +106,44 @@ function TeamsPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [canViewTeams, isPermissionMatrixPending, viewPermissionTitle]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissionError(null);
+
+    if (!currentAdmin?.id) {
+      setPermissionMatrix(null);
+      setIsPermissionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsPermissionsLoading(true);
+    getUserPermissions(currentAdmin.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((permissionsError) => {
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load team permissions.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPermissionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAdmin?.id]);
 
   useEffect(() => {
     void loadTeams('initial');
@@ -92,45 +161,63 @@ function TeamsPage() {
   }, [loadTeams]);
 
   const handleCreateTeam = useCallback(async (name: string) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     const createdTeam = await createTeam({ name });
     await refreshAfterMutation('Team created.');
     setCurrentTeamId(createdTeam.id);
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   const handleUpdateTeam = useCallback(async (teamId: string, updates: Partial<Team>) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     await updateTeam(teamId, {
       name: updates.name,
       slug: updates.slug,
     });
     await refreshAfterMutation('Team saved.');
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   const handleDeleteTeam = useCallback(async (teamId: string) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     await deleteTeam(teamId);
     await refreshAfterMutation('Team deleted.');
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   const handleInviteMember = useCallback(async (teamId: string, email: string, role: TeamRole) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     const result = await inviteTeamMember(teamId, { email, role });
     await refreshAfterMutation(
       result.invite?.inviteUrl
         ? `Invite created. Local invite link: ${result.invite.inviteUrl}`
         : 'Team member invited.',
     );
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   const handleUpdateMemberRole = useCallback(async (teamId: string, memberId: string, role: TeamRole) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     await updateTeamMemberRole(teamId, memberId, role);
     await refreshAfterMutation('Team member role updated.');
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   const handleRemoveMember = useCallback(async (teamId: string, memberId: string) => {
+    if (!canManageTeams) {
+      throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
     const confirmed = window.confirm('Remove this member from the team?');
     if (!confirmed) return;
 
     await removeTeamMember(teamId, memberId);
     await refreshAfterMutation('Team member removed.');
-  }, [refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
   return (
     <PageShell
@@ -141,7 +228,8 @@ function TeamsPage() {
           variant="outline"
           iconStart={<RefreshCw className={isRefreshing ? 'size-4 animate-spin' : 'size-4'} />}
           onClick={() => void loadTeams()}
-          disabled={isLoading || isRefreshing}
+          disabled={isTeamsBusy || !canViewTeams}
+          title={!canViewTeams ? viewPermissionTitle : undefined}
         >
           Refresh
         </Button>
@@ -151,6 +239,11 @@ function TeamsPage() {
         {error && (
           <Notice tone="error" title="Teams unavailable">
             {error}
+          </Notice>
+        )}
+        {permissionError && (
+          <Notice tone="error" title="Team permissions unavailable">
+            {permissionError}
           </Notice>
         )}
         {notice && (
@@ -173,6 +266,9 @@ function TeamsPage() {
               <TeamManagement
                 teams={teams}
                 currentTeamId={currentTeamId}
+                canManageTeams={canManageTeams}
+                mutationDisabledReason={managePermissionTitle}
+                isMutating={isTeamsBusy}
                 onCreateTeam={handleCreateTeam}
                 onUpdateTeam={handleUpdateTeam}
                 onDeleteTeam={handleDeleteTeam}
@@ -187,6 +283,9 @@ function TeamsPage() {
           <TeamManagement
             teams={teams}
             currentTeamId={currentTeamId}
+            canManageTeams={canManageTeams}
+            mutationDisabledReason={managePermissionTitle}
+            isMutating={isTeamsBusy}
             onCreateTeam={handleCreateTeam}
             onUpdateTeam={handleUpdateTeam}
             onDeleteTeam={handleDeleteTeam}

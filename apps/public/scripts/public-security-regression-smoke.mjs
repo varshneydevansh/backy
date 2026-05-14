@@ -170,6 +170,15 @@ const adminTeamRoute = read('apps/public/src/app/api/admin/teams/[teamId]/route.
 assertIncludes(adminTeamRoute, 'repositories.teams.update', 'admin team detail route must update database-backed teams');
 assertIncludes(adminTeamRoute, 'repositories.teams.delete', 'admin team detail route must delete database-backed teams');
 assertIncludes(adminTeamRoute, 'TEAM_HAS_SITES', 'admin team delete must block teams that still own sites');
+const adminTeamsUiRoute = read('apps/admin/src/routes/teams.tsx');
+assertIncludes(adminTeamsUiRoute, 'getUserPermissions', 'teams admin page must load frontend permissions');
+assertIncludes(adminTeamsUiRoute, "'users.manage'", 'teams admin page must gate mutations on users.manage');
+assertIncludes(adminTeamsUiRoute, 'canManageTeams={canManageTeams}', 'teams admin page must pass mutation permission to team controls');
+const teamManagementComponent = read('apps/admin/src/components/teams/TeamManagement.tsx');
+assertIncludes(teamManagementComponent, 'busyMemberAction', 'team management controls must track member mutation busy state');
+assertIncludes(teamManagementComponent, 'handleUpdateMemberRole', 'team management role changes must catch and show mutation failures');
+assertIncludes(teamManagementComponent, 'handleRemoveMember', 'team management removals must catch and show mutation failures');
+assertIncludes(teamManagementComponent, 'disabled={mutationsDisabled}', 'team management create/edit/delete/invite controls must disable without permission');
 const adminTeamMembersRoute = read('apps/public/src/app/api/admin/teams/[teamId]/members/route.ts');
 assertIncludes(adminTeamMembersRoute, 'repositories.teams.addMember', 'admin team members route must add database-backed team members');
 assertIncludes(adminTeamMembersRoute, 'repositories.users.create', 'admin team member invite must create invited users when needed');
