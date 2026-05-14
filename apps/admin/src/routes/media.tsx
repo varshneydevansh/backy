@@ -595,6 +595,21 @@ const getMediaFolderDescendantIds = (folders: MediaFolder[], folderId: string): 
   return descendants;
 };
 
+const getMediaFolderAncestorIds = (folders: MediaFolder[], folderId: string): string[] => {
+  const folderById = new Map(folders.map((folder) => [folder.id, folder]));
+  const ancestors: string[] = [];
+  const visited = new Set<string>();
+  let current = folderById.get(folderId);
+
+  while (current?.parentId && folderById.has(current.parentId) && !visited.has(current.parentId)) {
+    visited.add(current.parentId);
+    ancestors.push(current.parentId);
+    current = folderById.get(current.parentId);
+  }
+
+  return ancestors;
+};
+
 const getUploadFileExtension = (file: File): string => file.name.split('.').pop()?.toLowerCase() || '';
 
 const isUploadFontFile = (file: File): boolean => (
@@ -992,6 +1007,18 @@ function MediaPage() {
     });
     return counts;
   }, [files]);
+  const folderSubtreeAssetCounts = useMemo(() => {
+    const counts = new Map(folderAssetCounts);
+    files.forEach((file) => {
+      if (!file.folderId) {
+        return;
+      }
+      getMediaFolderAncestorIds(folders, file.folderId).forEach((ancestorId) => {
+        counts.set(ancestorId, (counts.get(ancestorId) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [files, folderAssetCounts, folders]);
   const getFolderPath = useCallback((folderId: string) => (
     folderOptionById.get(folderId)?.path || folders.find((folder) => folder.id === folderId)?.name || 'Folder'
   ), [folderOptionById, folders]);
@@ -1428,7 +1455,8 @@ function MediaPage() {
       name: folder.name,
       parentId: folder.parentId,
       path: folder.path,
-      assetCount: folderAssetCounts.get(folder.id) || 0,
+      assetCount: folderSubtreeAssetCounts.get(folder.id) || 0,
+      directAssetCount: folderAssetCounts.get(folder.id) || 0,
     })),
     fonts: fontGroups.map((group) => ({
       family: group.family,
@@ -1478,6 +1506,7 @@ function MediaPage() {
     displayedFiles.length,
     files,
     folderAssetCounts,
+    folderSubtreeAssetCounts,
     folderOptions,
     folders,
     fontGroups,
@@ -5056,6 +5085,7 @@ function MediaPage() {
                       updateMediaRouteSearch({ folderId: folder.id });
                     }}
                     disabled={isMediaLibraryBusy}
+                    title={`${folderSubtreeAssetCounts.get(folder.id) || 0} asset${(folderSubtreeAssetCounts.get(folder.id) || 0) === 1 ? '' : 's'} including descendant folders; ${folderAssetCounts.get(folder.id) || 0} direct.`}
                     className={cn(
                       'px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
                       selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
@@ -5063,7 +5093,7 @@ function MediaPage() {
                   >
                     <span className="font-medium">{folder.label}</span>
                     <span className="ml-2 font-mono text-xs text-muted-foreground">
-                      {folderAssetCounts.get(folder.id) || 0}
+                      {folderSubtreeAssetCounts.get(folder.id) || 0}
                     </span>
                   </button>
                   <button

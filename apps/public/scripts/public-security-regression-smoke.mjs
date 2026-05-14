@@ -885,6 +885,11 @@ assertIncludes(mediaAdminRoute, '<MediaPreviewBlocked reason={blockedReason} />'
 assertIncludes(mediaAdminRoute, '<MediaPreviewBlocked reason={selectedAssetPreviewBlockedReason} />', 'media detail previews must block private or quarantined raw URLs');
 assertIncludes(mediaAdminRoute, 'version.url && !retainedPreviewBlockedReason', 'media retained version links must not expose private or quarantined raw URLs');
 assertIncludes(mediaAdminRoute, 'blockedReason={retainedPreviewBlockedReason}', 'media retained version previews must block private or quarantined raw URLs');
+assertIncludes(mediaAdminRoute, 'const getMediaFolderAncestorIds = (', 'media folder chip counts must understand ancestor folders');
+assertIncludes(mediaAdminRoute, 'const folderSubtreeAssetCounts = useMemo(() => {', 'media folder chip counts must include descendant folders');
+assertIncludes(mediaAdminRoute, 'assetCount: folderSubtreeAssetCounts.get(folder.id) || 0', 'media folder handoff manifest must expose subtree asset counts');
+assertIncludes(mediaAdminRoute, 'directAssetCount: folderAssetCounts.get(folder.id) || 0', 'media folder handoff manifest must preserve direct asset counts');
+assertIncludes(mediaAdminRoute, 'including descendant folders', 'media folder chip title must explain subtree counts');
 assert(
   occurrenceCount(mediaAdminRoute, 'onClick={() => void copyMediaHandoffManifest()}') >= 2,
   'media manifest copy controls must route through the permission-checked handler',
