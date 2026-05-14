@@ -1525,9 +1525,9 @@ function CollectionsPage() {
           ? 'Collection schema operation in progress...'
           : undefined;
   const isNewCollectionDraftOpen = isCollectionDraftMode && !activeCollection;
-  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Draft open below' : 'New collection';
+  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Edit open draft' : 'Start new collection';
   const newCollectionButtonTitle = isNewCollectionDraftOpen
-    ? 'A new collection draft is open below. Add a schema name and fields, then save it.'
+    ? 'A new collection draft is open. Jump to the schema form.'
     : schemaActionDisabledTitle;
   const newCollectionDisabledReason = schemaMutationDisabled
     ? schemaActionDisabledTitle || 'New collection is temporarily unavailable.'
@@ -2510,6 +2510,12 @@ function CollectionsPage() {
   };
 
   const beginNewCollection = () => {
+    if (isCollectionDraftMode && !activeCollection && canEditCollections) {
+      setNotice('New collection draft is already open. Add a schema name and fields, then save it to create the collection.');
+      scrollToCollectionSchema();
+      return;
+    }
+
     if (schemaMutationDisabled) {
       if (!canEditCollections) {
         showPermissionDenied('collections.edit', 'create collection schemas');
@@ -2522,7 +2528,7 @@ function CollectionsPage() {
     navigate({ to: '/collections', search: { siteId: activeSiteId, draft: 'new' }, replace: true });
     setError(null);
     setValidationDetails([]);
-    setNotice('New collection draft ready. Add a name and fields, then save the schema.');
+    setNotice('New collection draft opened. Add a schema name and fields, then save it to create the collection.');
     scrollToCollectionSchema();
   };
 
@@ -4580,7 +4586,26 @@ function CollectionsPage() {
             {collections.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 <Database className="mx-auto mb-3 h-8 w-8" />
-                No collections
+                <div className="font-medium text-foreground">No collections yet</div>
+                <p className="mx-auto mt-1 max-w-56">
+                  Start a draft schema, add fields, then save it to create your first collection.
+                </p>
+                <button
+                  type="button"
+                  onClick={beginNewCollection}
+                  disabled={schemaMutationDisabled}
+                  title={newCollectionButtonTitle}
+                  className="mx-auto mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="collections-empty-new-collection-button"
+                >
+                  <Plus className="h-4 w-4" />
+                  {newCollectionButtonLabel}
+                </button>
+                {newCollectionDisabledReason && (
+                  <p className="mt-2 text-xs font-medium text-amber-700">
+                    {newCollectionDisabledReason}
+                  </p>
+                )}
               </div>
             ) : collections.map((collection) => (
               <button

@@ -812,7 +812,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       const form = document.querySelector('#collections-schema');
       const params = new URLSearchParams(window.location.search);
       return {
-        hasNotice: body.includes('New collection draft ready'),
+        hasNotice: body.includes('New collection draft opened') || body.includes('New collection draft is already open'),
         hasActionState: Boolean(document.querySelector('[data-testid="collections-new-draft-action-state"]')) &&
           body.includes('Draft ready below'),
         hasDraftBanner: Boolean(document.querySelector('[data-testid="collections-draft-banner"]')) &&
