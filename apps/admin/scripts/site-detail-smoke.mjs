@@ -196,6 +196,11 @@ const getFrontendDesign = async (siteId) => {
   return payload.data?.frontendDesign || payload.frontendDesign;
 };
 
+const getForms = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/forms`);
+  return payload.data?.forms || payload.forms || [];
+};
+
 const getSite = async (siteId) => {
   const payload = await requestApi(`/api/admin/sites/${siteId}`);
   return payload.data?.site || payload.site;
@@ -342,6 +347,7 @@ const navigateToSiteDetail = (client, siteId, siteName) => navigate(
       Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-seo-panel"]')) &&
+      Boolean(document.querySelector('[data-testid="site-form-builder-panel"]')) &&
       document.body?.innerText?.includes(${JSON.stringify(siteName)}),
     body: document.body?.innerText?.slice(0, 1200) || '',
     path: window.location.pathname,
@@ -490,6 +496,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasActivity: Boolean(document.querySelector('[data-testid="site-audit-panel"]')) && body.includes('Site activity') && body.includes('Audit trail'),
       hasAutomation: body.includes('Forms') && body.includes('Comments moderation'),
       hasCommentPolicy: Boolean(document.querySelector('[data-testid="site-comment-policy-panel"]')) && body.includes('Site comment policy') && body.includes('Save comment policy'),
+      hasFormBuilder: Boolean(document.querySelector('[data-testid="site-form-builder-panel"]')) && body.includes('Site form builder') && body.includes('New form') && body.includes('Save form'),
       hasHandoff: body.includes('Frontend handoff') && body.includes('Public render') && body.includes('OpenAPI'),
     };
   })()`);
@@ -511,6 +518,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasActivity &&
       layout.hasAutomation &&
       layout.hasCommentPolicy &&
+      layout.hasFormBuilder &&
       layout.hasHandoff,
     `Site detail page missing expected regions: ${JSON.stringify(layout)}`,
   );
@@ -667,6 +675,103 @@ const configureWebhooksThroughUi = async (client, expected) => {
 
   await clickButtonByText(client, '[data-testid="site-webhooks-panel"]', 'Save webhooks');
   await waitForText(client, '[data-testid="site-workspace-command-center"]', 'Site webhook configuration saved.', 'Webhook save notice');
+};
+
+const configureFormBuilderThroughUi = async (client, expected) => {
+  await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Site form builder', 'Site form builder panel');
+  await waitForButtonEnabled(client, '[data-testid="site-form-builder-panel"]', 'New form', 'New site form button');
+  await clickButtonByText(client, '[data-testid="site-form-builder-panel"]', 'New form');
+  await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Standalone site form created.', 'Site form created notice');
+  await clickButtonByText(client, '[data-testid="site-form-builder-panel"]', 'Add field');
+
+  const result = await evaluate(client, `(() => {
+    ${setInputValue}
+    const section = document.querySelector('[data-testid="site-form-builder-panel"]');
+    if (!section) return { ok: false, reason: 'section-missing' };
+    const title = section.querySelector('[aria-label="Site form title"]');
+    const name = section.querySelector('[aria-label="Site form machine name"]');
+    const description = section.querySelector('[aria-label="Site form description"]');
+    const audience = section.querySelector('[aria-label="Site form audience"]');
+    const moderation = section.querySelector('[aria-label="Site form moderation"]');
+    const successMessage = section.querySelector('[aria-label="Site form success message"]');
+    const redirectUrl = section.querySelector('[aria-label="Site form redirect URL"]');
+    const notificationEmail = section.querySelector('[aria-label="Site form notification email"]');
+    const notificationWebhook = section.querySelector('[aria-label="Site form notification webhook"]');
+    const active = section.querySelector('[aria-label="Site form active"]');
+    const contactShare = section.querySelector('[aria-label="Site form contact share"]');
+    const fieldKey = section.querySelector('[aria-label="Site form field 4 key"]');
+    const fieldLabel = section.querySelector('[aria-label="Site form field 4 label"]');
+    const fieldType = section.querySelector('[aria-label="Site form field 4 type"]');
+    const fieldRequired = section.querySelector('[aria-label="Site form field 4 required"]');
+    const fieldPlaceholder = section.querySelector('[aria-label="Site form field 4 placeholder"]');
+    const fieldHelp = section.querySelector('[aria-label="Site form field 4 help text"]');
+    const fieldOptions = section.querySelector('[aria-label="Site form field 4 options"]');
+
+    if (
+      !(title instanceof HTMLInputElement) ||
+      !(name instanceof HTMLInputElement) ||
+      !(description instanceof HTMLTextAreaElement) ||
+      !(audience instanceof HTMLSelectElement) ||
+      !(moderation instanceof HTMLSelectElement) ||
+      !(successMessage instanceof HTMLInputElement) ||
+      !(redirectUrl instanceof HTMLInputElement) ||
+      !(notificationEmail instanceof HTMLInputElement) ||
+      !(notificationWebhook instanceof HTMLInputElement) ||
+      !(active instanceof HTMLInputElement) ||
+      !(contactShare instanceof HTMLInputElement) ||
+      !(fieldKey instanceof HTMLInputElement) ||
+      !(fieldLabel instanceof HTMLInputElement) ||
+      !(fieldType instanceof HTMLSelectElement) ||
+      !(fieldRequired instanceof HTMLInputElement) ||
+      !(fieldPlaceholder instanceof HTMLInputElement) ||
+      !(fieldHelp instanceof HTMLInputElement) ||
+      !(fieldOptions instanceof HTMLInputElement)
+    ) {
+      return {
+        ok: false,
+        reason: 'controls-missing',
+        labels: Array.from(section.querySelectorAll('[aria-label]')).map((node) => node.getAttribute('aria-label')),
+        text: section.textContent?.slice(0, 1800) || '',
+      };
+    }
+
+    setNativeValue(title, ${JSON.stringify(expected.formTitle)});
+    setNativeValue(name, ${JSON.stringify(expected.formName)});
+    setNativeValue(description, ${JSON.stringify(expected.formDescription)});
+    setNativeValue(audience, 'public');
+    setNativeValue(moderation, 'auto-approve');
+    setNativeValue(successMessage, ${JSON.stringify(expected.formSuccessMessage)});
+    setNativeValue(redirectUrl, ${JSON.stringify(expected.formRedirectUrl)});
+    setNativeValue(notificationEmail, ${JSON.stringify(expected.formNotificationEmail)});
+    setNativeValue(notificationWebhook, ${JSON.stringify(expected.formNotificationWebhook)});
+    if (!active.checked) active.click();
+    if (!contactShare.checked) contactShare.click();
+    setNativeValue(fieldKey, ${JSON.stringify(expected.formFieldKey)});
+    setNativeValue(fieldLabel, ${JSON.stringify(expected.formFieldLabel)});
+    setNativeValue(fieldType, 'select');
+    if (!fieldRequired.checked) fieldRequired.click();
+    setNativeValue(fieldPlaceholder, ${JSON.stringify(expected.formFieldPlaceholder)});
+    setNativeValue(fieldHelp, ${JSON.stringify(expected.formFieldHelp)});
+    setNativeValue(fieldOptions, ${JSON.stringify(expected.formFieldOptions)});
+
+    return {
+      ok: true,
+      title: title.value,
+      name: name.value,
+      audience: audience.value,
+      moderation: moderation.value,
+      contactShare: contactShare.checked,
+      fieldKey: fieldKey.value,
+      fieldLabel: fieldLabel.value,
+      fieldType: fieldType.value,
+      fieldRequired: fieldRequired.checked,
+      fieldOptions: fieldOptions.value,
+    };
+  })()`);
+  assert(result.ok, `Unable to configure site form builder through UI: ${JSON.stringify(result)}`);
+
+  await clickButtonByText(client, '[data-testid="site-form-builder-panel"]', 'Save form');
+  await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Site form builder changes saved.', 'Site form save notice');
 };
 
 const configureNavigationThroughUi = async (client, { routeLabel, routePath, footerLabel, footerHref }) => {
@@ -1059,9 +1164,12 @@ const assertApiReadback = async (siteId, expected) => {
   const frontendDesign = await getFrontendDesign(siteId);
   const site = await getSite(siteId);
   const auditLogs = await getSiteAuditLogs(siteId);
+  const forms = await getForms(siteId);
   const domainVerification = site?.settings?.domainVerification;
   const webhooks = site?.settings?.webhooks;
   const webhookEndpoint = webhooks?.endpoints?.find((endpoint) => endpoint.url === expected.webhookUrl);
+  const managedForm = forms.find((form) => form.name === expected.formName);
+  const managedField = managedForm?.fields?.find((field) => field.key === expected.formFieldKey);
 
   assert(
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
@@ -1137,6 +1245,27 @@ const assertApiReadback = async (siteId, expected) => {
     `Site API did not include saved webhooks: ${JSON.stringify(webhooks).slice(0, 1500)}`,
   );
   assert(
+    managedForm?.title === expected.formTitle &&
+      managedForm?.description === expected.formDescription &&
+      managedForm?.audience === 'public' &&
+      managedForm?.isActive === true &&
+      managedForm?.moderationMode === 'auto-approve' &&
+      managedForm?.notificationEmail === expected.formNotificationEmail &&
+      managedForm?.notificationWebhook === expected.formNotificationWebhook &&
+      managedForm?.successRedirectUrl === expected.formRedirectUrl &&
+      managedForm?.successMessage === expected.formSuccessMessage &&
+      managedForm?.contactShare?.enabled === true &&
+      managedField?.label === expected.formFieldLabel &&
+      managedField?.type === 'select' &&
+      managedField?.required === true &&
+      managedField?.placeholder === expected.formFieldPlaceholder &&
+      managedField?.helpText === expected.formFieldHelp &&
+      managedField?.options?.includes('Starter') &&
+      managedField?.options?.includes('Growth') &&
+      managedField?.options?.includes('Enterprise'),
+    `Forms API did not include saved site form builder definition: ${JSON.stringify({ managedForm, managedField }).slice(0, 1800)}`,
+  );
+  assert(
     frontendDesign?.status === 'synced' &&
       frontendDesign?.source?.type === 'custom-frontend' &&
       frontendDesign?.source?.label === expected.frontendLabel &&
@@ -1158,6 +1287,8 @@ const assertApiReadback = async (siteId, expected) => {
     'site.domainVerification.updated',
     'site.themePublish.updated',
     'site.webhooks.updated',
+    'form.create',
+    'form.update',
     'commentPolicy.update',
     'frontendDesign.capture',
     'frontendDesign.update',
@@ -1165,7 +1296,7 @@ const assertApiReadback = async (siteId, expected) => {
     assert(auditActions.has(action), `Site audit logs did not include ${action}: ${JSON.stringify(auditLogs.map((log) => log.action)).slice(0, 1000)}`);
   }
 
-  return { navigation, redirects, seo, frontendDesign, site, auditLogs };
+  return { navigation, redirects, seo, frontendDesign, site, forms, auditLogs };
 };
 
 const launchChrome = () => {
@@ -1269,6 +1400,18 @@ const main = async () => {
     webhookSecretId: `env:BACKY_SITE_WEBHOOK_SECRET_${suffix.toUpperCase()}`,
     webhookHeaderValue: `smoke-${suffix}`,
     webhookHeadersText: JSON.stringify({ 'X-Backy-Smoke': `smoke-${suffix}` }, null, 2),
+    formTitle: `Smoke Lead Form ${suffix}`,
+    formName: `smoke_lead_form_${suffix.toLowerCase()}`,
+    formDescription: `Site detail managed lead form for ${siteName}.`,
+    formSuccessMessage: `Thanks from ${siteName}.`,
+    formRedirectUrl: `/thanks-${suffix}`,
+    formNotificationEmail: `leads-${suffix}@example.com`,
+    formNotificationWebhook: `https://hooks.example.com/forms/${suffix}`,
+    formFieldLabel: `Budget ${suffix}`,
+    formFieldKey: `budget_${suffix.toLowerCase()}`,
+    formFieldPlaceholder: '5000',
+    formFieldHelp: 'Approximate project budget.',
+    formFieldOptions: 'Starter, Growth, Enterprise',
   };
 
   try {
@@ -1313,6 +1456,7 @@ const main = async () => {
     await configureDomainVerificationThroughUi(client);
     await configureThemePublishThroughUi(client, expected);
     await configureWebhooksThroughUi(client, expected);
+    await configureFormBuilderThroughUi(client, expected);
     await configureNavigationThroughUi(client, expected);
     await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {
@@ -1328,6 +1472,7 @@ const main = async () => {
     await clickButtonByText(client, '[data-testid="site-audit-panel"]', 'Refresh activity');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.navigation.updated', 'Site activity audit row');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.webhooks.updated', 'Site webhooks audit row');
+    await waitForText(client, '[data-testid="site-audit-panel"]', 'form.update', 'Site form update audit row');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.seo.updated', 'Site SEO audit row');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {

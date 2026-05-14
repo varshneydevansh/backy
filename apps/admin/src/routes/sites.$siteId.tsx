@@ -44,6 +44,9 @@ import {
   listAdminAuditLogs,
   listPages,
   listForms as listFormsFromApi,
+  createForm,
+  updateForm,
+  deleteForm as deleteFormFromApi,
   listFormContacts,
   previewSiteRedirects,
   updateSiteRedirects,
@@ -66,6 +69,7 @@ import type {
   AdminSiteSeoSettings,
   AdminContact,
   FormDefinition,
+  FormFieldDefinition,
   FormSubmission,
   SiteReadiness,
 } from '@/lib/adminContentApi';
@@ -137,7 +141,10 @@ type SiteDetailPermissionKey =
   | 'sites.configure'
   | 'sites.delete'
   | 'forms.view'
+  | 'forms.create'
+  | 'forms.edit'
   | 'forms.manage'
+  | 'forms.delete'
   | 'forms.export'
   | 'comments.view'
   | 'comments.manage'
@@ -149,7 +156,10 @@ const SITE_DETAIL_PERMISSION_ROLE_DEFAULTS: Record<SiteDetailPermissionKey, Arra
   'sites.configure': ['owner', 'admin'],
   'sites.delete': ['owner'],
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.create': ['owner', 'admin', 'editor'],
+  'forms.edit': ['owner', 'admin', 'editor'],
   'forms.manage': ['owner', 'admin', 'editor'],
+  'forms.delete': ['owner', 'admin'],
   'forms.export': ['owner', 'admin'],
   'comments.view': ['owner', 'admin', 'editor', 'viewer'],
   'comments.manage': ['owner', 'admin', 'editor'],
@@ -589,6 +599,18 @@ const DEFAULT_SITE_WEBHOOK_EVENTS: SiteWebhookEventKind[] = [
   'comment-reported',
 ];
 
+const SITE_FORM_FIELD_TYPES = [
+  'text',
+  'email',
+  'textarea',
+  'tel',
+  'number',
+  'select',
+  'checkbox',
+  'radio',
+  'date',
+] as const;
+
 const EMPTY_FRONTEND_DESIGN: SiteFrontendDesignContract = {
   schemaVersion: 'backy.frontend-design.v1',
   status: 'unconfigured',
@@ -739,6 +761,71 @@ function siteWebhookDraftToSettings(state: SiteWebhookEditorState): NonNullable<
       .filter((endpoint) => endpoint.url),
   };
 }
+
+const cloneSiteFormDefinition = (form: FormDefinition): FormDefinition => (
+  JSON.parse(JSON.stringify(form)) as FormDefinition
+);
+
+const normalizeFormFieldKey = (value: string): string => (
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48)
+);
+
+const parseFormOptionsText = (value: string): string[] | undefined => {
+  const options = value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return options.length > 0 ? options : undefined;
+};
+
+const normalizeFormOptionalText = (value: string | null | undefined): string | null => {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text ? text : null;
+};
+
+const makeSiteFormField = (index: number): FormFieldDefinition => ({
+  key: `field_${index}`,
+  label: `Field ${index}`,
+  type: 'text',
+  required: false,
+});
+
+const siteFormDraftToPayload = (form: FormDefinition) => ({
+  name: form.name.trim(),
+  title: normalizeFormOptionalText(form.title),
+  description: normalizeFormOptionalText(form.description),
+  audience: form.audience,
+  isActive: form.isActive,
+  fields: form.fields.map((field, index) => ({
+    key: normalizeFormFieldKey(field.key) || `field_${index + 1}`,
+    label: field.label.trim() || `Field ${index + 1}`,
+    type: field.type || 'text',
+    required: Boolean(field.required),
+    ...(normalizeFormOptionalText(field.placeholder) ? { placeholder: normalizeFormOptionalText(field.placeholder) || undefined } : {}),
+    ...(normalizeFormOptionalText(field.helpText) ? { helpText: normalizeFormOptionalText(field.helpText) || undefined } : {}),
+    ...(field.options && field.options.length > 0 ? { options: field.options.map((option) => option.trim()).filter(Boolean) } : {}),
+  })),
+  notificationEmail: normalizeFormOptionalText(form.notificationEmail),
+  notificationWebhook: normalizeFormOptionalText(form.notificationWebhook),
+  successRedirectUrl: normalizeFormOptionalText(form.successRedirectUrl),
+  successMessage: normalizeFormOptionalText(form.successMessage),
+  enableHoneypot: form.enableHoneypot !== false,
+  enableCaptcha: form.enableCaptcha === true,
+  moderationMode: form.moderationMode || 'manual',
+  contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
+  collectionTarget: form.collectionTarget?.enabled
+    ? form.collectionTarget
+    : { enabled: false, collectionId: form.collectionTarget?.collectionId || '', fieldMap: form.collectionTarget?.fieldMap || {} },
+  settings: {
+    ...(form.settings || {}),
+    source: form.settings?.source || 'site-detail-builder',
+  },
+});
 
 function normalizeRedirectEditorRule(rule: SiteRedirectRule): SiteRedirectRule {
   return {
@@ -1063,6 +1150,11 @@ function EditSitePage() {
   const [savedCommentPolicy, setSavedCommentPolicy] = useState<SiteCommentPolicyDraft>(DEFAULT_SITE_COMMENT_POLICY);
   const [commentPolicyLoading, setCommentPolicyLoading] = useState(false);
   const [commentPolicySaving, setCommentPolicySaving] = useState(false);
+  const [formBuilderDraft, setFormBuilderDraft] = useState<FormDefinition | null>(null);
+  const [formBuilderSaving, setFormBuilderSaving] = useState(false);
+  const [formBuilderCreating, setFormBuilderCreating] = useState(false);
+  const [formBuilderDeleting, setFormBuilderDeleting] = useState(false);
+  const [formBuilderNotice, setFormBuilderNotice] = useState<string | null>(null);
   const [contactNoteDrafts, setContactNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1074,7 +1166,10 @@ function EditSitePage() {
   const canConfigureSite = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure');
   const canDeleteSite = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'sites.delete');
   const canViewForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view');
+  const canCreateForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.create');
+  const canEditForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.edit');
   const canManageForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage');
+  const canDeleteForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.delete');
   const canExportForms = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export');
   const canViewComments = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view');
   const canManageComments = !isPermissionMatrixPending && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage');
@@ -1084,7 +1179,10 @@ function EditSitePage() {
   const configureSitePermissionTitle = canConfigureSite ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.configure');
   const deleteSitePermissionTitle = canDeleteSite ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'sites.delete');
   const formsViewPermissionTitle = canViewForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.view');
+  const formsCreatePermissionTitle = canCreateForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.create');
+  const formsEditPermissionTitle = canEditForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.edit');
   const formsManagePermissionTitle = canManageForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.manage');
+  const formsDeletePermissionTitle = canDeleteForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.delete');
   const formsExportPermissionTitle = canExportForms ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'forms.export');
   const commentsViewPermissionTitle = canViewComments ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'comments.view');
   const commentsManagePermissionTitle = canManageComments ? undefined : siteDetailPermissionReason(permissionMatrix, currentAdmin, 'comments.manage');
@@ -1104,6 +1202,8 @@ function EditSitePage() {
   const isWorkflowRefreshDisabled = state.workflowLoading || (!canViewForms && !canViewComments);
   const isFormViewDisabled = state.workflowLoading || !canViewForms;
   const isFormManagementDisabled = state.workflowLoading || !canManageForms;
+  const isFormBuilderBusy = formBuilderSaving || formBuilderCreating || formBuilderDeleting || state.workflowLoading;
+  const isFormBuilderDisabled = isFormBuilderBusy || !canEditForms;
   const isCommentPolicyDisabled = commentPolicyLoading || commentPolicySaving || !canConfigureComments;
   const isCommentViewDisabled = state.commentsLoading || !canViewComments;
 
@@ -2178,6 +2278,195 @@ function EditSitePage() {
     }
   };
 
+  const createSiteDetailForm = async () => {
+    if (!siteApiId || formBuilderCreating) return;
+    if (!canCreateForms) {
+      setWorkflowError(formsCreatePermissionTitle || 'Your account cannot create site forms.');
+      return;
+    }
+
+    const suffix = Date.now().toString(36);
+    setFormBuilderCreating(true);
+    setWorkflowError(null);
+    setFormBuilderNotice(null);
+
+    try {
+      const created = await createForm(siteApiId, {
+        name: `site-form-${suffix}`,
+        title: 'New site form',
+        description: 'Standalone form managed from the site workspace.',
+        audience: 'public',
+        isActive: true,
+        fields: [
+          { key: 'name', label: 'Name', type: 'text', required: true },
+          { key: 'email', label: 'Email', type: 'email', required: true },
+          { key: 'message', label: 'Message', type: 'textarea', required: false },
+        ],
+        successMessage: 'Submission received.',
+        enableHoneypot: true,
+        enableCaptcha: false,
+        moderationMode: 'manual',
+        contactShare: {
+          enabled: true,
+          nameField: 'name',
+          emailField: 'email',
+          notesField: 'message',
+          dedupeByEmail: true,
+        },
+        collectionTarget: { enabled: false, collectionId: '', fieldMap: {} },
+        settings: { source: 'site-detail-builder' },
+      });
+      setState((prev) => ({
+        ...prev,
+        forms: [created, ...prev.forms.filter((form) => form.id !== created.id)],
+        selectedFormId: created.id,
+      }));
+      setFormBuilderDraft(cloneSiteFormDefinition(created));
+      setFormBuilderNotice('Standalone site form created.');
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : 'Unable to create site form.');
+    } finally {
+      setFormBuilderCreating(false);
+    }
+  };
+
+  const patchFormBuilderDraft = (patch: Partial<FormDefinition>) => {
+    if (!canEditForms) return;
+    setFormBuilderDraft((current) => (current ? { ...current, ...patch } : current));
+    setFormBuilderNotice(null);
+  };
+
+  const patchFormBuilderField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
+    if (!canEditForms) return;
+    setFormBuilderDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        fields: current.fields.map((field, index) => (
+          index === fieldIndex ? { ...field, ...patch } : field
+        )),
+      };
+    });
+    setFormBuilderNotice(null);
+  };
+
+  const addFormBuilderField = () => {
+    if (!canEditForms) return;
+    setFormBuilderDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        fields: [...current.fields, makeSiteFormField(current.fields.length + 1)],
+      };
+    });
+    setFormBuilderNotice(null);
+  };
+
+  const removeFormBuilderField = (fieldIndex: number) => {
+    if (!canEditForms) return;
+    setFormBuilderDraft((current) => {
+      if (!current || current.fields.length <= 1) return current;
+      return {
+        ...current,
+        fields: current.fields.filter((_, index) => index !== fieldIndex),
+      };
+    });
+    setFormBuilderNotice(null);
+  };
+
+  const moveFormBuilderField = (fieldIndex: number, direction: -1 | 1) => {
+    if (!canEditForms) return;
+    setFormBuilderDraft((current) => {
+      if (!current) return current;
+      const nextIndex = fieldIndex + direction;
+      if (nextIndex < 0 || nextIndex >= current.fields.length) return current;
+      const fields = [...current.fields];
+      const [field] = fields.splice(fieldIndex, 1);
+      fields.splice(nextIndex, 0, field);
+      return { ...current, fields };
+    });
+    setFormBuilderNotice(null);
+  };
+
+  const saveFormBuilderDraft = async () => {
+    if (!siteApiId || !state.selectedFormId || !formBuilderDraft || formBuilderSaving) return;
+    if (!canEditForms) {
+      setWorkflowError(formsEditPermissionTitle || 'Your account cannot edit site forms.');
+      return;
+    }
+
+    const payload = siteFormDraftToPayload(formBuilderDraft);
+    if (!payload.name) {
+      setWorkflowError('Form machine name is required.');
+      return;
+    }
+    if (!payload.fields.length) {
+      setWorkflowError('At least one form field is required.');
+      return;
+    }
+    if (payload.fields.some((field) => !field.key || !field.label)) {
+      setWorkflowError('Every form field needs a key and label.');
+      return;
+    }
+
+    setFormBuilderSaving(true);
+    setWorkflowError(null);
+    setFormBuilderNotice(null);
+
+    try {
+      const updated = await updateForm(siteApiId, state.selectedFormId, payload);
+      setState((prev) => ({
+        ...prev,
+        forms: prev.forms.map((form) => (form.id === updated.id ? updated : form)),
+      }));
+      setFormBuilderDraft(cloneSiteFormDefinition(updated));
+      setFormBuilderNotice('Site form builder changes saved.');
+      await Promise.all([loadSubmissions(updated.id), loadContacts(updated.id)]);
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : 'Unable to save site form.');
+    } finally {
+      setFormBuilderSaving(false);
+    }
+  };
+
+  const deleteSelectedSiteForm = async () => {
+    if (!siteApiId || !state.selectedFormId || formBuilderDeleting) return;
+    if (!canDeleteForms) {
+      setWorkflowError(formsDeletePermissionTitle || 'Your account cannot delete site forms.');
+      return;
+    }
+
+    const formId = state.selectedFormId;
+    setFormBuilderDeleting(true);
+    setWorkflowError(null);
+    setFormBuilderNotice(null);
+
+    try {
+      await deleteFormFromApi(siteApiId, formId);
+      setState((prev) => {
+        const forms = prev.forms.filter((form) => form.id !== formId);
+        return {
+          ...prev,
+          forms,
+          selectedFormId: forms[0]?.id || '',
+          submissions: [],
+          submissionCount: 0,
+          contacts: [],
+          contactCount: 0,
+        };
+      });
+      setFormBuilderDraft(null);
+      setFormBuilderNotice('Site form deleted.');
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : 'Unable to delete site form.');
+    } finally {
+      setFormBuilderDeleting(false);
+    }
+  };
+
   const updateSubmissionStatus = async (
     submission: FormSubmission,
     status: FormSubmission['status'],
@@ -2665,6 +2954,11 @@ function EditSitePage() {
   }, [state.selectedFormId]);
 
   useEffect(() => {
+    const selected = state.forms.find((form) => form.id === state.selectedFormId) || null;
+    setFormBuilderDraft(selected ? cloneSiteFormDefinition(selected) : null);
+  }, [state.forms, state.selectedFormId]);
+
+  useEffect(() => {
     if (!state.commentReportReasons.length) {
       return;
     }
@@ -2676,6 +2970,9 @@ function EditSitePage() {
   }, [state.commentReportReasons, commentBlockReason]);
 
   const activeForm = state.forms.find((form) => form.id === state.selectedFormId);
+  const formBuilderDirty = Boolean(
+    activeForm && formBuilderDraft && JSON.stringify(activeForm) !== JSON.stringify(formBuilderDraft),
+  );
   const commentPolicyDirty = JSON.stringify(commentPolicyDraft) !== JSON.stringify(savedCommentPolicy);
   const commentPolicyBlockedTermsText = commentPolicyDraft.blockedTerms.join('\n');
   const readinessFindings = readiness?.checks
@@ -2969,6 +3266,15 @@ function EditSitePage() {
     },
     automation: {
       forms: state.forms.length,
+      formBuilder: activeForm
+        ? {
+            formId: activeForm.id,
+            title: activeForm.title || activeForm.name,
+            fields: formBuilderDraft?.fields.length || activeForm.fields.length,
+            active: formBuilderDraft?.isActive ?? activeForm.isActive,
+            dirty: formBuilderDirty,
+          }
+        : null,
       submissions: state.submissionCount,
       contacts: state.contactCount,
       comments: state.commentCount,
@@ -2995,6 +3301,7 @@ function EditSitePage() {
     ],
   }), [
     adminSiteUrl,
+    activeForm,
     commentPolicyDirty,
     commentPolicyDraft,
     commentRequestId,
@@ -3007,6 +3314,9 @@ function EditSitePage() {
     formData.name,
     formData.slug,
     formData.status,
+    formBuilderDirty,
+    formBuilderDraft?.fields.length,
+    formBuilderDraft?.isActive,
     frontendDesignState.frontendDesign,
     domainVerification,
     hasCustomDomain,
@@ -5224,6 +5534,345 @@ function EditSitePage() {
                   </div>
                 </div>
               </div>
+
+              <section className="bg-card border border-border rounded-xl p-4 shadow-sm" data-testid="site-form-builder-panel">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold">Site form builder</h3>
+                      {formBuilderDirty ? (
+                        <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                          Unsaved
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                      Create and maintain standalone form contracts for this site without leaving the workspace. Canvas-owned page forms should still be edited from their source canvas.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void createSiteDetailForm()}
+                      disabled={isFormBuilderBusy || !canCreateForms}
+                      title={canCreateForms ? undefined : formsCreatePermissionTitle}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {formBuilderCreating ? 'Creating...' : 'New form'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => activeForm && setFormBuilderDraft(cloneSiteFormDefinition(activeForm))}
+                      disabled={isFormBuilderBusy || !formBuilderDirty}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void saveFormBuilderDraft()}
+                      disabled={isFormBuilderDisabled || !formBuilderDraft || !formBuilderDirty}
+                      title={canEditForms ? undefined : formsEditPermissionTitle}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4" />
+                      {formBuilderSaving ? 'Saving...' : 'Save form'}
+                    </button>
+                  </div>
+                </div>
+
+                {formBuilderNotice ? (
+                  <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    {formBuilderNotice}
+                  </div>
+                ) : null}
+
+                {!formBuilderDraft ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
+                    No form selected. Create a standalone form or choose an existing form from the Active Form selector.
+                  </div>
+                ) : (
+                  <fieldset
+                    disabled={isFormBuilderDisabled}
+                    title={canEditForms ? undefined : formsEditPermissionTitle}
+                    className="mt-4 grid gap-4 disabled:opacity-60"
+                  >
+                    {(formBuilderDraft.pageId || formBuilderDraft.postId) ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        This form belongs to a page or blog canvas. Use the source editor for field changes so the rendered page and public definition stay synchronized.
+                      </div>
+                    ) : null}
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Form title
+                        <input
+                          value={formBuilderDraft.title || ''}
+                          onChange={(event) => patchFormBuilderDraft({ title: event.target.value })}
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form title"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Machine name
+                        <input
+                          value={formBuilderDraft.name}
+                          onChange={(event) => patchFormBuilderDraft({ name: normalizeFormFieldKey(event.target.value) })}
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form machine name"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
+                        Description
+                        <textarea
+                          value={formBuilderDraft.description || ''}
+                          onChange={(event) => patchFormBuilderDraft({ description: event.target.value })}
+                          rows={2}
+                          className="min-h-20 resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form description"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Audience
+                        <select
+                          value={formBuilderDraft.audience}
+                          onChange={(event) => patchFormBuilderDraft({ audience: event.target.value as FormDefinition['audience'] })}
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal"
+                          aria-label="Site form audience"
+                        >
+                          <option value="public">Public</option>
+                          <option value="authenticated">Authenticated</option>
+                          <option value="adminOnly">Admin only</option>
+                        </select>
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Moderation
+                        <select
+                          value={formBuilderDraft.moderationMode || 'manual'}
+                          onChange={(event) => patchFormBuilderDraft({ moderationMode: event.target.value as FormDefinition['moderationMode'] })}
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal"
+                          aria-label="Site form moderation"
+                        >
+                          <option value="manual">Manual review</option>
+                          <option value="auto-approve">Auto approve</option>
+                        </select>
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Success message
+                        <input
+                          value={formBuilderDraft.successMessage || ''}
+                          onChange={(event) => patchFormBuilderDraft({ successMessage: event.target.value })}
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form success message"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Redirect URL
+                        <input
+                          value={formBuilderDraft.successRedirectUrl || ''}
+                          onChange={(event) => patchFormBuilderDraft({ successRedirectUrl: event.target.value })}
+                          placeholder="/thanks"
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form redirect URL"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Notification email
+                        <input
+                          type="email"
+                          value={formBuilderDraft.notificationEmail || ''}
+                          onChange={(event) => patchFormBuilderDraft({ notificationEmail: event.target.value })}
+                          placeholder="leads@example.com"
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form notification email"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm font-medium">
+                        Webhook URL
+                        <input
+                          type="url"
+                          value={formBuilderDraft.notificationWebhook || ''}
+                          onChange={(event) => patchFormBuilderDraft({ notificationWebhook: event.target.value })}
+                          placeholder="https://example.com/backy/forms"
+                          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="Site form notification webhook"
+                        />
+                      </label>
+                      <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={formBuilderDraft.isActive}
+                          onChange={(event) => patchFormBuilderDraft({ isActive: event.target.checked })}
+                          aria-label="Site form active"
+                        />
+                        Active
+                      </label>
+                      <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formBuilderDraft.contactShare?.enabled)}
+                          onChange={(event) => patchFormBuilderDraft({
+                            contactShare: {
+                              enabled: event.target.checked,
+                              nameField: formBuilderDraft.contactShare?.nameField || formBuilderDraft.fields.find((field) => field.key.includes('name'))?.key,
+                              emailField: formBuilderDraft.contactShare?.emailField || formBuilderDraft.fields.find((field) => field.type === 'email')?.key,
+                              notesField: formBuilderDraft.contactShare?.notesField || formBuilderDraft.fields.find((field) => field.type === 'textarea')?.key,
+                              dedupeByEmail: formBuilderDraft.contactShare?.dedupeByEmail !== false,
+                            },
+                          })}
+                          aria-label="Site form contact share"
+                        />
+                        Contact share
+                      </label>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-semibold">Fields</h4>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Field keys are the public API payload contract. Reorder and edit carefully after launch.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={addFormBuilderField}
+                          disabled={isFormBuilderDisabled}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add field
+                        </button>
+                      </div>
+                      <div className="mt-3 grid gap-3">
+                        {formBuilderDraft.fields.map((field, fieldIndex) => (
+                          <div key={`site-form-field-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
+                            <div className="grid gap-3 xl:grid-cols-[minmax(120px,0.75fr)_minmax(140px,1fr)_130px_110px_auto]">
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Key
+                                <input
+                                  value={field.key}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { key: normalizeFormFieldKey(event.target.value) })}
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                  aria-label={`Site form field ${fieldIndex + 1} key`}
+                                />
+                              </label>
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Label
+                                <input
+                                  value={field.label}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { label: event.target.value })}
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                  aria-label={`Site form field ${fieldIndex + 1} label`}
+                                />
+                              </label>
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Type
+                                <select
+                                  value={field.type}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { type: event.target.value })}
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                                  aria-label={`Site form field ${fieldIndex + 1} type`}
+                                >
+                                  {SITE_FORM_FIELD_TYPES.map((type) => (
+                                    <option key={type} value={type}>{type}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="flex min-h-10 items-end gap-2 text-sm font-medium">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(field.required)}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { required: event.target.checked })}
+                                  aria-label={`Site form field ${fieldIndex + 1} required`}
+                                />
+                                Required
+                              </label>
+                              <div className="flex items-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => moveFormBuilderField(fieldIndex, -1)}
+                                  disabled={fieldIndex === 0}
+                                  className="rounded-md border px-2 py-2 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Up
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveFormBuilderField(fieldIndex, 1)}
+                                  disabled={fieldIndex === formBuilderDraft.fields.length - 1}
+                                  className="rounded-md border px-2 py-2 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Down
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeFormBuilderField(fieldIndex)}
+                                  disabled={formBuilderDraft.fields.length <= 1}
+                                  className="rounded-md border border-red-200 px-2 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label={`Remove site form field ${fieldIndex + 1}`}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Placeholder
+                                <input
+                                  value={field.placeholder || ''}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { placeholder: event.target.value })}
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                  aria-label={`Site form field ${fieldIndex + 1} placeholder`}
+                                />
+                              </label>
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Help text
+                                <input
+                                  value={field.helpText || ''}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { helpText: event.target.value })}
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                  aria-label={`Site form field ${fieldIndex + 1} help text`}
+                                />
+                              </label>
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Options
+                                <input
+                                  value={(field.options || []).join(', ')}
+                                  onChange={(event) => patchFormBuilderField(fieldIndex, { options: parseFormOptionsText(event.target.value) })}
+                                  placeholder="Option one, Option two"
+                                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                  aria-label={`Site form field ${fieldIndex + 1} options`}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+                      <span className="text-xs text-muted-foreground">
+                        {formBuilderDraft.fields.length} field{formBuilderDraft.fields.length === 1 ? '' : 's'} in this public form contract.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void deleteSelectedSiteForm()}
+                        disabled={isFormBuilderBusy || !canDeleteForms}
+                        title={canDeleteForms ? undefined : formsDeletePermissionTitle}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {formBuilderDeleting ? 'Deleting...' : 'Delete form'}
+                      </button>
+                    </div>
+                  </fieldset>
+                )}
+              </section>
 
               <section className="bg-card border border-border rounded-xl p-4 shadow-sm" data-testid="site-comment-policy-panel">
                 <div className="flex flex-wrap items-start justify-between gap-3">
