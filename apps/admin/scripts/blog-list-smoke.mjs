@@ -58,7 +58,10 @@ const requestApi = async (endpoint, options = {}) => {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
-    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 500)}`);
+    const errorPayload = typeof payload.error === 'string'
+      ? payload
+      : payload.error || payload;
+    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(errorPayload).slice(0, 500)}`);
   }
 
   return payload;
@@ -185,12 +188,17 @@ const createBlogPost = async ({ title, slug, categoryId, tagId, authorId }) => {
 };
 
 const submitBlogComment = async ({ postId, requestId }) => {
+  const uniqueSuffix = String(requestId || Date.now()).replace(/[^a-z0-9-]/gi, '').slice(-24) || Date.now().toString(36);
+  const uniqueOctet = Math.max(2, Math.min(254, (Number.parseInt(uniqueSuffix.slice(-6), 36) % 253) + 2));
   const payload = await requestApi(`/api/sites/${SITE_ID}/blog/${postId}/comments`, {
     method: 'POST',
+    headers: {
+      'x-forwarded-for': `198.51.100.${uniqueOctet}`,
+    },
     body: JSON.stringify({
-      authorName: 'Blog List Smoke Reader',
-      authorEmail: 'blog-list-smoke@example.com',
-      content: 'Temporary comment proving the blog list row shows moderation counts.',
+      authorName: `Blog List Smoke Reader ${uniqueSuffix}`,
+      authorEmail: `blog-list-smoke-${uniqueSuffix}@example.com`,
+      content: `Temporary comment proving the blog list row shows moderation counts. ${uniqueSuffix}`,
       requestId,
       startedAt: Date.now() - 5000,
       rateLimitBypass: true,
@@ -796,12 +804,16 @@ const bulkPublishPost = async (client, title, postId) => {
   assert(before?.updatedAt, `Blog post ${postId} did not expose updatedAt before bulk publish: ${JSON.stringify(before).slice(0, 500)}`);
 
   const captureInstalled = await evaluate(client, `(() => {
+    window.__backyBlogStatusRequests = [];
     window.__backyBlogStatusPostBodies = [];
     if (!window.__backyOriginalFetchForBlogStatus) {
       window.__backyOriginalFetchForBlogStatus = window.fetch.bind(window);
       window.fetch = async (input, init = {}) => {
         const url = String(input instanceof Request ? input.url : input || '');
         const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (method === 'GET' && url.includes(${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog/${postId}/readiness`)})) {
+          window.__backyBlogStatusRequests.push({ url, method });
+        }
         if (method === 'POST' && url.includes(${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog/${postId}/publish`)})) {
           let body = init?.body || '';
           if (typeof body !== 'string') {
@@ -814,6 +826,7 @@ const bulkPublishPost = async (client, title, postId) => {
             parsed = body;
           }
           window.__backyBlogStatusPostBodies.push({ url, method, body: parsed });
+          window.__backyBlogStatusRequests.push({ url, method });
         }
         return window.__backyOriginalFetchForBlogStatus(input, init);
       };
@@ -852,13 +865,23 @@ const bulkPublishPost = async (client, title, postId) => {
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
-      publishedBadge: document.body?.innerText?.includes('Published') || false,
       notice: document.body?.innerText?.includes('published.') || false,
       body: document.body?.innerText?.slice(0, 600) || '',
     }))()`);
-    if (state.publishedBadge || state.notice) {
-      const captured = await evaluate(client, `window.__backyBlogStatusPostBodies || []`);
-      const statusPost = captured.find((entry) => entry?.body && Object.prototype.hasOwnProperty.call(entry.body, 'expectedUpdatedAt'));
+    const captured = await evaluate(client, `window.__backyBlogStatusPostBodies || []`);
+    const capturedRequests = await evaluate(client, `window.__backyBlogStatusRequests || []`);
+    const statusPost = captured.find((entry) => entry?.body && Object.prototype.hasOwnProperty.call(entry.body, 'expectedUpdatedAt'));
+    if (state.notice || statusPost) {
+      const readinessIndex = capturedRequests.findIndex((entry) => entry?.method === 'GET' && String(entry.url || '').includes('/readiness'));
+      const publishIndex = capturedRequests.findIndex((entry) => entry?.method === 'POST' && String(entry.url || '').includes('/publish'));
+      assert(
+        readinessIndex !== -1,
+        `Blog list bulk publish did not preflight post readiness: ${JSON.stringify(capturedRequests).slice(0, 500)}`,
+      );
+      assert(
+        publishIndex !== -1 && readinessIndex < publishIndex,
+        `Blog list bulk publish did not preflight readiness before publishing: ${JSON.stringify(capturedRequests).slice(0, 500)}`,
+      );
       assert(
         statusPost?.body?.expectedUpdatedAt === before.updatedAt,
         `Blog list bulk publish did not send expectedUpdatedAt guard: ${JSON.stringify(captured).slice(0, 500)}`,

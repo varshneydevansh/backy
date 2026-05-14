@@ -17,6 +17,7 @@ import {
   deleteBlogPost,
   deleteBlogTag,
   getAdminApiBase,
+  getBlogPostReadiness,
   getUserPermissions,
   listBlogAuthors,
   listBlogCategories,
@@ -31,6 +32,7 @@ import {
   type AdminUserPermissionMatrix,
   type BlogAuthor,
   type BlogCategory,
+  type BlogPostReadiness,
   type BlogTag,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
@@ -195,6 +197,16 @@ const BLOG_EXPORT_COLUMNS = [
   'admin_preview_url',
   'frontend_systems',
 ] as const;
+
+const getBlogPostReadinessBlockMessage = (readiness: BlogPostReadiness): string | null => {
+  const blockingCheck = readiness.checks.find((check) => check.status === 'fail' && check.severity === 'error');
+
+  if (readiness.statusLabel === 'blocked' || blockingCheck) {
+    return blockingCheck?.message || 'Resolve post readiness errors before publishing.';
+  }
+
+  return null;
+};
 
 function BlogLayout() {
   const routerState = useRouterState();
@@ -801,6 +813,19 @@ function BlogListView() {
 
     try {
       if (bulkAction === 'publish') {
+        const readinessResults = await Promise.all(selectedPosts.map(async (post) => ({
+          post,
+          readiness: await getBlogPostReadiness(activeSiteId, post.id),
+        })));
+        const blockedPost = readinessResults.find(({ readiness }) => getBlogPostReadinessBlockMessage(readiness));
+
+        if (blockedPost) {
+          const blockMessage = getBlogPostReadinessBlockMessage(blockedPost.readiness);
+          const title = blockedPost.readiness.title || blockedPost.post.title;
+          setError(`Bulk publish blocked: "${title}" is not ready. ${blockMessage}`);
+          return;
+        }
+
         const updatedPosts = await Promise.all(selectedPosts.map((post) => publishBlogPost(activeSiteId, post.id, {
           expectedUpdatedAt: post.updatedAt,
         })));
