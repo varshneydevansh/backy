@@ -471,6 +471,75 @@ await record('admin invite-only setting blocks direct activation', async () => {
     assert(blockedActivation.response.status === 400, `${blockedActivation.url} expected direct activation 400, got ${blockedActivation.response.status}`);
     assert(blockedActivation.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedActivation.url} expected INVITE_ONLY_REQUIRED on activation`);
 
+    const blockedResetToken = await request(`/api/admin/users/${invitedUserId}/password-reset`, {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ expiresInMinutes: 15 }),
+    });
+    assert(blockedResetToken.response.status === 400, `${blockedResetToken.url} expected invited reset-token create 400, got ${blockedResetToken.response.status}`);
+    assert(blockedResetToken.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedResetToken.url} expected INVITE_ONLY_REQUIRED on reset-token create`);
+
+    const temporarilyDisableInviteOnly = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        auth: {
+          ...originalAuth,
+          inviteOnly: false,
+        },
+      }),
+    });
+    assert(temporarilyDisableInviteOnly.response.status === 200, `${temporarilyDisableInviteOnly.url} expected invite-only disable 200`);
+
+    const legacyResetToken = await request(`/api/admin/users/${invitedUserId}/password-reset`, {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ expiresInMinutes: 15 }),
+    });
+    assert(legacyResetToken.response.status === 200, `${legacyResetToken.url} expected legacy reset token 200, got ${legacyResetToken.response.status}`);
+    const legacyToken = legacyResetToken.json?.data?.reset?.token;
+    assert(legacyToken, `${legacyResetToken.url} missing legacy reset token`);
+
+    const reenableInviteOnly = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        auth: {
+          ...originalAuth,
+          inviteOnly: true,
+        },
+      }),
+    });
+    assert(reenableInviteOnly.response.status === 200, `${reenableInviteOnly.url} expected invite-only re-enable 200`);
+
+    const blockedResetAccept = await request('/api/admin/auth/reset-password', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.61',
+      },
+      body: JSON.stringify({ token: legacyToken, password: '12345678901234' }),
+    });
+    assert(blockedResetAccept.response.status === 409, `${blockedResetAccept.url} expected invited reset accept 409, got ${blockedResetAccept.response.status}`);
+    assert(blockedResetAccept.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedResetAccept.url} expected INVITE_ONLY_REQUIRED on reset accept`);
+
     const blockedBulkActivation = await request('/api/admin/users/bulk', {
       method: 'POST',
       headers: {

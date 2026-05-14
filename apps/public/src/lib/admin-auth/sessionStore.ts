@@ -1,5 +1,6 @@
 import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
+import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 
 export interface AdminAuthUser {
   id: string;
@@ -75,7 +76,7 @@ export type AdminPasswordResetResult =
     }
   | {
       reset: false;
-      reason: 'missing' | 'expired' | 'user-not-found' | 'email-mismatch' | 'inactive';
+      reason: 'missing' | 'expired' | 'user-not-found' | 'email-mismatch' | 'inactive' | 'invite-only';
       resetToken?: AdminPasswordResetToken;
     };
 
@@ -421,10 +422,10 @@ export function createAdminPasswordResetToken(input: {
   return resetToken;
 }
 
-export function resetAdminPasswordToken(
+export async function resetAdminPasswordToken(
   token: string | null | undefined,
   password: string,
-): AdminPasswordResetResult {
+): Promise<AdminPasswordResetResult> {
   pruneExpiredSessions();
 
   const normalizedToken = token?.trim() || '';
@@ -450,6 +451,11 @@ export function resetAdminPasswordToken(
 
   if (currentUser.status === 'inactive' || currentUser.status === 'suspended') {
     return { reset: false, reason: 'inactive', resetToken };
+  }
+
+  const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(currentUser.status, 'active');
+  if (!inviteOnlyPolicy.ok) {
+    return { reset: false, reason: 'invite-only', resetToken };
   }
 
   const previousStatus = currentUser.status;

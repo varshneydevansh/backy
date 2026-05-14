@@ -5,6 +5,7 @@ import { getAdminUserById } from '@/lib/backyStore';
 import {
   createAdminPasswordResetToken,
 } from '@/lib/admin-auth/sessionStore';
+import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -70,6 +71,11 @@ export async function POST(
 
     if (user.status === 'inactive' || user.status === 'suspended') {
       return errorResponse(409, 'USER_NOT_ACTIVE', 'Activate the account before issuing a password reset token.', requestId);
+    }
+
+    const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(user.status, 'active');
+    if (!inviteOnlyPolicy.ok) {
+      return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
     }
 
     const origin = request.headers.get('origin') || request.nextUrl.origin;

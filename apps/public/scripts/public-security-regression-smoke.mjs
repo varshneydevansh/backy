@@ -273,6 +273,8 @@ assertIncludes(adminPasswordPolicy, 'MAX_PASSWORD_LENGTH = 128', 'admin password
 const resetPasswordRoute = read('apps/public/src/app/api/admin/auth/reset-password/route.ts');
 assertIncludes(resetPasswordRoute, '@/lib/admin-auth/passwordPolicy', 'reset password route must import password policy');
 assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password)', 'reset password route must enforce persisted password policy');
+assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, password)', 'reset password route must await invite-only reset policy checks');
+assertIncludes(resetPasswordRoute, "'INVITE_ONLY_REQUIRED'", 'reset password route must return stable invite-only policy code');
 assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route');
 
 const adminEmailPolicy = read('apps/public/src/lib/admin-auth/emailPolicy.ts');
@@ -296,6 +298,16 @@ for (const route of [
 }
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
+
+const adminPasswordResetTokenRoute = read('apps/public/src/app/api/admin/users/[userId]/password-reset/route.ts');
+assertIncludes(adminPasswordResetTokenRoute, '@/lib/admin-auth/emailPolicy', 'admin reset-token route must import invite-only policy');
+assertIncludes(adminPasswordResetTokenRoute, 'validateAdminInviteOnlyActivationPolicy(user.status,', 'admin reset-token route must block invite-only activation bypass');
+assertIncludes(adminPasswordResetTokenRoute, "'INVITE_ONLY_REQUIRED'", 'admin reset-token route must return stable invite-only policy code');
+
+const adminSessionStore = read('apps/public/src/lib/admin-auth/sessionStore.ts');
+assertIncludes(adminSessionStore, '@/lib/admin-auth/emailPolicy', 'admin session store must import invite-only policy');
+assertIncludes(adminSessionStore, 'await validateAdminInviteOnlyActivationPolicy(currentUser.status,', 'admin password reset accept must enforce invite-only policy before activation');
+assertIncludes(adminSessionStore, "reason: 'invite-only'", 'admin password reset accept must expose invite-only failure');
 
 const contactEmailPolicy = read('apps/public/src/lib/contactEmailPolicy.ts');
 assertIncludes(contactEmailPolicy, 'CONTACT_EMAIL_PATTERN', 'contact email policy must define a validation pattern');

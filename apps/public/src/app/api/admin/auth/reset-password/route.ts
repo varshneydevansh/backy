@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
-  const result = resetAdminPasswordToken(token, password);
+  const result = await resetAdminPasswordToken(token, password);
   if (!result.reset) {
     const status = result.reason === 'expired'
       ? 410
@@ -101,9 +101,14 @@ export async function POST(request: NextRequest) {
         ? 'Password reset token was not found.'
         : result.reason === 'inactive'
           ? 'This account must be active or invited before password reset.'
-          : 'Password reset token could not be accepted.';
+          : result.reason === 'invite-only'
+            ? 'Invite-only workspace access requires users to accept an invitation before becoming active.'
+            : 'Password reset token could not be accepted.';
+    const code = result.reason === 'invite-only'
+      ? 'INVITE_ONLY_REQUIRED'
+      : `RESET_${result.reason.replace(/-/g, '_').toUpperCase()}`;
 
-    return errorResponse(status, `RESET_${result.reason.replace(/-/g, '_').toUpperCase()}`, message, requestId);
+    return errorResponse(status, code, message, requestId);
   }
 
   await recordAdminAudit({
