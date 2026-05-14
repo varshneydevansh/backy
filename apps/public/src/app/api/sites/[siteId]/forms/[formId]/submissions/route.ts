@@ -25,6 +25,7 @@ import {
 import { verifyFormCaptcha } from '@/lib/formCaptcha';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -972,6 +973,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!form.isActive) {
         return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
       }
+      const audienceAccess = requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
+      if (audienceAccess) {
+        return audienceAccess;
+      }
 
       const parsed = parseRequestBody(await request.json().catch(() => null));
       if (!parsed) {
@@ -1116,6 +1121,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!form.isActive) {
       return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
+    }
+    const audienceAccess = requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
+    if (audienceAccess) {
+      return audienceAccess;
     }
 
     const parsed = parseRequestBody(await request.json().catch(() => null));

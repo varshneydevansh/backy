@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getFormById, getSiteByIdOrSlug, listFormContacts } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -52,6 +53,10 @@ const parseStatus = (value: string | null) => (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'forms.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, formId } = await params;

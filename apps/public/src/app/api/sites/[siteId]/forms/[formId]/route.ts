@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -62,6 +63,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             if (!form || !form.isActive) {
                 return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
             }
+            const audienceAccess = requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
+            if (audienceAccess) {
+                return audienceAccess;
+            }
 
             const endpoints = formEndpoints(_request, site.id, form.id);
             const formContract = withFormFrontendDesign(form);
@@ -89,8 +94,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         }
 
         const form = getFormById(site.id, formId);
-        if (!form) {
+        if (!form || form.isActive === false) {
             return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+        }
+        const audienceAccess = requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
+        if (audienceAccess) {
+            return audienceAccess;
         }
 
         const endpoints = formEndpoints(_request, site.id, form.id);

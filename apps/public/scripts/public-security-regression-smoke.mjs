@@ -23,6 +23,10 @@ function assertExcludes(source, needle, label) {
   assert(!source.includes(needle), `${label} unexpectedly includes ${needle}`);
 }
 
+function occurrenceCount(source, needle) {
+  return source.split(needle).length - 1;
+}
+
 function functionSource(source, functionName, label) {
   const start = source.indexOf(`export async function ${functionName}`);
   assert(start !== -1, `${label} missing ${functionName} handler`);
@@ -58,6 +62,10 @@ const protectedRoutes = [
   {
     file: 'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts',
     gates: ["permission: 'forms.view'", "permission: 'forms.manage'"],
+  },
+  {
+    file: 'apps/public/src/app/api/sites/[siteId]/forms/[formId]/contacts/route.ts',
+    gates: ["permission: 'forms.view'"],
   },
   {
     file: 'apps/public/src/app/api/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts',
@@ -196,6 +204,47 @@ assertIncludes(
   commerceReconcilePost,
   "permission: 'commerce.configure'",
   'commerce reconcile route must match configure-only admin UI policy',
+);
+
+const publicFormAudienceAccess = read('apps/public/src/lib/publicFormAudienceAccess.ts');
+for (const needle of [
+  'isPublicFormAudience',
+  'filterPublicAudienceForms',
+  'requirePublicFormAudienceAccess',
+  "permission = action === 'submit' && audience === 'adminOnly' ? 'forms.manage' : 'forms.view'",
+  'FORM_AUTHENTICATION_REQUIRED',
+  'FORM_ADMIN_ONLY',
+]) {
+  assertIncludes(publicFormAudienceAccess, needle, 'public form audience access helper');
+}
+
+const publicFormsListRoute = read('apps/public/src/app/api/sites/[siteId]/forms/route.ts');
+assertIncludes(publicFormsListRoute, 'filterPublicAudienceForms(payload.items)', 'public forms list must hide non-public repository forms');
+assertIncludes(publicFormsListRoute, 'filterPublicAudienceForms(listFormsBySite', 'public forms list must hide non-public demo forms');
+
+const publicFormDefinitionRoute = read('apps/public/src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts');
+assertIncludes(publicFormDefinitionRoute, '@/lib/publicFormAudienceAccess', 'public form definition route must import audience guard');
+assertIncludes(functionSource(publicFormDefinitionRoute, 'GET', 'public form definition route'), "requirePublicFormAudienceAccess(request, requestId, form, 'definition')", 'public form definition route must enforce audience before disclosure');
+assertIncludes(publicFormDefinitionRoute, "cache: form.audience === 'public' ? 'discovery' : 'private'", 'restricted form definitions must not use public discovery cache');
+assert(
+  occurrenceCount(publicFormDefinitionRoute, "requirePublicFormAudienceAccess(request, requestId, form, 'definition')") >= 2,
+  'public form definition route must enforce audience in repository and demo branches',
+);
+
+const publicFormDetailRoute = read('apps/public/src/app/api/sites/[siteId]/forms/[formId]/route.ts');
+assertIncludes(publicFormDetailRoute, '@/lib/publicFormAudienceAccess', 'public form detail route must import audience guard');
+assertIncludes(functionSource(publicFormDetailRoute, 'GET', 'public form detail route'), "requirePublicFormAudienceAccess(_request, requestId, form, 'definition')", 'public form detail route must enforce audience before disclosure');
+assert(
+  occurrenceCount(publicFormDetailRoute, "requirePublicFormAudienceAccess(_request, requestId, form, 'definition')") >= 2,
+  'public form detail route must enforce audience in repository and demo branches',
+);
+
+const publicFormSubmissionRoute = read('apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts');
+assertIncludes(publicFormSubmissionRoute, '@/lib/publicFormAudienceAccess', 'public form submission route must import audience guard');
+assertIncludes(functionSource(publicFormSubmissionRoute, 'POST', 'public form submission route'), "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')", 'public form submission route must enforce audience before parsing submissions');
+assert(
+  occurrenceCount(publicFormSubmissionRoute, "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')") >= 2,
+  'public form submission route must enforce audience in repository and demo branches',
 );
 
 for (const file of [

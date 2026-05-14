@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -69,6 +70,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!form || !form.isActive) {
         return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
       }
+      const audienceAccess = requirePublicFormAudienceAccess(request, requestId, form, 'definition');
+      if (audienceAccess) {
+        return audienceAccess;
+      }
 
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
@@ -78,7 +83,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return publicContractJson(formDefinitionPayload(site.id, form, requestId), {
         requestId,
         request,
-        cache: 'discovery',
+        cache: form.audience === 'public' ? 'discovery' : 'private',
         schemaVersion: FORM_DEFINITION_SCHEMA_VERSION,
         siteId: site.id,
         cacheRevision,
@@ -94,11 +99,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!form || form.isActive === false) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
+    const audienceAccess = requirePublicFormAudienceAccess(request, requestId, form, 'definition');
+    if (audienceAccess) {
+      return audienceAccess;
+    }
 
     return publicContractJson(formDefinitionPayload(site.id, form, requestId), {
       requestId,
       request,
-      cache: 'discovery',
+      cache: form.audience === 'public' ? 'discovery' : 'private',
       schemaVersion: FORM_DEFINITION_SCHEMA_VERSION,
       siteId: site.id,
     });

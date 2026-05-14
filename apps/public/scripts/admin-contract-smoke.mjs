@@ -3927,6 +3927,46 @@ try {
       formWritePageId = createFormWritePage.json?.data?.page?.id;
       assert(formWritePageId, `${createFormWritePage.url} missing created page id`);
 
+      const createAuthenticatedForm = await request(`/api/admin/sites/${createdSiteId}/forms`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          pageId: formWritePageId,
+          name: `Authenticated Contract Form ${unique}`,
+          title: 'Authenticated Contract Form',
+          audience: 'authenticated',
+          isActive: true,
+          fields: [
+            { id: 'authenticated-name', key: 'name', label: 'Name', type: 'text', required: true },
+          ],
+        }),
+      });
+      assert(createAuthenticatedForm.response.status === 201, `${createAuthenticatedForm.url} expected authenticated form 201`);
+      const authenticatedFormId = createAuthenticatedForm.json?.data?.form?.id;
+      assert(authenticatedFormId, `${createAuthenticatedForm.url} missing authenticated form id`);
+
+      const createAdminOnlyForm = await request(`/api/admin/sites/${createdSiteId}/forms`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          pageId: formWritePageId,
+          name: `Admin Only Contract Form ${unique}`,
+          title: 'Admin Only Contract Form',
+          audience: 'adminOnly',
+          isActive: true,
+          fields: [
+            { id: 'admin-only-name', key: 'name', label: 'Name', type: 'text', required: true },
+          ],
+        }),
+      });
+      assert(createAdminOnlyForm.response.status === 201, `${createAdminOnlyForm.url} expected admin-only form 201`);
+      const adminOnlyFormId = createAdminOnlyForm.json?.data?.form?.id;
+      assert(adminOnlyFormId, `${createAdminOnlyForm.url} missing admin-only form id`);
+
       const listedForms = await request(`/api/sites/${createdSiteId}/forms?pageId=${formWritePageId}`);
       assert(listedForms.response.status === 200, `${listedForms.url} expected 200, got ${listedForms.response.status}`);
       assert(listedForms.response.headers.get('x-backy-cache-scope') === 'discovery', `${listedForms.url} missing forms cache scope`);
@@ -3943,6 +3983,8 @@ try {
       assert(listedForms.json?.success === true, `${listedForms.url} expected success envelope`);
       assert(listedForms.json?.data?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing form in data envelope`);
       assert(listedForms.json?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing legacy forms list`);
+      assert(!listedForms.json?.data?.forms?.some((form) => form.id === authenticatedFormId), `${listedForms.url} should hide authenticated forms from anonymous discovery`);
+      assert(!listedForms.json?.data?.forms?.some((form) => form.id === adminOnlyFormId), `${listedForms.url} should hide admin-only forms from anonymous discovery`);
 
       const formDefinition = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/definition`);
       assert(formDefinition.response.status === 200, `${formDefinition.url} expected 200, got ${formDefinition.response.status}`);
@@ -3969,6 +4011,38 @@ try {
       assert(formDetailBeforeSubmission.json?.success === true, `${formDetailBeforeSubmission.url} expected success envelope`);
       assert(formDetailBeforeSubmission.json?.data?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing form in data envelope`);
       assert(formDetailBeforeSubmission.json?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing legacy form`);
+
+      const unauthAuthenticatedDefinition = await request(`/api/sites/${createdSiteId}/forms/${authenticatedFormId}/definition`);
+      assert(unauthAuthenticatedDefinition.response.status === 401, `${unauthAuthenticatedDefinition.url} expected authenticated form definition 401`);
+      assertBackyContract(unauthAuthenticatedDefinition, 'error');
+      assert(unauthAuthenticatedDefinition.json?.error?.code === 'FORM_AUTHENTICATION_REQUIRED', `${unauthAuthenticatedDefinition.url} expected FORM_AUTHENTICATION_REQUIRED`);
+
+      const unauthAdminOnlyDetail = await request(`/api/sites/${createdSiteId}/forms/${adminOnlyFormId}`);
+      assert(unauthAdminOnlyDetail.response.status === 401, `${unauthAdminOnlyDetail.url} expected admin-only form detail 401`);
+      assertBackyContract(unauthAdminOnlyDetail, 'error');
+      assert(unauthAdminOnlyDetail.json?.error?.code === 'FORM_ADMIN_ONLY', `${unauthAdminOnlyDetail.url} expected FORM_ADMIN_ONLY`);
+
+      const unauthAdminOnlySubmission = await request(`/api/sites/${createdSiteId}/forms/${adminOnlyFormId}/submissions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: { name: 'Blocked Visitor' },
+          requestId: 'contract-admin-only-blocked',
+          rateLimitBypass: true,
+        }),
+      });
+      assert(unauthAdminOnlySubmission.response.status === 401, `${unauthAdminOnlySubmission.url} expected admin-only submission 401`);
+      assertBackyContract(unauthAdminOnlySubmission, 'error');
+      assert(unauthAdminOnlySubmission.json?.error?.code === 'FORM_ADMIN_ONLY', `${unauthAdminOnlySubmission.url} expected FORM_ADMIN_ONLY submission block`);
+
+      const adminAuthenticatedDefinition = await request(`/api/sites/${createdSiteId}/forms/${authenticatedFormId}/definition`, {
+        headers: withAdminAuth(),
+      });
+      assert(adminAuthenticatedDefinition.response.status === 200, `${adminAuthenticatedDefinition.url} expected admin-authenticated form definition 200`);
+      assertBackyContract(adminAuthenticatedDefinition, 'private');
+      assert(adminAuthenticatedDefinition.json?.data?.form?.id === authenticatedFormId, `${adminAuthenticatedDefinition.url} missing authenticated form definition`);
 
       const capturedFormTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
         method: 'POST',

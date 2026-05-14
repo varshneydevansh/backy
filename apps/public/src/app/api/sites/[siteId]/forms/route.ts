@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { filterPublicAudienceForms } from '@/lib/publicFormAudienceAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -62,18 +63,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 siteId: site.id,
                 scope: 'content',
             }) || undefined;
-            const forms = payload.items.map(withFormFrontendDesign);
+            const forms = filterPublicAudienceForms(payload.items).map(withFormFrontendDesign);
 
             return publicContractJson({
                 success: true,
                 requestId,
                 data: {
                     forms,
-                    total: payload.pagination.total,
-                    pagination: payload.pagination,
+                    total: forms.length,
+                    pagination: {
+                        total: forms.length,
+                        limit: payload.pagination.limit,
+                        offset: payload.pagination.offset,
+                        hasMore: payload.pagination.hasMore,
+                    },
                 },
                 forms,
-                total: payload.pagination.total,
+                total: forms.length,
             }, {
                 requestId,
                 request,
@@ -88,10 +94,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
         }
 
-        const forms = listFormsBySite(site.id, {
+        const forms = filterPublicAudienceForms(listFormsBySite(site.id, {
             pageId: pageId || undefined,
             postId: postId || undefined,
-        }).map(withFormFrontendDesign);
+        })).map(withFormFrontendDesign);
 
         return publicContractJson({
             success: true,
