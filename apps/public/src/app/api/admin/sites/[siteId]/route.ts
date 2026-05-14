@@ -333,6 +333,11 @@ const isCommentPolicyOnlyPatch = (body: Record<string, unknown>): boolean => {
   return settingsKeys.length === 1 && settingsKeys[0] === 'commentPolicy';
 };
 
+const isDomainVerificationPatch = (body: Record<string, unknown>): boolean => {
+  const settings = body.settings;
+  return isRecord(settings) && isRecord(settings.domainVerification);
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
@@ -382,6 +387,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const commentPolicyOnlyPatch = isCommentPolicyOnlyPatch(body);
+  const domainVerificationPatch = isDomainVerificationPatch(body);
   const access = await requireAdminAccess(request, requestId, {
     permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
   });
@@ -429,6 +435,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           requestId,
         });
       } else {
+        const domainVerification = updated.item.settings?.domainVerification;
         await recordAdminAudit({
           repositories,
           siteId: site.id,
@@ -436,13 +443,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           actorId: access.session?.user.id,
           entity: 'site',
           entityId: site.id,
-          action: 'site.updated',
+          action: domainVerificationPatch ? 'site.domainVerification.updated' : 'site.updated',
           before: adminSiteFromRepositorySite(site) || {},
           after: adminSiteFromRepositorySite(updated.item) || {},
           metadata: {
             slug: updated.item.slug,
             status: statusForRepositorySite(updated.item),
             source: 'admin-site-update',
+            ...(domainVerificationPatch
+              ? {
+                  domainVerificationStatus: domainVerification?.status || 'not_started',
+                  domainVerificationDomain: domainVerification?.domain || updated.item.customDomain || null,
+                }
+              : {}),
           },
           requestId,
         });
@@ -483,18 +496,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
     } else {
+      const domainVerification = updated.settings?.domainVerification;
       await recordAdminAudit({
         siteId: site.id,
         actorId: access.session?.user.id,
         entity: 'site',
         entityId: site.id,
-        action: 'site.updated',
+        action: domainVerificationPatch ? 'site.domainVerification.updated' : 'site.updated',
         before: site,
         after: updated,
         metadata: {
           slug: updated.slug,
           status: updated.status,
           source: 'admin-site-update',
+          ...(domainVerificationPatch
+            ? {
+                domainVerificationStatus: domainVerification?.status || 'not_started',
+                domainVerificationDomain: domainVerification?.domain || updated.customDomain || null,
+              }
+            : {}),
         },
         requestId,
       });

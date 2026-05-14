@@ -335,7 +335,8 @@ const navigateToSiteDetail = (client, siteId, siteName) => navigate(
   client,
   `${ADMIN_BASE_URL}/sites/${encodeURIComponent(siteId)}`,
   `(() => ({
-    ready: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) &&
+      ready: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) &&
+      Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-seo-panel"]')) &&
@@ -402,6 +403,34 @@ const waitForText = async (client, selector, text, description) => {
   return null;
 };
 
+const waitForButtonEnabled = async (client, selector, text, description) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const root = document.querySelector(${JSON.stringify(selector)});
+      const button = root
+        ? Array.from(root.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === ${JSON.stringify(text)}
+          ))
+        : null;
+      return {
+        ready: button instanceof HTMLButtonElement && !button.disabled,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        title: button instanceof HTMLButtonElement ? button.getAttribute('title') : null,
+        text: root?.textContent?.replace(/\\s+/g, ' ').slice(0, 1200) || '',
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`${description} did not become enabled: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const waitForNavigationEditorReady = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -437,6 +466,11 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasSite: body.includes(${JSON.stringify(siteName)}),
       hasCommandCenter: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) && body.includes('Site command center'),
       hasReadiness: Boolean(document.querySelector('[data-testid="site-readiness-panel"]')) && body.includes('Publish readiness'),
+      hasDomainVerification: Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
+        body.includes('Domain verification') &&
+        body.includes('TXT host') &&
+        body.includes('Prepare DNS record') &&
+        body.includes('Mark verified'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
       hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) && body.includes('Frontend design contract') && body.includes('Capture current design') && body.includes('Save contract'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
@@ -455,6 +489,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasSite &&
       layout.hasCommandCenter &&
       layout.hasReadiness &&
+      layout.hasDomainVerification &&
       layout.hasNavigation &&
       layout.hasFrontendDesign &&
       layout.hasRedirects &&
@@ -467,6 +502,38 @@ const assertSiteDetailLayout = async (client, siteName) => {
     `Site detail page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const configureDomainVerificationThroughUi = async (client) => {
+  await waitForText(client, '[data-testid="site-domain-verification-panel"]', 'TXT host', 'Domain verification TXT host');
+  await waitForButtonEnabled(
+    client,
+    '[data-testid="site-domain-verification-panel"]',
+    'Prepare DNS record',
+    'Domain verification prepare button',
+  );
+  await clickButtonByText(client, '[data-testid="site-domain-verification-panel"]', 'Prepare DNS record');
+  await waitForText(
+    client,
+    '[data-testid="site-workspace-command-center"]',
+    'DNS verification record is ready.',
+    'Domain verification prepare notice',
+  );
+  await waitForText(client, '[data-testid="site-domain-verification-panel"]', 'Pending DNS', 'Domain pending state');
+  await waitForButtonEnabled(
+    client,
+    '[data-testid="site-domain-verification-panel"]',
+    'Mark verified',
+    'Domain verification verified button',
+  );
+  await clickButtonByText(client, '[data-testid="site-domain-verification-panel"]', 'Mark verified');
+  await waitForText(
+    client,
+    '[data-testid="site-workspace-command-center"]',
+    'domain verification marked verified.',
+    'Domain verification verified notice',
+  );
+  await waitForText(client, '[data-testid="site-domain-verification-panel"]', 'Verified', 'Domain verified state');
 };
 
 const configureNavigationThroughUi = async (client, { routeLabel, routePath, footerLabel, footerHref }) => {
@@ -859,6 +926,7 @@ const assertApiReadback = async (siteId, expected) => {
   const frontendDesign = await getFrontendDesign(siteId);
   const site = await getSite(siteId);
   const auditLogs = await getSiteAuditLogs(siteId);
+  const domainVerification = site?.settings?.domainVerification;
 
   assert(
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
@@ -883,6 +951,16 @@ const assertApiReadback = async (siteId, expected) => {
       seo?.favicon === expected.favicon &&
       seo?.robots?.extraRules === expected.robotsRule,
     `SEO API did not include saved defaults: ${JSON.stringify(seo).slice(0, 1000)}`,
+  );
+  assert(
+    domainVerification?.status === 'verified' &&
+      typeof domainVerification?.token === 'string' &&
+      domainVerification.token.length > 0 &&
+      typeof domainVerification?.txtValue === 'string' &&
+      domainVerification.txtValue.includes('backy-site-verification=') &&
+      typeof domainVerification?.verifiedAt === 'string' &&
+      domainVerification.verifiedAt.length > 0,
+    `Site API did not include verified domain verification state: ${JSON.stringify(domainVerification).slice(0, 1000)}`,
   );
   assert(
     site?.settings?.commentPolicy?.requireEmail === true &&
@@ -912,6 +990,7 @@ const assertApiReadback = async (siteId, expected) => {
     'site.navigation.updated',
     'site.redirects.updated',
     'site.seo.updated',
+    'site.domainVerification.updated',
     'commentPolicy.update',
     'frontendDesign.capture',
     'frontendDesign.update',
@@ -1047,6 +1126,7 @@ const main = async () => {
     await navigateToSiteDetail(client, site.id, siteName);
     await assertSiteDetailLayout(client, siteName);
 
+    await configureDomainVerificationThroughUi(client);
     await configureNavigationThroughUi(client, expected);
     await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {

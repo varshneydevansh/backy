@@ -180,6 +180,11 @@ const SITE_WORKSPACE_AREAS = [
     href: '#site-navigation',
   },
   {
+    title: 'Domain',
+    detail: 'Custom-domain DNS ownership, TXT/CNAME handoff, and verification status.',
+    href: '#site-domain',
+  },
+  {
     title: 'Frontend design',
     detail: 'Capture custom frontend tokens, chrome, templates, and editable bindings for generated pages.',
     href: '#site-frontend-design',
@@ -293,6 +298,55 @@ const DEFAULT_SITE_COMMENT_POLICY: SiteCommentPolicyDraft = {
   blockedTerms: [],
   closedMessage: 'Comments are closed for this site.',
   sort: 'newest',
+};
+
+type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
+
+const domainVerificationStatusClass: Record<SiteDomainVerification['status'], string> = {
+  not_started: 'bg-muted text-muted-foreground',
+  pending: 'bg-amber-50 text-amber-700',
+  verified: 'bg-emerald-50 text-emerald-700',
+  failed: 'bg-red-50 text-red-700',
+};
+
+const domainVerificationStatusLabel: Record<SiteDomainVerification['status'], string> = {
+  not_started: 'Not started',
+  pending: 'Pending DNS',
+  verified: 'Verified',
+  failed: 'Needs attention',
+};
+
+const buildDomainVerificationToken = (site: Site): string => {
+  const rawId = (site.publicSiteId || site.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+  return `backy-${site.slug}-${rawId}`;
+};
+
+const domainForSite = (site: Site, customDomain?: string, slug?: string): string => (
+  customDomain || site.customDomain || `${slug || site.slug}.backy.app`
+);
+
+const getDomainVerification = (
+  site: Site,
+  customDomain?: string,
+  slug?: string,
+): SiteDomainVerification => {
+  const current = site.settings?.domainVerification;
+  const domain = domainForSite(site, customDomain, slug);
+  const token = current?.token || buildDomainVerificationToken(site);
+
+  return {
+    status: customDomain || site.customDomain ? (current?.status || 'not_started') : 'verified',
+    method: 'dns-txt',
+    domain: current?.domain || domain,
+    token,
+    txtHost: current?.txtHost || `_backy.${domain}`,
+    txtValue: current?.txtValue || `backy-site-verification=${token}`,
+    cnameTarget: current?.cnameTarget || `${slug || site.slug}.backy.app`,
+    requestedAt: current?.requestedAt || null,
+    checkedAt: current?.checkedAt || null,
+    verifiedAt: current?.verifiedAt || null,
+    lastError: current?.lastError || null,
+  };
 };
 
 const normalizeSiteCommentPolicyDraft = (policy?: SiteCommentPolicy | null): SiteCommentPolicyDraft => ({
@@ -1429,6 +1483,54 @@ function EditSitePage() {
     }
   };
 
+  const handleDomainVerificationChange = async (status: SiteDomainVerification['status']) => {
+    if (!siteApiId || !site || !domainVerification) return;
+    if (!canConfigureSite) {
+      setSiteSettingsError(siteConfigureDeniedMessage);
+      return;
+    }
+    if (!hasCustomDomain) {
+      setSiteSettingsError('Add a custom domain before preparing DNS verification.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextVerification: SiteDomainVerification = {
+      ...domainVerification,
+      status,
+      requestedAt: domainVerification.requestedAt || now,
+      checkedAt: status === 'verified' || status === 'failed' ? now : domainVerification.checkedAt || null,
+      verifiedAt: status === 'verified' ? now : status === 'pending' ? null : domainVerification.verifiedAt || null,
+      lastError: status === 'failed' ? 'Manual DNS confirmation failed in the local workspace.' : null,
+    };
+
+    setIsLoading(true);
+    setSiteSettingsError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const savedSite = await updateSiteFromApi(siteApiId, {
+        settings: {
+          ...(site.settings || {}),
+          domainVerification: nextVerification,
+        },
+      });
+      updateSite(storeSiteId, savedSite);
+      setFetchedSite(savedSite);
+      setSiteWorkspaceNotice(
+        status === 'verified'
+          ? `${savedSite.name} domain verification marked verified.`
+          : `${savedSite.name} DNS verification record is ready.`,
+      );
+      void loadReadiness();
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setSiteSettingsError(error instanceof Error ? error.message : 'Unable to update domain verification.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleUpdateSeo = (updates: Partial<AdminSiteSeoSettings>) => {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
@@ -2206,6 +2308,11 @@ function EditSitePage() {
     })) || []),
   ];
   const readinessSummary = readiness?.summary;
+  const savedCustomDomain = site?.customDomain || '';
+  const domainVerification = site
+    ? getDomainVerification(site, savedCustomDomain || undefined, formData.slug || site.slug)
+    : null;
+  const hasCustomDomain = Boolean(savedCustomDomain);
   const siteWorkspaceReadiness = useMemo(() => {
     const navigationItems = [
       ...(navigationState.navigation.primary || []),
@@ -2226,6 +2333,7 @@ function EditSitePage() {
     const hasFrontendDesign = frontendDesignState.frontendDesign.status !== 'unconfigured';
     const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0 || commentPolicyDraft.enabled;
     const hasDomain = Boolean(formData.customDomain || site?.customDomain || site?.slug);
+    const domainReady = !hasCustomDomain || domainVerification?.status === 'verified';
     const checks = [
       {
         label: 'Publish state',
@@ -2274,9 +2382,11 @@ function EditSitePage() {
       {
         label: 'Public address',
         detail: hasDomain
-          ? formData.customDomain || `${formData.slug || site?.slug}.backy.app`
+          ? hasCustomDomain
+            ? `${savedCustomDomain} (${domainVerificationStatusLabel[domainVerification?.status || 'not_started']})`
+            : `${formData.slug || site?.slug}.backy.app`
           : 'Set a slug or custom domain for previews and frontend routing.',
-        ready: hasDomain,
+        ready: hasDomain && domainReady,
       },
       {
         label: 'Automation queues',
@@ -2301,6 +2411,9 @@ function EditSitePage() {
   }, [
     formData.customDomain,
     formData.slug,
+    domainVerification?.status,
+    hasCustomDomain,
+    savedCustomDomain,
     commentPolicyDraft.enabled,
     commentPolicyDraft.moderationMode,
     frontendDesignState.frontendDesign.editableMap.length,
@@ -2332,6 +2445,10 @@ function EditSitePage() {
   const adminSiteUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteApiId || siteId)}`;
   const publicApiBase = buildApiUrl('/api');
   const publicSiteApiUrl = `${publicApiBase}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const domainActionDisabled = isSiteSettingsBusy || !canConfigureSite || !hasCustomDomain;
+  const domainActionTitle = !hasCustomDomain
+    ? 'Save a custom domain before preparing DNS verification.'
+    : canConfigureSite ? undefined : configureSitePermissionTitle;
   const siteWorkspaceHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -2343,6 +2460,13 @@ function EditSitePage() {
       status: formData.status,
       publicUrl: publicSiteUrl,
     },
+    domainVerification: domainVerification
+      ? {
+        ...domainVerification,
+        hasCustomDomain,
+        ready: !hasCustomDomain || domainVerification.status === 'verified',
+      }
+      : null,
     endpoints: {
       adminSite: adminSiteUrl,
       readiness: `${adminSiteUrl}/readiness`,
@@ -2446,6 +2570,8 @@ function EditSitePage() {
     formData.slug,
     formData.status,
     frontendDesignState.frontendDesign,
+    domainVerification,
+    hasCustomDomain,
     navigationState.navigation.footer,
     navigationState.navigation.primary,
     publicSiteApiUrl,
@@ -2854,6 +2980,88 @@ function EditSitePage() {
             </div>
           </div>
         </section>
+
+        {domainVerification && (
+          <section id="site-domain" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-domain-verification-panel">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Globe className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold">Domain verification</h2>
+                  <span className={cn(
+                    'rounded-full px-2.5 py-1 text-xs font-semibold',
+                    domainVerificationStatusClass[domainVerification.status],
+                  )}
+                  >
+                    {domainVerificationStatusLabel[domainVerification.status]}
+                  </span>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Prepare the DNS ownership record for the saved custom domain and mark it verified after TXT/CNAME records are visible.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copySiteHandoffText(domainVerification.txtValue || '', 'Domain TXT value')}
+                  disabled={isSiteSettingsBusy}
+                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy TXT value
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDomainVerificationChange('pending')}
+                  disabled={domainActionDisabled}
+                  title={domainActionTitle}
+                  aria-label={`Prepare domain verification for ${site.name}`}
+                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+                  Prepare DNS record
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDomainVerificationChange('verified')}
+                  disabled={domainActionDisabled}
+                  title={domainActionTitle}
+                  aria-label={`Mark domain verification verified for ${site.name}`}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Mark verified
+                </button>
+              </div>
+            </div>
+
+            {!hasCustomDomain ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Save a custom domain in Site settings before preparing DNS verification.
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <SiteDomainVerificationValue label="Domain" value={domainVerification.domain || savedCustomDomain} />
+              <SiteDomainVerificationValue label="TXT host" value={domainVerification.txtHost || ''} />
+              <SiteDomainVerificationValue label="TXT value" value={domainVerification.txtValue || ''} />
+              <SiteDomainVerificationValue label="CNAME target" value={domainVerification.cnameTarget || ''} />
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <SiteDomainVerificationValue label="Token" value={domainVerification.token || ''} />
+              <SiteDomainVerificationValue label="Requested" value={formatTime(domainVerification.requestedAt || undefined)} />
+              <SiteDomainVerificationValue label="Last checked" value={formatTime(domainVerification.checkedAt || undefined)} />
+              <SiteDomainVerificationValue label="Verified" value={formatTime(domainVerification.verifiedAt || undefined)} />
+            </div>
+
+            {domainVerification.lastError ? (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {domainVerification.lastError}
+              </div>
+            ) : null}
+          </section>
+        )}
 
         <section id="site-readiness" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-readiness-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -4937,6 +5145,17 @@ function SiteHandoffEndpoint({ label, value }: { label: string; value: string })
       <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
+      </code>
+    </div>
+  );
+}
+
+function SiteDomainVerificationValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-2">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="mt-1 block min-w-0 overflow-x-auto font-mono text-xs text-foreground">
+        {value || '—'}
       </code>
     </div>
   );
