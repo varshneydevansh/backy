@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import {
   createComment,
+  deleteComment,
   getAdminSite,
   getCommentAnalytics,
   getUserPermissions,
@@ -321,6 +322,7 @@ function CommentsRoute() {
   const [replyDraft, setReplyDraft] = useState<CommentReplyDraft>(DEFAULT_REPLY_DRAFT);
   const [movingCommentId, setMovingCommentId] = useState<string | null>(null);
   const [moveParentDraft, setMoveParentDraft] = useState('');
+  const [pendingDeleteComment, setPendingDeleteComment] = useState<AdminComment | null>(null);
   const [commentPolicyDraft, setCommentPolicyDraft] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [savedCommentPolicy, setSavedCommentPolicy] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [isLoading, setIsLoading] = useState(false);
@@ -1187,6 +1189,42 @@ function CommentsRoute() {
       setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update comments');
+    } finally {
+      setUpdatingIds([]);
+    }
+  };
+
+  const handleDeleteComment = async (comment: AdminComment) => {
+    if (isCommentsBusy) return;
+    if (!canManageComments) {
+      setError(managePermissionTitle || 'Your account cannot delete comments.');
+      setNotice(null);
+      return;
+    }
+
+    setUpdatingIds([comment.id]);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await deleteComment(activeSiteId, comment.id);
+      const deletedIds = new Set(result.deleted.map((item) => item.id));
+      setComments((current) => current.filter((item) => !deletedIds.has(item.id)));
+      setSelectedIds((current) => current.filter((id) => !deletedIds.has(id)));
+      if (replyingToId && deletedIds.has(replyingToId)) {
+        setReplyingToId(null);
+        setReplyDraft(DEFAULT_REPLY_DRAFT);
+      }
+      if (movingCommentId && deletedIds.has(movingCommentId)) {
+        setMovingCommentId(null);
+        setMoveParentDraft('');
+      }
+      setPendingDeleteComment(null);
+      await refreshCommentAnalytics().catch(() => null);
+      await refreshCommentAuditLogs().catch(() => null);
+      setNotice(`${result.deletedCount} comment${result.deletedCount === 1 ? '' : 's'} deleted.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete comment');
     } finally {
       setUpdatingIds([]);
     }
@@ -2753,6 +2791,7 @@ function CommentsRoute() {
                     onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
                     onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
                     onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
+                    onDelete={() => setPendingDeleteComment(comment)}
                     onClearReports={() => void handleClearReports([comment.id])}
                     onOpenReply={() => openReplyComposer(comment)}
                     onCancelReply={() => {
@@ -2775,6 +2814,52 @@ function CommentsRoute() {
           )}
         </PanelContent>
       </Panel>
+      {pendingDeleteComment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="comments-delete-confirm-dialog">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete comment?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This permanently removes the comment from Backy. Mark it spam or rejected if you need to keep moderation history.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Author: <span className="font-medium text-foreground">{pendingDeleteComment.authorName || pendingDeleteComment.authorEmail || 'Anonymous'}</span>
+              <div className="mt-1">
+                Comment ID: <span className="font-mono font-medium text-foreground">{pendingDeleteComment.id}</span>
+              </div>
+              {!pendingDeleteComment.parentId && (replyCountByParent.get(pendingDeleteComment.id) || 0) > 0 ? (
+                <div className="mt-1 text-amber-700">
+                  This also deletes {replyCountByParent.get(pendingDeleteComment.id)} repl{replyCountByParent.get(pendingDeleteComment.id) === 1 ? 'y' : 'ies'} attached to this thread.
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPendingDeleteComment(null)}
+                disabled={isCommentsBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void handleDeleteComment(pendingDeleteComment)}
+                disabled={isCommentsBusy || !canManageComments}
+                title={!canManageComments ? managePermissionTitle : undefined}
+                data-testid="comments-delete-confirm-button"
+              >
+                {updatingIds.includes(pendingDeleteComment.id) ? 'Deleting...' : 'Delete comment'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
@@ -3145,6 +3230,7 @@ function CommentCard({
   onReject,
   onSpam,
   onBlock,
+  onDelete,
   onClearReports,
   onOpenReply,
   onCancelReply,
@@ -3176,6 +3262,7 @@ function CommentCard({
   onReject: () => void;
   onSpam: () => void;
   onBlock: () => void;
+  onDelete: () => void;
   onClearReports: () => void;
   onOpenReply: () => void;
   onCancelReply: () => void;
@@ -3307,6 +3394,18 @@ function CommentCard({
           aria-label={`Block comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
         >
           Block
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={onDelete}
+          disabled={disabled}
+          title={disabledReason}
+          iconStart={<Trash2 className="size-4" />}
+          aria-label={`Delete comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          data-testid="comments-delete-comment"
+        >
+          Delete
         </Button>
         {hasReports ? (
           <Button

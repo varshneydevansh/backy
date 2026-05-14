@@ -1678,6 +1678,12 @@ export class BackyClient {
     });
   }
 
+  deleteComment(commentId: string): Promise<BackyEnvelope<{ deleted: BackyComment[]; deletedCount: number }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`, {
+      method: 'DELETE',
+    });
+  }
+
   reportReasons(): Promise<BackyEnvelope<{ reasons: string[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/report-reasons`);
   }

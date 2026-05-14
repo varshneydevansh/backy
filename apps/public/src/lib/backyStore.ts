@@ -8297,6 +8297,17 @@ export function updateCommentThread(
   return clone(comment);
 }
 
+export function deleteCommentRecord(commentId: string): Comment | undefined {
+  refreshPersistedInteractionStore();
+
+  const comment = commentStore.find((item) => item.id === commentId);
+  if (!comment) return undefined;
+
+  setCommentStore(commentStore.filter((item) => item.id !== commentId));
+  persistInteractionStore({ mergePersisted: false });
+  return clone(comment);
+}
+
 export function listCommentReplies(siteId: string, params: {
   targetType: CommentTargetType;
   targetId: string;

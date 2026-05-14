@@ -325,6 +325,35 @@ const listCommentReplies = async (parentId) => {
   return payload.data?.comments || payload.comments || [];
 };
 
+const deleteComment = async (commentId) => {
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments/${commentId}`, {
+    method: 'DELETE',
+  });
+  return payload.data || payload;
+};
+
+const assertCommentHardDelete = async ({ pageId, requestId }) => {
+  const comment = await submitComment({
+    pageId,
+    authorName: 'Comments Smoke Delete',
+    authorEmail: 'comments-delete@example.com',
+    content: 'This temporary comment should be hard-deleted by the smoke.',
+    requestId,
+  });
+  const result = await deleteComment(comment.id);
+  assert(result.deletedCount === 1, `Comment hard delete should remove one comment: ${JSON.stringify(result).slice(0, 500)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const comments = await listComments(requestId);
+    if (!comments.some((item) => item.id === comment.id)) {
+      return;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Hard-deleted comment still appears in comment list: ${comment.id}`);
+};
+
 const listBlocklist = async (q = '') => {
   const query = new URLSearchParams({
     limit: '100',
@@ -1298,7 +1327,8 @@ const main = async () => {
     const threadReplyRequestId = `comments-smoke-thread-reply-${suffix}`;
     const moveParentRequestId = `comments-smoke-move-parent-${suffix}`;
     const captchaPassRequestId = `comments-smoke-captcha-pass-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId, moveParentRequestId, captchaPassRequestId);
+    const deleteRequestId = `comments-smoke-delete-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId, threadParentRequestId, threadReplyRequestId, moveParentRequestId, captchaPassRequestId, deleteRequestId);
 
     await patchSiteCommentPolicy({
       enabled: true,
@@ -1350,6 +1380,7 @@ const main = async () => {
       closedMessage: 'Comments are closed for this site.',
       sort: 'newest',
     });
+    await assertCommentHardDelete({ pageId: page.id, requestId: deleteRequestId });
 
     const approveComment = await submitComment({
       pageId: page.id,

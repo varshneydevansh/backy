@@ -1037,6 +1037,20 @@ interface ApiUpdateCommentResponse {
   };
 }
 
+interface ApiDeleteCommentResponse {
+  success: boolean;
+  data?: {
+    deleted: Comment[];
+    deletedCount: number;
+  };
+  deleted?: Comment[];
+  deletedCount?: number;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiListCommentBlocklistResponse {
   success: boolean;
   data?: {
@@ -5125,6 +5139,26 @@ export async function updateCommentThread(
   }
 
   return comment;
+}
+
+export async function deleteComment(
+  siteId: string,
+  commentId: string,
+): Promise<{ deleted: AdminComment[]; deletedCount: number }> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteCommentResponse>(response);
+  const deleted = payload.data?.deleted || payload.deleted;
+
+  if (!response.ok || !payload.success || !deleted) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to delete comment', payload.error?.details);
+  }
+
+  return {
+    deleted,
+    deletedCount: payload.data?.deletedCount ?? payload.deletedCount ?? deleted.length,
+  };
 }
 
 export async function listCommentBlocklist(

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  deleteCommentRecord,
   getCommentById,
   getSiteByIdOrSlug,
+  listComments,
   updateCommentStatus,
   updateCommentThread,
 } from '@/lib/backyStore';
@@ -433,5 +435,148 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'comments.manage' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  try {
+    const { siteId, commentId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const comment = await repositories.comments.getById(site.id, commentId);
+      if (!comment) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+      }
+
+      const replies = comment.parentId
+        ? []
+        : (await repositories.comments.list({
+          siteId: site.id,
+          status: 'all',
+          parentOnly: true,
+          parentId: comment.id,
+          limit: 100,
+        })).items;
+      const deleted: Comment[] = [];
+
+      for (const reply of replies) {
+        if (await repositories.comments.delete(site.id, reply.id)) {
+          deleted.push(reply);
+        }
+      }
+
+      const rootDeleted = await repositories.comments.delete(site.id, comment.id);
+      if (!rootDeleted) {
+        return errorResponse(409, 'COMMENT_DELETE_FAILED', 'Unable to delete comment', requestId);
+      }
+      deleted.unshift(comment);
+
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: access.session?.user.id,
+        entity: 'comment',
+        entityId: comment.id,
+        action: 'comment.delete',
+        before: comment,
+        after: null,
+        metadata: {
+          permission: 'comments.manage',
+          targetType: comment.targetType,
+          targetId: comment.targetId,
+          deletedCount: deleted.length,
+          deletedIds: deleted.map((item) => item.id),
+        },
+        requestId,
+      });
+
+      return privateResponse({
+        success: true,
+        requestId,
+        data: {
+          deleted,
+          deletedCount: deleted.length,
+        },
+        deleted,
+        deletedCount: deleted.length,
+      }, requestId);
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const comment = getCommentById(commentId);
+    if (!comment || comment.siteId !== site.id) {
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+    }
+
+    const replies = comment.parentId
+      ? []
+      : listComments(site.id, {
+        status: 'all',
+        parentOnly: true,
+        parentId: comment.id,
+        limit: 100,
+      }).comments;
+    const deleted: Comment[] = [];
+
+    for (const reply of replies) {
+      const deletedReply = deleteCommentRecord(reply.id);
+      if (deletedReply) {
+        deleted.push(deletedReply);
+      }
+    }
+
+    const deletedComment = deleteCommentRecord(comment.id);
+    if (!deletedComment) {
+      return errorResponse(409, 'COMMENT_DELETE_FAILED', 'Unable to delete comment', requestId);
+    }
+    deleted.unshift(deletedComment);
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'comment',
+      entityId: comment.id,
+      action: 'comment.delete',
+      before: comment,
+      after: null,
+      metadata: {
+        permission: 'comments.manage',
+        targetType: comment.targetType,
+        targetId: comment.targetId,
+        deletedCount: deleted.length,
+        deletedIds: deleted.map((item) => item.id),
+      },
+      requestId,
+    });
+
+    return privateResponse({
+      success: true,
+      requestId,
+      data: {
+        deleted,
+        deletedCount: deleted.length,
+      },
+      deleted,
+      deletedCount: deleted.length,
+    }, requestId);
+  } catch (error) {
+    console.error('API Error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
