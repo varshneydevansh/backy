@@ -48,6 +48,10 @@ const normalizeKeywords = (keywords: string[] | undefined): string[] => (
         .slice(0, 20)
 );
 
+const isPublicationStatus = (status: ContentStatus): boolean => (
+    status === 'published' || status === 'scheduled'
+);
+
 const parseJsonLd = (
     value: string,
 ): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
@@ -122,7 +126,9 @@ export function PageSettingsModal({
             setValidationError(editDisabledReason);
             return;
         }
-        if ((settings.status === 'published' || settings.status === 'scheduled') && !canPublish) {
+        const publicationStateChanging = settings.status !== initialSettings.status
+            && (isPublicationStatus(settings.status) || isPublicationStatus(initialSettings.status));
+        if (publicationStateChanging && !canPublish) {
             setValidationError(publishDisabledReason);
             return;
         }
@@ -318,8 +324,8 @@ export function PageSettingsModal({
                                             scheduledAt: status === 'scheduled' ? settings.scheduledAt || null : null,
                                         });
                                     }}
-                                    disabled={!canEdit}
-                                    title={canEdit ? undefined : editDisabledReason}
+                                    disabled={!canEdit || (!canPublish && isPublicationStatus(initialSettings.status))}
+                                    title={!canEdit ? editDisabledReason : !canPublish && isPublicationStatus(initialSettings.status) ? publishDisabledReason : undefined}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     data-testid="page-settings-status"
                                 >

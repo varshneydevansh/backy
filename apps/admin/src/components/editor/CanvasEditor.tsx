@@ -3745,8 +3745,15 @@ export function CanvasEditor({
       setEditorNotice(editDisabledReason);
       throw new Error(editDisabledReason);
     }
-    if ((newSettings.status === 'published' || newSettings.status === 'scheduled') && pageSettings.status !== newSettings.status && !canPublish) {
-      const message = publishDisabledReason || 'You do not have permission to publish this page.';
+    const publicationStateChanging = pageSettings.status !== newSettings.status
+      && (
+        pageSettings.status === 'published' ||
+        pageSettings.status === 'scheduled' ||
+        newSettings.status === 'published' ||
+        newSettings.status === 'scheduled'
+      );
+    if (publicationStateChanging && !canPublish) {
+      const message = publishDisabledReason || 'You do not have permission to change this page publication status.';
       setEditorNotice(message);
       throw new Error(message);
     }
@@ -3787,8 +3794,8 @@ export function CanvasEditor({
     const previousSettings = pageSettings;
     const wasDirty = hasUnsavedChanges;
     const nextStatus = pageSettings.status === 'published' ? 'draft' : 'published';
-    if (nextStatus === 'published' && !canPublish) {
-      setEditorNotice(publishDisabledReason || 'You do not have permission to publish this page.');
+    if (!canPublish) {
+      setEditorNotice(publishDisabledReason || 'You do not have permission to change this page publication status.');
       return;
     }
     if (nextStatus === 'published' && publishDisabled) {
@@ -4752,33 +4759,35 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={handleTogglePublish}
-                    disabled={isSaving || !canEdit || (pageSettings.status === 'published' ? false : (!canPublish || publishDisabled))}
+                    disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)}
                     className={cn(
                       'px-2 py-1.5 rounded-md text-sm font-medium',
                       pageSettings.status === 'published'
                         ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                         : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
-                      isSaving || !canEdit || (pageSettings.status === 'published' ? false : (!canPublish || publishDisabled))
+                      isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)
                         ? 'opacity-70 cursor-not-allowed'
                         : '',
                     )}
                     title={
                       !canEdit
                         ? editDisabledReason
-                        : pageSettings.status === 'published'
-                        ? 'Set page back to draft'
                         : !canPublish
-                          ? publishDisabledReason || 'You do not have permission to publish this page'
-                        : publishDisabled
-                          ? publishDisabledReason || 'Resolve page readiness issues before publishing'
-                          : 'Publish page'
+                          ? publishDisabledReason || 'You do not have permission to change this page publication status'
+                          : pageSettings.status === 'published'
+                            ? 'Set page back to draft'
+                            : publishDisabled
+                              ? publishDisabledReason || 'Resolve page readiness issues before publishing'
+                              : 'Publish page'
                     }
                     aria-label={
-                      pageSettings.status === 'published'
-                        ? 'Unpublish page'
-                        : !canPublish || publishDisabled
-                          ? publishDisabledReason || 'Publish disabled'
-                          : 'Publish page'
+                      !canPublish
+                        ? publishDisabledReason || 'Publication status disabled'
+                        : pageSettings.status === 'published'
+                          ? 'Unpublish page'
+                          : publishDisabled
+                            ? publishDisabledReason || 'Publish disabled'
+                            : 'Publish page'
                     }
                   >
                     {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}

@@ -590,6 +590,11 @@ for (const route of [
 ]) {
   assertIncludes(read(route), 'Array.isArray(rawContent.elements)', `${route} PATCH content normalization must extract elements arrays`);
 }
+const canvasEditorSource = read('apps/admin/src/components/editor/CanvasEditor.tsx');
+assertIncludes(canvasEditorSource, 'publicationStateChanging', 'canvas editor settings save must guard publication status changes');
+assertIncludes(canvasEditorSource, "disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)}", 'canvas editor publish/unpublish button must require pages.publish in both directions');
+const pageSettingsModalSource = read('apps/admin/src/components/editor/PageSettingsModal.tsx');
+assertIncludes(pageSettingsModalSource, 'isPublicationStatus(initialSettings.status)', 'page settings modal must guard unpublishing published or scheduled pages');
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
