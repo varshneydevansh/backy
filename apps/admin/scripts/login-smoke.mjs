@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
+const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_LOGIN_CDP_PORT || 9392);
 
@@ -38,6 +39,48 @@ const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) throw new Error(`${endpoint} returned ${response.status}`);
   return response.json();
+};
+
+const assertEditorCanReadOwnPermissionMatrix = async () => {
+  const loginResponse = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'jane@backy.io',
+      password: process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123',
+    }),
+  });
+  const loginPayload = await loginResponse.json().catch(() => ({}));
+  assert(
+    loginResponse.ok && loginPayload.success !== false && loginPayload.data?.session?.token && loginPayload.data?.user?.id,
+    `Editor login failed: ${JSON.stringify(loginPayload).slice(0, 500)}`,
+  );
+
+  const token = loginPayload.data.session.token;
+  const userId = loginPayload.data.user.id;
+  const ownPermissionsResponse = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/permissions`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const ownPermissionsPayload = await ownPermissionsResponse.json().catch(() => ({}));
+  assert(
+    ownPermissionsResponse.ok && ownPermissionsPayload.data?.permissions?.userId === userId,
+    `Editor should be able to read own permissions, got ${ownPermissionsResponse.status}: ${JSON.stringify(ownPermissionsPayload).slice(0, 500)}`,
+  );
+
+  const matrixRules = ownPermissionsPayload.data.permissions.groups.flatMap((group) => group.permissions || []);
+  assert(
+    matrixRules.some((permission) => permission.key === 'pages.view' && permission.allowed),
+    `Editor own permissions should include pages.view: ${JSON.stringify(ownPermissionsPayload.data.permissions).slice(0, 500)}`,
+  );
+
+  const otherPermissionsResponse = await fetch(`${API_BASE_URL}/api/admin/users/user-admin/permissions`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const otherPermissionsPayload = await otherPermissionsResponse.json().catch(() => ({}));
+  assert(
+    otherPermissionsResponse.status === 403 && otherPermissionsPayload.error?.code === 'FORBIDDEN_PERMISSION',
+    `Editor should not read another user's permissions, got ${otherPermissionsResponse.status}: ${JSON.stringify(otherPermissionsPayload).slice(0, 500)}`,
+  );
 };
 
 const waitForCdp = async () => {
@@ -188,6 +231,24 @@ const waitForDashboard = async (client) => {
   throw new Error('Dashboard did not load after backend-backed login');
 };
 
+const seedStaleAdminProfile = async (client) => {
+  await evaluate(client, `(() => {
+    localStorage.setItem('backy-auth-storage', JSON.stringify({
+      state: {
+        user: {
+          id: 'admin-user',
+          email: 'admin@backy.io',
+          fullName: 'Admin User',
+          role: 'admin',
+        },
+        session: null,
+      },
+      version: 0,
+    }));
+    return { ok: true };
+  })()`);
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -232,6 +293,8 @@ const main = async () => {
   let userDataDir;
 
   try {
+    await assertEditorCanReadOwnPermissionMatrix();
+
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
     client = connectCdp(target.webSocketDebuggerUrl);
@@ -248,6 +311,39 @@ const main = async () => {
         body: document.body?.innerText?.slice(0, 900) || '',
       }))()`,
       'Login page',
+    );
+
+    await seedStaleAdminProfile(client);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/settings`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        return {
+          ready: window.location.pathname === '/login' &&
+            body.includes('Authenticated admin access') &&
+            body.includes('Demo access') &&
+            !body.includes('Backy CMS\\nLoading'),
+          path: window.location.pathname,
+          stored: JSON.parse(localStorage.getItem('backy-auth-storage') || '{}'),
+          body: body.slice(0, 900),
+        };
+      })()`,
+      'Login page after stale stored admin profile',
+    );
+    await evaluate(client, `(() => {
+      localStorage.removeItem('backy-auth-storage');
+      return { ok: true };
+    })()`);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/login`,
+      `(() => ({
+        ready: document.body?.innerText?.includes('Authenticated admin access') &&
+          document.body?.innerText?.includes('Demo access'),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      }))()`,
+      'Login page after stale profile reset',
     );
 
     await setInputValue(client, '#email', 'admin@backy.io');

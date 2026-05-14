@@ -59,13 +59,20 @@ export async function GET(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, { permission: 'users.view' });
+  const access = await requireAdminAccess(request, requestId, { roles: ['owner', 'admin', 'editor', 'viewer'] });
   if (access instanceof NextResponse) {
     return access;
   }
 
   try {
     const { userId } = await context.params;
+    if (access.type === 'session' && access.session?.user.id !== userId) {
+      const userManagementAccess = await requireAdminAccess(request, requestId, { permission: 'users.view' });
+      if (userManagementAccess instanceof NextResponse) {
+        return userManagementAccess;
+      }
+    }
+
     const { repositories, user } = await getUser(userId);
 
     if (!user) {
