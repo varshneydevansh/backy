@@ -4447,6 +4447,16 @@ function SecuritySettings({
             const displayValue = canShowValue
               ? item.value || 'Not configured'
               : 'Hidden without settings.manageKeys';
+            const statusLabel = !item.value
+              ? 'Not configured'
+              : canShowValue
+                ? 'Active'
+                : 'Hidden';
+            const statusClassName = statusLabel === 'Active'
+              ? 'bg-success/10 text-success'
+              : statusLabel === 'Hidden'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-muted text-muted-foreground';
 
             return (
             <div key={item.scope} className="rounded-xl border border-border bg-muted/40 p-4">
@@ -4455,8 +4465,11 @@ function SecuritySettings({
                   <p className="font-medium">{item.label}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
                 </div>
-                <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-                  Active
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClassName}`}
+                  data-testid={`settings-api-key-status-${item.scope}`}
+                >
+                  {statusLabel}
                 </span>
               </div>
               <p className="mt-3 break-all rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">

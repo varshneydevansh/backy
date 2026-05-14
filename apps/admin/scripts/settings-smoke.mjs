@@ -645,6 +645,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
     const body = document.body?.innerText || '';
     return {
       hiddenAdminKey: body.includes('Hidden without settings.manageKeys'),
+      adminKeyStatus: document.querySelector('[data-testid="settings-api-key-status-admin"]')?.textContent?.trim() || '',
+      publicKeyStatus: document.querySelector('[data-testid="settings-api-key-status-public"]')?.textContent?.trim() || '',
       leakedStaleAdminKey: body.includes(${JSON.stringify(STALE_ADMIN_API_KEY)}),
       copyButtons: Array.from(document.querySelectorAll('button')).map((button) => ({
         text: (button.textContent || '').trim(),
@@ -653,7 +655,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
     };
   })()`);
   assert(
-    securityKeyState.hiddenAdminKey && !securityKeyState.leakedStaleAdminKey,
+    securityKeyState.hiddenAdminKey &&
+      securityKeyState.adminKeyStatus === 'Hidden' &&
+      securityKeyState.publicKeyStatus === 'Active' &&
+      !securityKeyState.leakedStaleAdminKey,
     `Admin API key should stay hidden from non-key managers even with stale local storage: ${JSON.stringify(securityKeyState)}`,
   );
   await assertTwoFactorUnavailable(client);
