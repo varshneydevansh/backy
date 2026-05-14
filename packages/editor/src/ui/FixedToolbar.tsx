@@ -6,8 +6,7 @@ import {
     Undo, Redo, Type, AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 import { cn } from '../utils';
-import { Editor, Transforms, Text, Element as SlateElement } from 'slate';
-import { useFocused } from 'slate-react';
+import { Editor, Transforms, Element as SlateElement } from 'slate';
 
 const ToolbarButton = ({
     onClick,
@@ -77,11 +76,11 @@ const toggleBlock = (editor: any, format: string) => {
         split: true,
     });
 
-    const newProperties: Partial<SlateElement> = {
+    const newProperties: Record<string, unknown> = {
         type: isActive ? 'p' : isList ? 'li' : (format as any),
     };
 
-    Transforms.setNodes<SlateElement>(editor, newProperties);
+    Transforms.setNodes(editor, newProperties as any);
 
     if (!isActive && isList) {
         const block = { type: format, children: [] };
@@ -90,8 +89,7 @@ const toggleBlock = (editor: any, format: string) => {
 };
 
 export const FixedToolbar = ({ className }: { className?: string }) => {
-    const editor = useEditorRef();
-    const focused = useFocused();
+    const editor = useEditorRef() as any;
 
     if (!editor) return null;
 
