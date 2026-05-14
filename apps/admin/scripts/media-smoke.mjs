@@ -18,6 +18,13 @@ const ONE_PIXEL_PNG = Buffer.from(
   'base64',
 );
 
+const MINIMAL_WOFF2 = Buffer.from([
+  0x77, 0x4f, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x30, 0x00, 0x01, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x10, 0x4f, 0x54, 0x54, 0x4f,
+  0x00, 0x00, 0x00, 0x00,
+]);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
@@ -720,9 +727,11 @@ const assertMediaPaginationControls = async (client) => {
   return null;
 };
 
-const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName) => {
+const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, options = {}) => {
+  const mode = options.mode || 'file';
+  const acceptIncludes = options.acceptIncludes || '.txt';
   const modeResult = await evaluate(client, `(() => {
-    const modeButton = document.querySelector('[data-testid="media-upload-mode-file"]');
+    const modeButton = document.querySelector(${JSON.stringify(`[data-testid="media-upload-mode-${mode}"]`)});
     if (!(modeButton instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'mode-button-not-found' };
     }
@@ -732,23 +741,23 @@ const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName) => {
     modeButton.click();
     return { ok: true };
   })()`);
-  assert(modeResult.ok, `Unable to select central file upload mode: ${JSON.stringify(modeResult)}`);
+  assert(modeResult.ok, `Unable to select central ${mode} upload mode: ${JSON.stringify(modeResult)}`);
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const input = document.querySelector('[data-testid="media-upload-input"]');
-      const selectedButton = document.querySelector('[data-testid="media-upload-mode-file"]');
+      const selectedButton = document.querySelector(${JSON.stringify(`[data-testid="media-upload-mode-${mode}"]`)});
       return {
         hasInput: input instanceof HTMLInputElement,
         accept: input instanceof HTMLInputElement ? input.accept : '',
         selected: selectedButton instanceof HTMLButtonElement ? selectedButton.className.includes('bg-primary') : false,
       };
     })()`);
-    if (state.hasInput && state.selected && state.accept.includes('.txt')) {
+    if (state.hasInput && state.selected && (!acceptIncludes || state.accept.includes(acceptIncludes))) {
       break;
     }
     if (attempt === 39) {
-      throw new Error(`Central upload mode did not expose file accept filters: ${JSON.stringify(state)}`);
+      throw new Error(`Central ${mode} upload mode did not expose expected accept filters: ${JSON.stringify(state)}`);
     }
     await sleep(100);
   }
@@ -1874,6 +1883,108 @@ const closeMediaDetails = async (client) => {
   return null;
 };
 
+const assertFontRegistrationPanel = async (client, { family, weight, style }) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('#media-fonts');
+      const text = panel?.textContent || '';
+      return {
+        hasPanel: panel instanceof HTMLElement,
+        hasFamily: text.includes(${JSON.stringify(family)}),
+        hasWeight: text.includes(${JSON.stringify(weight)}),
+        hasStyle: text.toLowerCase().includes(${JSON.stringify(style.toLowerCase())}),
+        hasEdit: Array.from(panel?.querySelectorAll('button') || []).some((button) => (button.textContent || '').includes('Edit')),
+        body: text.slice(0, 1400),
+      };
+    })()`);
+    if (state.hasPanel && state.hasFamily && state.hasWeight && state.hasStyle && state.hasEdit) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Font registration panel did not render expected metadata: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertPublicFontManifest = async ({ fontId, family, weight, style, display, fallback }) => {
+  const payload = await requestApi(`/api/sites/${SITE_ID}/media/fonts`);
+  const manifest = payload.data || payload;
+  const fonts = Array.isArray(manifest.fonts) ? manifest.fonts : [];
+  const families = Array.isArray(manifest.families) ? manifest.families : [];
+  const variant = fonts.find((font) => font.mediaId === fontId);
+
+  assert(variant, `Public font manifest did not include uploaded font ${fontId}: ${JSON.stringify(manifest).slice(0, 500)}`);
+  assert(variant.family === family, `Public font manifest family mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.weight === weight, `Public font manifest weight mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.style === style, `Public font manifest style mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.display === display, `Public font manifest display mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.fallbackStack === fallback, `Public font manifest fallback mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.url === `/api/sites/${encodeURIComponent(SITE_ID)}/media/${encodeURIComponent(fontId)}/file`, `Public font manifest URL mismatch: ${JSON.stringify(variant)}`);
+  assert(variant.cssFamily === `"${family}", ${fallback}`, `Public font manifest CSS family mismatch: ${JSON.stringify(variant)}`);
+  assert((manifest.css || '').includes(`font-family: "${family}";`), `Public font manifest CSS missed family: ${manifest.css || ''}`);
+  assert((manifest.css || '').includes(`font-weight: ${weight};`), `Public font manifest CSS missed weight: ${manifest.css || ''}`);
+  assert((manifest.css || '').includes(`font-style: ${style};`), `Public font manifest CSS missed style: ${manifest.css || ''}`);
+  assert((manifest.css || '').includes(`font-display: ${display};`), `Public font manifest CSS missed display: ${manifest.css || ''}`);
+  assert(families.some((fontFamily) => (
+    fontFamily.family === family &&
+    Array.isArray(fontFamily.assetIds) &&
+    fontFamily.assetIds.includes(fontId)
+  )), `Public font manifest did not group uploaded font family: ${JSON.stringify(families).slice(0, 500)}`);
+
+  return { variant, counts: manifest.counts };
+};
+
+const uploadFontThroughUiAndAssert = async (client, {
+  uploadPath,
+  uploadName,
+  marker,
+  family,
+  weight,
+  style,
+  display,
+  fallback,
+}) => {
+  await uploadCentralMediaThroughUi(client, uploadPath, uploadName, { mode: 'font', acceptIncludes: '.woff2' });
+  const uploadedFont = await waitForMedia(marker, (item) => (
+    item.originalName === uploadName &&
+    item.type === 'font' &&
+    item.visibility === 'public'
+  ));
+  await waitForMediaPageAsset(client, uploadName);
+  await openMediaDetails(client, uploadName);
+  await setDetailsField(client, 'Family', family);
+  await setDetailsField(client, 'Weight', weight);
+  await setDetailsField(client, 'Style', style);
+  await setDetailsField(client, 'Fallback stack', fallback);
+  await setDetailsField(client, 'Display', display);
+  await saveDetails(client);
+
+  const updatedFont = await waitForMedia(marker, (item) => (
+    item.id === uploadedFont.id &&
+    item.type === 'font' &&
+    item.metadata?.fontFamily === family &&
+    item.metadata?.fontWeight === weight &&
+    item.metadata?.fontStyle === style &&
+    item.metadata?.fontDisplay === display &&
+    item.metadata?.fontFallback === fallback
+  ));
+  await closeMediaDetails(client);
+  const panel = await assertFontRegistrationPanel(client, { family, weight, style });
+  const manifest = await assertPublicFontManifest({
+    fontId: updatedFont.id,
+    family,
+    weight,
+    style,
+    display,
+    fallback,
+  });
+
+  return { uploadedFont: updatedFont, panel, manifest };
+};
+
 const deleteAssetThroughUi = async (client, assetName) => {
   await waitForMediaPageAsset(client, assetName);
   const openResult = await evaluate(client, `(() => {
@@ -1980,6 +2091,8 @@ const main = async () => {
   let folderId;
   let childFolderId;
   let centralUploadedFile;
+  let fontUploadedFile;
+  let fontSmokeResult;
   let originalSettings;
   let restoredSettings = false;
   const mediaIds = [];
@@ -1992,12 +2105,19 @@ const main = async () => {
   const privateName = `${marker}.txt`;
   const childFolderAssetName = `${marker}-child-folder.txt`;
   const centralUploadName = `${marker}-central-upload.txt`;
+  const fontUploadName = `${marker}-brand-font.woff2`;
   const rejectedUploadModeName = `${marker}-image-mode-rejected.txt`;
   const bulkName = `${marker}-bulk.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
+  const fontFamily = `Backy Smoke ${suffix}`;
+  const fontWeight = '600';
+  const fontStyle = 'italic';
+  const fontDisplay = 'optional';
+  const fontFallback = 'Inter, system-ui, sans-serif';
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
   const centralUploadPath = path.join(os.tmpdir(), centralUploadName);
-  const tempFiles = [replacementPath, centralUploadPath];
+  const fontUploadPath = path.join(os.tmpdir(), fontUploadName);
+  const tempFiles = [replacementPath, centralUploadPath, fontUploadPath];
 
   try {
     await loginAdminApi();
@@ -2007,6 +2127,7 @@ const main = async () => {
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     fs.writeFileSync(centralUploadPath, `Backy central upload UI smoke ${suffix}\n`, 'utf8');
+    fs.writeFileSync(fontUploadPath, MINIMAL_WOFF2);
     const existing = await listMedia(marker);
     assert(existing.length === 0, `Temporary media already exists for marker ${marker}`);
 
@@ -2160,6 +2281,18 @@ const main = async () => {
       item.visibility === 'public'
     ));
     mediaIds.push(centralUploadedFile.id);
+    fontSmokeResult = await uploadFontThroughUiAndAssert(client, {
+      uploadPath: fontUploadPath,
+      uploadName: fontUploadName,
+      marker,
+      family: fontFamily,
+      weight: fontWeight,
+      style: fontStyle,
+      display: fontDisplay,
+      fallback: fontFallback,
+    });
+    fontUploadedFile = fontSmokeResult.uploadedFont;
+    mediaIds.push(fontUploadedFile.id);
     await saveMediaStorageSettingsFromUi(client, suffix);
     const savedStorageSettings = await readSettings();
     assert(savedStorageSettings.integrations?.storage?.provider === 'supabase', 'Media storage provider was not persisted through the Media page.');
@@ -2339,6 +2472,14 @@ const main = async () => {
       }
       centralUploadedFile = null;
     }
+    if (fontUploadedFile) {
+      await deleteMedia(fontUploadedFile.id);
+      const fontUploadIndex = mediaIds.indexOf(fontUploadedFile.id);
+      if (fontUploadIndex !== -1) {
+        mediaIds.splice(fontUploadIndex, 1);
+      }
+      fontUploadedFile = null;
+    }
     await deleteFolder(childFolderId);
     childFolderId = null;
     await deleteFolder(folderId);
@@ -2355,6 +2496,12 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
       restoredSettings,
       deniedViewUi,
+      fontSmoke: fontSmokeResult ? {
+        family: fontSmokeResult.uploadedFont.metadata?.fontFamily,
+        weight: fontSmokeResult.uploadedFont.metadata?.fontWeight,
+        style: fontSmokeResult.uploadedFont.metadata?.fontStyle,
+        manifestVariantId: fontSmokeResult.manifest.variant.id,
+      } : null,
     }, null, 2));
   } finally {
     if (!restoredSettings) {
