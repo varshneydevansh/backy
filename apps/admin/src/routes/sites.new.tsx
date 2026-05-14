@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
-import { createPage, createSite, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { AdminContentApiError, createPage, createSite, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -181,6 +181,7 @@ function NewSitePage() {
     name: '',
     slug: '',
     customDomain: '',
+    teamId: '',
     description: '',
     status: 'draft' as Site['status'],
     blueprint: 'business' as SiteBlueprint,
@@ -248,6 +249,13 @@ function NewSitePage() {
         ready: hasValidDomain,
       },
       {
+        label: 'Backend team',
+        detail: formData.teamId.trim()
+          ? `Create under team ${formData.teamId.trim()}.`
+          : 'Server will infer the database team from configuration or existing site ownership.',
+        ready: true,
+      },
+      {
         label: 'Starter pages',
         detail: hasStarterPages && canSeedStarterPages
           ? `${selectedBlueprint.pages.length} page${selectedBlueprint.pages.length === 1 ? '' : 's'} will be seeded with editable header, navigation, and footer`
@@ -290,6 +298,7 @@ function NewSitePage() {
     displaySlug,
     formData.name,
     formData.status,
+    formData.teamId,
     normalizedDomain,
     canCreateSites,
     canSeedStarterPages,
@@ -303,6 +312,7 @@ function NewSitePage() {
     name: formData.name.trim() || 'Untitled site',
     slug: displaySlug || 'new-site',
     customDomain: normalizedDomain || null,
+    teamId: formData.teamId.trim() || undefined,
     description: formData.description.trim(),
     status: formData.status,
     blueprint: formData.blueprint,
@@ -320,6 +330,7 @@ function NewSitePage() {
     formData.description,
     formData.name,
     formData.status,
+    formData.teamId,
     normalizedDomain,
     selectedBlueprint.pages,
   ]);
@@ -334,6 +345,7 @@ function NewSitePage() {
       slug: displaySlug || 'new-site',
       publicAddress,
       customDomain: normalizedDomain || null,
+      teamId: formData.teamId.trim() || undefined,
       status: formData.status,
     },
     blueprint: {
@@ -375,6 +387,7 @@ function NewSitePage() {
     displaySlug,
     formData.name,
     formData.status,
+    formData.teamId,
     normalizedDomain,
     publicAddress,
     publicApiBase,
@@ -497,6 +510,7 @@ function NewSitePage() {
       const created = await createSite({
         name: formData.name.trim(),
         slug: displaySlug,
+        teamId: formData.teamId.trim() || undefined,
         customDomain: normalizedDomain || null,
         description: formData.description.trim(),
         status: formData.status,
@@ -531,9 +545,13 @@ function NewSitePage() {
 
       navigate({ to: '/pages', search: { siteId: created.publicSiteId || created.id } });
     } catch (createError) {
-      setError(createError instanceof Error
-        ? `${createError.message}. The site was not created because the backend did not persist it.`
-        : 'Unable to create site. The site was not persisted.');
+      if (createError instanceof AdminContentApiError && createError.code === 'TEAM_REQUIRED') {
+        setError('Database mode needs a team owner for this site. Enter a Database team ID here, configure BACKY_DEFAULT_TEAM_ID on the backend, or create the first site through a seeded team.');
+      } else {
+        setError(createError instanceof Error
+          ? `${createError.message}. The site was not created because the backend did not persist it.`
+          : 'Unable to create site. The site was not persisted.');
+      }
       setNotice(null);
       setIsLoading(false);
     }
@@ -839,6 +857,27 @@ function NewSitePage() {
               {!isValidDomain(normalizedDomain) && (
                 <span className="mt-2 block text-xs text-red-600">Use a domain like example.com.</span>
               )}
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">Database team ID</span>
+              <input
+                type="text"
+                value={formData.teamId}
+                disabled={creationFormDisabled}
+                title={creationDisabledTitle}
+                onChange={(e) => {
+                  if (creationFormDisabled) return;
+
+                  setFormData({ ...formData, teamId: e.target.value.trim() });
+                }}
+                placeholder="team_..."
+                data-testid="site-create-team-id-input"
+                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <span className="mt-2 block text-xs leading-5 text-muted-foreground">
+                Optional for demo mode. Required in database mode when the backend cannot infer a team.
+              </span>
             </label>
           </div>
 

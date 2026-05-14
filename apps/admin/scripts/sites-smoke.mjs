@@ -336,41 +336,47 @@ const navigateToSites = (client, expectedText = 'Sites command center') => navig
 );
 
 const setCreateSiteControl = async (client, labelText, value) => {
-  const result = await evaluate(client, `(() => {
-    const labelText = ${JSON.stringify(labelText)};
-    const value = ${JSON.stringify(value)};
-    const normalize = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
-    const labels = Array.from(document.querySelectorAll('label'));
-    const label = labels.find((candidate) => {
-      const firstSpan = candidate.querySelector('span');
-      return normalize(firstSpan?.textContent || candidate.textContent) === labelText;
-    });
-    if (!(label instanceof HTMLLabelElement)) {
-      return {
-        ok: false,
-        reason: 'label-missing',
-        labelText,
-        labels: labels.map((candidate) => normalize(candidate.querySelector('span')?.textContent || candidate.textContent)).slice(0, 80),
-      };
-    }
-    const control = label.querySelector('input, select, textarea');
-    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
-      return { ok: false, reason: 'control-missing', labelText };
-    }
-    if (control.disabled) return { ok: false, reason: 'control-disabled', labelText };
-    const prototype = control instanceof HTMLSelectElement
-      ? HTMLSelectElement.prototype
-      : control instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-    setter?.call(control, String(value));
-    control.dispatchEvent(new Event('input', { bubbles: true }));
-    control.dispatchEvent(new Event('change', { bubbles: true }));
-    control.dispatchEvent(new Event('blur', { bubbles: true }));
-    return { ok: true, value: control.value };
-  })()`);
-  assert(result.ok, `Unable to set create-site ${labelText}: ${JSON.stringify(result)}`);
+  let result = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const labelText = ${JSON.stringify(labelText)};
+      const value = ${JSON.stringify(value)};
+      const normalize = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
+      const labels = Array.from(document.querySelectorAll('label'));
+      const label = labels.find((candidate) => {
+        const firstSpan = candidate.querySelector('span');
+        return normalize(firstSpan?.textContent || candidate.textContent) === labelText;
+      });
+      if (!(label instanceof HTMLLabelElement)) {
+        return {
+          ok: false,
+          reason: 'label-missing',
+          labelText,
+          labels: labels.map((candidate) => normalize(candidate.querySelector('span')?.textContent || candidate.textContent)).slice(0, 80),
+        };
+      }
+      const control = label.querySelector('input, select, textarea');
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
+        return { ok: false, reason: 'control-missing', labelText };
+      }
+      if (control.disabled) return { ok: false, reason: 'control-disabled', labelText };
+      const prototype = control instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : control instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      setter?.call(control, String(value));
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      control.dispatchEvent(new Event('blur', { bubbles: true }));
+      return { ok: true, value: control.value };
+    })()`);
+    if (result.ok) break;
+    if (result.reason !== 'control-disabled') break;
+    await sleep(250);
+  }
+  assert(result?.ok, `Unable to set create-site ${labelText}: ${JSON.stringify(result)}`);
   await sleep(150);
   return result;
 };
@@ -417,6 +423,7 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => 
   await setCreateSiteControl(client, 'Site name', siteName);
   await setCreateSiteControl(client, 'URL slug', slug);
   await setCreateSiteControl(client, 'Custom domain', customDomain);
+  await setCreateSiteControl(client, 'Database team ID', `team-${slug}`);
   await setCreateSiteControl(client, 'Description', 'Temporary storefront workspace created through the Backy admin UI smoke.');
   await setCreateSiteControl(client, 'Status', 'published');
   await setCreateSiteBlueprint(client, 'storefront');

@@ -45,6 +45,8 @@ interface ApiSiteResponse {
   };
   error?: {
     message?: string;
+    details?: unknown;
+    code?: string;
   };
 }
 
@@ -3092,7 +3094,11 @@ export async function createSite(input: SiteCreateInput): Promise<Site> {
   const payload = await readJson<ApiSiteResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to create site');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to create site',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStoreSite(payload.data.site);
