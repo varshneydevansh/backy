@@ -3,6 +3,11 @@ import {
   authenticateAdminCredentials,
   authenticateAdminCredentialsWithPersistence,
 } from '@/lib/admin-auth/sessionStore';
+import {
+  isProductionAdminLocalAuthAllowed,
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+} from '@/lib/admin-auth/productionPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -48,6 +53,15 @@ export async function POST(request: NextRequest) {
 
   if (!email || !email.includes('@') || !password) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
+  }
+
+  if (!isProductionAdminLocalAuthAllowed()) {
+    return errorResponse(
+      503,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+      requestId,
+    );
   }
 
   const repositories = !shouldUseDemoStoreFallback()

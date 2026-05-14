@@ -2,6 +2,7 @@ import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { listAuthSettingsPermissionOverrides, type AdminUserPermissionOverride } from '@/lib/adminPermissionOverrides';
+import { assertProductionAdminLocalAuthAllowed } from '@/lib/admin-auth/productionPolicy';
 
 export interface AdminAuthUser {
   id: string;
@@ -246,6 +247,8 @@ const createAdminSessionForUser = (
   user: AdminAuthUser,
   authSettings?: AdminAuthSessionSettings,
 ): AdminSession => {
+  assertProductionAdminLocalAuthAllowed();
+
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes(authSettings) * 60 * 1000);
   const permissionOverrides = authSettings

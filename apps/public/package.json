@@ -12,6 +12,7 @@
         "test:ai-contract-examples": "node scripts/validate-ai-contract-examples.mjs",
         "test:preview-contract": "node scripts/preview-contract-smoke.mjs",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
+        "test:admin-auth-production-policy": "tsx scripts/admin-auth-production-policy-smoke.ts",
         "test:form-captcha": "tsx scripts/form-captcha-smoke.ts",
         "test:media-quota": "node scripts/media-quota-smoke.mjs",
         "test:media-safety": "tsx scripts/media-safety-provider-smoke.ts",

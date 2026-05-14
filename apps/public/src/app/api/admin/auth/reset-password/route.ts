@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
 import {
+  isProductionAdminLocalAuthAllowed,
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+} from '@/lib/admin-auth/productionPolicy';
+import {
   getPersistedPasswordResetToken,
   removePersistedPasswordResetToken,
 } from '@/lib/adminAuthTokenPersistence';
@@ -73,6 +78,15 @@ export async function POST(request: NextRequest) {
 
   if (!token) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Password reset token is required.', requestId);
+  }
+
+  if (!isProductionAdminLocalAuthAllowed()) {
+    return errorResponse(
+      503,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+      requestId,
+    );
   }
 
   const repositories = !shouldUseDemoStoreFallback()
