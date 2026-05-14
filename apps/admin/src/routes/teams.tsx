@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { RefreshCw, Users } from 'lucide-react';
+import { Check, Copy, RefreshCw, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +15,7 @@ import {
   updateTeam,
   updateTeamMemberRole,
   type AdminTeam,
+  type AdminInviteToken,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
@@ -49,6 +50,13 @@ const TEAM_PERMISSION_ROLE_DEFAULTS: Record<TeamPermissionKey, Array<AuthUser['r
   'users.manage': ['owner', 'admin'],
 };
 
+interface TeamInviteDeliveryResult {
+  email: string;
+  role: TeamRole;
+  teamName: string;
+  invite: AdminInviteToken;
+}
+
 function TeamsPage() {
   const currentAdmin = useAuthStore((state) => state.user);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -57,6 +65,8 @@ function TeamsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [latestInviteDelivery, setLatestInviteDelivery] = useState<TeamInviteDeliveryResult | null>(null);
+  const [copiedInviteUrl, setCopiedInviteUrl] = useState(false);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -192,6 +202,7 @@ function TeamsPage() {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
     }
     const createdTeam = await createTeam({ name });
+    setLatestInviteDelivery(null);
     await refreshAfterMutation('Team created.');
     setCurrentTeamId(createdTeam.id);
   }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
@@ -204,6 +215,7 @@ function TeamsPage() {
       name: updates.name,
       slug: updates.slug,
     });
+    setLatestInviteDelivery(null);
     await refreshAfterMutation('Team saved.');
   }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
@@ -212,6 +224,7 @@ function TeamsPage() {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
     }
     await deleteTeam(teamId);
+    setLatestInviteDelivery(null);
     await refreshAfterMutation('Team deleted.');
   }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
 
@@ -220,12 +233,23 @@ function TeamsPage() {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
     }
     const result = await inviteTeamMember(teamId, { email, role });
+    const teamName = teams.find((team) => team.id === teamId)?.name || 'Selected team';
+    setLatestInviteDelivery(result.invite ? { email, role, teamName, invite: result.invite } : null);
+    setCopiedInviteUrl(false);
     await refreshAfterMutation(
       result.invite?.inviteUrl
-        ? `Invite created. Local invite link: ${result.invite.inviteUrl}`
+        ? 'Invite created. Copy the manual delivery link below.'
         : 'Team member invited.',
     );
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
+  }, [canManageTeams, managePermissionTitle, refreshAfterMutation, teams]);
+
+  const copyLatestInviteUrl = useCallback(async () => {
+    if (!latestInviteDelivery?.invite.inviteUrl) return;
+
+    await navigator.clipboard.writeText(latestInviteDelivery.invite.inviteUrl);
+    setCopiedInviteUrl(true);
+    window.setTimeout(() => setCopiedInviteUrl(false), 1400);
+  }, [latestInviteDelivery?.invite.inviteUrl]);
 
   const handleUpdateMemberRole = useCallback(async (teamId: string, memberId: string, role: TeamRole) => {
     if (!canManageTeams) {
@@ -285,6 +309,32 @@ function TeamsPage() {
           <Notice tone="success">
             {notice}
           </Notice>
+        )}
+        {latestInviteDelivery && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950" data-testid="team-invite-delivery-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">Manual invite delivery</h2>
+                <p className="mt-1 text-emerald-900/80">
+                  Send this link to {latestInviteDelivery.email} for {latestInviteDelivery.teamName} as {latestInviteDelivery.role}.
+                </p>
+                <p className="mt-1 text-xs text-emerald-900/70">
+                  Expires {new Date(latestInviteDelivery.invite.expiresAt).toLocaleString()}.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                iconStart={copiedInviteUrl ? <Check className="size-4" /> : <Copy className="size-4" />}
+                onClick={() => void copyLatestInviteUrl()}
+              >
+                {copiedInviteUrl ? 'Copied' : 'Copy link'}
+              </Button>
+            </div>
+            <p className="mt-3 break-all rounded-md border border-emerald-200 bg-white/70 px-3 py-2 font-mono text-xs">
+              {latestInviteDelivery.invite.inviteUrl}
+            </p>
+          </div>
         )}
         {isLoading ? (
           <div className="flex min-h-[280px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">

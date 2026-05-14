@@ -177,6 +177,9 @@ assertIncludes(adminTeamsUiRoute, 'canManageTeams={canManageTeams}', 'teams admi
 assertIncludes(adminTeamsUiRoute, 'getTeamMemberMutationBlockReason', 'teams admin page must guard unsafe member role/remove mutations');
 assertIncludes(adminTeamsUiRoute, 'Use another owner/admin account to change your own team membership.', 'teams admin page must protect current admin team membership');
 assertIncludes(adminTeamsUiRoute, 'Add another owner before removing the final team owner.', 'teams admin page must protect final owner removal');
+assertIncludes(adminTeamsUiRoute, 'latestInviteDelivery', 'admin teams page must persist the latest invite delivery result');
+assertIncludes(adminTeamsUiRoute, 'data-testid="team-invite-delivery-panel"', 'admin teams page must render a persistent invite delivery panel');
+assertIncludes(adminTeamsUiRoute, 'navigator.clipboard.writeText(latestInviteDelivery.invite.inviteUrl)', 'admin teams invite panel must expose copyable invite URLs');
 const teamManagementComponent = read('apps/admin/src/components/teams/TeamManagement.tsx');
 assertIncludes(teamManagementComponent, 'busyMemberAction', 'team management controls must track member mutation busy state');
 assertIncludes(teamManagementComponent, 'handleUpdateMemberRole', 'team management role changes must catch and show mutation failures');
