@@ -58,7 +58,20 @@ import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSel
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 
+interface UsersSearch {
+  siteId?: string;
+  notice?: string;
+}
+
+const normalizedUsersSearchString = (value: unknown) => (
+  typeof value === 'string' && value.trim() ? value : undefined
+);
+
 export const Route = createFileRoute('/users')({
+  validateSearch: (search: Record<string, unknown>): UsersSearch => ({
+    siteId: normalizedUsersSearchString(search.siteId),
+    notice: normalizedUsersSearchString(search.notice),
+  }),
   component: UsersLayout,
 });
 
@@ -283,6 +296,7 @@ function UsersLayout() {
 
 function UsersListView() {
   const navigate = useNavigate();
+  const routeSearch = Route.useSearch();
   const currentAdmin = useAuthStore((state) => state.user);
   const { sites, users, setUsers } = useStore();
   const [isLoading, setIsLoading] = useState(true);
@@ -296,6 +310,7 @@ function UsersListView() {
   const [bulkStatus, setBulkStatus] = useState<UserStatus>('inactive');
   const [isBulkActionBusy, setIsBulkActionBusy] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const routeNoticeRef = useRef('');
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importMode, setImportMode] = useState<'create' | 'upsert'>('create');
   const [isImportingUsers, setIsImportingUsers] = useState(false);
@@ -320,6 +335,7 @@ function UsersListView() {
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', USER_PERMISSION_ROLE_DEFAULTS);
   const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport;
   const isUsersBusy = isLoading || isUserMutationBusy || isPermissionMatrixPending;
+  const routeNotice = routeSearch.notice || '';
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const selectedMembershipSiteId = useMemo(() => getSiteSelectionFromSearch(sites), [sites]);
@@ -341,6 +357,17 @@ function UsersListView() {
       user.email.trim().toLowerCase() === currentAdmin.email.trim().toLowerCase()
     ))
   ), [currentAdmin]);
+
+  useEffect(() => {
+    if (!routeNotice) return;
+    routeNoticeRef.current = routeNotice;
+    setNotice(routeNotice);
+    navigate({
+      to: '/users',
+      search: routeSearch.siteId ? { siteId: routeSearch.siteId } : undefined,
+      replace: true,
+    });
+  }, [navigate, routeNotice, routeSearch.siteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -392,7 +419,9 @@ function UsersListView() {
     try {
       const backendUsers = await listUsers();
       setUsers(backendUsers);
-      setNotice(null);
+      const pendingRouteNotice = routeNoticeRef.current;
+      routeNoticeRef.current = '';
+      setNotice((currentNotice) => (pendingRouteNotice ? currentNotice || pendingRouteNotice : null));
     } catch (error) {
       if (isAdminPermissionDeniedError(error)) {
         setUsers([]);

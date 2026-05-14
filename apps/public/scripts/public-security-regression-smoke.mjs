@@ -483,6 +483,15 @@ assertIncludes(adminUsersRoute, 'createAdminInviteToken', 'admin user create rou
 assertIncludes(adminUsersRoute, 'const shouldCreateInvite = status ===', 'admin user create route must gate invite token creation by invited status');
 assertIncludes(adminUsersRoute, 'inviteTokenId', 'admin user create route must audit generated invite token ids');
 assertIncludes(adminUsersRoute, 'invite,', 'admin user create route must return generated invite token data');
+const adminUsersUiRoute = read('apps/admin/src/routes/users.tsx');
+assertIncludes(adminUsersUiRoute, 'notice: normalizedUsersSearchString(search.notice)', 'admin users list route must accept redirect success notices');
+assertIncludes(adminUsersUiRoute, 'const routeNotice = routeSearch.notice ||', 'admin users list route must render one-time redirect notices');
+assertIncludes(adminUsersUiRoute, 'const pendingRouteNotice = routeNoticeRef.current', 'admin users list load must not clear redirect success notices');
+const adminUsersNewUiRoute = read('apps/admin/src/routes/users.new.tsx');
+assertIncludes(adminUsersNewUiRoute, 'notice: `${created.user.fullName} was created.`', 'admin user create page must carry a success notice back to the users list');
+const adminUserDetailUiRoute = read('apps/admin/src/routes/users.$userId.tsx');
+assertIncludes(adminUserDetailUiRoute, 'notice: `${saved.fullName} was saved.`', 'admin user edit page must carry a save success notice back to the users list');
+assertIncludes(adminUserDetailUiRoute, 'notice: `${user.fullName} was removed.`', 'admin user edit page must carry a delete success notice back to the users list');
 
 const adminPasswordResetTokenRoute = read('apps/public/src/app/api/admin/users/[userId]/password-reset/route.ts');
 assertIncludes(adminPasswordResetTokenRoute, '@/lib/admin-auth/emailPolicy', 'admin reset-token route must import invite-only policy');

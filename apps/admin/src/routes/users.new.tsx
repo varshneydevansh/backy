@@ -333,7 +333,13 @@ function NewUserPage() {
         setIsLoading(false);
         return;
       }
-      navigate({ to: '/users', search: usersRouteSearch });
+      navigate({
+        to: '/users',
+        search: {
+          ...(usersRouteSearch || {}),
+          notice: `${created.user.fullName} was created.`,
+        },
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error
         ? `${error.message}. The invitation was not persisted.`

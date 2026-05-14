@@ -635,7 +635,7 @@ function EditUserPage() {
         status: formData.status,
       });
       setUsers(users.map((item) => (item.id === userId ? saved : item)));
-      navigate({ to: '/users' });
+      navigate({ to: '/users', search: { notice: `${saved.fullName} was saved.` } });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Backend save failed. Changes were not persisted.');
       setIsLoading(false);
@@ -662,7 +662,7 @@ function EditUserPage() {
     try {
       await deleteBackendUser(userId);
       setUsers(users.filter((item) => item.id !== userId));
-      navigate({ to: '/users' });
+      navigate({ to: '/users', search: { notice: `${user.fullName} was removed.` } });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Backend delete failed. The user was not removed.');
       setIsLoading(false);
