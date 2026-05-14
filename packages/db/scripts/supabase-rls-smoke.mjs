@@ -46,6 +46,16 @@ for (const table of tableNames) {
 }
 
 const hardeningMigration = read('supabase/migrations/003_schema_parity_and_rls_hardening.sql');
+assertIncludes(
+  schemaSource,
+  "uniqueIndex('content_collections_site_slug_idx').on(table.siteId, table.slug)",
+  'Drizzle content collections schema',
+);
+assertIncludes(
+  hardeningMigration,
+  'UNIQUE(site_id, slug)',
+  'Supabase content collections schema',
+);
 for (const marker of [
   "ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'owner'",
   "role::TEXT IN ('owner', 'admin'",

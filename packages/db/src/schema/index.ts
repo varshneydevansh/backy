@@ -20,6 +20,7 @@ import {
     integer,
     jsonb,
     index,
+    uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -398,7 +399,7 @@ export const contentCollections = pgTable('content_collections', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    siteSlugIdx: index('content_collections_site_slug_idx').on(table.siteId, table.slug),
+    siteSlugIdx: uniqueIndex('content_collections_site_slug_idx').on(table.siteId, table.slug),
     siteStatusUpdatedIdx: index('content_collections_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
     siteRouteIdx: index('content_collections_site_route_idx').on(table.siteId, table.routePattern, table.listRoutePattern),
 }));
