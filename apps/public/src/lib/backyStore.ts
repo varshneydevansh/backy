@@ -3426,6 +3426,20 @@ function submissionValidationDetail(
 }
 
 function isEmptySubmissionValue(field: FormFieldDefinition, value: unknown): boolean {
+  if (field.type === 'file') {
+    if (Array.isArray(value)) return value.length === 0;
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      return !(
+        sanitizeString(record.id)
+        || sanitizeString(record.mediaId)
+        || sanitizeString(record.assetId)
+        || sanitizeString(record.url)
+        || sanitizeString(record.signedUrl)
+      );
+    }
+  }
+
   if (field.type === 'checkbox') {
     if (typeof value === 'boolean') return value !== true;
     if (Array.isArray(value)) return value.length === 0;
@@ -3438,6 +3452,48 @@ function isEmptySubmissionValue(field: FormFieldDefinition, value: unknown): boo
   }
 
   return sanitizeString(value).length === 0;
+}
+
+function isValidDateSubmissionValue(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split('-').map((part) => Number(part));
+  if (!year || !month || !day) {
+    return false;
+  }
+
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+}
+
+function isValidTelSubmissionValue(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 7
+    && digits.length <= 20
+    && /^[+()\d\s.-]+$/.test(value);
+}
+
+function isValidFileSubmissionReference(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(isValidFileSubmissionReference);
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const reference = sanitizeString(record.id)
+      || sanitizeString(record.mediaId)
+      || sanitizeString(record.assetId)
+      || sanitizeString(record.url)
+      || sanitizeString(record.signedUrl);
+    return Boolean(reference) && reference.length <= 2048;
+  }
+
+  const reference = sanitizeString(value);
+  return Boolean(reference) && reference.length <= 2048;
 }
 
 function validateIntrinsicSubmissionField(
@@ -3465,7 +3521,39 @@ function validateIntrinsicSubmissionField(
     }
   }
 
+  if (field.type === 'number' && sanitized.length > 0 && !Number.isFinite(Number(sanitized))) {
+    return submissionValidationDetail(field, 'invalid_number', `${fieldLabel} must be a valid number`);
+  }
+
+  if (field.type === 'date' && sanitized.length > 0 && !isValidDateSubmissionValue(sanitized)) {
+    return submissionValidationDetail(field, 'invalid_date', `${fieldLabel} must be a valid date`);
+  }
+
+  if (field.type === 'tel' && sanitized.length > 0 && !isValidTelSubmissionValue(sanitized)) {
+    return submissionValidationDetail(field, 'invalid_tel', `${fieldLabel} must be a valid phone number`);
+  }
+
+  if (field.type === 'file' && !isEmptySubmissionValue(field, value) && !isValidFileSubmissionReference(value)) {
+    return submissionValidationDetail(field, 'invalid_file', `${fieldLabel} must be a valid file reference`);
+  }
+
   return null;
+}
+
+export function normalizeFormSubmissionValues(
+  form: Pick<FormDefinition, 'fields'>,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!form.fields || form.fields.length === 0) {
+    return {};
+  }
+
+  return form.fields.reduce<Record<string, unknown>>((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(values, field.key)) {
+      acc[field.key] = values[field.key];
+    }
+    return acc;
+  }, {});
 }
 
 function evaluateValidationRule(

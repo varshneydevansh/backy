@@ -272,12 +272,24 @@ assert(
 const publicFormSubmissionRoute = read('apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts');
 assertIncludes(publicFormSubmissionRoute, '@/lib/publicFormAudienceAccess', 'public form submission route must import audience guard');
 assertIncludes(functionSource(publicFormSubmissionRoute, 'POST', 'public form submission route'), "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')", 'public form submission route must enforce audience before parsing submissions');
+assertIncludes(publicFormSubmissionRoute, 'normalizeFormSubmissionValues(form, parsed.values)', 'public form submission route must strip undeclared submission keys before storage and routing');
 assertIncludes(publicFormSubmissionRoute, 'enabled: formShareEnabled && contactShareOverride?.enabled !== false', 'public form submission route must not let public overrides enable disabled contact sharing');
 assertExcludes(publicFormSubmissionRoute, "classification.status === 'approved' || classification.status === 'pending'", 'public form submission route must not route pending submissions into contacts or collections');
 assert(
   occurrenceCount(publicFormSubmissionRoute, "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')") >= 2,
   'public form submission route must enforce audience in repository and demo branches',
 );
+
+const backyStoreSource = read('apps/public/src/lib/backyStore.ts');
+for (const needle of [
+  'invalid_number',
+  'invalid_date',
+  'invalid_tel',
+  'invalid_file',
+  'normalizeFormSubmissionValues',
+]) {
+  assertIncludes(backyStoreSource, needle, 'form submission validation must enforce intrinsic field types and declared keys');
+}
 
 const adminFormSubmissionReviewRoute = read('apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts');
 assertIncludes(adminFormSubmissionReviewRoute, 'createRepositoryCollectionRecordFromSubmission', 'admin submission review must route approved repository submissions into collection records');

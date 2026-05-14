@@ -9,6 +9,7 @@ import {
   listFormSubmissions,
   getFormById,
   getSiteByIdOrSlug,
+  normalizeFormSubmissionValues,
   trackWebhookEvent,
   validateAndClassifyFormSubmission,
   validateCollectionRecordValues,
@@ -995,9 +996,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return captchaResponse;
       }
 
+      const submissionValues = normalizeFormSubmissionValues(form, parsed.values);
       const classification = validateAndClassifyFormSubmission(
         form,
-        parsed.values,
+        submissionValues,
         {
           honeypot: parsed.honeypot,
           ipHash,
@@ -1029,7 +1031,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let submission = (await repositories.forms.createSubmission({
         siteId: site.id,
         formId: form.id,
-        values: parsed.values,
+        values: submissionValues,
         pageId: parsed.pageId,
         postId: parsed.postId,
         ipHash,
@@ -1046,12 +1048,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let contact: Contact | null = null;
       let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
       if (classification.status === 'approved') {
-        contact = await buildRepositoryContactShare(repositories, form, parsed.values, submission, parsed.contactShareOverride);
+        contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission, parsed.contactShareOverride);
         collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
           repositories,
           site.id,
           form,
-          parsed.values,
+          submissionValues,
           submission,
         );
         submission = (await repositories.forms.updateSubmission(site.id, submission.id, {
@@ -1065,7 +1067,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         form,
         submission,
-        values: parsed.values,
+        values: submissionValues,
         pageId: parsed.pageId,
         postId: parsed.postId,
         requestId,
@@ -1076,7 +1078,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         form,
         submission,
-        values: parsed.values,
+        values: submissionValues,
         requestId,
       });
 
@@ -1144,9 +1146,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return captchaResponse;
     }
 
+    const submissionValues = normalizeFormSubmissionValues(form, parsed.values);
     const classification = validateAndClassifyFormSubmission(
       form,
-      parsed.values,
+      submissionValues,
       {
         honeypot: parsed.honeypot,
         ipHash,
@@ -1178,7 +1181,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let submission = createFormSubmission({
       siteId: site.id,
       formId: form.id,
-      values: parsed.values,
+      values: submissionValues,
       pageId: parsed.pageId,
       postId: parsed.postId,
       ipHash,
@@ -1190,7 +1193,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let contact = null;
     let collectionRecordResult = null;
     if (classification.status === 'approved') {
-      contact = buildContactShareFromSubmission(site.id, form.id, parsed.values, {
+      contact = buildContactShareFromSubmission(site.id, form.id, submissionValues, {
         status: submission.status,
         pageId: parsed.pageId,
         postId: parsed.postId,
@@ -1202,7 +1205,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       collectionRecordResult = createCollectionRecordFromFormSubmission(
         site.id,
         form,
-        parsed.values,
+        submissionValues,
         submission,
       );
       submission = attachCollectionRecordToSubmission(submission.id, {
@@ -1215,7 +1218,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
       form,
       submission,
-      values: parsed.values,
+      values: submissionValues,
       pageId: parsed.pageId,
       postId: parsed.postId,
       requestId,
@@ -1225,7 +1228,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
       form,
       submission,
-      values: parsed.values,
+      values: submissionValues,
       requestId,
     });
 
