@@ -9,7 +9,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import type { PlateEditor } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range, BaseSelection, Node, Text } from 'slate';
 import { ReactEditor } from 'slate-react';
-import { RICH_TEXT_LIST_MAX_INDENT } from './richTextListTransforms';
+import { normalizeNestedRichTextLists, RICH_TEXT_LIST_MAX_INDENT } from './richTextListTransforms';
 
 interface ActiveEditorContextType {
   /** The currently active Plate editor */
@@ -1647,11 +1647,90 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       try {
-        const nextContent = JSON.parse(JSON.stringify(content));
+        const nextContent = normalizeNestedRichTextLists(JSON.parse(JSON.stringify(content)));
+        const expectedListItemIndents = new Map<string, number[]>();
+        const readSeedIndent = (value: unknown): number | undefined => {
+          if (!value || typeof value !== 'object') {
+            return undefined;
+          }
+
+          const rawIndent = (value as { indent?: unknown }).indent;
+          const indent = typeof rawIndent === 'number'
+            ? rawIndent
+            : typeof rawIndent === 'string'
+              ? Number(rawIndent)
+              : NaN;
+          if (!Number.isFinite(indent) || indent <= 0) {
+            return undefined;
+          }
+
+          return Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.floor(indent)));
+        };
+        const readSeedText = (value: unknown): string => {
+          if (Text.isText(value)) {
+            return typeof value.text === 'string' ? value.text : '';
+          }
+
+          if (!value || typeof value !== 'object' || !Array.isArray((value as { children?: unknown }).children)) {
+            return '';
+          }
+
+          return ((value as { children: unknown[] }).children || [])
+            .map((child) => readSeedText(child))
+            .join('');
+        };
+        const collectSeedIndents = (value: unknown): void => {
+          if (Array.isArray(value)) {
+            value.forEach((item) => collectSeedIndents(item));
+            return;
+          }
+
+          if (!value || typeof value !== 'object') {
+            return;
+          }
+
+          if ((value as { type?: unknown }).type === 'li') {
+            const indent = readSeedIndent(value);
+            const text = readSeedText(value).trim();
+            if (typeof indent === 'number' && text) {
+              const indents = expectedListItemIndents.get(text) || [];
+              indents.push(indent);
+              expectedListItemIndents.set(text, indents);
+            }
+          }
+
+          if (Array.isArray((value as { children?: unknown }).children)) {
+            (value as { children: unknown[] }).children.forEach((child) => collectSeedIndents(child));
+          }
+        };
+        collectSeedIndents(nextContent);
+
         while (Array.isArray((editor as any).children) && (editor as any).children.length > 0) {
           Transforms.removeNodes(editor as any, { at: [0] });
         }
         Transforms.insertNodes(editor as any, nextContent as any, { at: [0] });
+        const restoredListItemIndents: Array<{ text: string; indent: number; path: number[] }> = [];
+        if (expectedListItemIndents.size > 0) {
+          const usedListItemIndents = new Map<string, number>();
+          for (const [, path] of Array.from(
+            Editor.nodes(editor as any, {
+              at: [],
+              match: (node) => SlateElement.isElement(node) && (node as any).type === 'li',
+            })
+          )) {
+            const text = Editor.string(editor as any, path as any).trim();
+            const indents = expectedListItemIndents.get(text);
+            const usedIndex = usedListItemIndents.get(text) || 0;
+            const indent = indents?.[usedIndex];
+            if (typeof indent !== 'number') {
+              continue;
+            }
+
+            Transforms.setNodes(editor as any, { indent } as any, { at: path as any });
+            restoredListItemIndents.push({ text, indent, path: path as number[] });
+            usedListItemIndents.set(text, usedIndex + 1);
+          }
+        }
         Transforms.select(editor as any, {
           anchor: Editor.start(editor as any, []),
           focus: Editor.end(editor as any, []),
@@ -1663,6 +1742,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
           text: Editor.string(editor as any, []),
           selection: describeSelection(editor.selection || null),
           childTypes: ((editor as any).children || []).map((node: { type?: string }) => node?.type || ''),
+          listItemIndents: restoredListItemIndents,
         };
       } catch (error) {
         return {

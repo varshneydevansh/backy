@@ -125,6 +125,29 @@ assert.deepEqual(nestedEntries, [
 ]);
 assert.deepEqual(listUtils.extractListItemsFromSlate(nestedSlateList), ['Parent', 'Child', 'Explicit']);
 
+const normalizedNestedSlateList = helper.normalizeNestedRichTextLists(nestedSlateList);
+assert.equal(normalizedNestedSlateList[0].type, 'ul');
+assert.deepEqual(
+  normalizedNestedSlateList[0].children.map((item) => ({
+    text: item.children.map((child) => child.text || '').join(''),
+    indent: item.indent,
+  })),
+  [
+    { text: 'Parent', indent: undefined },
+    { text: 'Child', indent: 1 },
+    { text: 'Explicit', indent: 2 },
+  ],
+);
+const normalizedExplicitRootIndent = helper.normalizeNestedRichTextLists([{
+  type: 'ol',
+  children: [
+    { type: 'li', indent: 8, children: [{ text: 'Root explicit' }] },
+    { type: 'li', children: [{ text: 'Root plain' }] },
+  ],
+}]);
+assert.equal(normalizedExplicitRootIndent[0].children[0].indent, 8);
+assert.equal(normalizedExplicitRootIndent[0].children[1].indent, undefined);
+
 const objectBackedList = listUtils.buildListContentFromItems([
   { label: 'Parent object' },
   { text: 'Child object', indent: 2 },
@@ -139,5 +162,5 @@ assert.deepEqual(listUtils.extractListItemEntriesFromSlate(objectBackedList), [
 console.log(JSON.stringify({
   ok: true,
   helper: path.relative(process.cwd(), helperPath),
-  cases: 38,
+  cases: 40,
 }));

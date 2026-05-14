@@ -4497,6 +4497,119 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     `List drag reorder did not preserve Slate list item metadata: ${JSON.stringify(listDragRestoreState)}`,
   );
 
+  await activateTextEditing(client, elementId);
+  const seededNestedList = await evaluate(client, `(() => {
+    if (typeof window.__backySetActiveEditorContent !== 'function') {
+      return { ok: false, reason: 'missing-set-content-helper' };
+    }
+
+    return window.__backySetActiveEditorContent([
+      { type: 'blockquote', children: [{ text: 'First block' }] },
+      { type: 'blockquote', children: [{ text: 'Second block' }] },
+      {
+        type: 'ul',
+        children: [
+          {
+            type: 'li',
+            children: [
+              { text: 'Parent item' },
+              {
+                type: 'ul',
+                children: [
+                  { type: 'li', children: [{ text: 'Child nested' }] },
+                  { type: 'li', children: [{ text: 'Child sibling' }] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]);
+  })()`);
+  assert(seededNestedList?.ok, `Unable to seed nested rich-text list content: ${JSON.stringify(seededNestedList)}`);
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedNestedChildBeforeIndent = await selectEditorTextRange(client, elementId, 'Child nested', 'Child nested');
+  assert(
+    selectedNestedChildBeforeIndent.selectedText === 'Child nested',
+    `Nested child list selection failed before indent control: ${JSON.stringify(selectedNestedChildBeforeIndent)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-list-indent');
+  await sleep(500);
+
+  const nestedChildIndentState = await evaluate(client, `(() => {
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const listItems = (slateState?.types || []).filter((node) => node.type === 'li').map((node) => ({
+      text: node.text || '',
+      indent: node.indent,
+      path: node.path,
+    }));
+    const parent = listItems.find((item) => item.text === 'Parent itemChild nestedChild sibling');
+    const nested = listItems.find((item) => item.text === 'Child nested');
+    const sibling = listItems.find((item) => item.text === 'Child sibling');
+    return {
+      parent,
+      nested,
+      sibling,
+      listItems,
+      slateState,
+    };
+  })()`);
+  assert(
+    nestedChildIndentState.nested?.indent === 1 &&
+      (nestedChildIndentState.parent?.indent ?? 0) === 0 &&
+      (nestedChildIndentState.sibling?.indent ?? 0) === 0,
+    `Nested child list indent retargeted the wrong list item: ${JSON.stringify(nestedChildIndentState)}`,
+  );
+
+  const restoredFlatListContent = await evaluate(client, `(() => {
+    if (typeof window.__backySetActiveEditorContent !== 'function') {
+      return { ok: false, reason: 'missing-set-content-helper' };
+    }
+
+    return window.__backySetActiveEditorContent([
+      { type: 'blockquote', children: [{ text: 'First block' }] },
+      { type: 'blockquote', children: [{ text: 'Second block' }] },
+      {
+        type: 'ol',
+        children: [
+          { type: 'li', indent: 8, children: [{ text: 'Nested item' }] }
+        ]
+      },
+      {
+        type: 'ul',
+        children: [
+          { type: 'li', indent: 1, children: [{ text: 'Sibling item' }] }
+        ]
+      }
+    ]);
+  })()`);
+  assert(restoredFlatListContent?.ok, `Unable to restore flat rich-text list content after nested-list smoke: ${JSON.stringify(restoredFlatListContent)}`);
+  await sleep(500);
+
+  for (let index = 0; index < 8; index += 1) {
+    await activateTextEditing(client, elementId);
+    const reselectedRestoredListItem = await selectEditorTextRange(client, elementId, 'Nested item', 'Nested item');
+    assert(
+      reselectedRestoredListItem.selectedText === 'Nested item',
+      `List item reselection failed while restoring flat list indent: ${JSON.stringify(reselectedRestoredListItem)}`,
+    );
+    await mouseDownControlByTestId(client, 'rich-text-list-indent');
+    await sleep(100);
+  }
+  await activateTextEditing(client, elementId);
+  const reselectedRestoredSiblingItem = await selectEditorTextRange(client, elementId, 'Sibling item', 'Sibling item');
+  assert(
+    reselectedRestoredSiblingItem.selectedText === 'Sibling item',
+    `Sibling list item reselection failed while restoring flat list indent: ${JSON.stringify(reselectedRestoredSiblingItem)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-list-indent');
+  await sleep(250);
+
+  await activateTextEditing(client, elementId);
   const collapsed = await evaluate(client, `(() => {
     if (typeof window.__backyCollapseActiveEditorToEnd !== 'function') {
       return { ok: false, reason: 'missing-collapse-helper' };
@@ -5814,6 +5927,10 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     listMoveUpState,
     listDragDownState,
     listDragRestoreState,
+    seededNestedList,
+    selectedNestedChildBeforeIndent,
+    nestedChildIndentState,
+    restoredFlatListContent,
     collapsed,
     collapsedListState,
     directInsert,

@@ -13,6 +13,23 @@ const cloneNode = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
+const readIndent = (value: unknown): number | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const indent = typeof value.indent === 'number'
+    ? value.indent
+    : typeof value.indent === 'string'
+      ? Number(value.indent)
+      : NaN;
+  if (!Number.isFinite(indent) || indent <= 0) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, Math.floor(indent)));
+};
+
 const emptyListItem = () => ({
   type: 'li',
   children: [{ text: '' }],
@@ -288,4 +305,69 @@ export const applyListIndentToNodes = (nodes: unknown[], step: number): unknown[
   };
 
   return nodes.map((node) => patchNode(node));
+};
+
+export const normalizeNestedRichTextLists = (nodes: unknown[]): unknown[] => {
+  const normalizeNode = (node: unknown): unknown => {
+    if (!isRecord(node)) {
+      return node;
+    }
+
+    const children = Array.isArray(node.children) ? node.children : null;
+    if (!children) {
+      return cloneNode(node);
+    }
+
+    if (isListType(node.type)) {
+      return normalizeListContainer(node, 0);
+    }
+
+    return {
+      ...cloneNode(node),
+      children: children.map((child) => normalizeNode(child)),
+    };
+  };
+
+  const normalizeListItem = (node: Record<string, unknown>, fallbackIndent: number): unknown[] => {
+    const children = Array.isArray(node.children) ? node.children : [];
+    const ownIndent = readIndent(node);
+    const itemIndent = typeof ownIndent === 'number'
+      ? ownIndent
+      : Math.max(0, Math.min(RICH_TEXT_LIST_MAX_INDENT, fallbackIndent));
+    const ownChildren = children
+      .filter((child) => !isRecord(child) || !isListType(child.type))
+      .map((child) => normalizeNode(child));
+    const nestedLists = children.filter((child): child is Record<string, unknown> => (
+      isRecord(child) && isListType(child.type)
+    ));
+    const normalizedItem: Record<string, unknown> = {
+      ...cloneNode(node),
+      children: ownChildren.length > 0 ? ownChildren : [{ text: '' }],
+    };
+    if (itemIndent > 0) {
+      normalizedItem.indent = itemIndent;
+    } else {
+      delete normalizedItem.indent;
+    }
+
+    const nestedItems = nestedLists.flatMap((list) => normalizeListChildren(list, itemIndent + 1));
+    return [normalizedItem, ...nestedItems];
+  };
+
+  const normalizeListChildren = (node: Record<string, unknown>, fallbackIndent: number): unknown[] => {
+    const children = Array.isArray(node.children) ? node.children : [];
+    const normalized = children.flatMap((child) => (
+      isRecord(child) && child.type === 'li'
+        ? normalizeListItem(child, Math.min(RICH_TEXT_LIST_MAX_INDENT, fallbackIndent))
+        : []
+    ));
+    return normalized.length ? normalized : [emptyListItem()];
+  };
+
+  const normalizeListContainer = (node: Record<string, unknown>, fallbackIndent: number): unknown => ({
+    ...cloneNode(node),
+    children: normalizeListChildren(node, fallbackIndent),
+  });
+
+  return nodes.map((node) => normalizeNode(node));
 };

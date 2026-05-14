@@ -127,10 +127,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Has Content, Layout, Style, Appearance sections
 - **Issues:**
     - Advanced rich text table editing still needs Canva-level edge-case coverage beyond the current single-cell controls and selected multi-cell style ranges, especially complex merged-cell selections and nested selection behavior
-    - Full nested list edge-case parity is not complete
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
     - List controls now round-trip stable item arrays and support empty lines in property panel editing.
+    - Nested Slate list content is normalized into Backy's flat list item + `indent` model before active editing, so selecting and indenting a nested child item no longer retargets the parent item.
     - Rich-text tables support authored captions that render above the table, remain outside the editable Slate cell flow, sync to table metadata, and persist through save/reload smoke coverage.
     - Selected rich-text table cells can merge with the right sibling or cell below, then split spanned cells back into sibling cells using persisted `colSpan`/`rowSpan` metadata.
     - Selected table cells can receive an independent fill color from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
@@ -265,6 +265,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Right-panel rich-text controls can set table captions that render outside the editable cell flow and persist on the Slate table node.
   - Right-panel rich-text controls can remove the active table while preserving surrounding rich-text blocks.
   - Selected-range mark controls split multi-node selections at text boundaries, persist marks only on selected fragments, and leave neighboring text unmarked.
+  - Nested Slate lists normalize into flat list item metadata before editing, preserving parent/child/sibling targeting for right-panel indent controls.
   - Shared editor block markdown shortcuts now support `>` for blockquote.
   - Editor context list actions now expose:
     - Toggle same-list off by unwrapping existing list wrappers.
@@ -272,7 +273,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Indent and outdent list entries from the right-panel formatting toolbar.
     - Move the active list item up/down from the right-panel formatting toolbar.
 - **Remaining:**
-  - Full fidelity for deeper table operations involving merged-cell selections, nested list edge cases, and remaining edge-case selections beyond selected-range mark splits.
+  - Full fidelity for deeper table operations involving merged-cell selections and remaining edge-case selections beyond selected-range mark splits.
 
 ### 16. Font Selection
 **File:** `PropertyPanel.tsx` (StyleProperties)
