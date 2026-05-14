@@ -55,6 +55,7 @@ import {
   captureSiteFrontendDesignDefaults,
   adminFetch,
   type AdminUserPermissionMatrix,
+  type ApiSite,
 } from '@/lib/adminContentApi';
 import type {
   AdminFrontendDesignResponse,
@@ -66,7 +67,7 @@ import type {
   FormSubmission,
   SiteReadiness,
 } from '@/lib/adminContentApi';
-import type { Page } from '@/stores/mockStore';
+import type { Page, Site } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import type {
@@ -659,6 +660,21 @@ function readinessStatusClass(value?: SiteReadiness['statusLabel']): string {
   return 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
+function apiSiteToStoreSite(site: ApiSite): Site {
+  return {
+    id: site.id,
+    name: site.name,
+    slug: site.slug,
+    description: site.description || '',
+    customDomain: site.customDomain || null,
+    status: site.status === 'archived' ? 'archived' : site.status === 'published' || site.isPublished ? 'published' : 'draft',
+    settings: site.settings,
+    publicSiteId: site.id,
+    pageCount: 0,
+    lastUpdated: site.updatedAt || site.createdAt || new Date().toISOString(),
+  };
+}
+
 export const Route = createFileRoute('/sites/$siteId')({
   component: EditSitePage,
 });
@@ -669,7 +685,11 @@ function EditSitePage() {
   const { sites, updateSite, deleteSite } = useStore();
   const currentAdmin = useAuthStore((store) => store.user);
 
-  const site = sites.find((s) => siteMatchesIdentifier(s, siteId));
+  const storeSite = sites.find((s) => siteMatchesIdentifier(s, siteId));
+  const [fetchedSite, setFetchedSite] = useState<Site | null>(null);
+  const [isSiteDetailLoading, setIsSiteDetailLoading] = useState(false);
+  const [siteDetailError, setSiteDetailError] = useState<string | null>(null);
+  const site = storeSite || (fetchedSite && siteMatchesIdentifier(fetchedSite, siteId) ? fetchedSite : null);
   const storeSiteId = site?.id || siteId;
   const siteApiId = site?.publicSiteId || site?.slug || site?.id;
 
@@ -794,6 +814,43 @@ function EditSitePage() {
   const isFormManagementDisabled = state.workflowLoading || !canManageForms;
   const isCommentPolicyDisabled = commentPolicyLoading || commentPolicySaving || !canConfigureComments;
   const isCommentViewDisabled = state.commentsLoading || !canViewComments;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (storeSite) {
+      setFetchedSite(null);
+      setSiteDetailError(null);
+      setIsSiteDetailLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsSiteDetailLoading(true);
+    setSiteDetailError(null);
+    getAdminSite(siteId)
+      .then((siteDetail) => {
+        if (!cancelled) {
+          setFetchedSite(apiSiteToStoreSite(siteDetail));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setFetchedSite(null);
+          setSiteDetailError(error instanceof Error ? error.message : 'Unable to load site.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsSiteDetailLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId, storeSite]);
 
   useEffect(() => {
     if (site) {
@@ -2399,6 +2456,7 @@ function EditSitePage() {
     try {
       const savedSite = await updateSiteFromApi(siteApiId || siteId, nextSite);
       updateSite(storeSiteId, savedSite);
+      setFetchedSite(savedSite);
       if (siteApiId) {
         void loadReadiness();
       }
@@ -2436,8 +2494,18 @@ function EditSitePage() {
   };
 
   if (!site) {
+    if (isSiteDetailLoading) {
+      return (
+        <PageShell title="Loading Site" description="Loading the site workspace from Backy.">
+          <button onClick={() => navigate({ to: '/sites' })} className="text-primary hover:underline">
+            &larr; Back to Sites
+          </button>
+        </PageShell>
+      );
+    }
+
     return (
-      <PageShell title="Site Not Found" description="The site you requested does not exist.">
+      <PageShell title="Site Not Found" description={siteDetailError || 'The site you requested does not exist.'}>
         <button onClick={() => navigate({ to: '/sites' })} className="text-primary hover:underline">
           &larr; Back to Sites
         </button>
