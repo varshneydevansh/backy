@@ -4825,6 +4825,17 @@ export async function updateContact(
   return contact;
 }
 
+export async function deleteContact(siteId: string, formId: string, contactId: string): Promise<void> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiContactResponse>(response);
+
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.error?.message || 'Unable to delete contact');
+  }
+}
+
 export async function promoteContactToUser(
   siteId: string,
   formId: string,

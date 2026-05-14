@@ -298,6 +298,32 @@ const createContactDirectly = async (formId) => {
   return contact;
 };
 
+const assertContactHardDelete = async (formId) => {
+  const email = `contacts-delete-${Date.now().toString(36)}@example.com`;
+  const createPayload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Contacts Delete User',
+      email,
+      phone: '+1 555 0196',
+      status: 'new',
+      notes: 'Created for hard delete smoke.',
+      sourceValues: { source: 'delete-smoke' },
+      upsertByEmail: false,
+    }),
+  });
+  const contact = createPayload.data?.contact || createPayload.contact;
+  assert(contact?.id, `Delete smoke contact create did not return a contact: ${JSON.stringify(createPayload).slice(0, 500)}`);
+
+  const deletePayload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/${contact.id}`, {
+    method: 'DELETE',
+  });
+  assert(deletePayload.success === true && (deletePayload.data?.deleted === true || deletePayload.deleted === true), `Contact delete did not report success: ${JSON.stringify(deletePayload).slice(0, 500)}`);
+
+  const contacts = await listContacts(formId);
+  assert(!contacts.some((item) => item.id === contact.id || item.email === email), `Deleted contact still appears in contact list: ${JSON.stringify(contacts).slice(0, 500)}`);
+};
+
 const createDuplicateContacts = async (formId) => {
   const email = `contacts-duplicate-${Date.now().toString(36)}@example.com`;
   const contacts = [];
@@ -1134,6 +1160,7 @@ const main = async () => {
   try {
     const directContact = await createContactDirectly(form.id);
     await assertInvalidContactEmailRejected(form.id, directContact.id);
+    await assertContactHardDelete(form.id);
     const importedContact = await importContactsCsv(form.id);
     const duplicateContacts = await createDuplicateContacts(form.id);
     const submission = await submitLead(form.id);

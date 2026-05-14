@@ -1567,6 +1567,12 @@ export class BackyClient {
     });
   }
 
+  deleteFormContact(formId: string, contactId: string): Promise<BackyEnvelope<{ deleted: true; contact: BackyContact }>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
+      method: 'DELETE',
+    });
+  }
+
   pageComments(pageId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {

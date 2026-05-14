@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Contact } from '@backy-cms/core';
+import type { BackyJsonObject, Contact } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
+  deleteContactRecord,
   getContactById,
   getFormById,
   getSiteByIdOrSlug,
@@ -24,6 +26,10 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
+);
+
+const getAccessActorId = (access: Exclude<ReturnType<typeof requireAdminAccess>, NextResponse>): string => (
+  access.session?.user.id || access.session?.user.email || 'admin'
 );
 
 const parseStatus = (value: unknown): ContactStatus | null => (
@@ -196,6 +202,111 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error('Admin form contact API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  try {
+    const { siteId, formId, contactId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      }
+
+      const contact = await repositories.forms.getContactById(site.id, form.id, contactId);
+      if (!contact) {
+        return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
+      }
+
+      const deleted = await repositories.forms.deleteContact(site.id, contact.id);
+      if (!deleted) {
+        return errorResponse(409, 'CONTACT_DELETE_FAILED', 'Unable to delete contact', requestId);
+      }
+
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        actorId: getAccessActorId(access),
+        entity: 'contact',
+        entityId: contact.id,
+        action: 'contact.delete',
+        before: contact,
+        after: null,
+        metadata: {
+          formId: form.id,
+          email: contact.email || null,
+        } as BackyJsonObject,
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: { deleted: true, contact },
+        deleted: true,
+        contact,
+      });
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const form = getFormById(site.id, formId);
+    if (!form) {
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    }
+
+    const contact = getContactById(contactId);
+    if (!contact || contact.siteId !== site.id || contact.formId !== form.id) {
+      return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
+    }
+
+    const deletedContact = deleteContactRecord(contact.id);
+    if (!deletedContact) {
+      return errorResponse(409, 'CONTACT_DELETE_FAILED', 'Unable to delete contact', requestId);
+    }
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: getAccessActorId(access),
+      entity: 'contact',
+      entityId: contact.id,
+      action: 'contact.delete',
+      before: contact,
+      after: null,
+      metadata: {
+        formId: form.id,
+        email: contact.email || null,
+      } as BackyJsonObject,
+      requestId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: { deleted: true, contact: deletedContact },
+      deleted: true,
+      contact: deletedContact,
+    });
+  } catch (error) {
+    console.error('Admin form contact delete API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }

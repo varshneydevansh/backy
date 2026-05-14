@@ -926,6 +926,7 @@ export interface BackyFormRepository {
   getContactById(siteId: string, formId: string, contactId: string, context?: BackyRepositoryContext): Promise<Contact | null>;
   createContact(input: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Contact>>;
   updateContact(siteId: string, contactId: string, input: Partial<Contact>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Contact>>;
+  deleteContact(siteId: string, contactId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
 export interface BackyCommentRepository {

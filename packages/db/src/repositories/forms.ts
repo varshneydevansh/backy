@@ -30,7 +30,7 @@ type QueryDatabase = {
         };
     };
     delete: (table: unknown) => {
-        where: (condition: unknown) => Promise<unknown>;
+        where: (condition: unknown) => ReturningQuery;
     };
 };
 
@@ -421,6 +421,11 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
 
             const [row] = await database.update(formContacts).set(updates).where(and(eq(formContacts.siteId, siteId), eq(formContacts.id, contactId))).returning() as ContactRow[];
             return { item: toContact(row) };
+        },
+
+        async deleteContact(siteId: string, contactId: string): Promise<boolean> {
+            const rows = await database.delete(formContacts).where(and(eq(formContacts.siteId, siteId), eq(formContacts.id, contactId))).returning();
+            return rows.length > 0;
         },
     };
 }

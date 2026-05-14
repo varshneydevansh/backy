@@ -18,6 +18,7 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
   UserCheck,
   UserPlus,
@@ -25,6 +26,7 @@ import {
 import {
   applyContactConsentRetention,
   createFormContact,
+  deleteContact,
   deleteContactSavedList,
   getAdminApiBase,
   getUserPermissions,
@@ -288,6 +290,7 @@ function ContactsRoute() {
   const [contactRetentionDays, setContactRetentionDays] = useState('0');
   const [lastContactRetention, setLastContactRetention] = useState<ContactConsentRetentionResult | null>(null);
   const [contactAuditLogs, setContactAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [pendingDeleteContact, setPendingDeleteContact] = useState<AdminContact | null>(null);
   const [isLoadingContactAudit, setIsLoadingContactAudit] = useState(false);
   const [contactAuditError, setContactAuditError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
@@ -1031,6 +1034,48 @@ function ContactsRoute() {
         },
       };
     });
+  };
+
+  const removeContactFromState = (deleted: AdminContact) => {
+    setContactsByForm((current) => {
+      const inbox = current[deleted.formId];
+      if (!inbox) return current;
+
+      const nextContacts = inbox.contacts.filter((item) => item.id !== deleted.id);
+      return {
+        ...current,
+        [deleted.formId]: {
+          ...inbox,
+          contacts: nextContacts,
+          total: Math.max(0, inbox.total - (nextContacts.length === inbox.contacts.length ? 0 : 1)),
+        },
+      };
+    });
+    setSelectedContactIds((current) => current.filter((id) => id !== deleted.id));
+  };
+
+  const handleDeleteContact = async (contact: AdminContact) => {
+    if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'delete contacts');
+      return;
+    }
+
+    setUpdatingId(`delete-contact-${contact.id}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await deleteContact(activeSiteId, contact.formId, contact.id);
+      removeContactFromState(contact);
+      setPendingDeleteContact(null);
+      setNotice(`${contact.name || contact.email || 'Contact'} deleted.`);
+      void loadContactAuditLogs();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete contact');
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const toggleContactSelection = (contactId: string, selected: boolean) => {
@@ -2895,6 +2940,7 @@ function ContactsRoute() {
                   onSelect={(selected) => toggleContactSelection(contact.id, selected)}
                   onIdentity={(input) => handleIdentity(contact, input)}
                   onStatus={(status) => void handleStatus(contact, status)}
+                  onDelete={() => setPendingDeleteContact(contact)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
                   onPromoteUser={() => void handlePromoteContactToUser(contact)}
                   onPromoteCustomer={() => void handlePromoteContactToCustomer(contact)}
@@ -2908,6 +2954,49 @@ function ContactsRoute() {
           )}
         </PanelContent>
       </Panel>
+      {pendingDeleteContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="contacts-delete-confirm-dialog">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteContact.name || pendingDeleteContact.email || 'contact'}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This permanently removes the contact from Backy. Archive it instead if you still need lead history.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Contact ID: <span className="font-mono font-medium text-foreground">{pendingDeleteContact.id}</span>
+              {pendingDeleteContact.email ? (
+                <div className="mt-1">
+                  Email: <span className="font-medium text-foreground">{pendingDeleteContact.email}</span>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPendingDeleteContact(null)}
+                disabled={isContactsBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void handleDeleteContact(pendingDeleteContact)}
+                disabled={isContactsBusy || !canManageForms}
+                title={!canManageForms ? managePermissionTitle : undefined}
+                data-testid="contacts-delete-confirm-button"
+              >
+                {updatingId === `delete-contact-${pendingDeleteContact.id}` ? 'Deleting...' : 'Delete contact'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
@@ -3052,6 +3141,7 @@ function ContactCard({
   onSelect,
   onIdentity,
   onStatus,
+  onDelete,
   onNotes,
   onPromoteUser,
   onPromoteCustomer,
@@ -3067,6 +3157,7 @@ function ContactCard({
   onSelect: (selected: boolean) => void;
   onIdentity: (input: { name: string | null; email: string | null; phone: string | null }) => Promise<void>;
   onStatus: (status: ContactStatus) => void;
+  onDelete: () => void;
   onNotes: (notes: string) => void;
   onPromoteUser: () => void;
   onPromoteCustomer: () => void;
@@ -3383,6 +3474,17 @@ function ContactCard({
           aria-label={`Archive ${contact.name || contact.email || contact.id}`}
         >
           Archive
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={onDelete}
+          disabled={disabled}
+          iconStart={<Trash2 className="size-4" />}
+          aria-label={`Delete ${contact.name || contact.email || contact.id}`}
+          data-testid="contacts-delete-contact"
+        >
+          Delete
         </Button>
       </div>
     </article>

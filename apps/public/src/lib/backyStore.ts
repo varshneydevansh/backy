@@ -8008,6 +8008,17 @@ export function updateContactStatus(
   return clone(contact);
 }
 
+export function deleteContactRecord(contactId: string): Contact | undefined {
+  refreshPersistedInteractionStore();
+
+  const contact = contactStore.find((item) => item.id === contactId);
+  if (!contact) return undefined;
+
+  setContactStore(contactStore.filter((item) => item.id !== contactId));
+  persistInteractionStore({ mergePersisted: false });
+  return clone(contact);
+}
+
 export function anonymizeFormContactConsentEvidence(
   formId: string,
   contactId: string,
