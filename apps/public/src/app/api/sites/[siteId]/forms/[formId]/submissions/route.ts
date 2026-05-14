@@ -39,15 +39,6 @@ interface RouteParams {
   }>;
 }
 
-interface ContactShareOverridePayload {
-  enabled?: boolean;
-  nameField?: string;
-  emailField?: string;
-  phoneField?: string;
-  notesField?: string;
-  dedupeByEmail?: boolean;
-}
-
 const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const;
 
 type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
@@ -180,33 +171,6 @@ function parseRequestBody(raw: unknown) {
         return acc;
       }, {});
 
-  const contactShare = typeof rawRecord.contactShareOverride === 'object'
-    ? (rawRecord.contactShareOverride as Record<string, unknown> | null)
-    : null;
-
-  const contactShareOverride: ContactShareOverridePayload | null = contactShare
-    ? {
-      enabled: typeof (contactShare as { enabled?: unknown }).enabled === 'boolean'
-        ? (contactShare as { enabled: boolean }).enabled
-        : undefined,
-      nameField: typeof (contactShare as { nameField?: unknown }).nameField === 'string'
-        ? (contactShare as { nameField: string }).nameField
-        : undefined,
-      emailField: typeof (contactShare as { emailField?: unknown }).emailField === 'string'
-        ? (contactShare as { emailField: string }).emailField
-        : undefined,
-      phoneField: typeof (contactShare as { phoneField?: unknown }).phoneField === 'string'
-        ? (contactShare as { phoneField: string }).phoneField
-        : undefined,
-      notesField: typeof (contactShare as { notesField?: unknown }).notesField === 'string'
-        ? (contactShare as { notesField: string }).notesField
-        : undefined,
-      dedupeByEmail: typeof (contactShare as { dedupeByEmail?: unknown }).dedupeByEmail === 'boolean'
-        ? (contactShare as { dedupeByEmail: boolean }).dedupeByEmail
-        : undefined,
-    }
-    : null;
-
   return {
     values,
     honeypot: typeof (raw as { honeypot?: unknown }).honeypot === 'string'
@@ -227,9 +191,6 @@ function parseRequestBody(raw: unknown) {
         ? (raw as { startedAt: string }).startedAt
         : undefined,
     captchaToken: parseCaptchaToken(rawRecord),
-    contactShareOverride: contactShareOverride && Object.keys(contactShareOverride).length > 0
-      ? contactShareOverride
-      : undefined,
   };
 }
 
@@ -558,16 +519,15 @@ const buildRepositoryContactShare = async (
   form: FormDefinition,
   values: Record<string, unknown>,
   submission: FormSubmission,
-  contactShareOverride?: ContactShareOverridePayload,
 ): Promise<Contact | null> => {
   const formShareEnabled = form.contactShare?.enabled === true;
   const resolvedShare = {
-    enabled: formShareEnabled && contactShareOverride?.enabled !== false,
-    nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
-    emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
-    phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
-    notesField: contactShareOverride?.notesField || form.contactShare?.notesField,
-    dedupeByEmail: contactShareOverride?.dedupeByEmail ?? form.contactShare?.dedupeByEmail,
+    enabled: formShareEnabled,
+    nameField: form.contactShare?.nameField,
+    emailField: form.contactShare?.emailField,
+    phoneField: form.contactShare?.phoneField,
+    notesField: form.contactShare?.notesField,
+    dedupeByEmail: form.contactShare?.dedupeByEmail,
   };
 
   if (!resolvedShare.enabled || submission.status === 'spam') {
@@ -1079,7 +1039,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let contact: Contact | null = null;
       let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
       if (classification.status === 'approved') {
-        contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission, parsed.contactShareOverride);
+        contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission);
         collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
           repositories,
           site.id,
@@ -1231,7 +1191,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         ipHash,
         sourceSubmissionId: submission.id,
-      }, parsed.contactShareOverride ?? undefined);
+      });
 
       collectionRecordResult = createCollectionRecordFromFormSubmission(
         site.id,

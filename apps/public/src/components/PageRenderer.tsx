@@ -1458,35 +1458,6 @@ const isEmbedHostAllowed = (host: string, allowedHosts: string[]): boolean => {
   ));
 };
 
-const buildContactShareOverride = (props: Record<string, unknown>) => {
-  const hasAnySetting =
-    typeof props.contactShareEnabled === 'boolean' ||
-    typeof props.contactShareNameField === 'string' ||
-    typeof props.contactShareEmailField === 'string' ||
-    typeof props.contactSharePhoneField === 'string' ||
-    typeof props.contactShareNotesField === 'string' ||
-    props.contactShareDedupeByEmail !== undefined;
-
-  if (!hasAnySetting) {
-    return undefined;
-  }
-
-  return {
-    enabled:
-      typeof props.contactShareEnabled === 'boolean' ? props.contactShareEnabled : undefined,
-    nameField:
-      typeof props.contactShareNameField === 'string' ? props.contactShareNameField : undefined,
-    emailField:
-      typeof props.contactShareEmailField === 'string' ? props.contactShareEmailField : undefined,
-    phoneField:
-      typeof props.contactSharePhoneField === 'string' ? props.contactSharePhoneField : undefined,
-    notesField:
-      typeof props.contactShareNotesField === 'string' ? props.contactShareNotesField : undefined,
-    dedupeByEmail:
-      typeof props.contactShareDedupeByEmail === 'boolean' ? props.contactShareDedupeByEmail : undefined,
-  };
-};
-
 const buildCommentThreads = (comments: CommentItem[]) => {
   const map = new Map<string, CommentItem & { replies?: CommentItem[] }>();
   const roots: (CommentItem & { replies?: CommentItem[] })[] = [];
@@ -2590,7 +2561,6 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const formTitle = getNameClass(props.formTitle);
   const schemaFields = normalizeFormSchemaFields(props.fields || props.formFields || props.schema);
   const submitLabel = getNameClass(props.submitLabel) || 'Submit';
-  const contactShareOverride = buildContactShareOverride(props as Record<string, unknown>);
   const requestId = useRef<string>(`f-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
 
   useEffect(() => {
@@ -2776,7 +2746,6 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
       values,
       ...(enableHoneypot ? { honeypot: getNameClass(values.honeypot) } : {}),
       ...(enableCaptcha && captchaToken ? { captchaToken } : {}),
-      ...(contactShareOverride ? { contactShareOverride } : {}),
       startedAt,
       requestId: requestId.current,
       ...(pageId ? { pageId } : {}),

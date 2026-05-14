@@ -384,7 +384,9 @@ const publicFormSubmissionRoute = read('apps/public/src/app/api/sites/[siteId]/f
 assertIncludes(publicFormSubmissionRoute, '@/lib/publicFormAudienceAccess', 'public form submission route must import audience guard');
 assertIncludes(functionSource(publicFormSubmissionRoute, 'POST', 'public form submission route'), "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')", 'public form submission route must enforce audience before parsing submissions');
 assertIncludes(publicFormSubmissionRoute, 'normalizeFormSubmissionValues(form, parsed.values)', 'public form submission route must strip undeclared submission keys before storage and routing');
-assertIncludes(publicFormSubmissionRoute, 'enabled: formShareEnabled && contactShareOverride?.enabled !== false', 'public form submission route must not let public overrides enable disabled contact sharing');
+assertIncludes(publicFormSubmissionRoute, 'enabled: formShareEnabled,', 'public form submission route must only use admin-configured contact sharing');
+assertExcludes(publicFormSubmissionRoute, 'parsed.contactShareOverride', 'public form submission route must ignore public contact-share overrides');
+assertExcludes(publicFormSubmissionRoute, 'ContactShareOverridePayload', 'public form submission route must not parse public contact-share overrides');
 assertExcludes(publicFormSubmissionRoute, "classification.status === 'approved' || classification.status === 'pending'", 'public form submission route must not route pending submissions into contacts or collections');
 assert(
   occurrenceCount(publicFormSubmissionRoute, "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')") >= 2,
@@ -598,6 +600,9 @@ for (const route of [
 
 const backyStore = read('apps/public/src/lib/backyStore.ts');
 assertIncludes(backyStore, 'enabled: formShareEnabled && contactShareOverride?.enabled !== false', 'demo contact share helper must not let public overrides enable disabled contact sharing');
+const pageRenderer = read('apps/public/src/components/PageRenderer.tsx');
+assertExcludes(pageRenderer, 'buildContactShareOverride', 'public page renderer must not send client-controlled contact-share overrides');
+assertExcludes(pageRenderer, 'contactShareOverride', 'public page renderer must not submit contact-share overrides');
 const submissionValidationStart = backyStore.indexOf('function validateSubmissionValues(');
 const submissionValidationEnd = backyStore.indexOf('\nfunction makeSubmissionSignature', submissionValidationStart);
 assert(submissionValidationStart !== -1 && submissionValidationEnd !== -1, 'backyStore missing submission validation function');
@@ -707,6 +712,7 @@ const publicOpenApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/
 assertIncludes(publicOpenApiRoute, 'maximum: 100', 'public OpenAPI route must document capped list limits');
 assertExcludes(publicOpenApiRoute, "queryParameter('limit', { type: 'integer', minimum: 1 })", 'public OpenAPI route must not advertise unbounded list limits');
 assertExcludes(publicOpenApiRoute, "schema: { type: 'integer', minimum: 1 }", 'public OpenAPI route must not advertise direct unbounded limit parameters');
+assertExcludes(publicOpenApiRoute, 'contactShareOverride', 'public OpenAPI schema must not document public contact-share overrides');
 
 for (const route of [
   'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',

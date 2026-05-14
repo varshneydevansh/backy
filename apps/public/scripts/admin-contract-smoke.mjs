@@ -4071,6 +4071,9 @@ try {
                   formActive: true,
                   moderationMode: 'auto-approve',
                   enableHoneypot: false,
+                  contactShareEnabled: true,
+                  contactShareNameField: 'title',
+                  contactShareNotesField: 'message',
                   collectionWriteEnabled: true,
                   collectionWriteCollectionId: createdCollectionId,
                   collectionWriteSlugField: 'title',
@@ -4301,11 +4304,6 @@ try {
           pageId: formWritePageId,
           requestId: 'contract-form-write',
           rateLimitBypass: true,
-          contactShareOverride: {
-            enabled: true,
-            nameField: 'title',
-            notesField: 'message',
-          },
         }),
       });
       assert(formWriteSubmission.response.status === 201, `${formWriteSubmission.url} expected 201, got ${formWriteSubmission.response.status}`);

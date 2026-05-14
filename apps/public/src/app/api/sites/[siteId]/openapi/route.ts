@@ -2436,7 +2436,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           FormSubmissionRequest: {
             type: 'object',
             additionalProperties: true,
-            description: 'Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, contactShareOverride, and captcha token fields are reserved transport metadata keys.',
+            description: 'Submit form field values under values, fields, data, or submission. Simple frontends may also send field keys at the top level; requestId, pageId, postId, honeypot, startedAt, and captcha token fields are reserved transport metadata keys.',
             properties: {
               values: { type: 'object', additionalProperties: true, description: 'Preferred field value map.' },
               fields: { type: 'object', additionalProperties: true, description: 'Alias accepted for generated form integrations.' },
@@ -2462,7 +2462,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   response: { type: 'string' },
                 },
               },
-              contactShareOverride: { type: 'object', additionalProperties: true },
             },
           },
           FormSubmissionValidationDetail: {
