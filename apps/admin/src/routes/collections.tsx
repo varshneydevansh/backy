@@ -5839,7 +5839,7 @@ function CollectionsPage() {
                     {isRecordsLoading ? ' • Loading...' : ''}
                   </p>
                   <a
-                    href={`${dynamicBaseUrl}${buildCollectionListRoutePath(activeCollection)}`}
+                    href={hostedListPreviewUrl}
                     target="_blank"
                     rel="noreferrer"
                     aria-disabled={isCollectionsBusy}
