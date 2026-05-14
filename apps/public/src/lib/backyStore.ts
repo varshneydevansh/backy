@@ -5516,6 +5516,20 @@ export function getAdminPageById(siteId: string, pageId: string): StorePage | un
   return page ? clone(page) : undefined;
 }
 
+export function listAdminPages(
+  siteId: string,
+  options: { includeUnpublished?: boolean } = {},
+): StorePage[] {
+  ensurePersistedAdminContentLoaded();
+
+  const { includeUnpublished = true } = options;
+  return clone(
+    PAGE_LIST.filter((page) => (
+      page.siteId === siteId && (includeUnpublished || isPublished(page.status, page.scheduledAt))
+    )),
+  );
+}
+
 export function createAdminPage(siteId: string, input: Record<string, unknown>): StorePage {
   ensurePersistedAdminContentLoaded();
 

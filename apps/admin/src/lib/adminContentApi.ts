@@ -42,6 +42,7 @@ interface ApiSiteResponse {
   success: boolean;
   data?: {
     site: ApiSite;
+    pagesCopied?: number;
   };
   error?: {
     message?: string;
@@ -3200,6 +3201,27 @@ export async function createSite(input: SiteCreateInput): Promise<Site> {
   if (!response.ok || !payload.success || !payload.data) {
     throw new AdminContentApiError(
       payload.error?.message || 'Unable to create site',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return toStoreSite(payload.data.site);
+}
+
+export async function duplicateSite(siteId: string, input: Partial<SiteCreateInput> = {}): Promise<Site> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/duplicate`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiSiteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.site) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to duplicate site',
       payload.error?.details,
       payload.error?.code,
     );

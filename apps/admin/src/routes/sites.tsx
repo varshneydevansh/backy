@@ -27,8 +27,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  createSite as createSiteFromApi,
   deleteSite as deleteSiteFromApi,
+  duplicateSite as duplicateSiteFromApi,
   getSettings,
   getUserPermissions,
   listAdminAuditLogs,
@@ -1084,21 +1084,12 @@ function SitesListView() {
     setNotice(null);
 
     try {
-      const suffix = Date.now().toString(36).slice(-6);
-      const duplicated = await createSiteFromApi({
-        name: `${site.name} Copy`,
-        slug: `${site.slug}-copy-${suffix}`,
-        description: site.description
-          ? `${site.description}\n\nDuplicated from ${site.name}.`
-          : `Duplicated from ${site.name}.`,
-        customDomain: null,
-        status: 'draft',
-      });
+      const duplicated = await duplicateSiteFromApi(site.publicSiteId || site.id);
       setSites([duplicated, ...sites]);
       setStatusFilter('all');
       setDomainFilter('all');
       setPageCoverageFilter('all');
-      setNotice(`${site.name} duplicated as ${duplicated.name}. Add domains, pages, and publish settings before going live.`);
+      setNotice(`${site.name} duplicated as ${duplicated.name}. Review domains and publish settings before going live.`);
       void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to duplicate site');

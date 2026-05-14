@@ -602,6 +602,50 @@ const duplicateSiteThroughUi = async (client, siteName, originalSlug) => {
   throw new Error(`Duplicated site was not created for ${siteName}`);
 };
 
+const collectNavigationPageIds = (items = [], ids = new Set()) => {
+  for (const item of items) {
+    if (item?.pageId) ids.add(item.pageId);
+    if (Array.isArray(item?.children)) {
+      collectNavigationPageIds(item.children, ids);
+    }
+  }
+  return ids;
+};
+
+const assertDuplicatedSiteContent = async ({ sourcePages, duplicateSiteId }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const duplicatePages = await listSitePages(duplicateSiteId);
+    const duplicateSlugs = new Set(duplicatePages.map((page) => page.slug));
+    const copiedExpectedPages = sourcePages.filter((page) => !['archived'].includes(page.status));
+    const hasCopiedPages = copiedExpectedPages.every((page) => duplicateSlugs.has(page.slug));
+
+    if (hasCopiedPages) {
+      assert(
+        duplicatePages.every((page) => page.status === 'draft'),
+        `Duplicated site pages should be draft copies: ${JSON.stringify(duplicatePages).slice(0, 700)}`,
+      );
+      const duplicateSite = await getSite(duplicateSiteId);
+      const duplicatePageIds = new Set(duplicatePages.map((page) => page.id));
+      const navigationPageIds = collectNavigationPageIds([
+        ...(duplicateSite?.settings?.navigation?.primary || []),
+        ...(duplicateSite?.settings?.navigation?.footer || []),
+      ]);
+      assert(
+        Array.from(navigationPageIds).every((pageId) => duplicatePageIds.has(pageId)),
+        `Duplicated navigation should point at copied pages: ${JSON.stringify({
+          navigationPageIds: Array.from(navigationPageIds),
+          duplicatePageIds: Array.from(duplicatePageIds),
+        }).slice(0, 700)}`,
+      );
+      return duplicatePages;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Duplicated site ${duplicateSiteId} did not copy source pages`);
+};
+
 const archiveSiteThroughUi = async (client, siteName, slug) => {
   await clickSiteAction(client, siteName, 'Archive');
   return waitForSite(slug, (site) => site.status === 'archived');
@@ -1167,6 +1211,7 @@ const main = async () => {
     const duplicated = await duplicateSiteThroughUi(client, siteName, slug);
     duplicatedSiteId = duplicated.id;
     assert((await getSite(duplicated.id)).status === 'draft', 'Duplicated site did not persist as a draft through the admin API.');
+    await assertDuplicatedSiteContent({ sourcePages: pages, duplicateSiteId: duplicated.id });
 
     await archiveSiteThroughUi(client, siteName, slug);
     assert((await getSite(createdSiteId)).status === 'archived', 'Archive action did not persist through the admin API.');
