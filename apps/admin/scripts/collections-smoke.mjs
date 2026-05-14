@@ -833,6 +833,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
         activeElementId: document.activeElement?.id || '',
         formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
         viewportHeight: window.innerHeight,
+        draft: params.get('draft'),
         collectionId: params.get('collectionId'),
         recordId: params.get('recordId'),
         search: params.get('search'),
@@ -848,11 +849,53 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       state.draftNameValue === '' &&
       state.draftSlugValue === '' &&
       state.nameValue === '' &&
+      state.draft === 'new' &&
       state.collectionId === null &&
       state.recordId === null &&
       state.search === null &&
       (state.activeElementId === 'collections-schema-name' || (state.formTop !== null && state.formTop < state.viewportHeight))
     ) {
+      const clickedOpenDraft = await evaluate(client, `(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+        if (!(button instanceof HTMLButtonElement)) {
+          return { ok: false, reason: 'new-collection-button-missing' };
+        }
+        if (button.disabled) return { ok: false, reason: 'new-collection-button-disabled' };
+        button.click();
+        return { ok: true };
+      })()`);
+      assert(clickedOpenDraft.ok, `Unable to click already-open New collection draft button: ${JSON.stringify(clickedOpenDraft)}`);
+
+      for (let alreadyOpenAttempt = 0; alreadyOpenAttempt < 40; alreadyOpenAttempt += 1) {
+        const alreadyOpenState = await evaluate(client, `(() => {
+          const body = document.body?.innerText || '';
+          const nameInput = document.querySelector('#collections-schema-name');
+          const form = document.querySelector('#collections-schema');
+          const params = new URLSearchParams(window.location.search);
+          return {
+            hasAlreadyOpenNotice: body.includes('New collection draft is already open'),
+            activeElementId: document.activeElement?.id || '',
+            formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
+            viewportHeight: window.innerHeight,
+            nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
+            draft: params.get('draft'),
+            collectionId: params.get('collectionId'),
+          };
+        })()`);
+        if (
+          alreadyOpenState.hasAlreadyOpenNotice &&
+          alreadyOpenState.nameValue === '' &&
+          alreadyOpenState.draft === 'new' &&
+          alreadyOpenState.collectionId === null &&
+          (alreadyOpenState.activeElementId === 'collections-schema-name' || (alreadyOpenState.formTop !== null && alreadyOpenState.formTop < alreadyOpenState.viewportHeight))
+        ) {
+          return;
+        }
+        if (alreadyOpenAttempt === 39) {
+          throw new Error(`Already-open New collection draft button did not show feedback: ${JSON.stringify(alreadyOpenState)}`);
+        }
+        await sleep(250);
+      }
       return;
     }
     if (attempt === 39) {

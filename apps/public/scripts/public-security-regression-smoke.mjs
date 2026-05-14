@@ -324,6 +324,18 @@ assert(
   occurrenceCount(publicFormSubmissionRoute, "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')") >= 2,
   'public form submission route must enforce audience in repository and demo branches',
 );
+assert(
+  occurrenceCount(publicFormSubmissionRoute, 'const submissionValues = normalizeFormSubmissionValues(form, parsed.values);') >= 2,
+  'public form submission route must normalize declared submission fields in repository and demo branches',
+);
+assert(
+  occurrenceCount(publicFormSubmissionRoute, 'values: submissionValues') >= 4,
+  'public form submission route must persist and notify with normalized submission values',
+);
+assert(
+  occurrenceCount(publicFormSubmissionRoute, 'parsed.values') === occurrenceCount(publicFormSubmissionRoute, 'normalizeFormSubmissionValues(form, parsed.values)'),
+  'public form submission route must not pass raw parsed submission values beyond normalization',
+);
 
 const backyStoreSource = read('apps/public/src/lib/backyStore.ts');
 for (const needle of [
@@ -387,6 +399,8 @@ for (const route of [
 }
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
+assertIncludes(adminLoginRoute, 'authenticateAdminCredentialsWithPersistence', 'login route must use repository-backed user lookup outside demo mode');
+assertIncludes(adminLoginRoute, 'repositories.users.getByEmail', 'login route must resolve database users by email outside demo mode');
 
 const adminUsersRoute = read('apps/public/src/app/api/admin/users/route.ts');
 assertIncludes(adminUsersRoute, 'createAdminInviteToken', 'admin user create route must create invite tokens for invited users');
@@ -403,6 +417,9 @@ const adminSessionStore = read('apps/public/src/lib/admin-auth/sessionStore.ts')
 assertIncludes(adminSessionStore, '@/lib/admin-auth/emailPolicy', 'admin session store must import invite-only policy');
 assertIncludes(adminSessionStore, 'await validateAdminInviteOnlyActivationPolicy(currentUser.status,', 'admin password reset accept must enforce invite-only policy before activation');
 assertIncludes(adminSessionStore, "reason: 'invite-only'", 'admin password reset accept must expose invite-only failure');
+assertIncludes(adminSessionStore, 'authenticateAdminCredentialsWithPersistence', 'admin session store must support repository-backed credential lookup');
+assertIncludes(adminSessionStore, 'getAdminSessionWithPersistence', 'admin session store must refresh sessions from repository-backed users');
+assertIncludes(adminSessionStore, 'persistence.getUserByEmail', 'admin session store must support repository-backed login user lookup');
 assertIncludes(adminSessionStore, 'persistence.getUserById', 'admin session store must support repository-backed invite/reset user lookup');
 assertIncludes(adminSessionStore, 'persistence.updateUser', 'admin session store must support repository-backed invite/reset user updates');
 
@@ -525,14 +542,21 @@ for (const needle of [
 ]) {
   assertIncludes(checkoutGet, needle, 'checkout GET must report only real order-intake readiness');
 }
-const orderCreateAnchor = 'const order = (await repositories.collections.createRecord({';
+const orderCreateAnchor = 'let order: Awaited<ReturnType<typeof repositories.collections.createRecord>>[\'item\'];';
 const orderCreateAnchorIndex = checkoutRoute.indexOf(orderCreateAnchor);
-const createOrderIndex = checkoutRoute.lastIndexOf('collections.createRecord(', orderCreateAnchorIndex);
-const updateInventoryIndex = checkoutRoute.indexOf('collections.updateRecord(', orderCreateAnchorIndex);
+const applyRepositoryReservationsIndex = checkoutRoute.indexOf('const rollbackInventoryReservations = await applyRepositoryInventoryReservations({');
+const createOrderIndex = checkoutRoute.indexOf('repositories.collections.createRecord({', orderCreateAnchorIndex);
+const rollbackOnOrderFailureIndex = checkoutRoute.indexOf('await rollbackInventoryReservations();', createOrderIndex);
+const applyRepositoryRollbackIndex = checkoutRoute.indexOf('repositories.collections.updateRecord(siteId, productsCollectionId, reservation.record.id, {');
+const originalValuesRollbackIndex = checkoutRoute.indexOf('values: toJsonRecord(reservation.originalValues)', applyRepositoryRollbackIndex);
 assert(orderCreateAnchorIndex !== -1, 'checkout route missing public order create anchor');
+assert(applyRepositoryReservationsIndex !== -1, 'checkout route missing repository inventory reservation application');
 assert(createOrderIndex !== -1, 'checkout route missing order create');
-assert(updateInventoryIndex !== -1, 'checkout route missing inventory update');
-assert(createOrderIndex < updateInventoryIndex, 'checkout route must create the order before updating inventory');
+assert(rollbackOnOrderFailureIndex !== -1, 'checkout route must roll back inventory reservations when order creation fails');
+assert(applyRepositoryRollbackIndex !== -1, 'checkout route missing repository inventory rollback update');
+assert(originalValuesRollbackIndex !== -1, 'checkout route must restore original inventory values on rollback');
+assert(applyRepositoryReservationsIndex < createOrderIndex, 'checkout route must reserve inventory before creating the private order');
+assert(createOrderIndex < rollbackOnOrderFailureIndex, 'checkout route must roll back after failed order creation');
 
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
