@@ -31,6 +31,7 @@ import {
   normalizeCollectionRoutePattern,
 } from '@/lib/collectionRoutes';
 import { findCollectionRouteConflict } from '@/lib/routeConflicts';
+import { requireCommerceCollectionSlugAccess } from '@/lib/adminCommerceCollectionAccess';
 
 export const runtime = 'nodejs';
 
@@ -244,6 +245,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     const invalid = validateImportInput(collections, requestId);
     if (invalid) return invalid;
+    const commerceAccess = requireCommerceCollectionSlugAccess(
+      request,
+      requestId,
+      collections.map((collection) => collection.slug),
+      'edit',
+    );
+    if (commerceAccess) return commerceAccess;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
