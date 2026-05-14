@@ -573,7 +573,7 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
     endpoints,
     delivery: {
       hosting: 'Vercel-ready custom frontend or Backy managed preview',
-      database: 'Backy-owned content APIs with Supabase connectivity planned in Settings',
+      database: 'Backy-owned content APIs with Supabase metadata and runtime env verification managed in Settings',
       storage: 'Backy media library, public/private visibility, responsive transforms, and file exports',
       ownership: 'Backy remains the backend control plane; the frontend consumes published contracts.',
     },
@@ -588,7 +588,7 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
     requiredNextControls: [
       'Per-site theme tokens, animations, and component variants',
       'Vercel deploy orchestration',
-      'Supabase auth/database adapter settings',
+      'Supabase auth adapter completion and runtime env verification',
       'Commerce checkout provider and tax/shipping rules',
       'Public registration and member account flows',
     ],
