@@ -669,6 +669,81 @@ const clickFrontendTemplateCreateForm = async (client) => {
   }
 };
 
+const clickBlankCreateForm = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="forms-create-blank-button"]')
+        || document.querySelector('[data-testid="forms-template-create-blank-button"]')
+        || document.querySelector('[data-testid="forms-empty-create-blank-button"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          button: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          body: document.body?.innerText?.slice(0, 700) || '',
+        };
+      }
+      button.click();
+      return { ok: true, text: button.textContent || '' };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to click blank form create button: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const waitForBlankStandaloneForm = async (client, beforeIds) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const forms = await listForms();
+    const created = forms.find((form) => (
+      !beforeIds.has(form.id) &&
+      form.title === 'Untitled form' &&
+      !form.pageId &&
+      !form.postId &&
+      form.settings?.source === 'blank-standalone'
+    ));
+    const state = await evaluate(client, `(() => ({
+      notice: document.body?.innerText?.includes('Blank standalone form created') || false,
+      builder: Boolean(document.querySelector('[data-testid="form-builder-panel"]')),
+      saveButton: Array.from(document.querySelectorAll('button')).some((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
+      )),
+      body: document.body?.innerText?.slice(0, 500) || '',
+    }))()`);
+
+    if (created && state.notice && state.builder && state.saveButton) {
+      assert(created.fields?.length === 1 && created.fields[0].key === 'field_1', `Blank form did not persist default field: ${JSON.stringify(created.fields)}`);
+      assert(created.contactShare?.enabled === false, `Blank form contact share should default off: ${JSON.stringify(created.contactShare)}`);
+      assert(created.collectionTarget?.enabled === false, `Blank form collection target should default off: ${JSON.stringify(created.collectionTarget)}`);
+      return { form: created, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Blank standalone form was not created: ${JSON.stringify({
+        forms: forms.map((form) => ({
+          id: form.id,
+          title: form.title,
+          pageId: form.pageId,
+          postId: form.postId,
+          settings: form.settings,
+        })).slice(0, 10),
+        state,
+      })}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const waitForFrontendTemplateForm = async (beforeIds) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const forms = await listForms();
@@ -1841,9 +1916,11 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let frontendCreatedFormId = null;
+  let blankCreatedFormId = null;
   let createdFormId = null;
   let createdEmbedSectionId = null;
   let frontendCleaned = false;
+  let blankCleaned = false;
   let cleaned = false;
   let embedCleaned = false;
   let collectionCleaned = false;
@@ -1870,6 +1947,13 @@ const main = async () => {
     });
 
     await navigateToForms(client);
+    await clickBlankCreateForm(client);
+    const blankCreated = await waitForBlankStandaloneForm(client, beforeIds);
+    blankCreatedFormId = blankCreated.form.id;
+    await deleteForm(blankCreatedFormId);
+    blankCleaned = true;
+    await navigateToForms(client);
+
     await clickFrontendTemplateCreateForm(client);
     frontendTemplateForm = await waitForFrontendTemplateForm(beforeIds);
     frontendCreatedFormId = frontendTemplateForm.id;
@@ -1985,6 +2069,10 @@ const main = async () => {
         bindingHints: frontendTemplateForm.settings?.frontendDesignBindingHints?.length || 0,
         fieldCount: frontendTemplateForm.fields?.length || 0,
       },
+      blankForm: {
+        id: blankCreatedFormId,
+        cleaned: blankCleaned,
+      },
       form: {
         id: createdFormId,
         title: definition.data.form.title,
@@ -2045,6 +2133,11 @@ const main = async () => {
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (!blankCleaned && blankCreatedFormId) {
+      await deleteForm(blankCreatedFormId).catch((error) => {
+        console.warn('Unable to delete blank smoke form:', error instanceof Error ? error.message : error);
+      });
+    }
     if (!frontendCleaned && frontendCreatedFormId) {
       await deleteForm(frontendCreatedFormId).catch((error) => {
         console.warn('Unable to delete frontend template smoke form:', error instanceof Error ? error.message : error);

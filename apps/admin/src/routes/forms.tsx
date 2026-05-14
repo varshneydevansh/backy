@@ -1275,6 +1275,69 @@ function FormsRoute() {
     }
   };
 
+  const createBlankStandaloneForm = async () => {
+    if (isFormsBusy) return;
+    if (!canCreateForms) {
+      setError(createPermissionTitle || 'Your account cannot create forms.');
+      setNotice(null);
+      return;
+    }
+
+    const suffix = Date.now().toString(36);
+    setIsCreatingTemplateId('blank');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const created = await createForm(activeSiteId, {
+        name: `blank-form-${suffix}`,
+        title: 'Untitled form',
+        description: 'Standalone form ready for custom fields and frontend embedding.',
+        audience: 'public',
+        isActive: true,
+        fields: [
+          {
+            key: 'field_1',
+            label: 'Field 1',
+            type: 'text',
+            required: false,
+          },
+        ],
+        successMessage: 'Submission received.',
+        enableHoneypot: true,
+        enableCaptcha: false,
+        moderationMode: 'manual',
+        contactShare: { enabled: false },
+        collectionTarget: { enabled: false, collectionId: '', fieldMap: {} },
+        spamSettings: DEFAULT_FORM_SPAM_SETTINGS,
+        consentSettings: DEFAULT_FORM_CONSENT_SETTINGS,
+        settings: {
+          spam: DEFAULT_FORM_SPAM_SETTINGS,
+          consent: DEFAULT_FORM_CONSENT_SETTINGS,
+          source: 'blank-standalone',
+        },
+      });
+      setForms((current) => [created, ...current.filter((form) => form.id !== created.id)]);
+      setInboxByForm((current) => ({
+        ...current,
+        [created.id]: {
+          form: created,
+          submissions: [],
+          total: 0,
+        },
+      }));
+      setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
+      setSelectedFormId(created.id);
+      setFormDraft(cloneFormDefinition(created));
+      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      setNotice('Blank standalone form created. Add fields or save changes in the builder.');
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create blank form');
+    } finally {
+      setIsCreatingTemplateId(null);
+    }
+  };
+
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
@@ -2170,6 +2233,16 @@ function FormsRoute() {
             >
               Export forms CSV
             </Button>
+            <Button
+              variant="primary"
+              onClick={() => void createBlankStandaloneForm()}
+              disabled={isFormsBusy || !canCreateForms}
+              title={!canCreateForms ? createPermissionTitle : undefined}
+              iconStart={<Plus className="size-4" />}
+              data-testid="forms-create-blank-button"
+            >
+              {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
+            </Button>
             <Button onClick={() => void loadForms()} disabled={isFormsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh forms
             </Button>
@@ -2435,8 +2508,20 @@ function FormsRoute() {
       <Panel id="forms-templates" className="mb-6 scroll-mt-24">
         <PanelHeader
           title="Form templates"
-          description="Copy complete schemas for registration, contact, newsletter, and product inquiry experiences."
+          description="Start from a blank standalone form or copy complete schemas for registration, contact, newsletter, and product inquiry experiences."
           icon={<Sparkles className="size-4" />}
+          action={
+            <Button
+              variant="primary"
+              onClick={() => void createBlankStandaloneForm()}
+              disabled={isFormsBusy || !canCreateForms}
+              title={!canCreateForms ? createPermissionTitle : undefined}
+              iconStart={<Plus className="size-4" />}
+              data-testid="forms-template-create-blank-button"
+            >
+              {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
+            </Button>
+          }
         />
         <PanelContent>
           {frontendFormTemplates.length > 0 || frontendDesignLoading || frontendDesignError ? (
@@ -2651,17 +2736,28 @@ function FormsRoute() {
         <EmptyState
           icon={ClipboardList}
           title="No forms found"
-          description="Forms appear here when a page or blog design includes a form block for this site."
+          description="Create a standalone form for custom frontends, or start from a page template that includes a form block."
           action={
-            <Button
-              variant="primary"
-              onClick={() => openFormPageTemplate('registration')}
-              disabled={isFormsBusy}
-              className="mt-2"
-              iconStart={<Sparkles className="size-4" />}
-            >
-              Create registration page
-            </Button>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => void createBlankStandaloneForm()}
+                disabled={isFormsBusy || !canCreateForms}
+                title={!canCreateForms ? createPermissionTitle : undefined}
+                iconStart={<Plus className="size-4" />}
+                data-testid="forms-empty-create-blank-button"
+              >
+                New blank form
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => openFormPageTemplate('registration')}
+                disabled={isFormsBusy}
+                iconStart={<Sparkles className="size-4" />}
+              >
+                Create registration page
+              </Button>
+            </div>
           }
         />
       ) : (
