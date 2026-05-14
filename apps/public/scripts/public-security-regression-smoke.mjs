@@ -275,6 +275,35 @@ for (const route of [
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
 
+const adminContentStatusPolicy = read('apps/public/src/lib/adminContentStatusPolicy.ts');
+for (const needle of [
+  'statusRequiresPublishPermission',
+  "status === 'published' || status === 'scheduled'",
+  'validateScheduledContentStatus',
+  'SCHEDULED_AT_REQUIRED',
+  'SCHEDULED_AT_INVALID',
+]) {
+  assertIncludes(adminContentStatusPolicy, needle, 'admin content status policy');
+}
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/pages/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/blog/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/blog/[postId]/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, '@/lib/adminContentStatusPolicy', `${route} must import content status policy`);
+  assertIncludes(source, "permission: 'pages.publish'", `${route} must require publish permission for published/scheduled status`);
+  assertIncludes(source, 'statusRequiresPublishPermission(', `${route} must check publish-status permission`);
+  assertIncludes(source, 'validateScheduledContentStatus(', `${route} must validate scheduled status`);
+}
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/blog/[postId]/route.ts',
+]) {
+  assertIncludes(read(route), 'Array.isArray(rawContent.elements)', `${route} PATCH content normalization must extract elements arrays`);
+}
+
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
   'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',

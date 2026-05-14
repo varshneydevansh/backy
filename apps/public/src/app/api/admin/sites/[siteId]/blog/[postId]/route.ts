@@ -16,6 +16,11 @@ import {
 } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
+  normalizeScheduledAtInput,
+  statusRequiresPublishPermission,
+  validateScheduledContentStatus,
+} from '@/lib/adminContentStatusPolicy';
+import {
   deleteAdminBlogPost,
   getAdminBlogPostById,
   getBlogPosts,
@@ -113,7 +118,11 @@ const contentDocumentFromInput = (
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) ? rawContent : [],
+    elements: isRecord(rawContent) && Array.isArray(rawContent.elements)
+      ? rawContent.elements
+      : Array.isArray(rawContent)
+        ? rawContent
+        : [],
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
@@ -260,6 +269,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const status = statusFromInput(body.status) || post.status;
+      const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
+      const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
+      if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+        const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+        if (publishAccess instanceof NextResponse) return publishAccess;
+      }
+      const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+      if (!scheduleValidation.ok) {
+        return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+      }
       const title = typeof body.title === 'string' ? body.title : post.title;
       const content = contentDocumentFromInput(body.content, post, { title, slug: nextSlug, status });
       await repositories.contentWorkflows.createRevision({
@@ -277,7 +296,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         slug: body.slug === undefined ? undefined : nextSlug,
         excerpt: typeof body.excerpt === 'string' || body.excerpt === null ? body.excerpt : undefined,
         status: statusFromInput(body.status),
-        scheduledAt: typeof body.scheduledAt === 'string' || body.scheduledAt === null ? body.scheduledAt : undefined,
+        scheduledAt: scheduledAt === undefined ? undefined : scheduledAt,
         featuredImageId: typeof body.featuredImageId === 'string' || body.featuredImageId === null
           ? body.featuredImageId
           : undefined,
@@ -358,9 +377,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    const status = statusFromInput(body.status) || post.status;
+    const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
+    const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
+    if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+      const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      if (publishAccess instanceof NextResponse) return publishAccess;
+    }
+    const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+    if (!scheduleValidation.ok) {
+      return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+    }
+
     const updated = updateAdminBlogPost(site.id, post.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
+      ...(scheduledAt !== undefined ? { scheduledAt } : {}),
     });
 
     if (!updated) {

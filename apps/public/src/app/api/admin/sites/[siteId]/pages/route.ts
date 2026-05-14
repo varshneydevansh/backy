@@ -21,6 +21,11 @@ import {
   listCollections,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import {
+  normalizeScheduledAtInput,
+  statusRequiresPublishPermission,
+  validateScheduledContentStatus,
+} from '@/lib/adminContentStatusPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
@@ -246,6 +251,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Page slug is required', requestId);
       }
 
+      if (statusRequiresPublishPermission(status)) {
+        const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+        if (publishAccess instanceof NextResponse) {
+          return publishAccess;
+        }
+      }
+
       const slugCheck = await repositories.pages.checkSlug({ siteId: site.id, slug });
       if (!slugCheck.available) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
@@ -277,6 +289,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const createBody = seeded.body;
+      const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
+      const scheduleValidation = validateScheduledContentStatus(status, scheduledAt);
+      if (!scheduleValidation.ok) {
+        return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+      }
       const pageId = typeof createBody.id === 'string' && createBody.id.trim().length > 0 ? createBody.id.trim() : `page_${slug}`;
       const created = await repositories.pages.create({
         siteId: site.id,
@@ -284,7 +301,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         slug,
         description: typeof createBody.description === 'string' ? createBody.description : null,
         status,
-        scheduledAt: typeof createBody.scheduledAt === 'string' ? createBody.scheduledAt : null,
+        scheduledAt: scheduledAt || null,
         isHomepage: typeof createBody.isHomepage === 'boolean' ? createBody.isHomepage : false,
         parentId: typeof createBody.parentId === 'string' ? createBody.parentId : null,
         content: contentDocumentFromInput(createBody.content, { id: pageId, title, slug, status }),
@@ -331,6 +348,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await parseJsonBody(request);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const slug = normalizeSlug(body.slug || title);
+    const status = statusFromInput(body.status);
 
     if (!title) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Page title is required', requestId);
@@ -338,6 +356,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Page slug is required', requestId);
+    }
+
+    if (statusRequiresPublishPermission(status)) {
+      const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      if (publishAccess instanceof NextResponse) {
+        return publishAccess;
+      }
     }
 
     if (getPageBySlug(site.id, slug, { includeUnpublished: true })) {
@@ -362,10 +387,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
 
+    const scheduledAt = normalizeScheduledAtInput(seeded.body.scheduledAt);
+    const scheduleValidation = validateScheduledContentStatus(status, scheduledAt);
+    if (!scheduleValidation.ok) {
+      return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+    }
+
     const page = createAdminPage(site.id, {
       ...seeded.body,
       title,
       slug,
+      status,
+      scheduledAt: scheduledAt || null,
     });
     await recordAdminAudit({
       siteId: site.id,

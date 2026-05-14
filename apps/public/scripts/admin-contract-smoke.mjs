@@ -1292,6 +1292,54 @@ try {
     assert(pageCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === pageSlug, `${pageCreateAudit.url} missing page create audit metadata`);
     assert(pageCreateAudit.json?.data?.logs?.[0]?.after?.status === 'draft', `${pageCreateAudit.url} missing page create audit after snapshot`);
 
+    const pageEditorSessionToken = await loginAdminCredentials('jane@backy.io', process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123');
+    const denyEditorPagePublish = await request('/api/admin/users/user-editor/permissions', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        overrides: {
+          'pages.publish': 'deny',
+        },
+      }),
+    });
+    assert(denyEditorPagePublish.response.status === 200, `${denyEditorPagePublish.url} expected editor publish-deny override`);
+    try {
+      const blockedEditorPublish = await requestWithSession(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, pageEditorSessionToken, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'published' }),
+      });
+      assert(blockedEditorPublish.response.status === 403, `${blockedEditorPublish.url} expected editor publish denial, got ${blockedEditorPublish.response.status}`);
+      assert(blockedEditorPublish.json?.error?.code === 'FORBIDDEN_PERMISSION', `${blockedEditorPublish.url} expected FORBIDDEN_PERMISSION for denied page publish`);
+    } finally {
+      const restoreEditorPagePublish = await request('/api/admin/users/user-editor/permissions', {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          overrides: {
+            'pages.publish': null,
+          },
+        }),
+      });
+      assert(restoreEditorPagePublish.response.status === 200, `${restoreEditorPagePublish.url} expected editor publish override restore`);
+    }
+
+    const missingPageSchedule = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'scheduled' }),
+    });
+    assert(missingPageSchedule.response.status === 400, `${missingPageSchedule.url} expected missing schedule 400, got ${missingPageSchedule.response.status}`);
+    assert(missingPageSchedule.json?.error?.code === 'SCHEDULED_AT_REQUIRED', `${missingPageSchedule.url} expected scheduledAt required error`);
+
     const list = await request(`/api/admin/sites/${createdSiteId}/pages?includeUnpublished=true`);
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
     assert(list.json?.data?.pages?.some((page) => page.id === createdPageId), `${list.url} missing created page`);
@@ -2816,6 +2864,54 @@ try {
     assert(postCreateAudit.response.status === 200, `${postCreateAudit.url} expected post create audit readback`);
     assert(postCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === postSlug, `${postCreateAudit.url} missing post create audit metadata`);
     assert(postCreateAudit.json?.data?.logs?.[0]?.after?.status === 'draft', `${postCreateAudit.url} missing post create audit after snapshot`);
+
+    const postEditorSessionToken = await loginAdminCredentials('jane@backy.io', process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123');
+    const denyEditorPostPublish = await request('/api/admin/users/user-editor/permissions', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        overrides: {
+          'pages.publish': 'deny',
+        },
+      }),
+    });
+    assert(denyEditorPostPublish.response.status === 200, `${denyEditorPostPublish.url} expected editor publish-deny override`);
+    try {
+      const blockedEditorPostPublish = await requestWithSession(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, postEditorSessionToken, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'published' }),
+      });
+      assert(blockedEditorPostPublish.response.status === 403, `${blockedEditorPostPublish.url} expected editor post publish denial, got ${blockedEditorPostPublish.response.status}`);
+      assert(blockedEditorPostPublish.json?.error?.code === 'FORBIDDEN_PERMISSION', `${blockedEditorPostPublish.url} expected FORBIDDEN_PERMISSION for denied post publish`);
+    } finally {
+      const restoreEditorPostPublish = await request('/api/admin/users/user-editor/permissions', {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          overrides: {
+            'pages.publish': null,
+          },
+        }),
+      });
+      assert(restoreEditorPostPublish.response.status === 200, `${restoreEditorPostPublish.url} expected editor publish override restore`);
+    }
+
+    const missingPostSchedule = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'scheduled' }),
+    });
+    assert(missingPostSchedule.response.status === 400, `${missingPostSchedule.url} expected missing post schedule 400, got ${missingPostSchedule.response.status}`);
+    assert(missingPostSchedule.json?.error?.code === 'SCHEDULED_AT_REQUIRED', `${missingPostSchedule.url} expected post scheduledAt required error`);
 
     const list = await request(`/api/admin/sites/${createdSiteId}/blog?status=draft`);
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);

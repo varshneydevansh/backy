@@ -23,6 +23,11 @@ import {
   updateAdminPage,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import {
+  normalizeScheduledAtInput,
+  statusRequiresPublishPermission,
+  validateScheduledContentStatus,
+} from '@/lib/adminContentStatusPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
@@ -111,7 +116,11 @@ const contentDocumentFromInput = (
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) ? rawContent : [],
+    elements: isRecord(rawContent) && Array.isArray(rawContent.elements)
+      ? rawContent.elements
+      : Array.isArray(rawContent)
+        ? rawContent
+        : [],
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
@@ -260,6 +269,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const status = statusFromInput(body.status) || page.status;
+      const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
+      const nextScheduledAt = scheduledAt === undefined ? page.scheduledAt || null : scheduledAt;
+      if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+        const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+        if (publishAccess instanceof NextResponse) {
+          return publishAccess;
+        }
+      }
+      const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+      if (!scheduleValidation.ok) {
+        return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+      }
       const title = typeof body.title === 'string' ? body.title : page.title;
       const collections = await repositories.collections.list({
         siteId: site.id,
@@ -288,7 +309,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         slug: body.slug === undefined ? undefined : nextSlug,
         description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
         status: statusFromInput(body.status),
-        scheduledAt: typeof body.scheduledAt === 'string' || body.scheduledAt === null ? body.scheduledAt : undefined,
+        scheduledAt: scheduledAt === undefined ? undefined : scheduledAt,
         isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : undefined,
         parentId: typeof body.parentId === 'string' || body.parentId === null ? body.parentId : undefined,
         content,
@@ -369,9 +390,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
+    const status = statusFromInput(body.status) || page.status;
+    const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
+    const nextScheduledAt = scheduledAt === undefined ? page.scheduledAt || null : scheduledAt;
+    if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+      const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      if (publishAccess instanceof NextResponse) {
+        return publishAccess;
+      }
+    }
+    const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
+    if (!scheduleValidation.ok) {
+      return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+    }
+
     const updated = updateAdminPage(site.id, page.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
+      ...(scheduledAt !== undefined ? { scheduledAt } : {}),
     });
 
     if (!updated) {

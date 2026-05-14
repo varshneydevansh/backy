@@ -15,6 +15,11 @@ import {
 } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
+  normalizeScheduledAtInput,
+  statusRequiresPublishPermission,
+  validateScheduledContentStatus,
+} from '@/lib/adminContentStatusPolicy';
+import {
   createAdminBlogPost,
   getBlogPosts,
   getSiteByIdOrSlug,
@@ -259,6 +264,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
       }
 
+      if (statusRequiresPublishPermission(status)) {
+        const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+        if (publishAccess instanceof NextResponse) return publishAccess;
+      }
+
       const slugCheck = await repositories.posts.checkSlug({ siteId: site.id, slug });
       if (!slugCheck.available) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
@@ -278,6 +288,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const createBody = seeded.body;
+      const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
+      const scheduleValidation = validateScheduledContentStatus(status, scheduledAt);
+      if (!scheduleValidation.ok) {
+        return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+      }
       const postId = typeof createBody.id === 'string' && createBody.id.trim().length > 0 ? createBody.id.trim() : `post_${slug}`;
       const created = await repositories.posts.create({
         siteId: site.id,
@@ -285,7 +300,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         slug,
         excerpt: typeof createBody.excerpt === 'string' ? createBody.excerpt : null,
         status,
-        scheduledAt: typeof createBody.scheduledAt === 'string' ? createBody.scheduledAt : null,
+        scheduledAt: scheduledAt || null,
         featuredImageId: typeof createBody.featuredImageId === 'string' ? createBody.featuredImageId : null,
         authorId: typeof createBody.authorId === 'string' ? createBody.authorId : null,
         categoryIds: stringArrayFromInput(createBody.categoryIds),
@@ -334,6 +349,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await parseJsonBody(request);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const slug = normalizeSlug(body.slug || title);
+    const status = statusFromInput(body.status);
 
     if (!title) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Post title is required', requestId);
@@ -341,6 +357,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+    }
+
+    if (statusRequiresPublishPermission(status)) {
+      const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      if (publishAccess instanceof NextResponse) return publishAccess;
     }
 
     const conflict = getBlogPosts(site.id, {
@@ -365,10 +386,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
 
+    const scheduledAt = normalizeScheduledAtInput(seeded.body.scheduledAt);
+    const scheduleValidation = validateScheduledContentStatus(status, scheduledAt);
+    if (!scheduleValidation.ok) {
+      return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+    }
+
     const post = createAdminBlogPost(site.id, {
       ...seeded.body,
       title,
       slug,
+      status,
+      scheduledAt: scheduledAt || null,
     });
     await recordAdminAudit({
       siteId: site.id,
