@@ -2976,7 +2976,7 @@ export function CanvasEditor({
       const selectedElementId = selectedId;
       updateElementsWithHistory((currentElements) => {
         const result = updateElementById(currentElements, selectedElementId, (element) => (
-          applyUpdatesForBreakpoint(element, updates, breakpoint)
+          element.locked ? element : applyUpdatesForBreakpoint(element, updates, breakpoint)
         ));
 
         if (!result.updated) {

@@ -10015,6 +10015,41 @@ const testIconBehaviorControls = async (client) => {
   };
 };
 
+const testLockedLayerPropertyPanelGuard = async (client) => {
+  await setLayerLockedState(client, 'smoke-icon', true);
+  await selectLayerById(client, 'smoke-icon');
+  await switchToPropertiesPanel(client);
+
+  const before = await evaluate(client, `(() => {
+    const element = window.__BACKY_EDITOR_DEBUG__?.getElements?.()?.find((candidate) => candidate.id === 'smoke-icon');
+    return {
+      locked: element?.locked === true,
+      props: element?.props || {},
+    };
+  })()`);
+  assert(before.locked === true, `Locked property guard setup did not lock smoke-icon: ${JSON.stringify(before)}`);
+
+  await setFormControlByTestId(client, 'editor-icon-title', 'Locked title should not persist');
+
+  const after = await evaluate(client, `(() => {
+    const element = window.__BACKY_EDITOR_DEBUG__?.getElements?.()?.find((candidate) => candidate.id === 'smoke-icon');
+    const titleInput = document.querySelector('[data-testid="editor-icon-title"]');
+    return {
+      locked: element?.locked === true,
+      props: element?.props || {},
+      titleInputValue: titleInput instanceof HTMLInputElement ? titleInput.value : '',
+    };
+  })()`);
+  assert(after.locked === true, `Locked property guard lost locked state: ${JSON.stringify(after)}`);
+  assert(
+    after.props?.title === before.props?.title,
+    `Locked property panel update changed element props: ${JSON.stringify({ before, after })}`,
+  );
+
+  await setLayerLockedState(client, 'smoke-icon', false);
+  return { before, after };
+};
+
 const assertPersistedIconBehavior = async (pageId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const elements = payload.data?.page?.content?.elements || [];
@@ -12830,6 +12865,9 @@ const main = async () => {
     const iconBehaviorControls = EDITOR_PATH
       ? null
       : await testIconBehaviorControls(client);
+    const lockedLayerPropertyGuard = EDITOR_PATH
+      ? null
+      : await testLockedLayerPropertyPanelGuard(client);
     const listBehaviorControls = EDITOR_PATH
       ? null
       : await testListBehaviorControls(client);
@@ -13180,6 +13218,7 @@ const main = async () => {
       repeaterControls,
       imageBehaviorControls,
       iconBehaviorControls,
+      lockedLayerPropertyGuard,
       listBehaviorControls,
       dividerBehaviorControls,
       columnsBehaviorControls,
