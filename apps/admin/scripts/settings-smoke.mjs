@@ -79,8 +79,10 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
-const readSettings = async () => {
-  const payload = await requestApi('/api/admin/settings');
+const readSettings = async (sessionToken = apiAdminSessionToken) => {
+  const payload = await requestApi('/api/admin/settings', {
+    headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {},
+  });
   assert(payload.data?.settings, 'Settings API returned no settings payload');
   return payload.data.settings;
 };
@@ -120,17 +122,55 @@ const assertAdminApiKeyPatchDenied = async () => {
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `API key patch denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
-const restoreSettings = async (settings) => {
+const restoreSettings = async (settings, options = {}) => {
   if (!settings) return;
 
   await requestApi('/api/admin/settings', {
     method: 'PATCH',
+    headers: options.sessionToken ? { authorization: `Bearer ${options.sessionToken}` } : {},
     body: JSON.stringify({
       deliveryMode: settings.deliveryMode,
       auth: settings.auth,
       integrations: settings.integrations || {},
+      ...(options.includeApiKeys && settings.apiKeys ? { apiKeys: settings.apiKeys } : {}),
     }),
   });
+};
+
+const createUser = async (input) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const user = payload.data?.user || payload.user;
+  assert(user?.id, `Create settings owner user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return user;
+};
+
+const createInviteToken = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/invite-link`, {
+    method: 'POST',
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  const invite = payload.data?.invite || payload.invite;
+  assert(invite?.token, `Invite link endpoint did not return a token: ${JSON.stringify(payload).slice(0, 500)}`);
+  return invite;
+};
+
+const acceptInviteToken = async (token) => {
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  const session = payload.data?.session;
+  const user = payload.data?.user;
+  assert(session?.token && user?.id, `Invite accept did not return an owner session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { session, user };
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
 };
 
 const fetchJson = async (endpoint) => {
@@ -196,10 +236,13 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = (sessionToken) => `
+const authStorageScript = (
+  sessionToken,
+  user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    user,
     session: {
       token: sessionToken,
       issuedAt: new Date().toISOString(),
@@ -222,6 +265,18 @@ localStorage.setItem('backy-db', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const setBrowserSession = async (client, sessionToken, user) => {
+  const state = await evaluate(client, `(() => {
+    ${authStorageScript(sessionToken, user)}
+    return {
+      userEmail: ${JSON.stringify(user.email)},
+      hasToken: Boolean(JSON.parse(localStorage.getItem('backy-auth-storage') || '{}')?.state?.session?.token),
+    };
+  })()`);
+  assert(state.hasToken, `Unable to seed browser session: ${JSON.stringify(state)}`);
+  return state;
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -295,6 +350,24 @@ const clickByText = async (client, text) => {
     return { ok: true, text: target.textContent || '', tag: target.tagName };
   })()`);
   assert(result.ok, `Unable to click control with text ${text}: ${JSON.stringify(result)}`);
+  await sleep(150);
+  return result;
+};
+
+const clickByTestId = async (client, testId) => {
+  const result = await evaluate(client, `(() => {
+    const testId = ${JSON.stringify(testId)};
+    const target = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+    if (!(target instanceof HTMLElement)) {
+      return { ok: false, testId, body: document.body?.innerText?.slice(0, 500) || '' };
+    }
+    if (target instanceof HTMLButtonElement && target.disabled) {
+      return { ok: false, testId, reason: 'button-disabled', text: target.textContent || '' };
+    }
+    target.click();
+    return { ok: true, testId, text: target.textContent || '', tag: target.tagName };
+  })()`);
+  assert(result.ok, `Unable to click ${testId}: ${JSON.stringify(result)}`);
   await sleep(150);
   return result;
 };
@@ -510,6 +583,98 @@ const saveSettings = async (client) => {
   return null;
 };
 
+const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOriginalSettings, adminPreloadIdentifier) => {
+  assert(ownerSession?.session?.token && ownerSession?.user?.id, 'Owner session is required for API key rotation coverage.');
+
+  if (adminPreloadIdentifier) {
+    await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: adminPreloadIdentifier });
+  }
+  await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: authStorageScript(ownerSession.session.token, ownerSession.user),
+  });
+  await setBrowserSession(client, ownerSession.session.token, ownerSession.user);
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/settings?tab=security` });
+
+  let securityState = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    securityState = await evaluate(client, `(() => ({
+      search: window.location.search,
+      adminKeyStatus: document.querySelector('[data-testid="settings-api-key-status-admin"]')?.textContent?.trim() || '',
+      publicKeyStatus: document.querySelector('[data-testid="settings-api-key-status-public"]')?.textContent?.trim() || '',
+      hasRotationButton: Boolean(document.querySelector('[data-testid="settings-api-key-regenerate-public"]')),
+      publicButtonDisabled: document.querySelector('[data-testid="settings-api-key-regenerate-public"]')?.disabled ?? true,
+      hiddenAdminKey: document.body?.innerText?.includes('Hidden without settings.manageKeys') || false,
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (
+      securityState.search.includes('tab=security') &&
+      securityState.adminKeyStatus === 'Active' &&
+      securityState.publicKeyStatus === 'Active' &&
+      securityState.hasRotationButton &&
+      !securityState.publicButtonDisabled &&
+      !securityState.hiddenAdminKey
+    ) {
+      break;
+    }
+    if (attempt === 99) {
+      throw new Error(`Owner security tab did not expose key rotation controls: ${JSON.stringify(securityState)}`);
+    }
+    await sleep(250);
+  }
+
+  const before = await readSettings(ownerSession.session.token);
+  const beforePublicKey = before.apiKeys?.publicApiKey || '';
+  const beforeAdminKey = before.apiKeys?.adminApiKey || '';
+  assert(beforePublicKey && beforeAdminKey, `Owner should be able to read both keys before rotation: ${JSON.stringify(before.apiKeys)}`);
+
+  await clickByTestId(client, 'settings-api-key-regenerate-public');
+  await waitForText(client, 'Regenerate the public API key?');
+  await clickByTestId(client, 'settings-api-key-rotation-confirm');
+
+  let after = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    after = await readSettings(ownerSession.session.token);
+    if (after.apiKeys?.publicApiKey && after.apiKeys.publicApiKey !== beforePublicKey) {
+      break;
+    }
+    if (attempt === 99) {
+      throw new Error(`Public API key did not rotate: ${JSON.stringify(after.apiKeys)}`);
+    }
+    await sleep(250);
+  }
+
+  assert(
+    after.apiKeys.adminApiKey === beforeAdminKey,
+    `Public-key rotation should not rotate the admin key: ${JSON.stringify({ before: before.apiKeys, after: after.apiKeys })}`,
+  );
+
+  let auditState = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    auditState = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        hasAudit: body.includes('API keys regenerated') && body.includes('Regenerated public API key.'),
+        body: body.slice(0, 1800),
+      };
+    })()`);
+    if (auditState.hasAudit) break;
+    await sleep(250);
+  }
+  assert(auditState?.hasAudit, `API key rotation audit event did not render: ${JSON.stringify(auditState)}`);
+
+  assert(
+    ownerOriginalSettings.apiKeys?.publicApiKey === beforePublicKey &&
+      ownerOriginalSettings.apiKeys?.adminApiKey === beforeAdminKey,
+    `Owner original settings snapshot did not capture the pre-rotation keys: ${JSON.stringify(ownerOriginalSettings.apiKeys)}`,
+  );
+
+  return {
+    publicKeyRotated: after.apiKeys.publicApiKey !== beforePublicKey,
+    adminKeyPreserved: after.apiKeys.adminApiKey === beforeAdminKey,
+    auditRendered: true,
+  };
+};
+
 const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   const initial = await navigateToSettings(client);
 
@@ -633,10 +798,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   assert(commerceState.hasStorefrontHandoff && commerceState.hasCheckoutProvider && commerceState.hasSettlement, `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`);
 
   await openSettingsTab(client, 'Notifications', 'tab=notifications');
-  await setLabeledControl(client, 'New user registration', true);
-  await setLabeledControl(client, 'Page published', true);
+  await setLabeledControl(client, 'Comment moderation events', false);
   await setLabeledControl(client, 'New form submission', true);
-  await setLabeledControl(client, 'Pending comments', true);
+  await setLabeledControl(client, 'Pending comments', false);
   await setLabeledControl(client, 'Digest frequency', 'daily');
   await setLabeledControl(client, 'Webhook URL', `https://hooks.example.com/${suffix}`);
 
@@ -719,8 +883,9 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.commerce?.shippingWeightRate === 1.75, 'Commerce shipping weight rate was not persisted');
   assert(settings.integrations?.commerce?.discountPercent === 12.5, 'Commerce discount percent was not persisted');
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
-  assert(settings.integrations?.notifications?.email?.newUser === true, 'Notification email toggle was not persisted');
-  assert(settings.integrations?.notifications?.inApp?.comments === true, 'Notification in-app toggle was not persisted');
+  assert(settings.integrations?.notifications?.email?.comments === false, 'Comment notification email toggle was not persisted');
+  assert(settings.integrations?.notifications?.email?.formSubmission === true, 'Form notification email toggle was not persisted');
+  assert(settings.integrations?.notifications?.inApp?.comments === false, 'Notification in-app toggle was not persisted');
   assert(settings.integrations?.notifications?.webhookUrl === `https://hooks.example.com/${suffix}`, 'Notification webhook was not persisted');
   assert(settings.auth?.requireTwoFactor !== true, 'Require 2FA should not persist as enabled without login enforcement');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
@@ -773,11 +938,25 @@ const main = async () => {
   const originalSettings = await readSettings();
   await assertAdminKeyRotationDenied();
   await assertAdminApiKeyPatchDenied();
+  let ownerUserId = '';
+  let ownerSession = null;
+  let ownerOriginalSettings = null;
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let restored = false;
+  let adminPreloadIdentifier = '';
 
   try {
+    const owner = await createUser({
+      fullName: `Settings Owner ${suffix}`,
+      email: `settings-owner-${suffix}@example.com`,
+      role: 'owner',
+      status: 'invited',
+    });
+    ownerUserId = owner.id;
+    ownerSession = await acceptInviteToken((await createInviteToken(owner.id)).token);
+    ownerOriginalSettings = await readSettings(ownerSession.session.token);
+
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -788,11 +967,18 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
-    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    const adminPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(adminSession.session.token),
     });
+    adminPreloadIdentifier = adminPreload.identifier || '';
 
     const ui = await updateSettingsThroughUi(client, suffix, originalSettings);
+    const ownerRotation = await assertOwnerCanRotateApiKeyThroughUi(
+      client,
+      ownerSession,
+      ownerOriginalSettings,
+      adminPreloadIdentifier,
+    );
     const persisted = await readSettings();
     assertPersistedSettings(persisted, suffix);
 
@@ -808,13 +994,19 @@ const main = async () => {
 
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
 
-    await restoreSettings(originalSettings);
+    await restoreSettings(ownerOriginalSettings || originalSettings, {
+      sessionToken: ownerSession?.session?.token,
+      includeApiKeys: Boolean(ownerOriginalSettings && ownerSession?.session?.token),
+    });
     restored = true;
+    await deleteUser(ownerUserId);
+    ownerUserId = '';
 
     console.log(JSON.stringify({
       ok: true,
       url: `${ADMIN_BASE_URL}/settings`,
       ui,
+      ownerRotation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,
@@ -830,8 +1022,16 @@ const main = async () => {
     }, null, 2));
   } finally {
     if (!restored) {
-      await restoreSettings(originalSettings).catch((error) => {
+      await restoreSettings(ownerOriginalSettings || originalSettings, {
+        sessionToken: ownerSession?.session?.token,
+        includeApiKeys: Boolean(ownerOriginalSettings && ownerSession?.session?.token),
+      }).catch((error) => {
         console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (ownerUserId) {
+      await deleteUser(ownerUserId).catch((error) => {
+        console.warn('Unable to remove temporary settings owner:', error instanceof Error ? error.message : error);
       });
     }
     await cleanup({ client, childProcess, userDataDir });
