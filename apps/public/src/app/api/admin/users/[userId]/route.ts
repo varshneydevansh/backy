@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
 import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -177,6 +178,13 @@ export async function PATCH(
         return errorResponse(400, 'VALIDATION_ERROR', 'A valid email address is required', requestId);
       }
 
+      if (nextEmail !== current.email) {
+        const emailPolicy = validateAdminEmailDomainPolicy(nextEmail);
+        if (!emailPolicy.ok) {
+          return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+        }
+      }
+
       if (!nextRole) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Role must be owner, admin, editor, or viewer', requestId);
       }
@@ -244,6 +252,13 @@ export async function PATCH(
 
     if (!nextEmail || !nextEmail.includes('@')) {
       return errorResponse(400, 'VALIDATION_ERROR', 'A valid email address is required', requestId);
+    }
+
+    if (nextEmail !== current.email) {
+      const emailPolicy = validateAdminEmailDomainPolicy(nextEmail);
+      if (!emailPolicy.ok) {
+        return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+      }
     }
 
     if (!nextRole) {

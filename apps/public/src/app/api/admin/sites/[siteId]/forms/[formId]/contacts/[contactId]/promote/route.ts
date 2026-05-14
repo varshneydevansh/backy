@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonObject, Contact } from '@backy-cms/core';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import {
   createAdminUser,
@@ -140,6 +141,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const existingUser = await repositories.users.getByEmail(email);
+      if (!existingUser) {
+        const emailPolicy = validateAdminEmailDomainPolicy(email);
+        if (!emailPolicy.ok) {
+          return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+        }
+      }
+
       const user = existingUser || (await repositories.users.create({
         fullName: contact.name?.trim() || email,
         email,
@@ -232,6 +240,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const existingUser = getAdminUserByEmail(email);
+    if (!existingUser) {
+      const emailPolicy = validateAdminEmailDomainPolicy(email);
+      if (!emailPolicy.ok) {
+        return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+      }
+    }
+
     const user = existingUser || createAdminUser({
       fullName: contact.name?.trim() || email,
       email,

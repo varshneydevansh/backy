@@ -291,6 +291,109 @@ await record('password reset follows configured minimum length', async () => {
   }
 });
 
+await record('admin user creation follows configured email domains', async () => {
+  const settingsBefore = await request('/api/admin/settings', {
+    headers: {
+      origin: adminDevOrigin,
+      'x-backy-admin-key': adminApiKey,
+    },
+  });
+  assert(settingsBefore.response.status === 200, `${settingsBefore.url} expected settings read 200`);
+  const originalAuth = settingsBefore.json?.data?.settings?.auth || {};
+  const unique = Date.now().toString(36);
+  let userId = '';
+
+  try {
+    const updateSettings = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        auth: {
+          ...originalAuth,
+          allowedEmailDomains: 'example.com, agency.dev',
+        },
+      }),
+    });
+    assert(updateSettings.response.status === 200, `${updateSettings.url} expected settings patch 200`);
+    assert(
+      updateSettings.json?.data?.settings?.auth?.allowedEmailDomains === 'example.com, agency.dev',
+      `${updateSettings.url} did not persist allowed email domains`,
+    );
+
+    const blockedCreate = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        fullName: `Blocked Domain ${unique}`,
+        email: `blocked-domain-${unique}@blocked.test`,
+        role: 'viewer',
+        status: 'invited',
+      }),
+    });
+    assert(blockedCreate.response.status === 400, `${blockedCreate.url} expected blocked domain 400, got ${blockedCreate.response.status}`);
+    assert(blockedCreate.json?.error?.code === 'EMAIL_DOMAIN_NOT_ALLOWED', `${blockedCreate.url} expected EMAIL_DOMAIN_NOT_ALLOWED`);
+
+    const allowedCreate = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        fullName: `Allowed Domain ${unique}`,
+        email: `allowed-domain-${unique}@example.com`,
+        role: 'viewer',
+        status: 'invited',
+      }),
+    });
+    assert(allowedCreate.response.status === 201, `${allowedCreate.url} expected allowed domain create 201, got ${allowedCreate.response.status}`);
+    userId = allowedCreate.json?.data?.user?.id || '';
+    assert(userId, `${allowedCreate.url} missing created user id`);
+
+    const blockedUpdate = await request(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        email: `blocked-update-${unique}@blocked.test`,
+      }),
+    });
+    assert(blockedUpdate.response.status === 400, `${blockedUpdate.url} expected blocked email update 400, got ${blockedUpdate.response.status}`);
+    assert(blockedUpdate.json?.error?.code === 'EMAIL_DOMAIN_NOT_ALLOWED', `${blockedUpdate.url} expected EMAIL_DOMAIN_NOT_ALLOWED on update`);
+  } finally {
+    if (userId) {
+      await request(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          origin: adminDevOrigin,
+          'x-backy-admin-key': adminApiKey,
+        },
+      }).catch(() => {});
+    }
+    await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ auth: originalAuth }),
+    }).catch(() => {});
+  }
+});
+
 console.log(`Admin auth smoke passed against ${baseUrl}`);
 for (const check of checks) {
   console.log(`- ${check.name} (${check.ms}ms)`);

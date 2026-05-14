@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -126,6 +127,11 @@ export async function POST(request: NextRequest) {
 
     if (!email || !email.includes('@')) {
       return errorResponse(400, 'VALIDATION_ERROR', 'A valid email address is required', requestId);
+    }
+
+    const emailPolicy = validateAdminEmailDomainPolicy(email);
+    if (!emailPolicy.ok) {
+      return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
     }
 
     if (!role) {

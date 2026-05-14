@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -26,6 +27,7 @@ type AdminUserForSafeguard = {
 type ImportError = {
   row: number;
   email?: string;
+  code?: string;
   message: string;
 };
 
@@ -288,6 +290,19 @@ export async function POST(request: NextRequest) {
         }
         continue;
       }
+
+      const emailPolicy = validateAdminEmailDomainPolicy(row.email);
+      if (!emailPolicy.ok) {
+        errors.push({
+          row: row.row,
+          email: row.email,
+          code: 'EMAIL_DOMAIN_NOT_ALLOWED',
+          message: emailPolicy.message,
+        });
+        skipped += 1;
+        continue;
+      }
+
       if (dryRun) {
         createdUsers.push({
           id: `preview_${row.email.replace(/[^a-z0-9]+/gi, '_')}`,
