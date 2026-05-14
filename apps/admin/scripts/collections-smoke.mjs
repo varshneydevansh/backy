@@ -1457,21 +1457,30 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       const updateToggle = document.querySelector('[data-testid="collections-public-update-toggle"] input');
       const deleteToggle = document.querySelector('[data-testid="collections-public-delete-toggle"] input');
       const tokenInput = document.querySelector('[data-testid="collections-visitor-write-token"]');
+      const createMode = document.querySelector('[data-testid="collections-visitor-write-policy-mode"]');
       const updateMode = document.querySelector('[data-testid="collections-visitor-update-policy-mode"]');
+      const createTitleField = document.querySelector('[data-testid="collections-visitor-write-field-title"]');
+      const createCategoryField = document.querySelector('[data-testid="collections-visitor-write-field-category"]');
+      const createSummaryField = document.querySelector('[data-testid="collections-visitor-write-field-summary"]');
       const summaryField = document.querySelector('[data-testid="collections-visitor-update-field-summary"]');
 
       if (!(updateToggle instanceof HTMLInputElement)) return { ok: false, reason: 'update-toggle-missing' };
       if (!(deleteToggle instanceof HTMLInputElement)) return { ok: false, reason: 'delete-toggle-missing' };
       if (!(tokenInput instanceof HTMLInputElement)) return { ok: false, reason: 'token-input-missing' };
+      if (!(createMode instanceof HTMLSelectElement)) return { ok: false, reason: 'create-mode-missing' };
       if (!(updateMode instanceof HTMLSelectElement)) return { ok: false, reason: 'update-mode-missing' };
+      if (!(createTitleField instanceof HTMLInputElement)) return { ok: false, reason: 'create-title-field-missing' };
+      if (!(createCategoryField instanceof HTMLInputElement)) return { ok: false, reason: 'create-category-field-missing' };
+      if (!(createSummaryField instanceof HTMLInputElement)) return { ok: false, reason: 'create-summary-field-missing' };
       if (!(summaryField instanceof HTMLInputElement)) return { ok: false, reason: 'summary-field-missing' };
-      if (updateToggle.disabled || deleteToggle.disabled || tokenInput.disabled || updateMode.disabled) {
+      if (updateToggle.disabled || deleteToggle.disabled || tokenInput.disabled || createMode.disabled || updateMode.disabled) {
         return {
           ok: false,
           reason: 'controls-disabled',
           updateDisabled: updateToggle.disabled,
           deleteDisabled: deleteToggle.disabled,
           tokenDisabled: tokenInput.disabled,
+          createModeDisabled: createMode.disabled,
           updateModeDisabled: updateMode.disabled,
         };
       }
@@ -1480,16 +1489,33 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       if (!deleteToggle.checked) deleteToggle.click();
       setNativeValue(tokenInput, ${JSON.stringify(token)});
       tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeValue(createMode, 'selected');
+      createMode.dispatchEvent(new Event('change', { bubbles: true }));
       setNativeValue(updateMode, 'selected');
       updateMode.dispatchEvent(new Event('change', { bubbles: true }));
+      [createTitleField, createCategoryField, createSummaryField].forEach((field) => {
+        if (!field.checked) field.click();
+      });
       if (!summaryField.checked) summaryField.click();
 
+      const createFieldsChecked = createTitleField.checked && createCategoryField.checked && createSummaryField.checked;
+      const updateFieldsChecked = summaryField.checked;
       return {
-        ok: true,
+        ok: updateToggle.checked &&
+          deleteToggle.checked &&
+          tokenInput.value === ${JSON.stringify(token)} &&
+          createMode.value === 'selected' &&
+          updateMode.value === 'selected' &&
+          createFieldsChecked &&
+          updateFieldsChecked,
         updateChecked: updateToggle.checked,
         deleteChecked: deleteToggle.checked,
         tokenValue: tokenInput.value,
+        createMode: createMode.value,
         updateMode: updateMode.value,
+        createTitleChecked: createTitleField.checked,
+        createCategoryChecked: createCategoryField.checked,
+        createSummaryChecked: createSummaryField.checked,
         summaryChecked: summaryField.checked,
       };
     })()`);
@@ -1505,14 +1531,22 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       updateChecked: document.querySelector('[data-testid="collections-public-update-toggle"] input')?.checked || false,
       deleteChecked: document.querySelector('[data-testid="collections-public-delete-toggle"] input')?.checked || false,
       tokenValue: document.querySelector('[data-testid="collections-visitor-write-token"]')?.value || '',
+      createMode: document.querySelector('[data-testid="collections-visitor-write-policy-mode"]')?.value || '',
       updateMode: document.querySelector('[data-testid="collections-visitor-update-policy-mode"]')?.value || '',
+      createTitleChecked: document.querySelector('[data-testid="collections-visitor-write-field-title"]')?.checked || false,
+      createCategoryChecked: document.querySelector('[data-testid="collections-visitor-write-field-category"]')?.checked || false,
+      createSummaryChecked: document.querySelector('[data-testid="collections-visitor-write-field-summary"]')?.checked || false,
       summaryChecked: document.querySelector('[data-testid="collections-visitor-update-field-summary"]')?.checked || false,
     }))()`);
     if (
       state.updateChecked &&
       state.deleteChecked &&
       state.tokenValue === token &&
+      state.createMode === 'selected' &&
       state.updateMode === 'selected' &&
+      state.createTitleChecked &&
+      state.createCategoryChecked &&
+      state.createSummaryChecked &&
       state.summaryChecked
     ) {
       break;
@@ -1561,6 +1595,12 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       collection?.permissions?.publicUpdate === true &&
       collection?.permissions?.publicDelete === true &&
       policy?.publicWriteToken === token &&
+      policy?.createFieldMode === 'selected' &&
+      Array.isArray(policy?.allowedCreateFields) &&
+      policy.allowedCreateFields.includes('title') &&
+      policy.allowedCreateFields.includes('category') &&
+      policy.allowedCreateFields.includes('summary') &&
+      !policy.allowedCreateFields.includes('website') &&
       policy?.updateFieldMode === 'selected' &&
       Array.isArray(policy?.allowedUpdateFields) &&
       policy.allowedUpdateFields.includes('summary')
@@ -1585,6 +1625,48 @@ const assertVisitorMutationPolicyPublicApi = async ({
 }) => {
   const originalRecord = await fetchRecordBySlug(collectionId, recordSlug);
   assert(originalRecord?.id, `Visitor mutation policy record missing before public API checks: ${JSON.stringify(originalRecord)}`);
+
+  const createRecordSlug = `smoke-public-create-${suffix}`;
+  const publicCreateSummary = `Public create summary ${suffix}`;
+  const publicCreateWebsite = `https://public-create-ignored-${suffix}.example.com`;
+  const acceptedCreate = await requestApiRaw(
+    `/api/sites/${SITE_ID}/collections/${collectionSlug}/records`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: createRecordSlug,
+        values: {
+          title: `Smoke public create ${suffix}`,
+          category: 'Smoke',
+          summary: publicCreateSummary,
+          website: publicCreateWebsite,
+        },
+      }),
+    },
+  );
+  assert(
+    acceptedCreate.response.status === 201 && acceptedCreate.payload?.success === true,
+    `Public create with selected fields failed: ${JSON.stringify({ status: acceptedCreate.response.status, payload: acceptedCreate.payload }).slice(0, 1000)}`,
+  );
+  const createPolicy = acceptedCreate.payload?.data?.visitorWritePolicy || acceptedCreate.payload?.visitorWritePolicy;
+  assert(
+    Array.isArray(createPolicy?.ignoredFields) &&
+      createPolicy.ignoredFields.includes('website') &&
+      Array.isArray(createPolicy.allowedCreateFields) &&
+      createPolicy.allowedCreateFields.includes('title') &&
+      createPolicy.allowedCreateFields.includes('category') &&
+      createPolicy.allowedCreateFields.includes('summary') &&
+      createPolicy.values?.summary === publicCreateSummary &&
+      createPolicy.values?.website === undefined,
+    `Public create field policy did not report ignored disallowed fields: ${JSON.stringify(createPolicy).slice(0, 800)}`,
+  );
+  const createdPublicRecord = await fetchRecordBySlug(collectionId, createRecordSlug);
+  assert(
+    createdPublicRecord?.status === 'draft' &&
+      createdPublicRecord.values?.summary === publicCreateSummary &&
+      createdPublicRecord.values?.website === undefined,
+    `Public create did not persist selected fields as a moderated draft: ${JSON.stringify(createdPublicRecord).slice(0, 800)}`,
+  );
 
   const rejectedUpdate = await requestApiRaw(
     `/api/sites/${SITE_ID}/collections/${collectionSlug}/records/${recordSlug}`,
