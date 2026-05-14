@@ -463,6 +463,11 @@ try {
     assert(draftManifest.json?.success === false, `${draftManifest.url} expected error envelope`);
     assert(draftManifest.response.headers.get('cache-control') === 'no-store', `${draftManifest.url} expected hidden manifest to be no-store`);
 
+    const draftNavigation = await request(`/api/sites/${createdSiteId}/navigation`);
+    assert(draftNavigation.response.status === 404, `${draftNavigation.url} expected draft site navigation to be hidden`);
+    assert(draftNavigation.json?.success === false, `${draftNavigation.url} expected error envelope`);
+    assert(draftNavigation.response.headers.get('cache-control') === 'no-store', `${draftNavigation.url} expected hidden navigation to be no-store`);
+
     const draftOpenApi = await request(`/api/sites/${createdSiteId}/openapi`);
     assert(draftOpenApi.response.status === 404, `${draftOpenApi.url} expected draft site OpenAPI to be hidden`);
     assert(draftOpenApi.json?.success === false, `${draftOpenApi.url} expected error envelope`);
