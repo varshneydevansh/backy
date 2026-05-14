@@ -1525,7 +1525,7 @@ function CollectionsPage() {
           ? 'Collection schema operation in progress...'
           : undefined;
   const isNewCollectionDraftOpen = isCollectionDraftMode && !activeCollection;
-  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Edit open draft' : 'Start new collection';
+  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Draft is open' : 'Open blank collection draft';
   const newCollectionButtonTitle = isNewCollectionDraftOpen
     ? 'A new collection draft is open. Jump to the schema form.'
     : schemaActionDisabledTitle;
@@ -3636,15 +3636,22 @@ function CollectionsPage() {
                 {newCollectionButtonLabel}
               </button>
               {isNewCollectionDraftOpen && canEditCollections && (
-                <button
-                  type="button"
-                  onClick={scrollToCollectionSchema}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary"
                   data-testid="collections-new-draft-action-state"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Draft ready below
-                </button>
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="font-semibold">Draft ready below</span>
+                  <button
+                    type="button"
+                    onClick={scrollToCollectionSchema}
+                    className="rounded-md border border-primary/30 bg-background px-2 py-1 font-semibold hover:bg-primary/10"
+                  >
+                    Name schema
+                  </button>
+                </div>
               )}
             </div>
             {newCollectionDisabledReason && (
@@ -3686,9 +3693,9 @@ function CollectionsPage() {
           data-testid="collections-draft-banner"
         >
           <div>
-            <div className="font-semibold">New collection draft is open</div>
+            <div className="font-semibold">Blank collection draft is open</div>
             <p className="mt-1 text-muted-foreground">
-              Add a schema name and fields, then save it to create a CMS collection for pages, forms, products, or custom frontend APIs.
+              Add a schema name and fields, then save it to create the collection. Nothing is created until the schema is saved.
             </p>
           </div>
           <button
@@ -3713,10 +3720,10 @@ function CollectionsPage() {
                 <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                   Create mode
                 </span>
-                <h2 className="text-base font-semibold text-foreground">Start the collection schema</h2>
+                <h2 className="text-base font-semibold text-foreground">Blank collection draft</h2>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Name the dataset here, then add fields and advanced permissions in the schema builder.
+                Name the dataset here, add fields and permissions in the schema builder, then save.
               </p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-sm" htmlFor="collections-draft-name">

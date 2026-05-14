@@ -816,10 +816,10 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
         hasActionState: Boolean(document.querySelector('[data-testid="collections-new-draft-action-state"]')) &&
           body.includes('Draft ready below'),
         hasDraftBanner: Boolean(document.querySelector('[data-testid="collections-draft-banner"]')) &&
-          body.includes('New collection draft is open') &&
+          body.includes('Blank collection draft is open') &&
           body.includes('Edit schema'),
         hasDraftStarter: Boolean(document.querySelector('[data-testid="collections-draft-starter"]')) &&
-          body.includes('Start the collection schema') &&
+          body.includes('Blank collection draft') &&
           body.includes('Add fields'),
         hasDraftState: Boolean(document.querySelector('[data-testid="collections-new-draft-state"]')),
         draftNameValue: document.querySelector('[data-testid="collections-draft-name-input"]') instanceof HTMLInputElement
