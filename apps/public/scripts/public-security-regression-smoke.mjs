@@ -778,6 +778,8 @@ assertExcludes(settingsRoute, 'placeholder="stripe_whsec_live"', 'settings UI mu
 assertIncludes(settingsRoute, 'pendingRotateKey', 'settings UI must require confirmation before API key rotation');
 assertIncludes(settingsRoute, 'settings-api-key-rotation-confirm-dialog', 'settings UI must render an API key rotation confirmation dialog');
 assertIncludes(settingsRoute, 'Existing integrations using', 'settings UI must warn that key rotation breaks existing integrations');
+assertIncludes(settingsRoute, 'const statusLabel = !canShowValue', 'settings UI must show redacted admin API keys as hidden, not unconfigured');
+assertIncludes(settingsRoute, 'Hidden without settings.manageKeys', 'settings UI must explain hidden admin API key values');
 
 const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');

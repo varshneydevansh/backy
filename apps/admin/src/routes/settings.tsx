@@ -4497,11 +4497,11 @@ function SecuritySettings({
             const displayValue = canShowValue
               ? item.value || 'Not configured'
               : 'Hidden without settings.manageKeys';
-            const statusLabel = !item.value
-              ? 'Not configured'
-              : canShowValue
+            const statusLabel = !canShowValue
+              ? 'Hidden'
+              : item.value
                 ? 'Active'
-                : 'Hidden';
+                : 'Not configured';
             const statusClassName = statusLabel === 'Active'
               ? 'bg-success/10 text-success'
               : statusLabel === 'Hidden'
