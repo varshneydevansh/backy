@@ -139,6 +139,64 @@ export const applySeoDefaults = (
   };
 };
 
+const routeOverrideMatches = (
+  override: NonNullable<SiteSettings['seo']['routeOverrides']>[number],
+  route: SeoRoute,
+) => {
+  const match = override.match.trim();
+  return match === route.canonical ||
+    match === route.path ||
+    match === route.id ||
+    match === `${route.type}:${route.id}`;
+};
+
+export const applySeoRouteOverrides = (
+  routes: SeoRoute[],
+  site: { settings?: Pick<SiteSettings, 'seo'> },
+): SeoRoute[] => {
+  const overrides = site.settings?.seo?.routeOverrides || [];
+  if (overrides.length === 0) {
+    return routes;
+  }
+
+  return routes.map((route) => {
+    const override = overrides.find((candidate) => (
+      candidate.enabled !== false && routeOverrideMatches(candidate, route)
+    ));
+    if (!override) {
+      return route;
+    }
+
+    const title = override.title || route.title;
+    const description = override.description || route.description;
+    const canonical = override.canonical || route.canonical;
+
+    return {
+      ...route,
+      title,
+      description,
+      path: canonical,
+      canonical,
+      priority: typeof override.priority === 'number' && Number.isFinite(override.priority)
+        ? Math.max(0, Math.min(1, override.priority))
+        : route.priority,
+      changeFrequency: override.changeFrequency || route.changeFrequency,
+      robots: {
+        index: override.robots?.index ?? route.robots.index,
+        follow: override.robots?.follow ?? route.robots.follow,
+      },
+      openGraph: {
+        ...route.openGraph,
+        title,
+        description,
+        image: override.ogImage || route.openGraph.image,
+      },
+      keywords: override.keywords && override.keywords.length > 0 ? override.keywords : route.keywords,
+      jsonLd: override.jsonLd && override.jsonLd.length > 0 ? override.jsonLd : route.jsonLd,
+    };
+  });
+};
+
 const clampPriority = (value: unknown): number | undefined => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return undefined;
@@ -173,18 +231,32 @@ export const applySeoSitemapAndRobotsSettings = (
   const includeDynamicRoutes = seo?.sitemap?.includeDynamicRoutes !== false;
   const defaultPriority = clampPriority(seo?.sitemap?.defaultPriority);
   const defaultChangeFrequency = seo?.sitemap?.defaultChangeFrequency;
+  const routeOverrides = seo?.routeOverrides || [];
 
   return routes
     .filter((route) => includeDynamicRoutes || (route.type !== 'dynamicItem' && route.type !== 'dynamicList'))
-    .map((route) => ({
-      ...route,
-      priority: defaultPriority === undefined || isHomepageRoute(route) ? route.priority : defaultPriority,
-      changeFrequency: defaultChangeFrequency && !isHomepageRoute(route) ? defaultChangeFrequency : route.changeFrequency,
-      robots: {
-        index: route.robots.index && robotsIndex,
-        follow: route.robots.follow && robotsFollow,
-      },
-    }));
+    .map((route) => {
+      const activeOverride = routeOverrides.find((candidate) => (
+        candidate.enabled !== false && (
+          routeOverrideMatches(candidate, route) ||
+          (typeof candidate.canonical === 'string' && candidate.canonical === route.canonical)
+        )
+      ));
+
+      return {
+        ...route,
+        priority: defaultPriority === undefined || isHomepageRoute(route) || activeOverride?.priority !== undefined
+          ? route.priority
+          : defaultPriority,
+        changeFrequency: defaultChangeFrequency && !isHomepageRoute(route) && !activeOverride?.changeFrequency
+          ? defaultChangeFrequency
+          : route.changeFrequency,
+        robots: {
+          index: route.robots.index && robotsIndex,
+          follow: route.robots.follow && robotsFollow,
+        },
+      };
+    });
 };
 
 export const sitemapRoutes = (discovery: SeoDiscovery): SeoRoute[] => (
@@ -450,7 +522,10 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
 
 export const buildSeoDiscovery = (site: StoreSite, options: { origin?: string } = {}): SeoDiscovery => {
   const routes = applySeoSitemapAndRobotsSettings(
-    buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site)),
+    applySeoRouteOverrides(
+      buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site)),
+      site,
+    ),
     site,
   );
   const seo = site.settings?.seo;

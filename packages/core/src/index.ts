@@ -72,6 +72,24 @@ export const DEFAULT_SITE_SETTINGS = {
       follow: true,
       extraRules: '',
     },
+    routeOverrides: [] as Array<{
+      id: string;
+      label?: string;
+      match: string;
+      title?: string;
+      description?: string;
+      canonical?: string;
+      ogImage?: string;
+      keywords?: string[];
+      jsonLd?: Array<Record<string, unknown>>;
+      priority?: number;
+      changeFrequency?: 'daily' | 'weekly' | 'monthly';
+      robots?: {
+        index?: boolean;
+        follow?: boolean;
+      };
+      enabled?: boolean;
+    }>,
   },
   analytics: {},
   social: {},

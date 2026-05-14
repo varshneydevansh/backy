@@ -64,6 +64,11 @@ const numberInRange = (value: unknown, fallback: number) => {
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
 };
 
+const optionalNumberInRange = (value: unknown): number | undefined => {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : undefined;
+};
+
 const applyTitleTemplate = (
   title: string,
   siteName: string,
@@ -144,6 +149,76 @@ const normalizeJsonLd = (
   }
 
   return { ok: true, value: entries };
+};
+
+const normalizeKeywords = (value: unknown): string[] | undefined => {
+  if (Array.isArray(value)) {
+    const keywords = value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter(Boolean);
+    return keywords.length > 0 ? keywords : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const keywords = value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return keywords.length > 0 ? keywords : undefined;
+  }
+
+  return undefined;
+};
+
+const normalizeRouteOverrides = (
+  value: unknown,
+): { ok: true; value: NonNullable<SiteSettings['seo']['routeOverrides']> } | { ok: false; message: string } => {
+  if (value === undefined) {
+    return { ok: true, value: [] };
+  }
+  if (!Array.isArray(value)) {
+    return { ok: false, message: 'Route overrides must be an array' };
+  }
+
+  const overrides: NonNullable<SiteSettings['seo']['routeOverrides']> = [];
+  for (const [index, entry] of value.entries()) {
+    if (!isRecord(entry)) {
+      return { ok: false, message: `Route override ${index + 1} must be an object` };
+    }
+    const match = text(entry.match) || '';
+    if (!match) {
+      continue;
+    }
+    const routeJsonLd = entry.jsonLd === undefined ? undefined : normalizeJsonLd(entry.jsonLd);
+    if (routeJsonLd && !routeJsonLd.ok) {
+      return { ok: false, message: `Route override ${index + 1}: ${routeJsonLd.message}` };
+    }
+    const robotsInput = isRecord(entry.robots) ? entry.robots : {};
+    const changeFrequency = entry.changeFrequency === 'daily' || entry.changeFrequency === 'weekly' || entry.changeFrequency === 'monthly'
+      ? entry.changeFrequency
+      : undefined;
+
+    overrides.push({
+      id: text(entry.id) || `route_override_${index + 1}`,
+      label: text(entry.label) || undefined,
+      match,
+      title: text(entry.title) || undefined,
+      description: text(entry.description) || undefined,
+      canonical: text(entry.canonical) || undefined,
+      ogImage: text(entry.ogImage) || undefined,
+      keywords: normalizeKeywords(entry.keywords),
+      jsonLd: routeJsonLd?.value,
+      priority: optionalNumberInRange(entry.priority),
+      changeFrequency,
+      robots: {
+        index: bool(robotsInput.index, true),
+        follow: bool(robotsInput.follow, true),
+      },
+      enabled: entry.enabled !== false,
+    });
+  }
+
+  return { ok: true, value: overrides };
 };
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
@@ -297,6 +372,7 @@ const normalizeSeoInput = (
   const robotsInput = isRecord(input.robots) ? input.robots : {};
   const issues: Array<{ field: string; message: string }> = [];
   const jsonLdInput = input.jsonLd === undefined ? undefined : normalizeJsonLd(input.jsonLd);
+  const routeOverridesInput = input.routeOverrides === undefined ? undefined : normalizeRouteOverrides(input.routeOverrides);
 
   if (titleTemplate && !titleTemplate.includes('%s') && !titleTemplate.includes('{title}')) {
     issues.push({ field: 'titleTemplate', message: 'Title template must include %s or {title}' });
@@ -304,6 +380,10 @@ const normalizeSeoInput = (
 
   if (jsonLdInput && !jsonLdInput.ok) {
     issues.push({ field: 'jsonLd', message: jsonLdInput.message });
+  }
+
+  if (routeOverridesInput && !routeOverridesInput.ok) {
+    issues.push({ field: 'routeOverrides', message: routeOverridesInput.message });
   }
 
   if (
@@ -347,6 +427,7 @@ const normalizeSeoInput = (
             follow: bool(robotsInput.follow, current.robots?.follow !== false),
             extraRules: robotsInput.extraRules === undefined ? current.robots?.extraRules || '' : text(robotsInput.extraRules) || '',
           },
+      routeOverrides: input.routeOverrides === undefined ? current.routeOverrides || [] : routeOverridesInput && routeOverridesInput.ok ? routeOverridesInput.value : [],
     },
   };
 };

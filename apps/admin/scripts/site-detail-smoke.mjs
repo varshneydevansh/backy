@@ -138,6 +138,32 @@ const createSite = async ({ name, slug, customDomain }) => {
   return site;
 };
 
+const createPage = async (siteId, { title, slug, description }) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title,
+      slug,
+      status: 'published',
+      description,
+      content: [],
+      meta: {
+        title,
+        description,
+        canonical: `/${slug}`,
+      },
+    }),
+  });
+  const page = payload.data?.page || payload.page;
+  assert(page?.id, `Create site detail SEO page did not return a page: ${JSON.stringify(payload).slice(0, 500)}`);
+  return page;
+};
+
+const deletePage = async (siteId, pageId) => {
+  if (!siteId || !pageId) return;
+  await requestApi(`/api/admin/sites/${siteId}/pages/${pageId}`, { method: 'DELETE' });
+};
+
 const deleteSite = async (siteId, sessionToken = apiAdminSessionToken) => {
   if (!siteId) return;
   await requestApi(`/api/admin/sites/${siteId}`, {
@@ -189,6 +215,11 @@ const getRedirects = async (siteId) => {
 const getSeo = async (siteId) => {
   const payload = await requestApi(`/api/admin/sites/${siteId}/seo`);
   return payload.data?.seo || payload.seo;
+};
+
+const getPublicSeo = async (siteId) => {
+  const payload = await requestApi(`/api/sites/${siteId}/seo`);
+  return payload.data || payload;
 };
 
 const getFrontendDesign = async (siteId) => {
@@ -1062,7 +1093,25 @@ const configureRedirectsThroughUi = async (client, { from, to }) => {
   await waitForText(client, '[data-testid="site-redirects-panel"]', 'Redirect rules saved', 'Redirect save notice');
 };
 
-const configureSeoThroughUi = async (client, { titleTemplate, description, ogImage, favicon, robotsRule }) => {
+const configureSeoThroughUi = async (client, {
+  titleTemplate,
+  description,
+  ogImage,
+  favicon,
+  robotsRule,
+  seoOverrideMatch,
+  seoOverrideTitle,
+  seoOverrideDescription,
+  seoOverrideCanonical,
+  seoOverrideOgImage,
+  seoOverrideKeywords,
+  seoOverridePriority,
+  seoOverrideFrequency,
+}) => {
+  if (seoOverrideMatch) {
+    await clickButtonByText(client, '[data-testid="site-seo-route-overrides-panel"]', 'Add route override');
+  }
+
   const result = await evaluate(client, `(() => {
     ${setInputValue}
     const section = document.querySelector('[data-testid="site-seo-panel"]');
@@ -1076,17 +1125,42 @@ const configureSeoThroughUi = async (client, { titleTemplate, description, ogIma
     const robots = Array.from(section.querySelectorAll('textarea')).find((textarea) => (
       textarea.getAttribute('placeholder') === 'Disallow: /private'
     ));
+    const overrideMatch = section.querySelector('[aria-label="SEO route override 1 match"]');
+    const overrideLabel = section.querySelector('[aria-label="SEO route override 1 label"]');
+    const overrideTitle = section.querySelector('[aria-label="SEO route override 1 title"]');
+    const overrideDescription = section.querySelector('[aria-label="SEO route override 1 description"]');
+    const overrideCanonical = section.querySelector('[aria-label="SEO route override 1 canonical"]');
+    const overrideOgImage = section.querySelector('[aria-label="SEO route override 1 Open Graph image"]');
+    const overrideKeywords = section.querySelector('[aria-label="SEO route override 1 keywords"]');
+    const overridePriority = section.querySelector('[aria-label="SEO route override 1 priority"]');
+    const overrideFrequency = section.querySelector('[aria-label="SEO route override 1 frequency"]');
+    const overrideIndex = section.querySelector('[aria-label="SEO route override 1 index"]');
+    const overrideFollow = section.querySelector('[aria-label="SEO route override 1 follow"]');
     if (
       !(title instanceof HTMLInputElement) ||
       !(og instanceof HTMLInputElement) ||
       !(faviconInput instanceof HTMLInputElement) ||
       !(descriptionInput instanceof HTMLTextAreaElement) ||
-      !(robots instanceof HTMLTextAreaElement)
+      !(robots instanceof HTMLTextAreaElement) ||
+      (${JSON.stringify(Boolean(seoOverrideMatch))} && (
+        !(overrideMatch instanceof HTMLInputElement) ||
+        !(overrideLabel instanceof HTMLInputElement) ||
+        !(overrideTitle instanceof HTMLInputElement) ||
+        !(overrideDescription instanceof HTMLTextAreaElement) ||
+        !(overrideCanonical instanceof HTMLInputElement) ||
+        !(overrideOgImage instanceof HTMLInputElement) ||
+        !(overrideKeywords instanceof HTMLInputElement) ||
+        !(overridePriority instanceof HTMLInputElement) ||
+        !(overrideFrequency instanceof HTMLSelectElement) ||
+        !(overrideIndex instanceof HTMLInputElement) ||
+        !(overrideFollow instanceof HTMLInputElement)
+      ))
     ) {
       return {
         ok: false,
         reason: 'seo-controls-missing',
-        inputs: Array.from(section.querySelectorAll('input')).map((input) => ({ placeholder: input.getAttribute('placeholder'), value: input.value })).slice(0, 20),
+        inputs: Array.from(section.querySelectorAll('input')).map((input) => ({ label: input.getAttribute('aria-label'), placeholder: input.getAttribute('placeholder'), value: input.value })).slice(0, 40),
+        selects: Array.from(section.querySelectorAll('select')).map((select) => ({ label: select.getAttribute('aria-label'), value: select.value })),
         textareas: Array.from(section.querySelectorAll('textarea')).map((textarea) => ({ placeholder: textarea.getAttribute('placeholder'), value: textarea.value })).slice(0, 12),
       };
     }
@@ -1096,6 +1170,19 @@ const configureSeoThroughUi = async (client, { titleTemplate, description, ogIma
     setNativeValue(og, ${JSON.stringify(ogImage)});
     setNativeValue(faviconInput, ${JSON.stringify(favicon)});
     setNativeValue(robots, ${JSON.stringify(robotsRule)});
+    if (${JSON.stringify(Boolean(seoOverrideMatch))}) {
+      setNativeValue(overrideLabel, 'Smoke route override');
+      setNativeValue(overrideMatch, ${JSON.stringify(seoOverrideMatch || '')});
+      setNativeValue(overrideTitle, ${JSON.stringify(seoOverrideTitle || '')});
+      setNativeValue(overrideDescription, ${JSON.stringify(seoOverrideDescription || '')});
+      setNativeValue(overrideCanonical, ${JSON.stringify(seoOverrideCanonical || '')});
+      setNativeValue(overrideOgImage, ${JSON.stringify(seoOverrideOgImage || '')});
+      setNativeValue(overrideKeywords, ${JSON.stringify(seoOverrideKeywords || '')});
+      setNativeValue(overridePriority, String(${JSON.stringify(seoOverridePriority ?? 0.9)}));
+      setNativeValue(overrideFrequency, ${JSON.stringify(seoOverrideFrequency || 'daily')});
+      if (!overrideIndex.checked) overrideIndex.click();
+      if (!overrideFollow.checked) overrideFollow.click();
+    }
     return {
       ok: true,
       title: title.value,
@@ -1103,6 +1190,8 @@ const configureSeoThroughUi = async (client, { titleTemplate, description, ogIma
       og: og.value,
       favicon: faviconInput.value,
       robots: robots.value,
+      overrideMatch: overrideMatch instanceof HTMLInputElement ? overrideMatch.value : null,
+      overrideTitle: overrideTitle instanceof HTMLInputElement ? overrideTitle.value : null,
     };
   })()`);
   assert(result.ok, `Unable to configure SEO through UI: ${JSON.stringify(result)}`);
@@ -1192,8 +1281,33 @@ const assertApiReadback = async (siteId, expected) => {
       seo?.defaultDescription === expected.description &&
       seo?.defaultOgImage === expected.ogImage &&
       seo?.favicon === expected.favicon &&
-      seo?.robots?.extraRules === expected.robotsRule,
+      seo?.robots?.extraRules === expected.robotsRule &&
+      seo?.routeOverrides?.some((override) => (
+        override.match === expected.seoOverrideMatch &&
+        override.title === expected.seoOverrideTitle &&
+        override.description === expected.seoOverrideDescription &&
+        override.canonical === expected.seoOverrideCanonical &&
+        override.ogImage === expected.seoOverrideOgImage &&
+        override.priority === expected.seoOverridePriority &&
+        override.changeFrequency === expected.seoOverrideFrequency &&
+        override.keywords?.includes('route-override') &&
+        override.robots?.index === true &&
+        override.robots?.follow === true
+      )),
     `SEO API did not include saved defaults: ${JSON.stringify(seo).slice(0, 1000)}`,
+  );
+  const publicSeo = await getPublicSeo(siteId);
+  const overriddenRoute = publicSeo.routes?.find((route) => route.canonical === expected.seoOverrideCanonical);
+  assert(
+    overriddenRoute?.title === expected.seoOverrideTitle &&
+      overriddenRoute?.description === expected.seoOverrideDescription &&
+      overriddenRoute?.openGraph?.image === expected.seoOverrideOgImage &&
+      overriddenRoute?.priority === expected.seoOverridePriority &&
+      overriddenRoute?.changeFrequency === expected.seoOverrideFrequency &&
+      overriddenRoute?.keywords?.includes('route-override') &&
+      overriddenRoute?.robots?.index === true &&
+      overriddenRoute?.robots?.follow === true,
+    `Public SEO discovery did not expose route override: ${JSON.stringify({ overriddenRoute, routes: publicSeo.routes?.slice(0, 12) }).slice(0, 1800)}`,
   );
   assert(
     domainVerification?.status === 'verified' &&
@@ -1360,6 +1474,7 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let siteId;
+  let seoPageId;
   let ownerUserId;
   let ownerSessionToken;
   const suffix = Date.now().toString(36);
@@ -1377,6 +1492,14 @@ const main = async () => {
     ogImage: `/uploads/${slug}/social-card.png`,
     favicon: `/uploads/${slug}/favicon.ico`,
     robotsRule: `Disallow: /private-${suffix}`,
+    seoRouteSlug: `seo-route-${suffix}`,
+    seoOverrideTitle: `Smoke SEO Override ${suffix}`,
+    seoOverrideDescription: `Route-specific SEO override description for ${siteName}.`,
+    seoOverrideCanonical: `/seo-route-${suffix}-canonical`,
+    seoOverrideOgImage: `/uploads/${slug}/route-social-card.png`,
+    seoOverrideKeywords: 'route-override, smoke-seo',
+    seoOverridePriority: 0.9,
+    seoOverrideFrequency: 'daily',
     commentBlockedTerm: `blocked-${suffix}`,
     commentClosedMessage: `Comments are closed for ${siteName}.`,
     frontendLabel: `Smoke Frontend ${suffix}`,
@@ -1434,6 +1557,13 @@ const main = async () => {
     });
     siteId = site.id;
     await assertAdminSiteDeleteDenied(siteId);
+    const seoPage = await createPage(site.id, {
+      title: `SEO Route ${suffix}`,
+      slug: expected.seoRouteSlug,
+      description: `Temporary route for site-level SEO override smoke on ${siteName}.`,
+    });
+    seoPageId = seoPage.id;
+    expected.seoOverrideMatch = `/${expected.seoRouteSlug}`;
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1479,6 +1609,8 @@ const main = async () => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
 
+    await deletePage(siteId, seoPageId);
+    seoPageId = null;
     await deleteSite(siteId, ownerSessionToken);
     await waitForSiteMissing(slug);
     siteId = null;
@@ -1492,6 +1624,9 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (siteId && seoPageId) {
+      await deletePage(siteId, seoPageId).catch(() => {});
+    }
     await cleanup({ client, childProcess, userDataDir, siteId, ownerSessionToken, ownerUserId });
   }
 };

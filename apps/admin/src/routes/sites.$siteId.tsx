@@ -66,6 +66,7 @@ import type {
   AdminFrontendDesignResponse,
   AdminSiteRedirectConflict,
   AdminSiteSeoPreview,
+  AdminSiteSeoPreviewRoute,
   AdminSiteSeoSettings,
   AdminContact,
   FormDefinition,
@@ -574,6 +575,7 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
     follow: true,
     extraRules: '',
   },
+  routeOverrides: [],
 };
 
 const EMPTY_SEO_PREVIEW: AdminSiteSeoPreview = {
@@ -698,6 +700,37 @@ const parseJsonLd = (value: string): Array<Record<string, unknown>> => {
 
   return parsed as Array<Record<string, unknown>>;
 };
+
+type SiteSeoRouteOverride = NonNullable<AdminSiteSeoSettings['routeOverrides']>[number];
+
+const parseSeoKeywordsText = (value: string): string[] | undefined => {
+  const keywords = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return keywords.length > 0 ? keywords : undefined;
+};
+
+const makeSeoRouteOverride = (
+  index: number,
+  route?: AdminSiteSeoPreviewRoute,
+): SiteSeoRouteOverride => ({
+  id: `route_override_${Date.now().toString(36)}_${index}`,
+  label: route ? `${route.sourceTitle || route.title} SEO override` : `Route override ${index}`,
+  match: route?.canonical || '/',
+  title: route?.title || '',
+  description: route?.description || '',
+  canonical: route?.canonical || '',
+  ogImage: '',
+  keywords: [],
+  priority: route?.type === 'dynamicItem' ? 0.6 : 0.7,
+  changeFrequency: 'weekly',
+  robots: {
+    index: true,
+    follow: true,
+  },
+  enabled: true,
+});
 
 function makeRedirectRule(): SiteRedirectRule {
   return {
@@ -2052,6 +2085,47 @@ function EditSitePage() {
     }));
   };
 
+  const handleAddSeoRouteOverride = (route?: AdminSiteSeoPreviewRoute) => {
+    if (!canConfigureSite) return;
+    setSeoState((prev) => ({
+      ...prev,
+      notice: null,
+      seo: {
+        ...prev.seo,
+        routeOverrides: [
+          ...(prev.seo.routeOverrides || []),
+          makeSeoRouteOverride((prev.seo.routeOverrides?.length || 0) + 1, route),
+        ],
+      },
+    }));
+  };
+
+  const handleUpdateSeoRouteOverride = (index: number, patch: Partial<SiteSeoRouteOverride>) => {
+    if (!canConfigureSite) return;
+    setSeoState((prev) => ({
+      ...prev,
+      notice: null,
+      seo: {
+        ...prev.seo,
+        routeOverrides: (prev.seo.routeOverrides || []).map((override, currentIndex) => (
+          currentIndex === index ? { ...override, ...patch } : override
+        )),
+      },
+    }));
+  };
+
+  const handleRemoveSeoRouteOverride = (index: number) => {
+    if (!canConfigureSite) return;
+    setSeoState((prev) => ({
+      ...prev,
+      notice: null,
+      seo: {
+        ...prev.seo,
+        routeOverrides: (prev.seo.routeOverrides || []).filter((_, currentIndex) => currentIndex !== index),
+      },
+    }));
+  };
+
   const handleSaveSeo = async () => {
     if (!siteApiId) return;
     if (!canConfigureSite) {
@@ -3026,7 +3100,8 @@ function EditSitePage() {
       seoState.seo.defaultDescription ||
       seoState.seo.defaultOgImage ||
       seoState.seo.favicon ||
-      seoState.seo.jsonLd?.length,
+      seoState.seo.jsonLd?.length ||
+      seoState.seo.routeOverrides?.length,
     );
     const enabledWebhookEndpoints = webhookState.endpoints.filter((endpoint) => endpoint.enabled && endpoint.url.trim());
     const hasFrontendDesign = frontendDesignState.frontendDesign.status !== 'unconfigured';
@@ -3074,7 +3149,7 @@ function EditSitePage() {
       {
         label: 'SEO defaults',
         detail: hasSeoDefaults
-          ? 'Site SEO defaults are available to hosted and custom frontend routes.'
+          ? `${seoState.seo.routeOverrides?.length || 0} route override${(seoState.seo.routeOverrides?.length || 0) === 1 ? '' : 's'} plus site defaults are available to hosted and custom frontend routes.`
           : 'Add default SEO metadata before relying on public discovery.',
         ready: hasSeoDefaults,
       },
@@ -3146,6 +3221,7 @@ function EditSitePage() {
     seoState.seo.defaultOgImage,
     seoState.seo.favicon,
     seoState.seo.jsonLd?.length,
+    seoState.seo.routeOverrides?.length,
     seoState.seo.titleTemplate,
     site?.customDomain,
     site?.slug,
@@ -3239,6 +3315,7 @@ function EditSitePage() {
       defaultDescription: seoState.seo.defaultDescription,
       sitemap: seoState.seo.sitemap,
       robots: seoState.seo.robots,
+      routeOverrides: seoState.seo.routeOverrides || [],
       jsonLdCount: seoState.seo.jsonLd?.length || 0,
     },
     webhooks: {
@@ -3330,6 +3407,7 @@ function EditSitePage() {
     seoState.seo.defaultDescription,
     seoState.seo.jsonLd?.length,
     seoState.seo.robots,
+    seoState.seo.routeOverrides,
     seoState.seo.sitemap,
     seoState.seo.titleTemplate,
     site?.customDomain,
@@ -5106,6 +5184,190 @@ function EditSitePage() {
                   className="mt-3 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs leading-5 focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder='[{"@context":"https://schema.org","@type":"Organization","name":"Example"}]'
                 />
+              </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3" data-testid="site-seo-route-overrides-panel">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Route SEO overrides</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Override exact canonical paths or route ids after site defaults are applied.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSeoRouteOverride()}
+                    disabled={areSeoEditsDisabled}
+                    title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add route override
+                  </button>
+                </div>
+                {(seoState.seo.routeOverrides || []).length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+                    No route-level overrides. Use them for custom canonical paths, campaign landing pages, and dynamic collection route SEO.
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {(seoState.seo.routeOverrides || []).map((override, overrideIndex) => (
+                      <div key={override.id || overrideIndex} className="rounded-md border border-border bg-card p-3">
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Label
+                            <input
+                              value={override.label || ''}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { label: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} label`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Match
+                            <input
+                              value={override.match}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { match: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              placeholder="/pricing or page:page-id"
+                              aria-label={`SEO route override ${overrideIndex + 1} match`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Title
+                            <input
+                              value={override.title || ''}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { title: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} title`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Canonical
+                            <input
+                              value={override.canonical || ''}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { canonical: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              placeholder="/canonical-path"
+                              aria-label={`SEO route override ${overrideIndex + 1} canonical`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground lg:col-span-2">
+                            Description
+                            <textarea
+                              value={override.description || ''}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { description: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              rows={2}
+                              className="min-h-16 resize-y rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} description`}
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(160px,1fr)_110px_140px_110px_110px_auto]">
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Open Graph image
+                            <input
+                              value={override.ogImage || ''}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { ogImage: event.target.value })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} Open Graph image`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Priority
+                            <input
+                              type="number"
+                              min={0}
+                              max={1}
+                              step={0.1}
+                              value={override.priority ?? 0.7}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { priority: Number(event.target.value) })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} priority`}
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                            Frequency
+                            <select
+                              value={override.changeFrequency || 'weekly'}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, {
+                                changeFrequency: event.target.value as SiteSeoRouteOverride['changeFrequency'],
+                              })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`SEO route override ${overrideIndex + 1} frequency`}
+                            >
+                              <option value="daily">Daily</option>
+                              <option value="weekly">Weekly</option>
+                              <option value="monthly">Monthly</option>
+                            </select>
+                          </label>
+                          <label className="flex min-h-10 items-end gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={override.robots?.index !== false}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, {
+                                robots: { ...override.robots, index: event.target.checked },
+                              })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              aria-label={`SEO route override ${overrideIndex + 1} index`}
+                            />
+                            Index
+                          </label>
+                          <label className="flex min-h-10 items-end gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={override.robots?.follow !== false}
+                              onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, {
+                                robots: { ...override.robots, follow: event.target.checked },
+                              })}
+                              disabled={areSeoEditsDisabled}
+                              title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                              aria-label={`SEO route override ${overrideIndex + 1} follow`}
+                            />
+                            Follow
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSeoRouteOverride(overrideIndex)}
+                            disabled={areSeoEditsDisabled}
+                            title={canConfigureSite ? 'Remove route override' : configureSitePermissionTitle}
+                            className="self-end rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <label className="mt-3 grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                          Keywords
+                          <input
+                            value={(override.keywords || []).join(', ')}
+                            onChange={(event) => handleUpdateSeoRouteOverride(overrideIndex, { keywords: parseSeoKeywordsText(event.target.value) })}
+                            disabled={areSeoEditsDisabled}
+                            title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                            className="min-h-10 rounded-md border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            placeholder="landing, pricing, launch"
+                            aria-label={`SEO route override ${overrideIndex + 1} keywords`}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="rounded-lg border border-border bg-background px-4 py-3">
                 <div className="text-xs font-semibold uppercase text-muted-foreground">Preview</div>

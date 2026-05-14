@@ -276,6 +276,26 @@ export interface SiteSettings {
       /** Additional robots.txt directives appended after the Backy defaults */
       extraRules?: string;
     };
+    /** Route-specific SEO overrides for pages, posts, and dynamic collection routes */
+    routeOverrides?: Array<{
+      id: string;
+      label?: string;
+      /** Exact canonical path, route id, or `${type}:${id}` selector */
+      match: string;
+      title?: string;
+      description?: string;
+      canonical?: string;
+      ogImage?: string;
+      keywords?: string[];
+      jsonLd?: Array<Record<string, unknown>>;
+      priority?: number;
+      changeFrequency?: 'daily' | 'weekly' | 'monthly';
+      robots?: {
+        index?: boolean;
+        follow?: boolean;
+      };
+      enabled?: boolean;
+    }>;
   };
 
   /** Analytics configuration */
