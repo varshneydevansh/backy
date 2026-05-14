@@ -38,6 +38,32 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const hasPublicOrderCollectionAccess = (permissions: {
+  publicRead?: boolean;
+  publicCreate?: boolean;
+  publicUpdate?: boolean;
+  publicDelete?: boolean;
+} = {}) => (
+  permissions.publicRead === true ||
+  permissions.publicCreate === true ||
+  permissions.publicUpdate === true ||
+  permissions.publicDelete === true
+);
+
+const hasPrivateOrderIntake = (collection: {
+  status?: string;
+  permissions?: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+} | null | undefined) => Boolean(
+  collection &&
+  collection.status === 'published' &&
+  !hasPublicOrderCollectionAccess(collection.permissions),
+);
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value && typeof value === 'object' && !Array.isArray(value))
 );
@@ -300,7 +326,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         settings: settings.integrations?.commerce,
         hasCatalog: Boolean(productsCollection?.status === 'published' && productsCollection.permissions.publicRead),
-        hasOrderIntake: Boolean(ordersCollection?.status === 'published' && !ordersCollection.permissions.publicRead && !ordersCollection.permissions.publicCreate),
+        hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
       });
 
       if (!commerce.webhooks.eventsEnabled) {
@@ -409,7 +435,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
       settings: settings.integrations?.commerce,
       hasCatalog: Boolean(productsCollection?.status === 'published' && productsCollection.permissions.publicRead),
-      hasOrderIntake: Boolean(ordersCollection?.status === 'published' && !ordersCollection.permissions.publicRead && !ordersCollection.permissions.publicCreate),
+      hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
     });
 
     if (!commerce.webhooks.eventsEnabled) {

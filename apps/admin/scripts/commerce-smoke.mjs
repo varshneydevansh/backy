@@ -398,6 +398,65 @@ const restoreCollection = async (snapshot, currentCollection) => {
   }
 };
 
+const updateCollectionPermissions = async (collection, permissions) => {
+  assert(collection?.id, `Cannot update permissions for missing collection: ${JSON.stringify(collection)}`);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ permissions }),
+  });
+
+  return payload.data?.collection || payload.data || payload.collection;
+};
+
+const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection) => {
+  assert(ordersCollection?.id, 'Orders collection was not available for order intake readiness check');
+  const originalPermissions = {
+    publicRead: false,
+    publicCreate: false,
+    publicUpdate: false,
+    publicDelete: false,
+    ...(ordersCollection.permissions || {}),
+  };
+  const exposedUpdatePermissions = {
+    ...originalPermissions,
+    publicRead: false,
+    publicCreate: false,
+    publicUpdate: true,
+    publicDelete: false,
+  };
+
+  try {
+    await updateCollectionPermissions(ordersCollection, exposedUpdatePermissions);
+
+    const catalogPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?limit=1`);
+    const catalogCommerce = catalogPayload.data?.commerce || catalogPayload.commerce;
+    assert(catalogCommerce?.capabilities?.catalog === true, `Catalog capability should remain available: ${JSON.stringify(catalogCommerce)}`);
+    assert(catalogCommerce.capabilities.orderIntake === false, `Catalog advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(catalogCommerce)}`);
+
+    const manifestPayload = await requestApi(`/api/sites/${SITE_ID}/manifest`);
+    const manifestCommerce = manifestPayload.data?.commerce || manifestPayload.commerce;
+    assert(manifestCommerce?.capabilities?.orderIntake === false, `Manifest advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(manifestCommerce)}`);
+
+    const orderContractResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`);
+    const orderContractPayload = await orderContractResponse.json().catch(() => ({}));
+    assert(orderContractResponse.status === 409, `Order contract should reject public order collection access: ${orderContractResponse.status} ${JSON.stringify(orderContractPayload)}`);
+    assert(orderContractPayload?.error?.code === 'ORDER_QUEUE_NOT_PRIVATE', `Order contract returned wrong private queue error: ${JSON.stringify(orderContractPayload)}`);
+  } finally {
+    await updateCollectionPermissions(ordersCollection, originalPermissions);
+  }
+
+  const restored = await findCollection(ORDERS_COLLECTION_SLUG);
+  assert(
+    restored?.permissions?.publicRead === originalPermissions.publicRead &&
+    restored?.permissions?.publicCreate === originalPermissions.publicCreate &&
+    restored?.permissions?.publicUpdate === originalPermissions.publicUpdate &&
+    restored?.permissions?.publicDelete === originalPermissions.publicDelete,
+    `Orders permissions were not restored after readiness check: ${JSON.stringify(restored?.permissions)}`,
+  );
+
+  return restored;
+};
+
 const mergeSchemaFields = (currentFields = [], requiredFields = []) => {
   const currentByKey = new Map(currentFields.map((field) => [field.key, field]));
   const requiredKeys = new Set(requiredFields.map((field) => field.key));
@@ -826,6 +885,8 @@ const ensureOrdersReady = async (client) => ensureCollectionReadyFromUi(
         collection.status === 'published' &&
         !collection.permissions?.publicRead &&
         !collection.permissions?.publicCreate &&
+        !collection.permissions?.publicUpdate &&
+        !collection.permissions?.publicDelete &&
         (collection.fields?.length || 0) >= ORDER_REQUIRED_FIELD_COUNT
       ),
       collectionId: collection?.id,
@@ -1418,6 +1479,7 @@ const main = async () => {
     finalOrdersCollection = await findCollection(ORDERS_COLLECTION_SLUG);
     assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
     assert(finalOrdersCollection?.id, 'Orders collection was not available after UI setup');
+    finalOrdersCollection = await assertOrderIntakeReadinessRequiresPrivateOrders(finalOrdersCollection);
 
     const importedProduct = await assertProductCsvImport({
       productCollection: finalProductCollection,

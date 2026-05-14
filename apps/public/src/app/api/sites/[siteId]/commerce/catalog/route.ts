@@ -41,6 +41,32 @@ const toBooleanFilter = (value: string | null): boolean | undefined => {
   return undefined;
 };
 
+const hasPublicOrderCollectionAccess = (permissions: {
+  publicRead?: boolean;
+  publicCreate?: boolean;
+  publicUpdate?: boolean;
+  publicDelete?: boolean;
+}) => (
+  permissions.publicRead === true ||
+  permissions.publicCreate === true ||
+  permissions.publicUpdate === true ||
+  permissions.publicDelete === true
+);
+
+const hasPrivateOrderIntake = (collection: {
+  status?: string;
+  permissions?: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+} | null | undefined) => Boolean(
+  collection &&
+  collection.status === 'published' &&
+  !hasPublicOrderCollectionAccess(collection.permissions || {}),
+);
+
 const paginationFor = (total: number, limit: number, offset: number) => ({
   total,
   limit,
@@ -163,12 +189,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         settings: settings.integrations?.commerce,
         hasCatalog: true,
-        hasOrderIntake: Boolean(
-          ordersCollection &&
-          ordersCollection.status === 'published' &&
-          !ordersCollection.permissions.publicRead &&
-          !ordersCollection.permissions.publicCreate
-        ),
+        hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
       });
 
       const recordsPayload = slug
@@ -240,12 +261,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
       settings: getAdminSettings().integrations?.commerce,
       hasCatalog: true,
-      hasOrderIntake: Boolean(
-        ordersCollection &&
-        ordersCollection.status === 'published' &&
-        !ordersCollection.permissions.publicRead &&
-        !ordersCollection.permissions.publicCreate
-      ),
+      hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
     });
 
     const recordsPayload = slug

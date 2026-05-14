@@ -46,6 +46,18 @@ type ManifestCollectionRoute = {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const hasPublicOrderCollectionAccess = (permissions: {
+  publicRead?: boolean;
+  publicCreate?: boolean;
+  publicUpdate?: boolean;
+  publicDelete?: boolean;
+}) => (
+  permissions.publicRead === true ||
+  permissions.publicCreate === true ||
+  permissions.publicUpdate === true ||
+  permissions.publicDelete === true
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   publicContractJson(
     {
@@ -201,8 +213,7 @@ const buildRepositoryManifest = (
   const hasPrivateOrders = input.collections.some((collection) => (
     collection.slug === 'orders' &&
     collection.status === 'published' &&
-    !collection.permissions.publicRead &&
-    !collection.permissions.publicCreate
+    !hasPublicOrderCollectionAccess(collection.permissions)
   ));
   const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
   const commerce = buildCommerceStorefrontContract({
@@ -520,8 +531,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const hasPrivateOrders = collections.some((collection) => (
       collection.slug === 'orders' &&
       collection.status === 'published' &&
-      !collection.permissions.publicRead &&
-      !collection.permissions.publicCreate
+      !hasPublicOrderCollectionAccess(collection.permissions)
     ));
     const commerce = buildCommerceStorefrontContract({
       siteId: site.id,
