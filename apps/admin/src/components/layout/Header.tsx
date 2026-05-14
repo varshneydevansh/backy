@@ -34,6 +34,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
+import {
+  canAccessAdminNavigationArea,
+  useCurrentAdminPermissionMatrix,
+  type AdminNavigationArea,
+} from '@/lib/adminNavigationAccess';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
@@ -100,6 +105,24 @@ type SearchResult =
   | { id: string; type: 'Order'; title: string; detail: string; action: { route: 'order'; orderId: string } }
   | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
   | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: StaticToolRoute } };
+
+const STATIC_ROUTE_AREA: Record<StaticToolRoute, AdminNavigationArea> = {
+  '/': 'dashboard',
+  '/sites': 'sites',
+  '/pages': 'pages',
+  '/blog': 'blog',
+  '/forms': 'forms',
+  '/comments': 'comments',
+  '/contacts': 'contacts',
+  '/media': 'media',
+  '/products': 'commerce',
+  '/orders': 'commerce',
+  '/collections': 'collections',
+  '/reusable-sections': 'sections',
+  '/teams': 'teams',
+  '/users': 'users',
+  '/settings': 'settings',
+};
 
 const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
   settings?.integrations?.notifications?.inApp?.comments !== false
@@ -182,6 +205,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const { user, signOut } = useAuthStore();
+  const { permissionMatrix } = useCurrentAdminPermissionMatrix(user);
   const sites = useStore((state) => state.sites);
   const storeUsers = useStore((state) => state.users);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -224,12 +248,18 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const notificationCount = pendingComments.length + workflowNotifications.length;
   const isNotificationMutationBusy = updatingCommentIds.length > 0;
   const isNotificationCenterBusy = notificationsLoading || isNotificationMutationBusy;
+  const canAccessArea = useCallback((area: AdminNavigationArea) => (
+    canAccessAdminNavigationArea(permissionMatrix, user, area)
+  ), [permissionMatrix, user]);
+  const searchLoadKey = useMemo(() => (
+    `${activeSiteId}:${permissionMatrix ? `${permissionMatrix.summary.allowed}/${permissionMatrix.summary.total}` : user?.role || 'anonymous'}`
+  ), [activeSiteId, permissionMatrix, user?.role]);
   const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
     const routeCount = (route: WorkflowNotification['action']['route']) => (
       workflowNotifications.filter((notification) => notification.action.route === route).length
     );
 
-    return [
+    const shortcuts: WorkflowShortcut[] = [
       {
         id: 'comments',
         label: 'Comments',
@@ -287,7 +317,9 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         icon: SlidersHorizontal,
       },
     ];
-  }, [commentsAlertsDisabled, pendingComments.length, workflowNotifications]);
+
+    return shortcuts.filter((shortcut) => canAccessAdminNavigationArea(permissionMatrix, user, STATIC_ROUTE_AREA[shortcut.to]));
+  }, [commentsAlertsDisabled, pendingComments.length, permissionMatrix, user, workflowNotifications]);
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (normalizedQuery.length < 2) return searchIndex.slice(0, 6);
@@ -615,19 +647,29 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       : 'Open dashboard';
 
   const loadGlobalSearch = useCallback(async () => {
-    if (searchLoading || searchLoadedForSiteId === activeSiteId) return;
+    if (searchLoading || searchLoadedForSiteId === searchLoadKey) return;
     setSearchLoading(true);
     setSearchError(null);
 
     try {
+      const canViewSites = canAccessArea('sites');
+      const canViewPages = canAccessArea('pages');
+      const canViewBlog = canAccessArea('blog');
+      const canViewForms = canAccessArea('forms');
+      const canViewComments = canAccessArea('comments');
+      const canViewContacts = canAccessArea('contacts');
+      const canViewMedia = canAccessArea('media');
+      const canViewCollections = canAccessArea('collections');
+      const canViewCommerce = canAccessArea('commerce');
+      const canViewUsers = canAccessArea('users');
       const [loadedSites, pages, posts, forms, comments, mediaAssets, collections] = await Promise.all([
-        listSites().catch(() => []),
-        listPages(activeSiteId).catch(() => []),
-        listBlogPosts(activeSiteId).catch(() => []),
-        listForms(activeSiteId).catch(() => []),
-        listComments(activeSiteId, { status: 'all', limit: 20, sort: 'newest' }).then((result) => result.comments).catch(() => []),
-        listMedia({ siteId: activeSiteId, limit: 20 }).catch(() => []),
-        listCollections(activeSiteId).catch(() => []),
+        canViewSites ? listSites().catch(() => []) : Promise.resolve([]),
+        canViewPages ? listPages(activeSiteId).catch(() => []) : Promise.resolve([]),
+        canViewBlog ? listBlogPosts(activeSiteId).catch(() => []) : Promise.resolve([]),
+        canViewForms ? listForms(activeSiteId).catch(() => []) : Promise.resolve([]),
+        canViewComments ? listComments(activeSiteId, { status: 'all', limit: 20, sort: 'newest' }).then((result) => result.comments).catch(() => []) : Promise.resolve([]),
+        canViewMedia ? listMedia({ siteId: activeSiteId, limit: 20 }).catch(() => []) : Promise.resolve([]),
+        canViewCollections || canViewCommerce ? listCollections(activeSiteId).catch(() => []) : Promise.resolve([]),
       ]);
       const productsCollection = collections.find((collection) => collection.slug === 'products');
       const ordersCollection = collections.find((collection) => collection.slug === 'orders');
@@ -635,27 +677,29 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         collection.slug !== 'products' && collection.slug !== 'orders'
       ));
       const contactGroups = await Promise.all(
-        forms.map((form) => listFormContacts(activeSiteId, form.id, { limit: 20 }).then((result) => result.contacts).catch(() => [])),
+        canViewContacts
+          ? forms.map((form) => listFormContacts(activeSiteId, form.id, { limit: 20 }).then((result) => result.contacts).catch(() => []))
+          : [],
       );
       const [productRecords, orderRecords] = await Promise.all([
-        productsCollection
+        productsCollection && canViewCommerce
           ? listCollectionRecords(activeSiteId, productsCollection.id, { limit: 20, sortBy: 'updatedAt', sortDirection: 'desc' })
             .then((result) => result.records)
             .catch(() => [])
           : Promise.resolve([]),
-        ordersCollection
+        ordersCollection && canViewCommerce
           ? listCollectionRecords(activeSiteId, ordersCollection.id, { limit: 20, sortBy: 'updatedAt', sortDirection: 'desc' })
             .then((result) => result.records)
             .catch(() => [])
           : Promise.resolve([]),
       ]);
       const customCollectionRecords = await Promise.all(
-        customCollections.slice(0, 4).map(async (collection) => ({
+        canViewCollections ? customCollections.slice(0, 4).map(async (collection) => ({
           collection,
           records: await listCollectionRecords(activeSiteId, collection.id, { limit: 8, sortBy: 'updatedAt', sortDirection: 'desc' })
             .then((result) => result.records)
             .catch(() => []),
-        })),
+        })) : [],
       );
 
       setSearchIndex([
@@ -781,35 +825,37 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             action: { route: 'order' as const, orderId: order.id },
           };
         }),
-        ...storeUsers.map((member) => ({
+        ...(canViewUsers ? storeUsers.map((member) => ({
           id: `user:${member.id}`,
           type: 'User' as const,
           title: member.fullName || member.email || member.id,
           detail: `${member.role} - ${member.status}`,
           action: { route: 'user' as const, userId: member.id },
-        })),
-        { id: 'tool:sites', type: 'Tool' as const, title: 'Sites', detail: 'Site settings, readiness, routing, domains', action: { route: 'static' as const, to: '/sites' as const } },
-        { id: 'tool:pages', type: 'Tool' as const, title: 'Pages', detail: 'Page tree, drafts, publishing', action: { route: 'static' as const, to: '/pages' as const } },
-        { id: 'tool:blog', type: 'Tool' as const, title: 'Blog', detail: 'Posts, categories, authors', action: { route: 'static' as const, to: '/blog' as const } },
-        { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },
-        { id: 'tool:comments', type: 'Tool' as const, title: 'Comments', detail: 'Moderation queue and public replies', action: { route: 'static' as const, to: '/comments' as const } },
-        { id: 'tool:contacts', type: 'Tool' as const, title: 'Contacts', detail: 'Captured leads and audience records', action: { route: 'static' as const, to: '/contacts' as const } },
-        { id: 'tool:media', type: 'Tool' as const, title: 'Media Library', detail: 'Files, folders, images, fonts', action: { route: 'static' as const, to: '/media' as const } },
-        { id: 'tool:products', type: 'Tool' as const, title: 'Products', detail: 'Catalog and sellable items', action: { route: 'static' as const, to: '/products' as const } },
-        { id: 'tool:orders', type: 'Tool' as const, title: 'Orders', detail: 'Sales and fulfillment queue', action: { route: 'static' as const, to: '/orders' as const } },
-        { id: 'tool:collections', type: 'Tool' as const, title: 'Collections', detail: 'Schemas, records, dynamic data', action: { route: 'static' as const, to: '/collections' as const } },
-        { id: 'tool:sections', type: 'Tool' as const, title: 'Sections', detail: 'Reusable page sections', action: { route: 'static' as const, to: '/reusable-sections' as const } },
-        { id: 'tool:teams', type: 'Tool' as const, title: 'Teams', detail: 'Workspace teams and member roles', action: { route: 'static' as const, to: '/teams' as const } },
-        { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
-        { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
+        })) : []),
+        ...([
+          { id: 'tool:sites', type: 'Tool' as const, title: 'Sites', detail: 'Site settings, readiness, routing, domains', action: { route: 'static' as const, to: '/sites' as const } },
+          { id: 'tool:pages', type: 'Tool' as const, title: 'Pages', detail: 'Page tree, drafts, publishing', action: { route: 'static' as const, to: '/pages' as const } },
+          { id: 'tool:blog', type: 'Tool' as const, title: 'Blog', detail: 'Posts, categories, authors', action: { route: 'static' as const, to: '/blog' as const } },
+          { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },
+          { id: 'tool:comments', type: 'Tool' as const, title: 'Comments', detail: 'Moderation queue and public replies', action: { route: 'static' as const, to: '/comments' as const } },
+          { id: 'tool:contacts', type: 'Tool' as const, title: 'Contacts', detail: 'Captured leads and audience records', action: { route: 'static' as const, to: '/contacts' as const } },
+          { id: 'tool:media', type: 'Tool' as const, title: 'Media Library', detail: 'Files, folders, images, fonts', action: { route: 'static' as const, to: '/media' as const } },
+          { id: 'tool:products', type: 'Tool' as const, title: 'Products', detail: 'Catalog and sellable items', action: { route: 'static' as const, to: '/products' as const } },
+          { id: 'tool:orders', type: 'Tool' as const, title: 'Orders', detail: 'Sales and fulfillment queue', action: { route: 'static' as const, to: '/orders' as const } },
+          { id: 'tool:collections', type: 'Tool' as const, title: 'Collections', detail: 'Schemas, records, dynamic data', action: { route: 'static' as const, to: '/collections' as const } },
+          { id: 'tool:sections', type: 'Tool' as const, title: 'Sections', detail: 'Reusable page sections', action: { route: 'static' as const, to: '/reusable-sections' as const } },
+          { id: 'tool:teams', type: 'Tool' as const, title: 'Teams', detail: 'Workspace teams and member roles', action: { route: 'static' as const, to: '/teams' as const } },
+          { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
+          { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
+        ].filter((tool) => canAccessArea(STATIC_ROUTE_AREA[tool.action.to]))),
       ]);
-      setSearchLoadedForSiteId(activeSiteId);
+      setSearchLoadedForSiteId(searchLoadKey);
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : 'Unable to load search');
     } finally {
       setSearchLoading(false);
     }
-  }, [activeSiteId, searchLoadedForSiteId, searchLoading, storeUsers]);
+  }, [activeSiteId, canAccessArea, searchLoadKey, searchLoadedForSiteId, searchLoading, storeUsers]);
 
   const openGlobalSearch = useCallback(() => {
     setSearchOpen(true);

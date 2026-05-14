@@ -32,7 +32,12 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuthStore, type User } from '@/stores/authStore';
+import { useAuthStore } from '@/stores/authStore';
+import {
+  canAccessAdminNavigationArea,
+  useCurrentAdminPermissionMatrix,
+  type AdminNavigationArea,
+} from '@/lib/adminNavigationAccess';
 
 // ============================================
 // TYPES
@@ -56,8 +61,8 @@ interface NavItem {
   icon: React.ElementType;
   /** Badge text (optional) */
   badge?: string;
-  /** Roles that can open this route by default */
-  roles?: User['role'][];
+  /** Permission area required to show this item */
+  area: AdminNavigationArea;
 }
 
 interface NavSection {
@@ -76,41 +81,41 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Workspace',
     items: [
-      { label: 'Dashboard', to: '/', icon: LayoutDashboard },
-      { label: 'Sites', to: '/sites', icon: Globe },
+      { label: 'Dashboard', to: '/', icon: LayoutDashboard, area: 'dashboard' },
+      { label: 'Sites', to: '/sites', icon: Globe, area: 'sites' },
     ],
   },
   {
     label: 'Content',
     items: [
-      { label: 'Pages', to: '/pages', icon: FileText },
-      { label: 'Blog', to: '/blog', icon: Newspaper },
-      { label: 'Media', to: '/media', icon: Image },
-      { label: 'Collections', to: '/collections', icon: Database },
-      { label: 'Sections', to: '/reusable-sections', icon: Layers3 },
+      { label: 'Pages', to: '/pages', icon: FileText, area: 'pages' },
+      { label: 'Blog', to: '/blog', icon: Newspaper, area: 'blog' },
+      { label: 'Media', to: '/media', icon: Image, area: 'media' },
+      { label: 'Collections', to: '/collections', icon: Database, area: 'collections' },
+      { label: 'Sections', to: '/reusable-sections', icon: Layers3, area: 'sections' },
     ],
   },
   {
     label: 'Commerce',
     items: [
-      { label: 'Products', to: '/products', icon: ShoppingBag },
-      { label: 'Orders', to: '/orders', icon: Receipt },
+      { label: 'Products', to: '/products', icon: ShoppingBag, area: 'commerce' },
+      { label: 'Orders', to: '/orders', icon: Receipt, area: 'commerce' },
     ],
   },
   {
     label: 'Audience',
     items: [
-      { label: 'Forms', to: '/forms', icon: ClipboardList },
-      { label: 'Contacts', to: '/contacts', icon: Contact },
-      { label: 'Comments', to: '/comments', icon: MessageSquare },
+      { label: 'Forms', to: '/forms', icon: ClipboardList, area: 'forms' },
+      { label: 'Contacts', to: '/contacts', icon: Contact, area: 'contacts' },
+      { label: 'Comments', to: '/comments', icon: MessageSquare, area: 'comments' },
     ],
   },
   {
     label: 'Platform',
     items: [
-      { label: 'Teams', to: '/teams', icon: Building2, roles: ['owner', 'admin'] },
-      { label: 'Users', to: '/users', icon: Users, roles: ['owner', 'admin'] },
-      { label: 'Settings', to: '/settings', icon: Settings, roles: ['owner', 'admin'] },
+      { label: 'Teams', to: '/teams', icon: Building2, area: 'teams' },
+      { label: 'Users', to: '/users', icon: Users, area: 'users' },
+      { label: 'Settings', to: '/settings', icon: Settings, area: 'settings' },
     ],
   },
 ];
@@ -145,7 +150,8 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
  */
 export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const location = useLocation();
-  const currentUserRole = useAuthStore((state) => state.user?.role || null);
+  const currentUser = useAuthStore((state) => state.user);
+  const { permissionMatrix } = useCurrentAdminPermissionMatrix(currentUser);
   const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
   const activeSiteId = new URLSearchParams(currentSearch).get('siteId')?.trim();
   const activeSiteSearch = activeSiteId ? { siteId: activeSiteId } : undefined;
@@ -155,7 +161,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const visibleSections = NAV_SECTIONS
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.roles || (currentUserRole && item.roles.includes(currentUserRole))),
+      items: section.items.filter((item) => canAccessAdminNavigationArea(permissionMatrix, currentUser, item.area)),
     }))
     .filter((section) => section.items.length > 0);
 
