@@ -806,6 +806,18 @@ assertIncludes(auditLogRepository, 'if (input.entity) conditions.push(eq(activit
 assertIncludes(auditLogRepository, 'if (input.action) conditions.push(eq(activityLogs.action, input.action));', 'audit log repository must push action filters into the database query');
 assertIncludes(auditLogRepository, "if (input.teamId) conditions.push(sql`${activityLogs.details}->>'teamId' = ${input.teamId}`);", 'audit log repository must push team metadata filters into the database query');
 assertIncludes(auditLogRepository, "if (input.requestId) conditions.push(sql`${activityLogs.details}->>'requestId' = ${input.requestId}`);", 'audit log repository must push request metadata filters into the database query');
+const pageWorkflowAdminContentApi = read('apps/admin/src/lib/adminContentApi.ts');
+assertIncludes(pageWorkflowAdminContentApi, 'export async function unpublishPage', 'admin content API must expose a first-class page unpublish operation');
+assertIncludes(pageWorkflowAdminContentApi, "revisionNote: 'Before unpublish'", 'page unpublish operation must record an explicit revision note');
+const pagesAdminRoute = read('apps/admin/src/routes/pages.tsx');
+assertIncludes(pagesAdminRoute, 'data-testid={`pages-unpublish-${page.id}`}', 'pages list must expose per-page unpublish controls');
+assertIncludes(pagesAdminRoute, '<option value="unpublish">Unpublish selected</option>', 'pages list must expose bulk unpublish');
+const pageEditorRoute = read('apps/admin/src/routes/pages.$pageId.edit.tsx');
+assertIncludes(pageEditorRoute, "applyWorkflow('unpublish')", 'page editor must expose unpublish from the page workflow panel');
+assertIncludes(pageEditorRoute, "'Page unpublished.'", 'page editor must show an unpublish success notice');
+const adminPageDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts');
+assertIncludes(adminPageDetailRoute, 'pageStatusMutationRequiresPublishPermission', 'admin page update route must guard unpublish status changes with the publish permission');
+assertIncludes(adminPageDetailRoute, "currentStatus === 'published' || currentStatus === 'scheduled'", 'admin page update route must treat public-to-draft transitions as publish-status mutations');
 
 const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');

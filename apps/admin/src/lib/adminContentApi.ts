@@ -4103,6 +4103,15 @@ export async function publishPage(siteId: string, pageId: string, input: PageSta
   return toStorePage(payload.data.page);
 }
 
+export async function unpublishPage(siteId: string, pageId: string, input: PageStatusMutationInput = {}): Promise<Page> {
+  return updatePage(siteId, pageId, {
+    status: 'draft',
+    scheduledAt: null,
+    revisionNote: 'Before unpublish',
+    expectedUpdatedAt: input.expectedUpdatedAt,
+  });
+}
+
 export async function archivePage(siteId: string, pageId: string, input: PageStatusMutationInput = {}): Promise<Page> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/archive`, {
     method: 'POST',

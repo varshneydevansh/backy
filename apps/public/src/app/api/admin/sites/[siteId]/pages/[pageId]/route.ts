@@ -94,6 +94,14 @@ const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 
   value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived' ? value : undefined
 );
 
+const pageStatusMutationRequiresPublishPermission = (
+  currentStatus: 'draft' | 'published' | 'scheduled' | 'archived',
+  nextStatus: 'draft' | 'published' | 'scheduled' | 'archived',
+) => (
+  statusRequiresPublishPermission(nextStatus)
+  || ((currentStatus === 'published' || currentStatus === 'scheduled') && nextStatus === 'draft')
+);
+
 const contentDocumentFromInput = (
   rawContent: unknown,
   fallback: BackyPage,
@@ -320,7 +328,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const status = statusFromInput(body.status) || page.status;
       const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
       const nextScheduledAt = scheduledAt === undefined ? page.scheduledAt || null : scheduledAt;
-      if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+      if (body.status !== undefined && pageStatusMutationRequiresPublishPermission(page.status, status)) {
         const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
         if (publishAccess instanceof NextResponse) {
           return publishAccess;
@@ -463,7 +471,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const status = statusFromInput(body.status) || page.status;
     const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
     const nextScheduledAt = scheduledAt === undefined ? page.scheduledAt || null : scheduledAt;
-    if (body.status !== undefined && statusRequiresPublishPermission(status)) {
+    if (body.status !== undefined && pageStatusMutationRequiresPublishPermission(page.status, status)) {
       const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
       if (publishAccess instanceof NextResponse) {
         return publishAccess;

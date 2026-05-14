@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, EyeOff, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
@@ -25,6 +25,7 @@ import {
   listPageRevisions,
   publishPage,
   rollbackPage,
+  unpublishPage,
   updatePage as updatePageFromApi,
   type AdminUserPermissionMatrix,
   type ContentRevision,
@@ -633,7 +634,16 @@ function PageEditorRoute() {
       ? 'Save the canvas before archiving from this panel'
       : isUsingLocalPageCopy
         ? localPageCopyDisabledMessage
-      : null;
+        : null;
+  const unpublishDisabledReason = !canEditPage
+    ? editPageDeniedMessage
+    : !canPublishPage
+      ? publishPageDeniedMessage
+      : editorHasUnsavedChanges
+        ? 'Save the canvas before unpublishing from this panel'
+        : isUsingLocalPageCopy
+          ? localPageCopyDisabledMessage
+          : null;
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
@@ -996,10 +1006,14 @@ function PageEditorRoute() {
     });
   };
 
-  const applyWorkflow = async (action: 'publish' | 'archive') => {
+  const applyWorkflow = async (action: 'publish' | 'unpublish' | 'archive') => {
     if (isPageEditorBusy) return;
     if (action === 'publish' && !canPublishPage) {
       setSaveWarning(publishPageDeniedMessage);
+      return;
+    }
+    if (action === 'unpublish' && (!canEditPage || !canPublishPage)) {
+      setSaveWarning(!canEditPage ? editPageDeniedMessage : publishPageDeniedMessage);
       return;
     }
     if (action === 'archive' && !canEditPage) {
@@ -1032,10 +1046,12 @@ function PageEditorRoute() {
 
       const nextPage = action === 'publish'
         ? await publishPage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated })
-        : await archivePage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated });
+        : action === 'unpublish'
+          ? await unpublishPage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated })
+          : await archivePage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated });
       setPage(nextPage);
       updatePage(pageId, nextPage);
-      setWorkflowNotice(action === 'publish' ? 'Page published.' : 'Page archived.');
+      setWorkflowNotice(action === 'publish' ? 'Page published.' : action === 'unpublish' ? 'Page unpublished.' : 'Page archived.');
       void loadPageReadiness();
     } catch (error) {
       setSaveWarning(error instanceof Error ? error.message : `Unable to ${action} page.`);
@@ -1290,6 +1306,16 @@ function PageEditorRoute() {
             >
               Publish
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void applyWorkflow('unpublish')}
+              disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
+              iconStart={<EyeOff className="size-4" />}
+              title={unpublishDisabledReason || 'Set published page back to draft'}
+            >
+              Unpublish
+            </Button>
           </div>
         </div>
 
@@ -1507,6 +1533,16 @@ function PageEditorRoute() {
                   title={externalWorkflowDisabledReason || 'Publish page'}
                 >
                   Publish
+                </Button>
+                <Button
+                  onClick={() => void applyWorkflow('unpublish')}
+                  disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
+                  variant="outline"
+                  iconStart={<EyeOff className="size-4" />}
+                  className="w-full"
+                  title={unpublishDisabledReason || 'Set published page back to draft'}
+                >
+                  Unpublish
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('archive')}

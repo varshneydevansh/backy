@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -20,6 +20,7 @@ import {
   listCollections,
   listPages,
   publishPage,
+  unpublishPage,
   type AdminUserPermissionMatrix,
   type Collection,
   type ContentRevisionSummary,
@@ -37,6 +38,7 @@ import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSel
 import { cn, formatDate } from '@/lib/utils';
 
 type PageStatusFilter = 'all' | Page['status'];
+type PageBulkAction = 'publish' | 'unpublish' | 'archive' | 'delete' | '';
 
 type PageLibraryFilter =
   | 'all'
@@ -408,7 +410,7 @@ function PagesListView() {
   const [statusFilter, setStatusFilter] = useState<PageStatusFilter>(routeSearch.status || 'all');
   const [healthFilter, setHealthFilter] = useState<PageLibraryFilter>(routeSearch.health || 'all');
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set());
-  const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
+  const [bulkAction, setBulkAction] = useState<PageBulkAction>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
@@ -1191,6 +1193,35 @@ function PagesListView() {
     }
   };
 
+  const handleUnpublishPage = async (page: Page) => {
+    if (isPageLibraryBusy) return;
+    if (!canEditPages) {
+      setNotice(editPermissionTitle || 'Your account cannot unpublish pages.');
+      return;
+    }
+    if (!canPublishPages) {
+      setNotice(publishPermissionTitle || 'Your account cannot unpublish pages.');
+      return;
+    }
+
+    setMutatingPageId(page.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await unpublishPage(page.siteId || activeSiteId, page.id, {
+        expectedUpdatedAt: page.lastUpdated,
+      });
+      updatePage(page.id, updated);
+      void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
+      setNotice(`${updated.title || page.title} unpublished.`);
+    } catch (unpublishError) {
+      setError(unpublishError instanceof Error ? unpublishError.message : 'Unable to unpublish page');
+    } finally {
+      setMutatingPageId(null);
+    }
+  };
+
   const handleDeletePage = async (page: Page) => {
     if (isPageLibraryBusy) return;
     if (!canDeletePages) {
@@ -1241,6 +1272,13 @@ function PagesListView() {
 
     if (bulkAction === 'publish' && !canPublishPages) {
       setNotice(publishPermissionTitle || 'Your account cannot publish pages.');
+      return;
+    }
+
+    if (bulkAction === 'unpublish' && (!canEditPages || !canPublishPages)) {
+      setNotice(!canEditPages
+        ? editPermissionTitle || 'Your account cannot unpublish pages.'
+        : publishPermissionTitle || 'Your account cannot unpublish pages.');
       return;
     }
 
@@ -1325,6 +1363,21 @@ function PagesListView() {
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
         setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} archived.`);
+      }
+
+      if (bulkAction === 'unpublish') {
+        const pagesToUnpublish = selectedPages.filter((page) => page.status === 'published' || page.status === 'scheduled');
+        if (pagesToUnpublish.length === 0) {
+          setNotice('Select at least one published or scheduled page to unpublish.');
+          return;
+        }
+        const updatedPages = await Promise.all(
+          pagesToUnpublish.map((page) => unpublishPage(page.siteId || activeSiteId, page.id, {
+            expectedUpdatedAt: page.lastUpdated,
+          })),
+        );
+        updatedPages.forEach((page) => updatePage(page.id, page));
+        setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} unpublished.`);
       }
 
       if (bulkAction === 'delete') {
@@ -1517,6 +1570,19 @@ function PagesListView() {
                 <CheckCircle2 className="w-4 h-4" />
               </button>
             )}
+            {page.status === 'published' && (
+              <button
+                onClick={() => {
+                  void handleUnpublishPage(page);
+                }}
+                disabled={isPageLibraryBusy || !canEditPages || !canPublishPages}
+                title={!canEditPages ? editPermissionTitle : !canPublishPages ? publishPermissionTitle : 'Unpublish page'}
+                data-testid={`pages-unpublish-${page.id}`}
+                className="p-2 text-muted-foreground hover:text-sky-700 hover:bg-sky-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <EyeOff className="w-4 h-4" />
+              </button>
+            )}
             {page.status !== 'archived' && (
               <button
                 onClick={() => {
@@ -1682,6 +1748,8 @@ function PagesListView() {
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const bulkPermissionTitle = bulkAction === 'publish'
     ? publishPermissionTitle
+    : bulkAction === 'unpublish'
+      ? editPermissionTitle || publishPermissionTitle
     : bulkAction === 'archive'
       ? editPermissionTitle
       : bulkAction === 'delete'
@@ -1691,6 +1759,8 @@ function PagesListView() {
           : undefined;
   const selectedBulkActionAllowed = bulkAction === 'publish'
     ? canPublishPages
+    : bulkAction === 'unpublish'
+      ? canEditPages && canPublishPages
     : bulkAction === 'archive'
       ? canEditPages
       : bulkAction === 'delete'
@@ -2447,6 +2517,7 @@ function PagesListView() {
           >
             <option value="">Bulk action...</option>
             <option value="publish">Publish selected</option>
+            <option value="unpublish">Unpublish selected</option>
             <option value="archive">Archive selected</option>
             <option value="delete">Delete selected</option>
           </select>
@@ -3660,7 +3731,7 @@ const probePageDeliveryHealth = async ({
 };
 
 const getBulkActionLabel = (
-  action: 'publish' | 'archive' | 'delete' | '',
+  action: PageBulkAction,
   count: number,
   isConfirmingDelete: boolean,
   isConfirmingPublish: boolean,
@@ -3673,6 +3744,10 @@ const getBulkActionLabel = (
     }
 
     return count > 0 ? `Review publish for ${pageLabel}` : 'Publish selected';
+  }
+
+  if (action === 'unpublish') {
+    return count > 0 ? `Unpublish ${pageLabel}` : 'Unpublish selected';
   }
 
   if (action === 'archive') {
@@ -3690,8 +3765,9 @@ const getBulkActionLabel = (
   return 'Choose action';
 };
 
-const getBulkBusyLabel = (action: 'publish' | 'archive' | 'delete' | ''): string => {
+const getBulkBusyLabel = (action: PageBulkAction): string => {
   if (action === 'publish') return 'Publishing...';
+  if (action === 'unpublish') return 'Unpublishing...';
   if (action === 'archive') return 'Archiving...';
   if (action === 'delete') return 'Deleting...';
   return 'Applying...';
