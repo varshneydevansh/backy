@@ -434,6 +434,46 @@ const createRecord = async ({ collectionId, slug, title }) => {
   return record;
 };
 
+const selectRecordForEdit = async (client, recordSlug) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === ${JSON.stringify(recordSlug)}
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'record-row-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (button.disabled) return { ok: false, reason: 'record-row-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (selected.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to select collection record for edit: ${JSON.stringify(selected)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const slugInput = document.querySelector('#collections-record-slug');
+      return {
+        hasEditMode: document.querySelector('[data-testid="collections-record-editor"]')?.textContent?.includes('Edit record') || false,
+        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
+        recordId: params.get('recordId'),
+      };
+    })()`);
+    if (state.hasEditMode && state.slugValue === recordSlug && state.recordId) return state;
+    if (attempt === 39) {
+      throw new Error(`Collection record edit state did not settle: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const fetchRecordBySlug = async (collectionId, recordSlug) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?slug=${encodeURIComponent(recordSlug)}`);
   const records = payload.data?.records || payload.records || [];
@@ -771,16 +811,22 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
 };
 
 const assertAuthoringShortcutCopy = async (client) => {
-  const clicked = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-testid="collections-authoring-copy-repeater"]');
-    if (!(button instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'authoring-copy-button-missing' };
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="collections-authoring-copy-repeater"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'authoring-copy-button-missing' };
+      }
+      if (button.disabled) return { ok: false, reason: 'authoring-copy-button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to use authoring shortcut copy action: ${JSON.stringify(clicked)}`);
     }
-    if (button.disabled) return { ok: false, reason: 'authoring-copy-button-disabled' };
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(clicked.ok, `Unable to use authoring shortcut copy action: ${JSON.stringify(clicked)}`);
+    await sleep(250);
+  }
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -1002,41 +1048,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
 };
 
 const assertNewRecordButtonReset = async (client, recordSlug) => {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const selected = await evaluate(client, `(() => {
-      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').trim() === ${JSON.stringify(recordSlug)}
-      ));
-      if (!(button instanceof HTMLButtonElement)) {
-        return { ok: false, reason: 'record-row-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
-      }
-      if (button.disabled) return { ok: false, reason: 'record-row-button-disabled' };
-      button.click();
-      return { ok: true };
-    })()`);
-    if (selected.ok) break;
-    if (attempt === 39) {
-      throw new Error(`Unable to select collection record for edit: ${JSON.stringify(selected)}`);
-    }
-    await sleep(250);
-  }
-
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const state = await evaluate(client, `(() => {
-      const params = new URLSearchParams(window.location.search);
-      const slugInput = document.querySelector('#collections-record-slug');
-      return {
-        hasEditMode: document.querySelector('[data-testid="collections-record-editor"]')?.textContent?.includes('Edit record') || false,
-        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
-        recordId: params.get('recordId'),
-      };
-    })()`);
-    if (state.hasEditMode && state.slugValue === recordSlug && state.recordId) break;
-    if (attempt === 39) {
-      throw new Error(`Collection record edit state did not settle: ${JSON.stringify(state)}`);
-    }
-    await sleep(250);
-  }
+  await selectRecordForEdit(client, recordSlug);
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
@@ -1093,6 +1105,250 @@ const assertNewRecordButtonReset = async (client, recordSlug) => {
   }
 
   return null;
+};
+
+const openCollectionRecordMediaPicker = async (client, fieldKey, expectedAllowedTypes, expectedUploadFilter) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector(${JSON.stringify(`[data-testid="collections-record-media-picker-${fieldKey}"]`)});
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'media-picker-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (button.disabled) return { ok: false, reason: 'media-picker-button-disabled', title: button.title || '' };
+      button.scrollIntoView({ block: 'center' });
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 39) {
+      throw new Error(`Unable to open ${fieldKey} media picker: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const body = document.body?.innerText || '';
+      const itemTypes = Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((item) => item.getAttribute('data-media-type') || '');
+      return {
+        ready: Boolean(modal) &&
+          modal?.getAttribute('data-allowed-types') === ${JSON.stringify(expectedAllowedTypes)} &&
+          modal?.getAttribute('data-upload-filter') === ${JSON.stringify(expectedUploadFilter)} &&
+          !body.includes('Loading media...') &&
+          itemTypes.length > 0,
+        allowedTypes: modal?.getAttribute('data-allowed-types') || '',
+        uploadFilter: modal?.getAttribute('data-upload-filter') || '',
+        typeFilters: Array.from(document.querySelectorAll('[data-testid^="media-library-type-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
+        uploadFilters: Array.from(document.querySelectorAll('[data-testid^="media-upload-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
+        itemTypes,
+        error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
+        body: body.slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) return state;
+    if (attempt === 79) {
+      throw new Error(`${fieldKey} media picker did not become ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const selectMediaLibraryItem = async (client, mediaId, { expectModalClose = true } = {}) => {
+  const selected = await evaluate(client, `(() => {
+    const item = document.querySelector(${JSON.stringify(`[data-testid="media-library-item"][data-media-id="${mediaId}"]`)});
+    if (!(item instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'media-item-missing',
+        available: Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((candidate) => ({
+          id: candidate.getAttribute('data-media-id') || '',
+          type: candidate.getAttribute('data-media-type') || '',
+          name: candidate.getAttribute('data-media-name') || '',
+        })),
+      };
+    }
+    if (item.getAttribute('data-media-private-select-disabled') === 'true') {
+      return { ok: false, reason: 'media-item-private', id: item.getAttribute('data-media-id') || '' };
+    }
+    item.scrollIntoView({ block: 'center' });
+    item.click();
+    return { ok: true, id: item.getAttribute('data-media-id') || '', type: item.getAttribute('data-media-type') || '' };
+  })()`);
+  assert(selected.ok, `Unable to select media item ${mediaId}: ${JSON.stringify(selected)}`);
+
+  if (!expectModalClose) {
+    return selected;
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      modalOpen: Boolean(document.querySelector('[data-testid="media-library-modal"]')),
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`);
+    if (!state.modalOpen) return selected;
+    if (attempt === 39) {
+      throw new Error(`Media picker did not close after selecting ${mediaId}: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return selected;
+};
+
+const selectFirstMediaLibraryItemExcluding = async (client, excludedIds, { expectModalClose = true } = {}) => {
+  const selected = await evaluate(client, `(() => {
+    const excluded = new Set(${JSON.stringify(excludedIds)});
+    const item = Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).find((candidate) => (
+      candidate instanceof HTMLButtonElement &&
+      !excluded.has(candidate.getAttribute('data-media-id') || '') &&
+      candidate.getAttribute('data-media-private-select-disabled') !== 'true'
+    ));
+    if (!(item instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'media-item-missing',
+        excluded: Array.from(excluded),
+        available: Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((candidate) => ({
+          id: candidate.getAttribute('data-media-id') || '',
+          type: candidate.getAttribute('data-media-type') || '',
+          name: candidate.getAttribute('data-media-name') || '',
+          privateDisabled: candidate.getAttribute('data-media-private-select-disabled') || '',
+        })),
+      };
+    }
+    item.scrollIntoView({ block: 'center' });
+    item.click();
+    return { ok: true, id: item.getAttribute('data-media-id') || '', type: item.getAttribute('data-media-type') || '' };
+  })()`);
+  assert(selected.ok, `Unable to select a third media item: ${JSON.stringify(selected)}`);
+
+  if (!expectModalClose) {
+    return selected;
+  }
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      modalOpen: Boolean(document.querySelector('[data-testid="media-library-modal"]')),
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`);
+    if (!state.modalOpen) return selected;
+    if (attempt === 39) {
+      throw new Error(`Media picker did not close after selecting ${selected.id}: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return selected;
+};
+
+const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, recordSlug) => {
+  await selectRecordForEdit(client, recordSlug);
+
+  const imagePicker = await openCollectionRecordMediaPicker(client, 'hero_image', 'image', 'image');
+  assert(
+    imagePicker.itemTypes.every((type) => type === 'image') &&
+      imagePicker.typeFilters.includes('media-library-type-filter-image') &&
+      !imagePicker.typeFilters.includes('media-library-type-filter-all') &&
+      !imagePicker.typeFilters.includes('media-library-type-filter-video') &&
+      !imagePicker.typeFilters.includes('media-library-type-filter-file'),
+    `Image media picker did not restrict visible library options to images: ${JSON.stringify(imagePicker)}`,
+  );
+  await selectMediaLibraryItem(client, 'media-demo-hero');
+
+  const imageFieldState = await evaluate(client, `(() => {
+    const field = document.querySelector('[data-testid="collections-record-field-hero_image"]');
+    return { value: field instanceof HTMLInputElement ? field.value : null };
+  })()`);
+  assert(
+    imageFieldState.value === 'media-demo-hero',
+    `Hero image field was not populated from media picker: ${JSON.stringify(imageFieldState)}`,
+  );
+
+  const galleryFirstPicker = await openCollectionRecordMediaPicker(client, 'gallery_files', 'any', 'file');
+  assert(
+    galleryFirstPicker.typeFilters.includes('media-library-type-filter-file') &&
+      galleryFirstPicker.typeFilters.includes('media-library-type-filter-image'),
+    `File media picker did not expose mixed media filters: ${JSON.stringify(galleryFirstPicker)}`,
+  );
+  await selectMediaLibraryItem(client, 'media-demo-hero');
+
+  await openCollectionRecordMediaPicker(client, 'gallery_files', 'any', 'file');
+  await selectMediaLibraryItem(client, 'media-demo-logo');
+
+  const galleryTwoState = await evaluate(client, `(() => {
+    const field = document.querySelector('[data-testid="collections-record-field-gallery_files"]');
+    return { value: field instanceof HTMLTextAreaElement ? field.value : null };
+  })()`);
+  const galleryTwoItems = String(galleryTwoState.value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+  assert(
+    galleryTwoItems.length === 2 &&
+      galleryTwoItems.includes('media-demo-hero') &&
+      galleryTwoItems.includes('media-demo-logo'),
+    `Gallery field did not collect two media IDs: ${JSON.stringify(galleryTwoState)}`,
+  );
+
+  await openCollectionRecordMediaPicker(client, 'gallery_files', 'any', 'file');
+  const rejectedThirdMedia = await selectFirstMediaLibraryItemExcluding(client, ['media-demo-hero', 'media-demo-logo'], { expectModalClose: false });
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const field = document.querySelector('[data-testid="collections-record-field-gallery_files"]');
+      const close = document.querySelector('button[aria-label="Close media library"]');
+      return {
+        hasMaxItemsError: (document.body?.innerText || '').includes('Gallery files allows at most 2 files.'),
+        value: field instanceof HTMLTextAreaElement ? field.value : null,
+        modalOpen: Boolean(document.querySelector('[data-testid="media-library-modal"]')),
+        canClose: close instanceof HTMLButtonElement,
+      };
+    })()`);
+    const items = String(state.value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+    if (state.hasMaxItemsError && items.length === 2 && !items.includes(rejectedThirdMedia.id)) {
+      if (state.modalOpen) {
+        const closed = await evaluate(client, `(() => {
+          const close = document.querySelector('button[aria-label="Close media library"]');
+          if (!(close instanceof HTMLButtonElement)) return { ok: false };
+          close.click();
+          return { ok: true };
+        })()`);
+        assert(closed.ok, `Unable to close media picker after max-items check: ${JSON.stringify(closed)}`);
+      }
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`Gallery max-items guard did not appear: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  const clickedSave = await evaluate(client, `(() => {
+    const form = document.querySelector('#collections-record-editor');
+    const button = form?.querySelector('button[type="submit"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'record-save-button-missing' };
+    if (button.disabled) return { ok: false, reason: 'record-save-button-disabled', text: button.textContent || '' };
+    button.scrollIntoView({ block: 'center' });
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedSave.ok, `Unable to save media-backed collection record: ${JSON.stringify(clickedSave)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const record = await fetchRecordBySlug(collectionId, recordSlug);
+    const gallery = Array.isArray(record?.values?.gallery_files) ? record.values.gallery_files : [];
+    if (
+      record?.values?.hero_image === 'media-demo-hero' &&
+      gallery.length === 2 &&
+      gallery.includes('media-demo-hero') &&
+      gallery.includes('media-demo-logo')
+    ) {
+      return record;
+    }
+    await sleep(250);
+  }
+
+  const record = await fetchRecordBySlug(collectionId, recordSlug);
+  throw new Error(`Media-backed collection record values did not persist: ${JSON.stringify(record).slice(0, 1000)}`);
 };
 
 const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => {
@@ -1880,6 +2136,23 @@ const main = async () => {
           sortOrder: 60,
           referenceCollectionId: targetCollection.id,
         },
+        {
+          key: 'hero_image',
+          label: 'Hero image',
+          type: 'image',
+          required: false,
+          unique: false,
+          sortOrder: 70,
+        },
+        {
+          key: 'gallery_files',
+          label: 'Gallery files',
+          type: 'file',
+          required: false,
+          unique: false,
+          sortOrder: 80,
+          validation: { multiple: true, maxItems: 2 },
+        },
       ],
     });
     collectionId = collection.id;
@@ -1926,6 +2199,7 @@ const main = async () => {
 
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
+    await assertCollectionRecordMediaFieldsThroughUi(client, collectionId, recordSlug);
     await assertAuthoringShortcutCopy(client);
     await assertCollectionBackupControls(client, collectionId);
     await navigateToCollections(client, { collectionId, recordSlug });
