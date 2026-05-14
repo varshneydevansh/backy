@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { SiteSettings } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getPageSummary,
   getSiteByIdOrSlug,
@@ -217,6 +218,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           navigation,
         },
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        teamId: site.teamId,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'site.navigation.updated',
+        before: site.settings.navigation || {},
+        after: updated.item.settings.navigation || {},
+        metadata: {
+          primaryCount: navigation.primary.length,
+          footerCount: navigation.footer?.length || 0,
+        },
+        requestId,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'navigation',
@@ -271,6 +288,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'site.navigation.updated',
+      before: site.settings?.navigation || {},
+      after: updated.settings?.navigation || {},
+      metadata: {
+        primaryCount: navigation.primary.length,
+        footerCount: navigation.footer?.length || 0,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

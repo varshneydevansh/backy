@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getBlogPosts,
   getPageSummary,
@@ -541,6 +542,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           redirectRules: validation.rules,
         },
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        teamId: site.teamId,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'site.redirects.updated',
+        before: site.settings.redirectRules || [],
+        after: updated.item.settings.redirectRules || [],
+        metadata: {
+          ruleCount: validation.rules.length,
+          enabledCount: validation.rules.filter((rule) => rule.enabled !== false).length,
+        },
+        requestId,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'routing',
@@ -574,6 +591,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'site.redirects.updated',
+      before: site.settings?.redirectRules || [],
+      after: updated.settings?.redirectRules || [],
+      metadata: {
+        ruleCount: validation.rules.length,
+        enabledCount: validation.rules.filter((rule) => rule.enabled !== false).length,
+      },
+      requestId,
+    });
 
     const routeCandidates = buildDemoRouteCandidates(site.id);
     return responsePayload(

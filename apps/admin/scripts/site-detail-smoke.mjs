@@ -201,6 +201,14 @@ const getSite = async (siteId) => {
   return payload.data?.site || payload.site;
 };
 
+const getSiteAuditLogs = async (siteId) => {
+  const payload = await requestApi(`/api/admin/audit-logs?${new URLSearchParams({
+    siteId,
+    limit: '50',
+  }).toString()}`);
+  return payload.data?.logs || payload.logs || [];
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -263,8 +271,22 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (
+  sessionToken,
+  user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user,
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -420,6 +442,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
       hasSeo: Boolean(document.querySelector('[data-testid="site-seo-panel"]')) && body.includes('SEO defaults') && body.includes('JSON-LD defaults'),
       hasSettings: body.includes('Site Name') && body.includes('Custom Domain'),
+      hasActivity: Boolean(document.querySelector('[data-testid="site-audit-panel"]')) && body.includes('Site activity') && body.includes('Audit trail'),
       hasAutomation: body.includes('Forms') && body.includes('Comments moderation'),
       hasCommentPolicy: Boolean(document.querySelector('[data-testid="site-comment-policy-panel"]')) && body.includes('Site comment policy') && body.includes('Save comment policy'),
       hasHandoff: body.includes('Frontend handoff') && body.includes('Public render') && body.includes('OpenAPI'),
@@ -437,6 +460,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasRedirects &&
       layout.hasSeo &&
       layout.hasSettings &&
+      layout.hasActivity &&
       layout.hasAutomation &&
       layout.hasCommentPolicy &&
       layout.hasHandoff,
@@ -834,6 +858,7 @@ const assertApiReadback = async (siteId, expected) => {
   const seo = await getSeo(siteId);
   const frontendDesign = await getFrontendDesign(siteId);
   const site = await getSite(siteId);
+  const auditLogs = await getSiteAuditLogs(siteId);
 
   assert(
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
@@ -881,8 +906,20 @@ const assertApiReadback = async (siteId, expected) => {
       frontendDesign?.editableMap?.some((entry) => entry.role === 'site.header'),
     `Frontend design API did not include saved contract: ${JSON.stringify(frontendDesign).slice(0, 1500)}`,
   );
+  const auditActions = new Set(auditLogs.map((log) => log.action));
+  for (const action of [
+    'site.created',
+    'site.navigation.updated',
+    'site.redirects.updated',
+    'site.seo.updated',
+    'commentPolicy.update',
+    'frontendDesign.capture',
+    'frontendDesign.update',
+  ]) {
+    assert(auditActions.has(action), `Site audit logs did not include ${action}: ${JSON.stringify(auditLogs.map((log) => log.action)).slice(0, 1000)}`);
+  }
 
-  return { navigation, redirects, seo, frontendDesign, site };
+  return { navigation, redirects, seo, frontendDesign, site, auditLogs };
 };
 
 const launchChrome = () => {
@@ -1004,7 +1041,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToSites(client, siteName);
     await navigateToSiteDetail(client, site.id, siteName);
@@ -1022,6 +1059,9 @@ const main = async () => {
       closedMessage: expected.commentClosedMessage,
     });
     await assertApiReadback(site.id, expected);
+    await clickButtonByText(client, '[data-testid="site-audit-panel"]', 'Refresh activity');
+    await waitForText(client, '[data-testid="site-audit-panel"]', 'site.navigation.updated', 'Site activity audit row');
+    await waitForText(client, '[data-testid="site-audit-panel"]', 'site.seo.updated', 'Site SEO audit row');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));

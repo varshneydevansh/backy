@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   listCollectionRecords,
   listCollections,
@@ -435,6 +436,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           seo: validation.seo,
         },
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        teamId: site.teamId,
+        actorId: access.session?.user.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'site.seo.updated',
+        before: site.settings.seo || {},
+        after: updated.item.settings.seo || {},
+        metadata: {
+          titleTemplate: validation.seo.titleTemplate || '',
+          sitemapEnabled: validation.seo.sitemap?.enabled !== false,
+          robotsIndex: validation.seo.robots?.index !== false,
+        },
+        requestId,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'seo',
@@ -473,6 +491,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+
+    await recordAdminAudit({
+      siteId: site.id,
+      actorId: access.session?.user.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'site.seo.updated',
+      before: settings.seo || {},
+      after: updated.settings?.seo || {},
+      metadata: {
+        titleTemplate: validation.seo.titleTemplate || '',
+        sitemapEnabled: validation.seo.sitemap?.enabled !== false,
+        robotsIndex: validation.seo.robots?.index !== false,
+      },
+      requestId,
+    });
 
     return responsePayload(requestId, updated, buildDemoSeoPreview(updated));
   } catch (error) {

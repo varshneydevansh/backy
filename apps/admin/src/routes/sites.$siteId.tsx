@@ -41,6 +41,7 @@ import {
   getAdminApiBase,
   getUserPermissions,
   getFormWithSubmissions,
+  listAdminAuditLogs,
   listPages,
   listForms as listFormsFromApi,
   listFormContacts,
@@ -54,6 +55,7 @@ import {
   updateSite as updateSiteFromApi,
   captureSiteFrontendDesignDefaults,
   adminFetch,
+  type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type ApiSite,
 } from '@/lib/adminContentApi';
@@ -203,6 +205,11 @@ const SITE_WORKSPACE_AREAS = [
     href: '#site-automation',
   },
   {
+    title: 'Activity',
+    detail: 'Request-id audit trail for site settings, navigation, redirects, SEO, and frontend contracts.',
+    href: '#site-activity',
+  },
+  {
     title: 'Frontend handoff',
     detail: 'Copy admin/public endpoints, navigation, redirects, SEO, readiness, and automation contract.',
     href: '#site-handoff',
@@ -249,6 +256,12 @@ interface SiteFrontendDesignEditorState {
   capturing: boolean;
   errorMessage: string | null;
   notice: string | null;
+}
+
+interface SiteAuditPanelState {
+  logs: AdminAuditLog[];
+  loading: boolean;
+  errorMessage: string | null;
 }
 
 const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
@@ -762,6 +775,11 @@ function EditSitePage() {
   const [frontendDesignState, setFrontendDesignState] = useState<SiteFrontendDesignEditorState>(
     () => createFrontendDesignState(),
   );
+  const [auditState, setAuditState] = useState<SiteAuditPanelState>({
+    logs: [],
+    loading: false,
+    errorMessage: null,
+  });
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -924,6 +942,39 @@ function EditSitePage() {
     }
   };
 
+  const loadSiteAuditEvents = async () => {
+    if (!siteApiId) return;
+    if (!canExportActivity) {
+      setAuditState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: siteDetailPermissionReason(permissionMatrix, currentAdmin, 'activity.export'),
+      }));
+      return;
+    }
+
+    setAuditState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const result = await listAdminAuditLogs({
+        siteId: siteApiId,
+        limit: 12,
+        offset: 0,
+      });
+      setAuditState({
+        logs: result.logs,
+        loading: false,
+        errorMessage: null,
+      });
+    } catch (error) {
+      setAuditState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load site audit activity.',
+      }));
+    }
+  };
+
   const loadNavigationEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
@@ -1051,6 +1102,7 @@ function EditSitePage() {
         notice: 'Navigation saved and available to public/front-end contracts.',
       }));
       void loadReadiness();
+      void loadSiteAuditEvents();
     } catch (error) {
       setNavigationState((prev) => ({
         ...prev,
@@ -1166,6 +1218,7 @@ function EditSitePage() {
           : 'Redirect rules saved and available to hosted sites and custom frontends.',
       }));
       void loadReadiness();
+      void loadSiteAuditEvents();
     } catch (error) {
       setRedirectState((prev) => ({
         ...prev,
@@ -1281,6 +1334,7 @@ function EditSitePage() {
       };
       const response = await updateSiteFrontendDesign(siteApiId, nextContract);
       applyFrontendDesignResponse(response, 'Frontend design contract saved and exposed in the public manifest.');
+      void loadSiteAuditEvents();
     } catch (error) {
       setFrontendDesignState((prev) => ({
         ...prev,
@@ -1301,6 +1355,7 @@ function EditSitePage() {
     try {
       const response = await captureSiteFrontendDesignDefaults(siteApiId);
       applyFrontendDesignResponse(response, 'Captured current Backy theme, navigation, and page templates as the site design contract.');
+      void loadSiteAuditEvents();
     } catch (error) {
       setFrontendDesignState((prev) => ({
         ...prev,
@@ -1366,6 +1421,7 @@ function EditSitePage() {
       setSavedCommentPolicy(normalized);
       setSiteWorkspaceNotice('Site comment policy saved.');
       void loadComments();
+      void loadSiteAuditEvents();
     } catch (error) {
       setSiteSettingsError(error instanceof Error ? error.message : 'Unable to save site comment policy.');
     } finally {
@@ -1420,6 +1476,7 @@ function EditSitePage() {
         notice: 'SEO defaults saved and reflected in public SEO discovery.',
       }));
       void loadReadiness();
+      void loadSiteAuditEvents();
     } catch (error) {
       setSeoState((prev) => ({
         ...prev,
@@ -2091,6 +2148,13 @@ function EditSitePage() {
   }, [siteApiId]);
 
   useEffect(() => {
+    if (siteApiId && !isPermissionMatrixPending) {
+      void loadSiteAuditEvents();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteApiId, isPermissionMatrixPending, canExportActivity]);
+
+  useEffect(() => {
     if (state.selectedFormId && siteApiId) {
       void loadSubmissions(state.selectedFormId);
       void loadContacts(state.selectedFormId);
@@ -2463,6 +2527,7 @@ function EditSitePage() {
       if (siteApiId) {
         void loadReadiness();
       }
+      void loadSiteAuditEvents();
       setSiteSettingsNotice(`${savedSite.name} settings saved.`);
     } catch (error) {
       setSiteSettingsError(error instanceof Error
@@ -3873,6 +3938,74 @@ function EditSitePage() {
             </div>
           </div>
         </form>
+
+        <section id="site-activity" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-audit-panel">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Site activity</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Audit trail for site settings, navigation, redirects, SEO, comment policy, and frontend contract changes.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadSiteAuditEvents()}
+              disabled={auditState.loading || !canExportActivity}
+              title={canExportActivity ? undefined : activityExportPermissionTitle}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={cn('h-4 w-4', auditState.loading && 'animate-spin')} />
+              Refresh activity
+            </button>
+          </div>
+
+          {auditState.errorMessage ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {auditState.errorMessage}
+            </div>
+          ) : null}
+
+          {auditState.loading ? (
+            <div className="mt-4 text-sm text-muted-foreground">Loading site audit activity...</div>
+          ) : auditState.logs.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+              No site audit events yet. Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity.
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Action</th>
+                    <th className="px-3 py-2 text-left font-medium">Entity</th>
+                    <th className="px-3 py-2 text-left font-medium">Request ID</th>
+                    <th className="px-3 py-2 text-left font-medium">When</th>
+                    <th className="px-3 py-2 text-left font-medium">Metadata</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border bg-background">
+                  {auditState.logs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="px-3 py-2 font-medium">{log.action}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {log.entity}:{log.entityId}
+                      </td>
+                      <td className="px-3 py-2">
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{log.requestId || 'none'}</code>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{formatTime(log.createdAt)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {log.metadata && Object.keys(log.metadata).length > 0
+                          ? safeText(log.metadata)
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section id="site-automation" className="space-y-4 scroll-mt-24">
           <div className="flex items-start justify-between gap-4">
