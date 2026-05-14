@@ -32,7 +32,7 @@ import {
   getUserPermissions,
   adminFetch,
   importCollectionRecordsCsv,
-  listCollectionRecords,
+  listAllCollectionRecords,
   listCollections,
   reconcileCommerceOrders,
   updateCollection,
@@ -851,7 +851,7 @@ function OrdersRoute() {
         return;
       }
 
-      const result = await listCollectionRecords(activeSiteId, collection.id, {
+      const result = await listAllCollectionRecords(activeSiteId, collection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
@@ -1354,7 +1354,7 @@ function OrdersRoute() {
     try {
       const result = await reconcileCommerceOrders(activeSiteId, 100);
       setReconciliationResult(result);
-      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+      const refreshed = await listAllCollectionRecords(activeSiteId, ordersCollection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
@@ -1553,7 +1553,7 @@ function OrdersRoute() {
     try {
       const csv = await file.text();
       const result = await importCollectionRecordsCsv(activeSiteId, ordersCollection.id, csv, { upsert: true });
-      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+      const refreshed = await listAllCollectionRecords(activeSiteId, ordersCollection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',

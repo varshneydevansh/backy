@@ -28,7 +28,7 @@ import {
   getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
-  listCollectionRecords,
+  listAllCollectionRecords,
   listCollections,
   updateCollection,
   updateCollectionRecord,
@@ -1064,7 +1064,7 @@ function ProductsRoute() {
         return;
       }
 
-      const result = await listCollectionRecords(activeSiteId, collection.id, {
+      const result = await listAllCollectionRecords(activeSiteId, collection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
@@ -1695,7 +1695,7 @@ function ProductsRoute() {
     try {
       const csv = await file.text();
       const result = await importCollectionRecordsCsv(activeSiteId, productCollection.id, normalizeProductImportCsvHeaders(csv), { upsert: true });
-      const refreshed = await listCollectionRecords(activeSiteId, productCollection.id, {
+      const refreshed = await listAllCollectionRecords(activeSiteId, productCollection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',

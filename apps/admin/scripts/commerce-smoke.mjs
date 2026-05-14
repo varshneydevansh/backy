@@ -566,6 +566,37 @@ const listCollectionRecords = async (collectionId, query = '') => {
   return payload.data?.records || [];
 };
 
+const listAllCollectionRecords = async (collectionId, query = '') => {
+  const baseParams = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  const records = [];
+  let offset = Number(baseParams.get('offset') || 0);
+  const limit = Number(baseParams.get('limit') || 100);
+
+  for (let pageIndex = 0; pageIndex < 1000; pageIndex += 1) {
+    const params = new URLSearchParams(baseParams);
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?${params.toString()}`);
+    const pageRecords = payload.data?.records || [];
+    const pagination = payload.data?.pagination || {
+      limit,
+      offset,
+      hasMore: false,
+    };
+
+    records.push(...pageRecords);
+    const nextOffset = Number(pagination.offset || offset) + Number(pagination.limit || limit);
+    if (!pagination.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return records;
+};
+
 const getCollectionRecordBySlug = async (collectionId, slug) => {
   const records = await listCollectionRecords(collectionId, `?slug=${encodeURIComponent(slug)}`);
   return records[0] || null;
@@ -1002,7 +1033,7 @@ const clickFrontendTemplateCreateProduct = async (client) => {
 
 const waitForFrontendTemplateProduct = async (productCollection) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const records = await listCollectionRecords(productCollection.id, '?limit=100&status=all');
+    const records = await listAllCollectionRecords(productCollection.id, '?limit=100&status=all');
     const record = records.find((candidate) => candidate.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID);
 
     if (record) {

@@ -5372,6 +5372,51 @@ export async function listCollectionRecords(
   };
 }
 
+export async function listAllCollectionRecords(
+  siteId: string,
+  collectionId: string,
+  filters: CollectionRecordListFilters = {},
+): Promise<CollectionRecordListResult> {
+  const pageSize = Math.max(1, Math.min(1000, filters.limit || 100));
+  const firstOffset = Math.max(0, filters.offset || 0);
+  const records: CollectionRecord[] = [];
+  let pagination: CollectionRecordPagination = {
+    total: 0,
+    limit: pageSize,
+    offset: firstOffset,
+    hasMore: false,
+  };
+  let offset = firstOffset;
+
+  for (let pageIndex = 0; pageIndex < 1000; pageIndex += 1) {
+    const page = await listCollectionRecords(siteId, collectionId, {
+      ...filters,
+      limit: pageSize,
+      offset,
+    });
+
+    records.push(...page.records);
+    pagination = page.pagination;
+
+    const nextOffset = page.pagination.offset + page.pagination.limit;
+    if (!page.pagination.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return {
+    records,
+    pagination: {
+      total: pagination.total || records.length,
+      limit: records.length || pageSize,
+      offset: firstOffset,
+      hasMore: pagination.hasMore,
+    },
+  };
+}
+
 export async function exportCollectionRecordsCsv(
   siteId: string,
   collectionId: string,
