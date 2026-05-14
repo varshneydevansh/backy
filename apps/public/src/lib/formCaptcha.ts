@@ -30,8 +30,15 @@ interface FormCaptchaProviderConfig {
 }
 
 const PROVIDERS = new Set<FormCaptchaProvider>(['turnstile', 'hcaptcha', 'recaptcha', 'mock']);
+const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
 const readEnv = (key: string): string => process.env[key]?.trim() || '';
+
+const truthyEnv = (key: string): boolean => TRUE_VALUES.has(readEnv(key).toLowerCase());
+
+const isProductionMockCaptchaAllowed = (): boolean => (
+  process.env.NODE_ENV !== 'production' || truthyEnv('BACKY_ALLOW_PRODUCTION_MOCK_CAPTCHA')
+);
 
 const readTimeout = (): number => {
   const parsed = Number.parseInt(readEnv('BACKY_FORM_CAPTCHA_TIMEOUT_MS') || '5000', 10);
@@ -40,11 +47,17 @@ const readTimeout = (): number => {
 
 const readProvider = (override?: FormCaptchaProvider | null): FormCaptchaProvider | null => {
   if (override && PROVIDERS.has(override)) {
+    if (override === 'mock' && !isProductionMockCaptchaAllowed()) {
+      return null;
+    }
     return override;
   }
 
   const raw = (readEnv('BACKY_FORM_CAPTCHA_PROVIDER') || readEnv('BACKY_CAPTCHA_PROVIDER')).toLowerCase();
   if (PROVIDERS.has(raw as FormCaptchaProvider)) {
+    if (raw === 'mock' && !isProductionMockCaptchaAllowed()) {
+      return null;
+    }
     return raw as FormCaptchaProvider;
   }
 
