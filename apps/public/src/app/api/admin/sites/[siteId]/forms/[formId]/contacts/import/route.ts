@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Contact } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { createContactRecord, getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { normalizeContactEmail, validateOptionalContactEmail } from '@/lib/contactEmailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -14,6 +15,7 @@ interface RouteParams {
 interface ImportError {
   row: number;
   email?: string;
+  code?: string;
   message: string;
   details?: unknown;
 }
@@ -30,8 +32,6 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 const normalizeHeader = (value: unknown): string => (
   String(value || '').trim().replace(/[^a-zA-Z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
 );
-
-const normalizeEmail = (value: string | null | undefined) => value?.trim().toLowerCase() || null;
 
 const parseStatus = (value: unknown): Contact['status'] => (
   CONTACT_STATUSES.includes(value as Contact['status'])
@@ -187,18 +187,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           errors.push({ row: rowNumber, email: rowData.email, message: 'Contact requires a name, email, or phone.' });
           continue;
         }
+        const emailPolicy = validateOptionalContactEmail(parsed.email);
+        if (!emailPolicy.ok) {
+          skipped += 1;
+          errors.push({
+            row: rowNumber,
+            email: emailPolicy.email || rowData.email,
+            code: 'INVALID_CONTACT_EMAIL',
+            message: emailPolicy.message,
+          });
+          continue;
+        }
+        const contactInput = {
+          ...parsed,
+          email: emailPolicy.email,
+        };
 
-        const normalizedEmail = normalizeEmail(parsed.email);
+        const normalizedEmail = normalizeContactEmail(contactInput.email);
         const existing = upsertByEmail && normalizedEmail
           ? (await repositories.forms.listContacts({ siteId: site.id, formId: form.id, limit: 1000 })).items
-              .find((contact) => normalizeEmail(contact.email) === normalizedEmail)
+              .find((contact) => normalizeContactEmail(contact.email) === normalizedEmail)
           : undefined;
         const contact = existing
-          ? (await repositories.forms.updateContact(site.id, existing.id, parsed)).item
+          ? (await repositories.forms.updateContact(site.id, existing.id, contactInput)).item
           : (await repositories.forms.createContact({
               siteId: site.id,
               formId: form.id,
-              ...parsed,
+              ...contactInput,
               sourceSubmissionId: undefined,
               sourceIpHash: null,
             })).item;
@@ -248,11 +263,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         errors.push({ row: rowNumber, email: rowData.email, message: 'Contact requires a name, email, or phone.' });
         continue;
       }
+      const emailPolicy = validateOptionalContactEmail(parsed.email);
+      if (!emailPolicy.ok) {
+        skipped += 1;
+        errors.push({
+          row: rowNumber,
+          email: emailPolicy.email || rowData.email,
+          code: 'INVALID_CONTACT_EMAIL',
+          message: emailPolicy.message,
+        });
+        continue;
+      }
 
       const result = createContactRecord({
         siteId: site.id,
         formId: form.id,
         ...parsed,
+        email: emailPolicy.email,
         sourceSubmissionId: undefined,
         sourceIpHash: null,
       }, { upsertByEmail });

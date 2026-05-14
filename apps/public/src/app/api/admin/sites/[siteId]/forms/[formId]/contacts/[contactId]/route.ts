@@ -7,6 +7,7 @@ import {
   getSiteByIdOrSlug,
   updateContactStatus,
 } from '@/lib/backyStore';
+import { validateOptionalContactEmail } from '@/lib/contactEmailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -126,6 +127,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!body) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or notes is required.', requestId);
     }
+    const emailPolicy = body.email === undefined
+      ? { ok: true as const, email: undefined }
+      : validateOptionalContactEmail(body.email);
+    if (!emailPolicy.ok) {
+      return errorResponse(400, 'INVALID_CONTACT_EMAIL', emailPolicy.message, requestId);
+    }
+    const contactInput = emailPolicy.email === undefined
+      ? body
+      : {
+          ...body,
+          email: emailPolicy.email,
+        };
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -144,7 +157,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
       }
 
-      const updated = (await repositories.forms.updateContact(site.id, contact.id, toContactUpdate(body))).item;
+      const updated = (await repositories.forms.updateContact(site.id, contact.id, toContactUpdate(contactInput))).item;
 
       return NextResponse.json({
         success: true,
@@ -169,7 +182,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
     }
 
-    const updated = updateContactStatus(contact.id, toFallbackUpdate(body));
+    const updated = updateContactStatus(contact.id, toFallbackUpdate(contactInput));
 
     if (!updated) {
       return errorResponse(409, 'CONTACT_UPDATE_FAILED', 'Unable to update contact', requestId);

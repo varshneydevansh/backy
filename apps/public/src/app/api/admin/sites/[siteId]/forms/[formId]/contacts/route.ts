@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Contact } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { createContactRecord, getFormById, getSiteByIdOrSlug, listFormContacts } from '@/lib/backyStore';
+import { normalizeContactEmail, validateOptionalContactEmail } from '@/lib/contactEmailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -34,8 +35,6 @@ const parseStatus = (value: string | null) => (
     ? value as (typeof CONTACT_STATUSES)[number]
     : undefined
 );
-
-const normalizeEmail = (value: string | null | undefined) => value?.trim().toLowerCase() || null;
 
 const parseOptionalString = (value: unknown): string | null | undefined => {
   if (value === undefined) return undefined;
@@ -187,6 +186,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!body) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Contact requires a name, email, or phone.', requestId);
     }
+    const emailPolicy = validateOptionalContactEmail(body.email);
+    if (!emailPolicy.ok) {
+      return errorResponse(400, 'INVALID_CONTACT_EMAIL', emailPolicy.message, requestId);
+    }
+    const contactInput = {
+      ...body,
+      email: emailPolicy.email,
+    };
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -200,36 +207,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
       }
 
-      const normalizedEmail = normalizeEmail(body.email);
-      const existing = body.upsertByEmail && normalizedEmail
+      const normalizedEmail = normalizeContactEmail(contactInput.email);
+      const existing = contactInput.upsertByEmail && normalizedEmail
         ? (await repositories.forms.listContacts({ siteId: site.id, formId: form.id, limit: 1000 })).items
-            .find((contact) => normalizeEmail(contact.email) === normalizedEmail)
+            .find((contact) => normalizeContactEmail(contact.email) === normalizedEmail)
         : undefined;
       const contact = existing
         ? (await repositories.forms.updateContact(site.id, existing.id, {
-            pageId: body.pageId,
-            postId: body.postId,
-            name: body.name,
-            email: body.email,
-            phone: body.phone,
-            notes: body.notes,
-            status: body.status,
-            sourceValues: body.sourceValues,
-            requestId: body.requestId,
+            pageId: contactInput.pageId,
+            postId: contactInput.postId,
+            name: contactInput.name,
+            email: contactInput.email,
+            phone: contactInput.phone,
+            notes: contactInput.notes,
+            status: contactInput.status,
+            sourceValues: contactInput.sourceValues,
+            requestId: contactInput.requestId,
           })).item
         : (await repositories.forms.createContact({
             siteId: site.id,
             formId: form.id,
-            pageId: body.pageId,
-            postId: body.postId,
-            name: body.name,
-            email: body.email,
-            phone: body.phone,
-            notes: body.notes,
-            status: body.status,
-            sourceValues: body.sourceValues,
+            pageId: contactInput.pageId,
+            postId: contactInput.postId,
+            name: contactInput.name,
+            email: contactInput.email,
+            phone: contactInput.phone,
+            notes: contactInput.notes,
+            status: contactInput.status,
+            sourceValues: contactInput.sourceValues,
             sourceSubmissionId: undefined,
-            requestId: body.requestId,
+            requestId: contactInput.requestId,
             sourceIpHash: null,
           })).item;
 
@@ -260,18 +267,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const result = createContactRecord({
       siteId: site.id,
       formId: form.id,
-      pageId: body.pageId,
-      postId: body.postId,
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      notes: body.notes,
-      status: body.status,
-      sourceValues: body.sourceValues,
+      pageId: contactInput.pageId,
+      postId: contactInput.postId,
+      name: contactInput.name,
+      email: contactInput.email,
+      phone: contactInput.phone,
+      notes: contactInput.notes,
+      status: contactInput.status,
+      sourceValues: contactInput.sourceValues,
       sourceSubmissionId: undefined,
-      requestId: body.requestId,
+      requestId: contactInput.requestId,
       sourceIpHash: null,
-    }, { upsertByEmail: body.upsertByEmail });
+    }, { upsertByEmail: contactInput.upsertByEmail });
 
     return NextResponse.json({
       success: true,

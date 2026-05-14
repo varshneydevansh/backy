@@ -279,6 +279,20 @@ for (const route of [
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
 
+const contactEmailPolicy = read('apps/public/src/lib/contactEmailPolicy.ts');
+assertIncludes(contactEmailPolicy, 'CONTACT_EMAIL_PATTERN', 'contact email policy must define a validation pattern');
+assertIncludes(contactEmailPolicy, 'validateOptionalContactEmail', 'contact email policy must expose optional email validator');
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/[contactId]/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/contacts/import/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, '@/lib/contactEmailPolicy', `${route} must import contact email policy`);
+  assertIncludes(source, 'validateOptionalContactEmail(', `${route} must validate contact emails`);
+  assertIncludes(source, 'INVALID_CONTACT_EMAIL', `${route} must use a stable invalid-contact-email error code`);
+}
+
 const adminContentStatusPolicy = read('apps/public/src/lib/adminContentStatusPolicy.ts');
 for (const needle of [
   'statusRequiresPublishPermission',

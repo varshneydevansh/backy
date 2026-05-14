@@ -97,6 +97,19 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestApiRaw = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...((endpoint.startsWith('/api/admin/') || endpoint.includes('/events?')) && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -332,6 +345,42 @@ const importContactsCsv = async (formId) => {
   const result = payload.data?.import;
   assert(result?.created === 1, `Contact CSV import should create one contact: ${JSON.stringify(payload).slice(0, 500)}`);
   return payload.data?.contacts?.[0];
+};
+
+const assertInvalidContactEmailRejected = async (formId, contactId) => {
+  const invalidCreate = await requestApiRaw(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Invalid Email Contact',
+      email: 'not-an-email',
+      phone: '+1 555 0199',
+    }),
+  });
+  assert(invalidCreate.response.status === 400, `Invalid contact create should be rejected: ${invalidCreate.response.status} ${JSON.stringify(invalidCreate.payload).slice(0, 500)}`);
+  assert(invalidCreate.payload?.error?.code === 'INVALID_CONTACT_EMAIL', `Invalid contact create should return INVALID_CONTACT_EMAIL: ${JSON.stringify(invalidCreate.payload).slice(0, 500)}`);
+
+  const invalidImport = await requestApiRaw(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    body: [
+      'name,email,phone,status',
+      'Invalid Imported Contact,invalid-import,555,new',
+    ].join('\n'),
+  });
+  assert(invalidImport.response.status === 200, `Invalid contact import should return import summary: ${invalidImport.response.status} ${JSON.stringify(invalidImport.payload).slice(0, 500)}`);
+  assert(invalidImport.payload?.data?.import?.created === 0, `Invalid contact import should not create rows: ${JSON.stringify(invalidImport.payload).slice(0, 500)}`);
+  assert(invalidImport.payload?.data?.import?.skipped === 1, `Invalid contact import should skip one row: ${JSON.stringify(invalidImport.payload).slice(0, 500)}`);
+  assert(
+    invalidImport.payload?.data?.import?.errors?.some((error) => error.code === 'INVALID_CONTACT_EMAIL'),
+    `Invalid contact import should report INVALID_CONTACT_EMAIL: ${JSON.stringify(invalidImport.payload).slice(0, 500)}`,
+  );
+
+  const invalidUpdate = await requestApiRaw(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/${contactId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ email: 'still-invalid' }),
+  });
+  assert(invalidUpdate.response.status === 400, `Invalid contact update should be rejected: ${invalidUpdate.response.status} ${JSON.stringify(invalidUpdate.payload).slice(0, 500)}`);
+  assert(invalidUpdate.payload?.error?.code === 'INVALID_CONTACT_EMAIL', `Invalid contact update should return INVALID_CONTACT_EMAIL: ${JSON.stringify(invalidUpdate.payload).slice(0, 500)}`);
 };
 
 const fetchJson = async (endpoint) => {
@@ -1012,6 +1061,7 @@ const main = async () => {
 
   try {
     const directContact = await createContactDirectly(form.id);
+    await assertInvalidContactEmailRejected(form.id, directContact.id);
     const importedContact = await importContactsCsv(form.id);
     const duplicateContacts = await createDuplicateContacts(form.id);
     const submission = await submitLead(form.id);
