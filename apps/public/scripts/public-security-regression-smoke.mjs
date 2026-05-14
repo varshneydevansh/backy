@@ -471,6 +471,15 @@ for (const file of [
 }
 
 const checkoutRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts');
+const checkoutGet = functionSource(checkoutRoute, 'GET', 'checkout route');
+for (const needle of [
+  'PRODUCT_CATALOG_NOT_FOUND',
+  'ORDER_QUEUE_NOT_FOUND',
+  'ORDER_QUEUE_NOT_PRIVATE',
+  'privateOrderQueue: true',
+]) {
+  assertIncludes(checkoutGet, needle, 'checkout GET must report only real order-intake readiness');
+}
 const orderCreateAnchor = 'const order = (await repositories.collections.createRecord({';
 const orderCreateAnchorIndex = checkoutRoute.indexOf(orderCreateAnchor);
 const createOrderIndex = checkoutRoute.lastIndexOf('collections.createRecord(', orderCreateAnchorIndex);

@@ -960,18 +960,110 @@ const reserveInventoryForCheckoutItem = (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const { siteId } = await params;
 
-  return publicContractJson({
-    success: true,
-    requestId,
-    data: orderContract(siteId),
-  }, {
-    requestId,
-    request,
-    cache: 'discovery',
-    siteId,
-  });
+  try {
+    const { siteId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const [productsCollection, ordersCollection, settings] = await Promise.all([
+        repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG),
+        repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG),
+        repositories.settings.get(),
+      ]);
+
+      if (!productsCollection || productsCollection.status !== 'published' || !productsCollection.permissions.publicRead) {
+        return errorResponse(404, 'PRODUCT_CATALOG_NOT_FOUND', 'Product catalog not found', requestId);
+      }
+
+      if (!ordersCollection || ordersCollection.status !== 'published') {
+        return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+      }
+
+      if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+        return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
+      }
+
+      const commerce = buildCommerceStorefrontContract({
+        siteId: site.id,
+        settings: settings.integrations?.commerce,
+        hasCatalog: true,
+        hasOrderIntake: true,
+      });
+
+      return publicContractJson({
+        success: true,
+        requestId,
+        data: {
+          ...orderContract(site.id),
+          commerce,
+          readiness: {
+            site: true,
+            catalog: true,
+            privateOrderQueue: true,
+            orderIntake: true,
+          },
+        },
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+      });
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const productsCollection = getCollectionByIdOrSlug(site.id, PRODUCT_COLLECTION_SLUG);
+    const ordersCollection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
+    if (!productsCollection || productsCollection.status !== 'published' || !productsCollection.permissions.publicRead) {
+      return errorResponse(404, 'PRODUCT_CATALOG_NOT_FOUND', 'Product catalog not found', requestId);
+    }
+    if (!ordersCollection || ordersCollection.status !== 'published') {
+      return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+    }
+    if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+      return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
+    }
+    const commerce = buildCommerceStorefrontContract({
+      siteId: site.id,
+      settings: getAdminSettings().integrations?.commerce,
+      hasCatalog: true,
+      hasOrderIntake: true,
+    });
+
+    return publicContractJson({
+      success: true,
+      requestId,
+      data: {
+        ...orderContract(site.id),
+        commerce,
+        readiness: {
+          site: true,
+          catalog: true,
+          privateOrderQueue: true,
+          orderIntake: true,
+        },
+      },
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
+    });
+  } catch (error) {
+    console.error('Public commerce order contract API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
