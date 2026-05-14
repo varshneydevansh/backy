@@ -394,6 +394,125 @@ await record('admin user creation follows configured email domains', async () =>
   }
 });
 
+await record('admin invite-only setting blocks direct activation', async () => {
+  const settingsBefore = await request('/api/admin/settings', {
+    headers: {
+      origin: adminDevOrigin,
+      'x-backy-admin-key': adminApiKey,
+    },
+  });
+  assert(settingsBefore.response.status === 200, `${settingsBefore.url} expected settings read 200`);
+  const originalAuth = settingsBefore.json?.data?.settings?.auth || {};
+  const unique = Date.now().toString(36);
+  let invitedUserId = '';
+
+  try {
+    const updateSettings = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        auth: {
+          ...originalAuth,
+          inviteOnly: true,
+        },
+      }),
+    });
+    assert(updateSettings.response.status === 200, `${updateSettings.url} expected settings patch 200`);
+    assert(updateSettings.json?.data?.settings?.auth?.inviteOnly === true, `${updateSettings.url} did not persist invite-only setting`);
+
+    const blockedCreate = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        fullName: `Invite Only Active ${unique}`,
+        email: `invite-only-active-${unique}@example.test`,
+        role: 'viewer',
+        status: 'active',
+      }),
+    });
+    assert(blockedCreate.response.status === 400, `${blockedCreate.url} expected active create 400, got ${blockedCreate.response.status}`);
+    assert(blockedCreate.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedCreate.url} expected INVITE_ONLY_REQUIRED on create`);
+
+    const allowedCreate = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        fullName: `Invite Only Invited ${unique}`,
+        email: `invite-only-invited-${unique}@example.test`,
+        role: 'viewer',
+        status: 'invited',
+      }),
+    });
+    assert(allowedCreate.response.status === 201, `${allowedCreate.url} expected invited create 201, got ${allowedCreate.response.status}`);
+    invitedUserId = allowedCreate.json?.data?.user?.id || '';
+    assert(invitedUserId, `${allowedCreate.url} missing invited user id`);
+
+    const blockedActivation = await request(`/api/admin/users/${invitedUserId}`, {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ status: 'active' }),
+    });
+    assert(blockedActivation.response.status === 400, `${blockedActivation.url} expected direct activation 400, got ${blockedActivation.response.status}`);
+    assert(blockedActivation.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedActivation.url} expected INVITE_ONLY_REQUIRED on activation`);
+
+    const csv = [
+      'full_name,email,role,status',
+      `Invite Only CSV ${unique},invite-only-csv-${unique}@example.test,viewer,active`,
+    ].join('\n');
+    const blockedImport = await request('/api/admin/users/import?dryRun=true', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'text/csv',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: csv,
+    });
+    assert(blockedImport.response.status === 200, `${blockedImport.url} expected import dry-run 200, got ${blockedImport.response.status}`);
+    assert(blockedImport.json?.data?.import?.created === 0, `${blockedImport.url} should not create active preview users`);
+    assert(blockedImport.json?.data?.import?.skipped === 1, `${blockedImport.url} expected one skipped import row`);
+    assert(
+      blockedImport.json?.data?.import?.errors?.some((error) => error.code === 'INVITE_ONLY_REQUIRED'),
+      `${blockedImport.url} expected INVITE_ONLY_REQUIRED import error`,
+    );
+  } finally {
+    if (invitedUserId) {
+      await request(`/api/admin/users/${invitedUserId}`, {
+        method: 'DELETE',
+        headers: {
+          origin: adminDevOrigin,
+          'x-backy-admin-key': adminApiKey,
+        },
+      }).catch(() => {});
+    }
+    await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ auth: originalAuth }),
+    }).catch(() => {});
+  }
+});
+
 console.log(`Admin auth smoke passed against ${baseUrl}`);
 for (const check of checks) {
   console.log(`- ${check.name} (${check.ms}ms)`);

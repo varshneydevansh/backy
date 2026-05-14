@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonObject, Contact } from '@backy-cms/core';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
+import {
+  getAdminAuthPolicySettings,
+  validateAdminEmailDomainPolicy,
+  validateAdminInviteOnlyCreatePolicy,
+} from '@/lib/admin-auth/emailPolicy';
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import {
   createAdminUser,
@@ -117,6 +121,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const status = normalizeStatus(body.status);
     const createInvite = body.createInvite !== false;
     const expiresInMinutes = normalizeExpiresInMinutes(body.expiresInMinutes);
+    const authPolicySettings = await getAdminAuthPolicySettings();
     if (!expiresInMinutes) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Invite expiry must be between 30 minutes and 30 days.', requestId);
     }
@@ -142,9 +147,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const existingUser = await repositories.users.getByEmail(email);
       if (!existingUser) {
-        const emailPolicy = validateAdminEmailDomainPolicy(email);
+        const emailPolicy = await validateAdminEmailDomainPolicy(email, authPolicySettings);
         if (!emailPolicy.ok) {
           return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+        }
+        const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy(status, authPolicySettings);
+        if (!inviteOnlyPolicy.ok) {
+          return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
         }
       }
 
@@ -241,9 +250,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const existingUser = getAdminUserByEmail(email);
     if (!existingUser) {
-      const emailPolicy = validateAdminEmailDomainPolicy(email);
+      const emailPolicy = await validateAdminEmailDomainPolicy(email, authPolicySettings);
       if (!emailPolicy.ok) {
         return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
+      }
+      const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy(status, authPolicySettings);
+      if (!inviteOnlyPolicy.ok) {
+        return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
       }
     }
 

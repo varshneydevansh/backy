@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
+import {
+  getAdminAuthPolicySettings,
+  validateAdminEmailDomainPolicy,
+  validateAdminInviteOnlyActivationPolicy,
+  validateAdminInviteOnlyCreatePolicy,
+} from '@/lib/admin-auth/emailPolicy';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -231,6 +236,7 @@ export async function POST(request: NextRequest) {
     const createdUsers = [];
     const updatedUsers = [];
     const errors = [...parsed.errors];
+    const authPolicySettings = await getAdminAuthPolicySettings();
     let skipped = 0;
 
     for (const row of parsed.rows) {
@@ -256,6 +262,17 @@ export async function POST(request: NextRequest) {
           role: row.role,
           status: row.status,
         };
+        const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(existing.status, row.status, authPolicySettings);
+        if (!inviteOnlyPolicy.ok) {
+          errors.push({
+            row: row.row,
+            email: row.email,
+            code: 'INVITE_ONLY_REQUIRED',
+            message: inviteOnlyPolicy.message,
+          });
+          skipped += 1;
+          continue;
+        }
         const allUsers = repositories
           ? (await repositories.users.list({ limit: 1000, offset: 0 })).items
           : listAdminUsers();
@@ -291,13 +308,25 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const emailPolicy = validateAdminEmailDomainPolicy(row.email);
+      const emailPolicy = await validateAdminEmailDomainPolicy(row.email, authPolicySettings);
       if (!emailPolicy.ok) {
         errors.push({
           row: row.row,
           email: row.email,
           code: 'EMAIL_DOMAIN_NOT_ALLOWED',
           message: emailPolicy.message,
+        });
+        skipped += 1;
+        continue;
+      }
+
+      const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy(row.status, authPolicySettings);
+      if (!inviteOnlyPolicy.ok) {
+        errors.push({
+          row: row.row,
+          email: row.email,
+          code: 'INVITE_ONLY_REQUIRED',
+          message: inviteOnlyPolicy.message,
         });
         skipped += 1;
         continue;

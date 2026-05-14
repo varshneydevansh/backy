@@ -259,8 +259,11 @@ assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route'
 
 const adminEmailPolicy = read('apps/public/src/lib/admin-auth/emailPolicy.ts');
 assertIncludes(adminEmailPolicy, 'getAdminSettings()', 'admin email policy must read persisted settings');
+assertIncludes(adminEmailPolicy, 'getRequiredDatabaseRepositories()', 'admin email policy must read database-backed settings');
 assertIncludes(adminEmailPolicy, 'allowedEmailDomains', 'admin email policy must enforce configured domains');
 assertIncludes(adminEmailPolicy, 'validateAdminEmailDomainPolicy', 'admin email policy must expose validator');
+assertIncludes(adminEmailPolicy, 'validateAdminInviteOnlyCreatePolicy', 'admin email policy must expose invite-only create validator');
+assertIncludes(adminEmailPolicy, 'validateAdminInviteOnlyActivationPolicy', 'admin email policy must expose invite-only activation validator');
 for (const route of [
   'apps/public/src/app/api/admin/users/route.ts',
   'apps/public/src/app/api/admin/users/[userId]/route.ts',
@@ -271,6 +274,7 @@ for (const route of [
   assertIncludes(source, '@/lib/admin-auth/emailPolicy', `${route} must import email domain policy`);
   assertIncludes(source, 'validateAdminEmailDomainPolicy(', `${route} must enforce email domain policy`);
   assertIncludes(source, 'EMAIL_DOMAIN_NOT_ALLOWED', `${route} must use a stable email-domain error code`);
+  assertIncludes(source, 'INVITE_ONLY_REQUIRED', `${route} must use a stable invite-only error code`);
 }
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');

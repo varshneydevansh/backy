@@ -9,7 +9,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { validateAdminEmailDomainPolicy } from '@/lib/admin-auth/emailPolicy';
+import {
+  getAdminAuthPolicySettings,
+  validateAdminEmailDomainPolicy,
+  validateAdminInviteOnlyActivationPolicy,
+} from '@/lib/admin-auth/emailPolicy';
 import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -169,6 +173,7 @@ export async function PATCH(
       const nextEmail = body.email === undefined ? current.email : normalizeEmail(body.email);
       const nextRole = body.role === undefined ? current.role : normalizeRole(body.role);
       const nextStatus = body.status === undefined ? current.status : normalizeStatus(body.status);
+      const authPolicySettings = await getAdminAuthPolicySettings();
 
       if (body.fullName !== undefined && (typeof body.fullName !== 'string' || !body.fullName.trim())) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Full name cannot be blank', requestId);
@@ -179,7 +184,7 @@ export async function PATCH(
       }
 
       if (nextEmail !== current.email) {
-        const emailPolicy = validateAdminEmailDomainPolicy(nextEmail);
+        const emailPolicy = await validateAdminEmailDomainPolicy(nextEmail, authPolicySettings);
         if (!emailPolicy.ok) {
           return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
         }
@@ -191,6 +196,11 @@ export async function PATCH(
 
       if (!nextStatus) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Status must be active, inactive, invited, or suspended', requestId);
+      }
+
+      const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(current.status, nextStatus, authPolicySettings);
+      if (!inviteOnlyPolicy.ok) {
+        return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
       }
 
       const emailOwner = await repositories.users.getByEmail(nextEmail);
@@ -245,6 +255,7 @@ export async function PATCH(
     const nextEmail = body.email === undefined ? current.email : normalizeEmail(body.email);
     const nextRole = body.role === undefined ? current.role : normalizeRole(body.role);
     const nextStatus = body.status === undefined ? current.status : normalizeStatus(body.status);
+    const authPolicySettings = await getAdminAuthPolicySettings();
 
     if (body.fullName !== undefined && (typeof body.fullName !== 'string' || !body.fullName.trim())) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Full name cannot be blank', requestId);
@@ -255,7 +266,7 @@ export async function PATCH(
     }
 
     if (nextEmail !== current.email) {
-      const emailPolicy = validateAdminEmailDomainPolicy(nextEmail);
+      const emailPolicy = await validateAdminEmailDomainPolicy(nextEmail, authPolicySettings);
       if (!emailPolicy.ok) {
         return errorResponse(400, 'EMAIL_DOMAIN_NOT_ALLOWED', emailPolicy.message, requestId);
       }
@@ -267,6 +278,11 @@ export async function PATCH(
 
     if (!nextStatus) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Status must be active, inactive, invited, or suspended', requestId);
+    }
+
+    const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(current.status, nextStatus, authPolicySettings);
+    if (!inviteOnlyPolicy.ok) {
+      return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
     }
 
     const emailOwner = getAdminUserByEmail(nextEmail);
