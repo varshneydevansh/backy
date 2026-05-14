@@ -2543,6 +2543,11 @@ export function CanvasEditor({
   }, [cloneElementTreeWithFreshIds, findElementEntry, updateElementsWithHistory]);
 
   const handleGroupSelected = useCallback(() => {
+    if (isCanvasMutationDisabled) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
+
     const selectedSet = new Set(selectedIds);
     const entries = selectedIds
       .map((id) => findElementEntry(elements, id))
@@ -2639,9 +2644,14 @@ export function CanvasEditor({
     setSelectedIds([groupId]);
     setSelectedId(groupId);
     setRightPanel('properties');
-  }, [elements, findElementEntry, selectedIds, updateElementsWithHistory]);
+  }, [editDisabledReason, elements, findElementEntry, isCanvasMutationDisabled, selectedIds, updateElementsWithHistory]);
 
   const handleUngroupSelected = useCallback(() => {
+    if (isCanvasMutationDisabled) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
+
     if (!selectedId) {
       return;
     }
@@ -2708,7 +2718,7 @@ export function CanvasEditor({
     setSelectedIds(expandedIds);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
-  }, [elements, findElementEntry, selectedId, updateElementsWithHistory]);
+  }, [editDisabledReason, elements, findElementEntry, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
 
   // Get selected element
   const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -3840,6 +3850,17 @@ export function CanvasEditor({
         return;
       }
 
+      const isMutationShortcut =
+        e.key.startsWith('Arrow') ||
+        e.key === 'Delete' ||
+        e.key === 'Backspace' ||
+        ((e.ctrlKey || e.metaKey) && ['x', 'v', 'd', 'g', 'z'].includes(key));
+      if (!canEdit && isMutationShortcut) {
+        e.preventDefault();
+        setEditorNotice(editDisabledReason);
+        return;
+      }
+
       // Tab / Shift+Tab (Cycle canvas element selection)
       if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
@@ -3958,6 +3979,8 @@ export function CanvasEditor({
     handleSelectSiblingScope,
     cycleElementSelection,
     nudgeSelectedElement,
+    canEdit,
+    editDisabledReason,
     isPreview,
     isSaving,
     safeEditorGridSize,
