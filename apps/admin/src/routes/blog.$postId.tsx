@@ -2328,7 +2328,7 @@ function EditBlogPostPage() {
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => navigate({ to: '/comments', search: { siteId: activeSiteId } })}
+                                        onClick={() => navigate({ to: '/comments', search: { siteId: activeSiteId, targetType: 'post', targetId: post.id } })}
                                         disabled={editorBusy || !canViewComments}
                                         title={commentsViewPermissionTitle}
                                         iconStart={<ExternalLink className="size-4" />}

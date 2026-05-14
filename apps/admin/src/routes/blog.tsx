@@ -937,7 +937,7 @@ function BlogListView() {
       render: (post) => {
         const seo = getPostSeoSummary(post);
         const summary = commentSummaries[post.id] || emptyCommentSummary();
-        const commentsHref = `/comments?siteId=${encodeURIComponent(activeSiteId)}`;
+        const commentsHref = `/comments?siteId=${encodeURIComponent(activeSiteId)}&targetType=post&targetId=${encodeURIComponent(post.id)}`;
         const seoBusy = updatingSeoPostId === post.id;
 
         return (

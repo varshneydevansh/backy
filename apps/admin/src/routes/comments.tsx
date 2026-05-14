@@ -73,6 +73,7 @@ interface CommentsSearch {
   siteId?: string;
   status?: CommentStatusFilter;
   targetType?: CommentModerationTarget;
+  targetId?: string;
   triage?: CommentTriageFilter;
   thread?: string;
   sort?: CommentSortFilter;
@@ -111,6 +112,7 @@ export const Route = createFileRoute('/comments')({
     siteId: normalizedSearchString(search.siteId),
     status: isCommentStatusFilter(search.status) ? search.status : undefined,
     targetType: isCommentTargetTypeFilter(search.targetType) ? search.targetType : undefined,
+    targetId: normalizedSearchString(search.targetId),
     triage: isCommentTriageFilter(search.triage) ? search.triage : undefined,
     thread: normalizedSearchString(search.thread),
     sort: isCommentSortFilter(search.sort) ? search.sort : undefined,
@@ -313,6 +315,7 @@ function CommentsRoute() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>(routeSearch.status || 'all');
   const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>(routeSearch.targetType || 'all');
+  const [targetIdFilter, setTargetIdFilter] = useState(routeSearch.targetId || 'all');
   const [triageFilter, setTriageFilter] = useState<CommentTriageFilter>(routeSearch.triage || 'all');
   const [threadFilter, setThreadFilter] = useState(routeSearch.thread || 'all');
   const [sortFilter, setSortFilter] = useState<CommentSortFilter>(routeSearch.sort || 'newest');
@@ -365,6 +368,11 @@ function CommentsRoute() {
     targets.forEach((target) => map.set(`${target.type}:${target.id}`, target));
     return map;
   }, [targets]);
+  const targetFilterOptions = useMemo(() => (
+    targets
+      .filter((target) => targetTypeFilter === 'all' || target.type === targetTypeFilter)
+      .sort((left, right) => left.label.localeCompare(right.label) || left.type.localeCompare(right.type))
+  ), [targetTypeFilter, targets]);
   const commentById = useMemo(() => {
     const map = new Map<string, AdminComment>();
     comments.forEach((comment) => map.set(comment.id, comment));
@@ -446,12 +454,13 @@ function CommentsRoute() {
     query.set('sort', 'newest');
     if (statusFilter !== 'all') query.set('status', statusFilter);
     if (targetTypeFilter !== 'all') query.set('targetType', targetTypeFilter);
+    if (targetIdFilter !== 'all') query.set('targetId', targetIdFilter);
     if (searchQuery.trim()) query.set('q', searchQuery.trim());
     if (threadFilter !== 'all') query.set('commentThreadId', threadFilter);
     if (sortFilter) query.set('sort', sortFilter);
 
     return `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments?${query.toString()}`;
-  }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter, threadFilter]);
+  }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetIdFilter, targetTypeFilter, threadFilter]);
   const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
   const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
   const moderationAnalyticsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/analytics?days=30`;
@@ -462,6 +471,7 @@ function CommentsRoute() {
     return comments.filter((comment) => {
       const matchesStatus = statusFilter === 'all' || comment.status === statusFilter;
       const matchesTarget = targetTypeFilter === 'all' || comment.targetType === targetTypeFilter;
+      const matchesTargetId = targetIdFilter === 'all' || comment.targetId === targetIdFilter;
       const matchesThread = threadFilter === 'all' || getCommentThreadKey(comment) === threadFilter;
       const isReported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
       const isReply = Boolean(comment.parentId);
@@ -493,13 +503,13 @@ function CommentsRoute() {
         target?.path,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesStatus && matchesTarget && matchesThread && matchesTriage && matchesSearch;
+      return matchesStatus && matchesTarget && matchesTargetId && matchesThread && matchesTriage && matchesSearch;
     }).sort((left, right) => {
       const leftTime = new Date(left.createdAt).getTime();
       const rightTime = new Date(right.createdAt).getTime();
       return sortFilter === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
     });
-  }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetTypeFilter, threadFilter, triageFilter]);
+  }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetIdFilter, targetTypeFilter, threadFilter, triageFilter]);
   const filteredBlocklist = useMemo(() => {
     const normalizedSearch = blocklistSearch.trim().toLowerCase();
 
@@ -518,6 +528,7 @@ function CommentsRoute() {
     searchQuery.trim() ||
     statusFilter !== 'all' ||
     targetTypeFilter !== 'all' ||
+    targetIdFilter !== 'all' ||
     triageFilter !== 'all' ||
     threadFilter !== 'all' ||
     sortFilter !== 'newest',
@@ -711,6 +722,7 @@ function CommentsRoute() {
     filters: {
       status: statusFilter,
       targetType: targetTypeFilter,
+      targetId: targetIdFilter,
       triage: triageFilter,
       thread: threadFilter,
       sort: sortFilter,
@@ -837,6 +849,7 @@ function CommentsRoute() {
     sortFilter,
     statusFilter,
     targetByKey,
+    targetIdFilter,
     targetTypeFilter,
     targets,
     threadFilter,
@@ -856,11 +869,12 @@ function CommentsRoute() {
     siteId: activeSiteId,
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(targetTypeFilter !== 'all' ? { targetType: targetTypeFilter } : {}),
+    ...(targetIdFilter !== 'all' ? { targetId: targetIdFilter } : {}),
     ...(triageFilter !== 'all' ? { triage: triageFilter } : {}),
     ...(threadFilter !== 'all' ? { thread: threadFilter } : {}),
     ...(sortFilter !== 'newest' ? { sort: sortFilter } : {}),
     ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
-  }), [activeSiteId, searchQuery, sortFilter, statusFilter, targetTypeFilter, threadFilter, triageFilter]);
+  }), [activeSiteId, searchQuery, sortFilter, statusFilter, targetIdFilter, targetTypeFilter, threadFilter, triageFilter]);
 
   const updateCommentsRouteSearch = (next: CommentsSearch) => {
     if (isCommentsBusy) return;
@@ -873,6 +887,7 @@ function CommentsRoute() {
       siteId: merged.siteId || activeSiteId,
       ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
       ...(merged.targetType && merged.targetType !== 'all' ? { targetType: merged.targetType } : {}),
+      ...(merged.targetId?.trim() && merged.targetId !== 'all' ? { targetId: merged.targetId.trim() } : {}),
       ...(merged.triage && merged.triage !== 'all' ? { triage: merged.triage } : {}),
       ...(merged.thread?.trim() && merged.thread !== 'all' ? { thread: merged.thread.trim() } : {}),
       ...(merged.sort && merged.sort !== 'newest' ? { sort: merged.sort } : {}),
@@ -1030,7 +1045,15 @@ function CommentsRoute() {
 
     try {
       const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult, auditResult] = await Promise.all([
-        listComments(activeSiteId, { status: 'all', limit: 100, sort: 'newest' }),
+        listComments(activeSiteId, {
+          status: routeSearch.status || 'all',
+          targetType: routeSearch.targetType || 'all',
+          targetId: routeSearch.targetId,
+          q: routeSearch.q,
+          commentThreadId: routeSearch.thread,
+          limit: 100,
+          sort: routeSearch.sort || 'newest',
+        }),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         getAdminSite(activeSiteId).catch(() => null),
@@ -1106,6 +1129,7 @@ function CommentsRoute() {
     setSearchQuery(routeSearch.q || '');
     setStatusFilter(routeSearch.status || 'all');
     setTargetTypeFilter(routeSearch.targetType || 'all');
+    setTargetIdFilter(routeSearch.targetId || 'all');
     setTriageFilter(routeSearch.triage || 'all');
     setThreadFilter(routeSearch.thread || 'all');
     setSortFilter(routeSearch.sort || 'newest');
@@ -1120,6 +1144,7 @@ function CommentsRoute() {
     routeSearch.siteId,
     routeSearch.sort,
     routeSearch.status,
+    routeSearch.targetId,
     routeSearch.targetType,
     routeSearch.thread,
     routeSearch.triage,
@@ -1132,7 +1157,19 @@ function CommentsRoute() {
       void loadComments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId, canViewComments, canManageComments, canExportActivity, isPermissionMatrixPending]);
+  }, [
+    activeSiteId,
+    canViewComments,
+    canManageComments,
+    canExportActivity,
+    isPermissionMatrixPending,
+    routeSearch.q,
+    routeSearch.sort,
+    routeSearch.status,
+    routeSearch.targetId,
+    routeSearch.targetType,
+    routeSearch.thread,
+  ]);
 
   const toggleVisibleSelection = () => {
     if (isCommentsBusy) return;
@@ -1518,6 +1555,7 @@ function CommentsRoute() {
     setSearchQuery('');
     setStatusFilter('all');
     setTargetTypeFilter('all');
+    setTargetIdFilter('all');
     setTriageFilter('all');
     setThreadFilter('all');
     setSortFilter('newest');
@@ -1525,6 +1563,7 @@ function CommentsRoute() {
       q: undefined,
       status: 'all',
       targetType: 'all',
+      targetId: 'all',
       triage: 'all',
       thread: 'all',
       sort: 'newest',
@@ -2577,13 +2616,33 @@ function CommentsRoute() {
                 if (isCommentsBusy) return;
                 const targetType = event.target.value as CommentModerationTarget;
                 setTargetTypeFilter(targetType);
-                updateCommentsRouteSearch({ targetType });
+                setTargetIdFilter('all');
+                updateCommentsRouteSearch({ targetType, targetId: 'all' });
               }}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All targets</option>
               <option value="page">Pages</option>
               <option value="post">Posts</option>
+            </select>
+            <select
+              aria-label="Specific target filter"
+              value={targetIdFilter}
+              disabled={isCommentsBusy}
+              onChange={(event) => {
+                if (isCommentsBusy) return;
+                const targetId = event.target.value;
+                setTargetIdFilter(targetId);
+                updateCommentsRouteSearch({ targetId });
+              }}
+              className="min-h-10 max-w-72 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="all">All pages/posts</option>
+              {targetFilterOptions.map((target) => (
+                <option key={`${target.type}:${target.id}`} value={target.id}>
+                  {target.type === 'post' ? 'Post' : 'Page'} · {target.label}
+                </option>
+              ))}
             </select>
             <select
               aria-label="Comment triage filter"

@@ -786,11 +786,13 @@ const navigateToComments = async (client, expectedAuthors) => {
   return null;
 };
 
-const assertCommentsFilterRouteSearch = async (client) => {
+const assertCommentsFilterRouteSearch = async (client, targetId) => {
   const routeUrl = new URL(`${ADMIN_BASE_URL}/comments`);
   routeUrl.searchParams.set('siteId', SITE_ID);
   routeUrl.searchParams.set('q', 'Comments Smoke Report');
   routeUrl.searchParams.set('status', 'pending');
+  routeUrl.searchParams.set('targetType', 'page');
+  routeUrl.searchParams.set('targetId', targetId);
   routeUrl.searchParams.set('triage', 'reported');
   routeUrl.searchParams.set('sort', 'oldest');
   await client.send('Page.navigate', { url: routeUrl.toString() });
@@ -798,6 +800,8 @@ const assertCommentsFilterRouteSearch = async (client) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const search = document.querySelector('input[aria-label="Search comments"]');
+      const targetType = document.querySelector('select[aria-label="Target type filter"]');
+      const target = document.querySelector('select[aria-label="Specific target filter"]');
       const triage = document.querySelector('select[aria-label="Comment triage filter"]');
       const sort = document.querySelector('select[aria-label="Comment sort order"]');
       const pendingButton = Array.from(document.querySelectorAll('button')).find((button) => (
@@ -806,6 +810,8 @@ const assertCommentsFilterRouteSearch = async (client) => {
       return {
         ready: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
         searchValue: search instanceof HTMLInputElement ? search.value : null,
+        targetTypeValue: targetType instanceof HTMLSelectElement ? targetType.value : null,
+        targetValue: target instanceof HTMLSelectElement ? target.value : null,
         triageValue: triage instanceof HTMLSelectElement ? triage.value : null,
         sortValue: sort instanceof HTMLSelectElement ? sort.value : null,
         pendingPressed: pendingButton instanceof HTMLButtonElement ? pendingButton.getAttribute('aria-pressed') : null,
@@ -817,11 +823,15 @@ const assertCommentsFilterRouteSearch = async (client) => {
     if (
       state.ready &&
       state.searchValue === 'Comments Smoke Report' &&
+      state.targetTypeValue === 'page' &&
+      state.targetValue === targetId &&
       state.triageValue === 'reported' &&
       state.sortValue === 'oldest' &&
       state.pendingPressed === 'true' &&
       state.reportVisible &&
       state.url.includes('status=pending') &&
+      state.url.includes('targetType=page') &&
+      state.url.includes(`targetId=${encodeURIComponent(targetId)}`) &&
       state.url.includes('triage=reported')
     ) {
       return state;
@@ -1492,7 +1502,7 @@ const main = async () => {
       'Comments Smoke Thread Reply',
       'Comments Smoke Move Parent',
     ]);
-    await assertCommentsFilterRouteSearch(client);
+    await assertCommentsFilterRouteSearch(client, pageId);
     await navigateToComments(client, [
       'Comments Smoke Approve',
       'Comments Smoke Reject',

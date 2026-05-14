@@ -743,6 +743,7 @@ const fetchPostBySlugFromAdminId = async (postId) => {
 };
 
 const assertRowSeoAndComments = async (client, { postId }) => {
+  const expectedTargetIdParam = `targetId=${encodeURIComponent(postId)}`;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const seo = document.querySelector(${JSON.stringify(`[data-testid="blog-post-seo-noindex-${postId}"]`)});
@@ -750,9 +751,16 @@ const assertRowSeoAndComments = async (client, { postId }) => {
       return {
         seoText: seo?.textContent || '',
         commentsText: comments?.textContent || '',
+        commentsHref: comments instanceof HTMLAnchorElement ? comments.href : '',
       };
     })()`);
-    if (/Index|Noindex/.test(state.seoText) && /1 comments/.test(state.commentsText)) {
+    if (
+      /Index|Noindex/.test(state.seoText) &&
+      /1 comments/.test(state.commentsText) &&
+      state.commentsHref.includes('/comments') &&
+      state.commentsHref.includes('targetType=post') &&
+      state.commentsHref.includes(expectedTargetIdParam)
+    ) {
       return state;
     }
     if (attempt === 79) {
