@@ -1,6 +1,7 @@
 import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
+import { listAuthSettingsPermissionOverrides, type AdminUserPermissionOverride } from '@/lib/adminPermissionOverrides';
 
 export interface AdminAuthUser {
   id: string;
@@ -90,6 +91,7 @@ type LocalCredential = {
 
 type StoredSession = AdminSession & {
   lastSeenAt: string;
+  permissionOverrides?: AdminUserPermissionOverride[];
 };
 
 type AdminAuthUserLike = {
@@ -120,6 +122,8 @@ type AdminAuthUserPersistence = {
 
 type AdminAuthSessionSettings = {
   sessionTimeoutMinutes?: unknown;
+  userPermissionOverrides?: unknown;
+  permissionOverrides?: unknown;
 };
 
 const globalAdminSessionStore = globalThis as typeof globalThis & {
@@ -240,6 +244,9 @@ const createAdminSessionForUser = (
 ): AdminSession => {
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes(authSettings) * 60 * 1000);
+  const permissionOverrides = authSettings
+    ? listAuthSettingsPermissionOverrides(authSettings, user.id)
+    : undefined;
   const session: StoredSession = {
     token: `bas_${randomUUID().replace(/-/g, '')}`,
     user,
@@ -247,6 +254,7 @@ const createAdminSessionForUser = (
     expiresAt: expiresAt.toISOString(),
     authMode: 'local-demo',
     lastSeenAt: issuedAt.toISOString(),
+    ...(permissionOverrides ? { permissionOverrides } : {}),
   };
 
   ADMIN_SESSIONS.set(session.token, session);
@@ -258,6 +266,26 @@ const createAdminSessionForUser = (
     authMode: session.authMode,
   };
 };
+
+export function listAdminSessionPermissionOverrides(
+  token: string | null | undefined,
+  userId: string,
+): AdminUserPermissionOverride[] | null {
+  const session = token ? ADMIN_SESSIONS.get(token.trim()) : null;
+  if (!session || !Object.prototype.hasOwnProperty.call(session, 'permissionOverrides')) return null;
+  return (session.permissionOverrides || []).filter((override) => override.userId === userId);
+}
+
+export function updateAdminSessionPermissionOverrides(
+  userId: string,
+  overrides: AdminUserPermissionOverride[],
+): void {
+  for (const [token, session] of ADMIN_SESSIONS.entries()) {
+    if (session.user.id !== userId) continue;
+    session.permissionOverrides = overrides.filter((override) => override.userId === userId);
+    ADMIN_SESSIONS.set(token, session);
+  }
+}
 
 const pruneExpiredSessions = () => {
   const now = Date.now();

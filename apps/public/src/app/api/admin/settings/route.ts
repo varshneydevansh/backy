@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
@@ -215,7 +216,10 @@ const getMediaScannerRuntimeSummary = () => {
 const canExposeAdminApiKey = (access: AdminAccessContext) => {
   if (access.type !== 'session' || !access.session) return false;
 
-  const overrides = listAdminUserPermissionOverrides(access.session.user.id);
+  const sessionOverrides = listAdminSessionPermissionOverrides(access.session.token, access.session.user.id);
+  const overrides = sessionOverrides !== null
+    ? sessionOverrides
+    : listAdminUserPermissionOverrides(access.session.user.id);
   const matrix = buildUserPermissionMatrix(access.session.user, overrides);
   return Boolean(matrix.groups
     .flatMap((group) => group.permissions)

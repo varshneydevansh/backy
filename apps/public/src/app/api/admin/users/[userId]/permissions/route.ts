@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { updateAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix, isAdminPermissionKey } from '@/lib/adminPermissions';
+import {
+  applyAuthSettingsPermissionOverrides,
+  listAuthSettingsPermissionOverrides,
+} from '@/lib/adminPermissionOverrides';
 import {
   getAdminUserById,
   listAdminUserPermissionOverrides,
@@ -61,13 +66,15 @@ export async function GET(
 
   try {
     const { userId } = await context.params;
-    const { user } = await getUser(userId);
+    const { repositories, user } = await getUser(userId);
 
     if (!user) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
 
-    const overrides = listAdminUserPermissionOverrides(user.id);
+    const overrides = repositories
+      ? listAuthSettingsPermissionOverrides((await repositories.settings.get()).auth, user.id)
+      : listAdminUserPermissionOverrides(user.id);
 
     return NextResponse.json({
       success: true,
@@ -127,8 +134,18 @@ export async function PATCH(
       overrides[permissionKey] = value;
     }
 
-    const before = listAdminUserPermissionOverrides(user.id);
-    const savedOverrides = updateAdminUserPermissionOverrides(user.id, overrides);
+    const before = repositories
+      ? listAuthSettingsPermissionOverrides((await repositories.settings.get()).auth, user.id)
+      : listAdminUserPermissionOverrides(user.id);
+    const savedOverrides = repositories
+      ? await (async () => {
+          const currentSettings = await repositories.settings.get();
+          const next = applyAuthSettingsPermissionOverrides(currentSettings.auth, user.id, overrides);
+          await repositories.settings.update({ auth: next.auth });
+          updateAdminSessionPermissionOverrides(user.id, next.overrides);
+          return next.overrides;
+        })()
+      : updateAdminUserPermissionOverrides(user.id, overrides);
     const permissions = buildUserPermissionMatrix(user, savedOverrides);
 
     await recordAdminAudit({

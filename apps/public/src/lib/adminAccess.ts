@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSession, type AdminSession } from '@/lib/admin-auth/sessionStore';
+import { getAdminSession, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides } from '@/lib/backyStore';
 
@@ -80,7 +80,10 @@ export function requireAdminAccess(
   }
 
   if (options.permission) {
-    const overrides = listAdminUserPermissionOverrides(session.user.id);
+    const sessionOverrides = listAdminSessionPermissionOverrides(session.token, session.user.id);
+    const overrides = sessionOverrides !== null
+      ? sessionOverrides
+      : listAdminUserPermissionOverrides(session.user.id);
     const matrix = buildUserPermissionMatrix(session.user, overrides);
     const permission = matrix.groups
       .flatMap((group) => group.permissions)
