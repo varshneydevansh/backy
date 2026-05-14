@@ -28,13 +28,14 @@ import {
   getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
-  listAllCollectionRecords,
+  listCollectionRecords,
   listCollections,
   updateCollection,
   updateCollectionRecord,
   type Collection,
   type CollectionField,
   type CollectionRecord,
+  type CollectionRecordPagination,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
@@ -79,6 +80,8 @@ const PRODUCT_CONTROL_AREAS = [
     href: '#products-editor',
   },
 ] as const;
+
+const PRODUCT_RECORD_PAGE_SIZE = 100;
 
 type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
@@ -538,6 +541,7 @@ function ProductsRoute() {
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [products, setProducts] = useState<CollectionRecord[]>([]);
+  const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>(routeSearch.status || 'all');
@@ -667,6 +671,9 @@ function ProductsRoute() {
     stockFilter !== 'all' ||
     categoryFilter !== 'all',
   );
+  const loadedProductCount = products.length;
+  const totalProductCount = productPagination?.total ?? loadedProductCount;
+  const hasMoreProducts = productPagination?.hasMore === true;
   const filteredProducts = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return products.filter((product) => {
@@ -716,7 +723,7 @@ function ProductsRoute() {
     });
   }, [categoryFilter, productTypeFilter, products, searchQuery, statusFilter, stockFilter]);
   const metrics = useMemo(() => ({
-    total: products.length,
+    total: totalProductCount,
     published: products.filter((product) => product.status === 'published').length,
     draft: products.filter((product) => product.status === 'draft').length,
     scheduled: products.filter((product) => product.status === 'scheduled').length,
@@ -724,7 +731,7 @@ function ProductsRoute() {
     lowStock: products.filter((product) => getProductStockState(product.values).lowStock).length,
     digital: products.filter((product) => readProductValue(product.values, 'productType') === 'digital').length,
     categories: new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean)).size,
-  }), [products]);
+  }), [products, totalProductCount]);
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
@@ -935,7 +942,9 @@ function ProductsRoute() {
       category: categoryFilter,
       stock: stockFilter,
       visible: filteredProducts.length,
-      total: products.length,
+      loaded: loadedProductCount,
+      total: totalProductCount,
+      hasMore: hasMoreProducts,
     },
     export: {
       csvIncludesPricing: true,
@@ -994,6 +1003,8 @@ function ProductsRoute() {
     filteredProducts.length,
     frontendDesign,
     frontendProductTemplates,
+    hasMoreProducts,
+    loadedProductCount,
     metrics,
     missingProductFields,
     orderIntakeReady,
@@ -1007,6 +1018,7 @@ function ProductsRoute() {
     storefrontProductDetailUrl,
     statusFilter,
     stockFilter,
+    totalProductCount,
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
   const productsRouteSearch = useMemo<ProductsSearch>(() => ({
@@ -1044,6 +1056,7 @@ function ProductsRoute() {
       setProductCollection(null);
       setOrdersCollection(null);
       setProducts([]);
+      setProductPagination(null);
       clearProductEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce products.');
       return;
@@ -1060,18 +1073,50 @@ function ProductsRoute() {
 
       if (!collection) {
         setProducts([]);
+        setProductPagination(null);
         clearProductEditorState();
         return;
       }
 
-      const result = await listAllCollectionRecords(activeSiteId, collection.id, {
-        limit: 100,
+      const result = await listCollectionRecords(activeSiteId, collection.id, {
+        limit: PRODUCT_RECORD_PAGE_SIZE,
+        offset: 0,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
       setProducts(result.records.map(normalizeProductRecord));
+      setProductPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load products');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadMoreProducts = async () => {
+    if (!productCollection || !productPagination?.hasMore || isProductsBusy || !canViewProducts) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextOffset = productPagination.offset + productPagination.limit;
+      const result = await listCollectionRecords(activeSiteId, productCollection.id, {
+        limit: PRODUCT_RECORD_PAGE_SIZE,
+        offset: nextOffset,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      });
+      setProducts((current) => {
+        const existingIds = new Set(current.map((product) => product.id));
+        const nextProducts = result.records
+          .map(normalizeProductRecord)
+          .filter((product) => !existingIds.has(product.id));
+        return [...current, ...nextProducts];
+      });
+      setProductPagination(result.pagination);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load more products');
     } finally {
       setIsLoading(false);
     }
@@ -1343,6 +1388,7 @@ function ProductsRoute() {
       });
       setProductCollection(collection);
       setProducts([]);
+      setProductPagination({ total: 0, limit: PRODUCT_RECORD_PAGE_SIZE, offset: 0, hasMore: false });
       setNotice('Products collection created. You can add your first product now.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to set up products');
@@ -1416,6 +1462,9 @@ function ProductsRoute() {
       }));
 
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
+      setProductPagination((current) => current
+        ? { ...current, total: current.total + 1 }
+        : current);
       setSelectedProductId(saved.id);
       setFormState(productToForm(saved));
       updateProductsRouteSearch({ productId: saved.id });
@@ -1498,6 +1547,11 @@ function ProductsRoute() {
         : await createCollectionRecord(activeSiteId, productCollection.id, input));
 
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
+      if (!selectedProduct) {
+        setProductPagination((current) => current
+          ? { ...current, total: current.total + 1 }
+          : current);
+      }
       setSelectedProductId(saved.id);
       updateProductsRouteSearch({ productId: saved.id });
       setNotice(selectedProduct ? 'Product updated.' : 'Product created.');
@@ -1553,6 +1607,9 @@ function ProductsRoute() {
     try {
       await deleteCollectionRecord(activeSiteId, productCollection.id, product.id);
       setProducts((current) => current.filter((item) => item.id !== product.id));
+      setProductPagination((current) => current
+        ? { ...current, total: Math.max(0, current.total - 1) }
+        : current);
       if (selectedProductId === product.id) {
         clearProductEditorState();
         updateProductsRouteSearch({ productId: undefined });
@@ -1695,12 +1752,14 @@ function ProductsRoute() {
     try {
       const csv = await file.text();
       const result = await importCollectionRecordsCsv(activeSiteId, productCollection.id, normalizeProductImportCsvHeaders(csv), { upsert: true });
-      const refreshed = await listAllCollectionRecords(activeSiteId, productCollection.id, {
-        limit: 100,
+      const refreshed = await listCollectionRecords(activeSiteId, productCollection.id, {
+        limit: PRODUCT_RECORD_PAGE_SIZE,
+        offset: 0,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
       setProducts(refreshed.records.map(normalizeProductRecord));
+      setProductPagination(refreshed.pagination);
       setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
@@ -2278,7 +2337,7 @@ function ProductsRoute() {
             <Panel id="products-catalog" className="scroll-mt-24">
               <PanelHeader
                 title="Catalog"
-                description={`${filteredProducts.length}/${products.length} visible products`}
+                description={`${filteredProducts.length}/${loadedProductCount} visible loaded products${totalProductCount > loadedProductCount ? `, ${totalProductCount} total` : ''}`}
                 icon={<ShoppingBag className="size-4" />}
                 action={<Button onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>New Product</Button>}
               />
@@ -2381,6 +2440,21 @@ function ProductsRoute() {
                   {hasActiveCatalogFilters && (
                     <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsAccessBusy || !canViewProducts}>
                       Clear filters
+                    </Button>
+                  )}
+                </div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  <span>
+                    Loaded {loadedProductCount} of {totalProductCount} product records. Filters and CSV export apply to loaded rows.
+                  </span>
+                  {hasMoreProducts && (
+                    <Button
+                      variant="outline"
+                      onClick={() => void loadMoreProducts()}
+                      disabled={isProductsAccessBusy || !canViewProducts}
+                      title={!canViewProducts ? viewPermissionTitle : undefined}
+                    >
+                      {isLoading ? 'Loading...' : 'Load more'}
                     </Button>
                   )}
                 </div>

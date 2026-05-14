@@ -675,6 +675,12 @@ const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');
 assertExcludes(adminContractSmoke, 'providerWebhookSecretId: `stripe_whsec_', 'admin contract smoke must not persist raw webhook secrets');
 
+const productsAdminRoute = read('apps/admin/src/routes/products.tsx');
+assertIncludes(productsAdminRoute, 'listCollectionRecords', 'products admin route must use paged collection record loads');
+assertIncludes(productsAdminRoute, 'PRODUCT_RECORD_PAGE_SIZE', 'products admin route must use an explicit product page size');
+assertIncludes(productsAdminRoute, 'loadMoreProducts', 'products admin route must expose incremental catalog loading');
+assertExcludes(productsAdminRoute, 'listAllCollectionRecords', 'products admin route must not walk every product record on page load');
+
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
   'CATALOG_RECORD_PAGE_SIZE',
