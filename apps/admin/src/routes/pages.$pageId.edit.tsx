@@ -558,6 +558,9 @@ function PageEditorRoute() {
     );
   }
 
+  const isUsingLocalPageCopy = Boolean(loadError);
+  const localPageCopyDisabledMessage = 'Reload the latest backend page before editing, previewing, publishing, archiving, or restoring. The local page copy is read-only.';
+
   // Load Settings
   const initialSettings: PageSettings = {
     title: page.title,
@@ -610,6 +613,8 @@ function PageEditorRoute() {
     ? `${publicPath} conflicts with "${currentRouteConflict.title}". Choose another slug before publishing.`
     : routeCheckBlockedMessage
       ? routeCheckBlockedMessage
+    : isUsingLocalPageCopy
+      ? localPageCopyDisabledMessage
     : isReadinessBlocked
       ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
       : null;
@@ -618,11 +623,15 @@ function PageEditorRoute() {
     ? publishPageDeniedMessage
     : editorHasUnsavedChanges
     ? 'Save the canvas before previewing, publishing, archiving, or restoring from the page panels.'
+    : isUsingLocalPageCopy
+      ? localPageCopyDisabledMessage
     : publishDisabledReason;
   const archiveDisabledReason = !canEditPage
     ? editPageDeniedMessage
     : editorHasUnsavedChanges
       ? 'Save the canvas before archiving from this panel'
+      : isUsingLocalPageCopy
+        ? localPageCopyDisabledMessage
       : null;
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
@@ -863,6 +872,11 @@ function PageEditorRoute() {
       throw new Error(editPageDeniedMessage);
     }
 
+    if (isUsingLocalPageCopy) {
+      setSaveWarning(localPageCopyDisabledMessage);
+      throw new Error(localPageCopyDisabledMessage);
+    }
+
     try {
       const validationMessage = validatePageSettings(settings);
       if (validationMessage) {
@@ -950,6 +964,7 @@ function PageEditorRoute() {
       setEditorResetVersion((version) => version + 1);
       setEditorHasUnsavedChanges(false);
       setSaveConflict(null);
+      setLoadError(null);
       setWorkflowNotice('Latest backend page loaded into the editor.');
       void loadPageReadiness();
     } catch (error) {
@@ -988,6 +1003,10 @@ function PageEditorRoute() {
     }
     if (action === 'archive' && !canEditPage) {
       setSaveWarning(editPageDeniedMessage);
+      return;
+    }
+    if (isUsingLocalPageCopy) {
+      setSaveWarning(localPageCopyDisabledMessage);
       return;
     }
 
@@ -1030,6 +1049,10 @@ function PageEditorRoute() {
       setSaveWarning(publishPageDeniedMessage);
       return;
     }
+    if (isUsingLocalPageCopy) {
+      setSaveWarning(localPageCopyDisabledMessage);
+      return;
+    }
 
     setIsPreviewBusy(true);
     setSaveWarning(null);
@@ -1056,6 +1079,10 @@ function PageEditorRoute() {
     if (isPageEditorBusy) return;
     if (!canEditPage) {
       setSaveWarning(editPageDeniedMessage);
+      return;
+    }
+    if (isUsingLocalPageCopy) {
+      setSaveWarning(localPageCopyDisabledMessage);
       return;
     }
 
@@ -1119,8 +1146,20 @@ function PageEditorRoute() {
       }
     >
       {(loadError || saveWarning) && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
-          {saveWarning || `${loadError} Using the local page copy.`}
+        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <span>{saveWarning || `${loadError} Using the local page copy in read-only mode.`}</span>
+          {loadError && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void reloadLatestPage()}
+              disabled={isPageEditorBusy}
+              iconStart={<RefreshCw className={cn('size-3.5', isLoadingPage && 'animate-spin')} />}
+            >
+              Reload latest
+            </Button>
+          )}
         </div>
       )}
 
@@ -1225,9 +1264,9 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPageEditorBusy || editorHasUnsavedChanges || !canPublishPage}
+              disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
               iconStart={<Eye className="size-4" />}
-              title={!canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+              title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
             >
               Preview
             </Button>
@@ -1411,13 +1450,13 @@ function PageEditorRoute() {
               }}
               validateSettings={validatePageSettings}
               canView={canViewPage}
-              canEdit={canEditPage}
-              canPublish={canPublishPage}
+              canEdit={canEditPage && !isUsingLocalPageCopy}
+              canPublish={canPublishPage && !isUsingLocalPageCopy}
               canViewMedia={canViewMedia}
               canCreateMedia={canCreateMedia}
               canViewCollections={canViewCollections}
               canDeleteReusableSections={canDeletePage}
-              editDisabledReason={editPagePermissionTitle}
+              editDisabledReason={isUsingLocalPageCopy ? localPageCopyDisabledMessage : editPagePermissionTitle}
               publishDisabled={Boolean(editorPublishDisabledReason)}
               publishDisabledReason={editorPublishDisabledReason || undefined}
               mediaViewDisabledReason={viewMediaPermissionTitle}
@@ -1450,11 +1489,11 @@ function PageEditorRoute() {
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
-                  disabled={isPageEditorBusy || editorHasUnsavedChanges || !canPublishPage}
+                  disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
                   className="w-full"
-                  title={!canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+                  title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
                 >
                   Preview
                 </Button>
@@ -1594,10 +1633,10 @@ function PageEditorRoute() {
                         </div>
                         <button
                           type="button"
-                          disabled={isPageEditorBusy || editorHasUnsavedChanges || !canEditPage}
+                          disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
                           onClick={() => setPendingRestoreRevision(revision)}
                           className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                          title={!canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
+                          title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </button>
@@ -1646,8 +1685,8 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isPageEditorBusy || editorHasUnsavedChanges || !canEditPage}
-                title={canEditPage ? undefined : editPagePermissionTitle}
+                disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
+                title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : canEditPage ? undefined : editPagePermissionTitle}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}

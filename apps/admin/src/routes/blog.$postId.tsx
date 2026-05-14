@@ -641,6 +641,9 @@ function EditBlogPostPage() {
         );
     }
 
+    const isUsingLocalPostCopy = Boolean(loadError);
+    const localPostCopyDisabledMessage = 'Reload the latest backend post before editing, previewing, publishing, archiving, deleting, or restoring. The local post copy is read-only.';
+
     const dummySettings: PageSettings = {
         title,
         slug,
@@ -653,6 +656,11 @@ function EditBlogPostPage() {
         e.preventDefault();
         if (!canEditBlog || (status === 'published' || status === 'scheduled') && !canPublishBlog) {
             setSaveWarning(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
+            setWorkflowNotice(null);
+            return;
+        }
+        if (isUsingLocalPostCopy) {
+            setSaveWarning(localPostCopyDisabledMessage);
             setWorkflowNotice(null);
             return;
         }
@@ -767,6 +775,7 @@ function EditBlogPostPage() {
         try {
             const latestPost = await getBlogPost(activeSiteId, postId);
             syncPostState(latestPost);
+            setLoadError(null);
             setWorkflowNotice('Latest backend post loaded into the editor.');
             void loadPostReadiness();
         } catch (error) {
@@ -806,6 +815,11 @@ function EditBlogPostPage() {
         }
         if (action === 'archive' && !canEditBlog) {
             setSaveWarning(editBlogDeniedMessage);
+            setWorkflowNotice(null);
+            return;
+        }
+        if (isUsingLocalPostCopy) {
+            setSaveWarning(localPostCopyDisabledMessage);
             setWorkflowNotice(null);
             return;
         }
@@ -867,6 +881,11 @@ function EditBlogPostPage() {
             setWorkflowNotice(null);
             return;
         }
+        if (isUsingLocalPostCopy) {
+            setSaveWarning(localPostCopyDisabledMessage);
+            setWorkflowNotice(null);
+            return;
+        }
 
         setIsPreviewBusy(true);
         setSaveWarning(null);
@@ -909,6 +928,11 @@ function EditBlogPostPage() {
         if (editorActionBusy) return;
         if (!canEditBlog) {
             setSaveWarning(editBlogDeniedMessage);
+            setWorkflowNotice(null);
+            return;
+        }
+        if (isUsingLocalPostCopy) {
+            setSaveWarning(localPostCopyDisabledMessage);
             setWorkflowNotice(null);
             return;
         }
@@ -976,6 +1000,10 @@ function EditBlogPostPage() {
         if (editorActionBusy) return;
         if (!canDeleteBlog) {
             setSaveWarning(deleteBlogDeniedMessage);
+            return;
+        }
+        if (isUsingLocalPostCopy) {
+            setSaveWarning(localPostCopyDisabledMessage);
             return;
         }
 
@@ -1125,7 +1153,7 @@ function EditBlogPostPage() {
     const canSave = title.trim().length > 0 && normalizedSlug.length > 0 && !routeBlocked && canonicalValid && (status !== 'scheduled' || Boolean(scheduledAt));
     const editorBusy = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
-    const editorFormDisabled = editorBusy || !canEditBlog;
+    const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
@@ -1457,7 +1485,7 @@ function EditBlogPostPage() {
                 {(loadError || saveWarning || routeCheckError) && (
                     <Notice tone="warning" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <span>{saveWarning || routeCheckError || `${loadError} Using the local post copy.`}</span>
+                            <span>{saveWarning || routeCheckError || `${loadError} Using the local post copy in read-only mode.`}</span>
                             {routeCheckError && (
                                 <Button
                                     type="button"
@@ -1470,14 +1498,14 @@ function EditBlogPostPage() {
                                     Retry route check
                                 </Button>
                             )}
-                            {saveConflict && (
+                            {(loadError || saveConflict) && (
                                 <Button
                                     type="button"
                                     size="sm"
                                     variant="outline"
                                     disabled={editorActionBusy}
                                     onClick={() => void reloadLatestPost()}
-                                    iconStart={<RefreshCw className="size-3.5" />}
+                                    iconStart={<RefreshCw className={cn('size-3.5', isLoadingPost && 'animate-spin')} />}
                                 >
                                     Reload latest
                                 </Button>
@@ -1551,8 +1579,8 @@ function EditBlogPostPage() {
                             <Button
                                 type="submit"
                                 form="blog-editor-form"
-                                disabled={editorActionBusy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
-                                title={!canEditBlog ? editBlogPermissionTitle : (status === 'published' || status === 'scheduled') ? publishBlogPermissionTitle : undefined}
+                                disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : !canEditBlog ? editBlogPermissionTitle : (status === 'published' || status === 'scheduled') ? publishBlogPermissionTitle : undefined}
                                 variant="primary"
                                 iconStart={<Save className="size-4" />}
                             >
@@ -1562,8 +1590,8 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void generatePreview()}
-                                disabled={editorActionBusy || !canPublishBlog}
-                                title={publishBlogPermissionTitle}
+                                disabled={editorActionBusy || isUsingLocalPostCopy || !canPublishBlog}
+                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : publishBlogPermissionTitle}
                                 iconStart={<Eye className="size-4" />}
                             >
                                 Preview
@@ -1934,7 +1962,7 @@ function EditBlogPostPage() {
                                         <Button
                                             type="submit"
                                             form="blog-editor-form"
-                                            disabled={editorActionBusy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
                                             size="sm"
                                             iconStart={<Save className="size-4" />}
                                         >
@@ -1967,7 +1995,7 @@ function EditBlogPostPage() {
                                     initialSize={canvasSize}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
-                                        if (editorBusy || !canEditBlog) return;
+                                        if (editorBusy || !canEditBlog || isUsingLocalPostCopy) return;
                                         clearEditorFeedback();
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
@@ -1980,13 +2008,13 @@ function EditBlogPostPage() {
                                     saveOwnerLabel="post form"
                                     saveOwnerVersion={post.updatedAt}
                                     canView={canViewBlog}
-                                    canEdit={canEditBlog}
-                                    canPublish={canPublishBlog}
+                                    canEdit={canEditBlog && !isUsingLocalPostCopy}
+                                    canPublish={canPublishBlog && !isUsingLocalPostCopy}
                                     canViewMedia={canViewMedia}
                                     canCreateMedia={canCreateMedia}
                                     canViewCollections={canViewCollections}
-                                    editDisabledReason={editBlogPermissionTitle}
-                                    publishDisabledReason={publishBlogPermissionTitle}
+                                    editDisabledReason={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editBlogPermissionTitle}
+                                    publishDisabledReason={isUsingLocalPostCopy ? localPostCopyDisabledMessage : publishBlogPermissionTitle}
                                     mediaViewDisabledReason={viewMediaDeniedMessage}
                                     mediaCreateDisabledReason={createMediaDeniedMessage}
                                     collectionsViewDisabledReason={viewCollectionsDeniedMessage}
@@ -2000,7 +2028,7 @@ function EditBlogPostPage() {
                                 {(editorBusy || !canEditBlog) && (
                                     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
                                         <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">
-                                            {!canEditBlog ? 'Blog editing is disabled for this account.' : isLoading ? 'Saving post design...' : 'Updating post workflow...'}
+                                            {isUsingLocalPostCopy ? 'Reload the backend post before editing.' : !canEditBlog ? 'Blog editing is disabled for this account.' : isLoading ? 'Saving post design...' : 'Updating post workflow...'}
                                         </div>
                                     </div>
                                 )}
@@ -2119,25 +2147,25 @@ function EditBlogPostPage() {
                                 )}
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={editorActionBusy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                    <Button type="submit" disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void generatePreview()}
-                                            disabled={editorActionBusy || editorHasUnsavedChanges || !canPublishBlog}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canPublishBlog}
                                             variant="outline"
                                             iconStart={<Eye className="size-4" />}
-                                            title={editorHasUnsavedChanges ? 'Save this post before generating a preview.' : undefined}
+                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before generating a preview.' : undefined}
                                         >
                                             Preview
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={editorActionBusy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || status === 'published' || !canPublishBlog}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || status === 'published' || !canPublishBlog}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
-                                            title={editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
+                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
                                         >
                                             Publish
                                         </Button>
@@ -2145,10 +2173,10 @@ function EditBlogPostPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void applyWorkflow('archive')}
-                                            disabled={editorActionBusy || editorHasUnsavedChanges || status === 'archived' || !canEditBlog}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || status === 'archived' || !canEditBlog}
                                             variant="outline"
                                             iconStart={<Archive className="size-4" />}
-                                            title={editorHasUnsavedChanges ? 'Save or discard local changes before archiving.' : undefined}
+                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before archiving.' : undefined}
                                         >
                                             Archive
                                         </Button>
@@ -2156,7 +2184,7 @@ function EditBlogPostPage() {
                                             Discard
                                         </Button>
                                     </div>
-                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorActionBusy || !canDeleteBlog} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
+                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorActionBusy || isUsingLocalPostCopy || !canDeleteBlog} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
                                         Delete post
                                     </Button>
                                 </div>
@@ -2222,8 +2250,8 @@ function EditBlogPostPage() {
                                             }
                                             setIsFeaturedMediaOpen(true);
                                         }}
-                                        disabled={editorBusy || !canEditBlog || !canViewMedia}
-                                        title={viewMediaPermissionTitle || editBlogPermissionTitle}
+                                        disabled={editorBusy || isUsingLocalPostCopy || !canEditBlog || !canViewMedia}
+                                        title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : viewMediaPermissionTitle || editBlogPermissionTitle}
                                         iconStart={<ImageIcon className="size-4" />}
                                     >
                                         {featuredImageId ? 'Replace image' : 'Select image'}
@@ -2533,10 +2561,10 @@ function EditBlogPostPage() {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        disabled={editorActionBusy || editorHasUnsavedChanges || !canEditBlog}
+                                                        disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
                                                         onClick={() => setPendingRestoreRevision(revision)}
                                                         className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                        title={editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
+                                                        title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
                                                     >
                                                         <RotateCcw className="w-4 h-4" />
                                                     </button>
@@ -2619,9 +2647,9 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => void restoreRevision(pendingRestoreRevision)}
-                                    disabled={editorActionBusy || editorHasUnsavedChanges || !canEditBlog}
+                                    disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
                                     className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                    title={editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : undefined}
+                                    title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : undefined}
                                 >
                                     {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
                                 </button>
@@ -2659,7 +2687,7 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => void handleDelete()}
-                                    disabled={editorActionBusy || !canDeleteBlog}
+                                    disabled={editorActionBusy || isUsingLocalPostCopy || !canDeleteBlog}
                                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {isWorkflowBusy ? 'Deleting...' : 'Delete post'}

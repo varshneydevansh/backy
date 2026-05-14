@@ -182,6 +182,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertPageEditorFallbackIsReadOnly = () => {
+  const source = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
+  assert(source.includes('isUsingLocalPageCopy'), 'Page editor must track backend-load fallback state');
+  assert(source.includes('localPageCopyDisabledMessage'), 'Page editor must explain that local fallback copies are read-only');
+  assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
+  assert(source.includes('if (isUsingLocalPageCopy)') && source.includes('throw new Error(localPageCopyDisabledMessage)'), 'Page editor save must reject local fallback copies');
+  assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -12204,6 +12213,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  assertPageEditorFallbackIsReadOnly();
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;

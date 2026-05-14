@@ -23,6 +23,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertBlogEditorFallbackIsReadOnly = () => {
+  const source = fs.readFileSync(new URL('../src/routes/blog.$postId.tsx', import.meta.url), 'utf8');
+  assert(source.includes('isUsingLocalPostCopy'), 'Blog editor must track backend-load fallback state');
+  assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
+  assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
+  assert(source.includes('editorBusy || !canEditBlog || isUsingLocalPostCopy'), 'Blog editor canvas changes must ignore local fallback copies');
+  assert(source.includes('setLoadError(null);') && source.includes('Latest backend post loaded into the editor.'), 'Blog editor reload must clear fallback state after loading backend content');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -636,6 +645,7 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 };
 
 const main = async () => {
+  assertBlogEditorFallbackIsReadOnly();
   await loginAdminApi();
   const slug = `blog-editor-smoke-${Date.now().toString(36)}`;
   const post = await assertBlogUpdateConflict(await createBlogPost(slug));
