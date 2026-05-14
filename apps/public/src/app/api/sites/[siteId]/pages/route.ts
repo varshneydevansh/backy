@@ -13,6 +13,7 @@ import { getPageByPath, getPageSummary, getSiteByIdOrSlug, validatePreviewToken 
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { getHostedRouteUrl } from '@/lib/seoDiscovery';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 
 interface RouteParams {
     params: Promise<{
@@ -201,7 +202,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             if (slug) {
                 const path = slug.trim().replace(/^\/+|\/+$/g, '') || 'index';
-                const page = await repositories.pages.getBySlug(site.id, path);
+                const page = await getRepositoryPageByPublicPath(repositories, site.id, path);
                 const canPreview = page && previewToken
                     ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
                     : false;

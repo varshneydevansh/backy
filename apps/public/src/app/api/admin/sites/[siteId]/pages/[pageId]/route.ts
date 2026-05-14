@@ -17,7 +17,7 @@ import {
 import {
   deleteAdminPage,
   getAdminPageById,
-  getPageBySlug,
+  getPageByPath,
   getSiteByIdOrSlug,
   listCollections,
   updateAdminPage,
@@ -33,6 +33,7 @@ import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 
 export const runtime = 'nodejs';
 
@@ -255,15 +256,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
       }
 
-      const nextSlug = body.slug === undefined ? page.slug : normalizeSlug(body.slug);
+      const nextIsHomepage = typeof body.isHomepage === 'boolean' ? body.isHomepage : page.isHomepage;
+      const nextSlug = nextIsHomepage ? 'index' : body.slug === undefined ? page.slug : normalizeSlug(body.slug);
 
-      if (body.slug !== undefined && !nextSlug) {
+      if (!nextIsHomepage && body.slug !== undefined && !nextSlug) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Page slug is required', requestId);
       }
 
-      if (nextSlug && nextSlug !== page.slug) {
-        const conflict = await repositories.pages.checkSlug({ siteId: site.id, slug: nextSlug, excludePageId: page.id });
-        if (!conflict.available) {
+      if (nextSlug && (nextSlug !== page.slug || nextIsHomepage !== page.isHomepage)) {
+        const conflict = await getRepositoryPageByPublicPath(repositories, site.id, nextSlug);
+        if (conflict && conflict.id !== page.id) {
           return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
         }
       }
@@ -289,10 +291,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
-      const routeConflict = findPageRouteConflict({ id: page.id, slug: nextSlug, title, isHomepage: page.isHomepage }, collections.items);
+      const routeConflict = findPageRouteConflict({ id: page.id, slug: nextSlug, title, isHomepage: nextIsHomepage }, collections.items);
       if (routeConflict) {
         return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
       }
+      const shouldUpdateSlug = body.slug !== undefined || (nextIsHomepage && page.slug !== 'index');
       const content = contentDocumentFromInput(body.content, page, { title, slug: nextSlug, status });
       await repositories.contentWorkflows.createRevision({
         siteId: site.id,
@@ -306,11 +309,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
       const updated = await repositories.pages.update(site.id, page.id, {
         title: body.title === undefined ? undefined : title,
-        slug: body.slug === undefined ? undefined : nextSlug,
+        slug: shouldUpdateSlug ? nextSlug : undefined,
         description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
         status: statusFromInput(body.status),
         scheduledAt: scheduledAt === undefined ? undefined : scheduledAt,
-        isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : undefined,
+        isHomepage: typeof body.isHomepage === 'boolean' ? nextIsHomepage : undefined,
         parentId: typeof body.parentId === 'string' || body.parentId === null ? body.parentId : undefined,
         content,
         meta: isRecord(body.meta) ? body.meta : undefined,
@@ -369,21 +372,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+    const nextIsHomepage = typeof body.isHomepage === 'boolean' ? body.isHomepage : page.isHomepage;
+    const nextSlug = nextIsHomepage ? 'index' : body.slug === undefined ? page.slug : normalizeSlug(body.slug);
 
-    if (body.slug !== undefined && !nextSlug) {
+    if (!nextIsHomepage && body.slug !== undefined && !nextSlug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Page slug is required', requestId);
     }
 
-    if (nextSlug && nextSlug !== page.slug) {
-      const conflict = getPageBySlug(site.id, nextSlug, { includeUnpublished: true });
+    if (nextSlug && (nextSlug !== page.slug || nextIsHomepage !== page.isHomepage)) {
+      const conflict = getPageByPath(site.id, nextSlug, { includeUnpublished: true });
       if (conflict && conflict.id !== page.id) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
       }
     }
 
     const routeConflict = findPageRouteConflict(
-      { id: page.id, slug: nextSlug || page.slug, title: typeof body.title === 'string' ? body.title : page.title, isHomepage: page.isHomepage },
+      { id: page.id, slug: nextSlug || page.slug, title: typeof body.title === 'string' ? body.title : page.title, isHomepage: nextIsHomepage },
       listCollections(site.id, { includeUnpublished: true }),
     );
     if (routeConflict) {
@@ -404,9 +408,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
     }
 
+    const shouldUpdateSlug = body.slug !== undefined || (nextIsHomepage && page.slug !== 'index');
     const updated = updateAdminPage(site.id, page.id, {
       ...body,
-      ...(nextSlug ? { slug: nextSlug } : {}),
+      ...(shouldUpdateSlug ? { slug: nextSlug } : {}),
+      ...(typeof body.isHomepage === 'boolean' ? { isHomepage: nextIsHomepage } : {}),
       ...(scheduledAt !== undefined ? { scheduledAt } : {}),
     });
 

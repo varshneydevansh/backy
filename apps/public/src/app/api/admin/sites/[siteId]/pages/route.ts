@@ -15,7 +15,7 @@ import {
 } from '@backy-cms/core';
 import {
   createAdminPage,
-  getPageBySlug,
+  getPageByPath,
   getPageSummary,
   getSiteByIdOrSlug,
   listCollections,
@@ -31,6 +31,7 @@ import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 
 export const runtime = 'nodejs';
 
@@ -241,7 +242,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const body = await parseJsonBody(request);
       const title = typeof body.title === 'string' ? body.title.trim() : '';
-      const slug = normalizeSlug(body.slug || title);
+      const isHomepage = body.isHomepage === true;
+      const slug = isHomepage ? 'index' : normalizeSlug(body.slug || title);
       const status = statusFromInput(body.status);
 
       if (!title) {
@@ -258,8 +260,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      const slugCheck = await repositories.pages.checkSlug({ siteId: site.id, slug });
-      if (!slugCheck.available) {
+      const slugConflict = await getRepositoryPageByPublicPath(repositories, site.id, slug);
+      if (slugConflict) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
       }
 
@@ -270,7 +272,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
-      const routeConflict = findPageRouteConflict({ slug, title }, collections.items);
+      const routeConflict = findPageRouteConflict({ slug, title, isHomepage }, collections.items);
       if (routeConflict) {
         return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
       }
@@ -302,7 +304,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         description: typeof createBody.description === 'string' ? createBody.description : null,
         status,
         scheduledAt: scheduledAt || null,
-        isHomepage: typeof createBody.isHomepage === 'boolean' ? createBody.isHomepage : false,
+        isHomepage,
         parentId: typeof createBody.parentId === 'string' ? createBody.parentId : null,
         content: contentDocumentFromInput(createBody.content, { id: pageId, title, slug, status }),
         meta: isRecord(createBody.meta) ? createBody.meta : undefined,
@@ -347,7 +349,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const body = await parseJsonBody(request);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
-    const slug = normalizeSlug(body.slug || title);
+    const isHomepage = body.isHomepage === true;
+    const slug = isHomepage ? 'index' : normalizeSlug(body.slug || title);
     const status = statusFromInput(body.status);
 
     if (!title) {
@@ -365,11 +368,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (getPageBySlug(site.id, slug, { includeUnpublished: true })) {
+    if (getPageByPath(site.id, slug, { includeUnpublished: true })) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
     }
 
-    const routeConflict = findPageRouteConflict({ slug, title }, listCollections(site.id, { includeUnpublished: true }));
+    const routeConflict = findPageRouteConflict({ slug, title, isHomepage }, listCollections(site.id, { includeUnpublished: true }));
     if (routeConflict) {
       return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
@@ -398,6 +401,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       title,
       slug,
       status,
+      isHomepage,
       scheduledAt: scheduledAt || null,
     });
     await recordAdminAudit({

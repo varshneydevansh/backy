@@ -309,7 +309,7 @@ const parseJsonLd = (
 };
 
 const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
-    page.isHomepage || page.slug === 'home' || page.slug === ''
+    page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === ''
         ? '/'
         : `/${slugify(page.slug)}`
 );
@@ -527,7 +527,7 @@ function NewPageRoute() {
     // Default to first site if available
     const [formData, setFormData] = useState<PageCreateDraftState>({
         title: search.title ?? templateDefaults.title,
-        slug: search.isHomepage ? 'home' : search.slug ?? templateDefaults.slug,
+        slug: search.isHomepage ? 'index' : search.slug ?? templateDefaults.slug,
         siteId: requestedSiteId,
         template: initialTemplate,
         status: search.status || ('draft' as PageCreationStatus),
@@ -801,7 +801,7 @@ function NewPageRoute() {
             siteId: nextSiteId,
             template: nextTemplate,
             title: search.title ?? nextDefaults.title,
-            slug: search.isHomepage ? 'home' : search.slug ?? nextDefaults.slug,
+            slug: search.isHomepage ? 'index' : search.slug ?? nextDefaults.slug,
             description: search.description ?? nextDefaults.description,
             status: search.status || ('draft' as PageCreationStatus),
             scheduledAt: search.status === 'scheduled' ? search.scheduledAt ?? null : null,
@@ -926,7 +926,7 @@ function NewPageRoute() {
         updatePageDraft({
             template: nextTemplate,
             title: shouldApplyTitle ? nextDefaults.title : formData.title,
-            slug: formData.isHomepage ? 'home' : shouldApplySlug ? nextDefaults.slug : formData.slug,
+            slug: formData.isHomepage ? 'index' : shouldApplySlug ? nextDefaults.slug : formData.slug,
             description: shouldApplyDescription ? nextDefaults.description : formData.description,
             navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
             navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
@@ -945,7 +945,7 @@ function NewPageRoute() {
         updatePageDraft({
             designTemplateId: template.id,
             title: shouldApplyTitle ? template.name : formData.title,
-            slug: formData.isHomepage ? 'home' : shouldApplySlug ? routeSlug : formData.slug,
+            slug: formData.isHomepage ? 'index' : shouldApplySlug ? routeSlug : formData.slug,
             description: shouldApplyDescription ? template.description || formData.description : formData.description,
             navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
             seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
@@ -1010,7 +1010,7 @@ function NewPageRoute() {
     const routePreview = formData.isHomepage
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
-    const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+    const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
     const titleDerivedSlug = slugify(formData.title || 'new-page');
     const canSyncSlugFromTitle = !isPageCreateBusy && canEditPages && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
     const normalizedCanonicalPath = normalizeCanonicalPath(formData.canonicalPath || routePreview);
@@ -1097,7 +1097,7 @@ function NewPageRoute() {
         return 'Review the required page basics before creating this page.';
     }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, routePreview, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
     const pageCreationReadiness = useMemo(() => {
-        const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+        const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
         const seedsSiteChrome = selectedFrontendTemplate ? Boolean(frontendDesign?.chrome && Object.keys(frontendDesign.chrome).length > 0) : formData.template !== 'blank';
         const checks = [
@@ -2127,7 +2127,7 @@ function NewPageRoute() {
                                     const isHomepage = e.target.checked;
                                     updatePageDraft({
                                         isHomepage,
-                                        slug: isHomepage ? 'home' : formData.slug,
+                                        slug: isHomepage ? 'index' : formData.slug,
                                         parentPageId: isHomepage ? '' : formData.parentPageId,
                                     });
                                 }}

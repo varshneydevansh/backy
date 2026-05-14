@@ -32,6 +32,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { normalizeRoutePath } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 
 interface RouteParams {
   params: Promise<{
@@ -360,7 +361,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const pagePath = path === '/' ? 'index' : path.slice(1);
-      const page = await repositories.pages.getBySlug(site.id, pagePath);
+      const page = await getRepositoryPageByPublicPath(repositories, site.id, pagePath);
       const canPreviewPage = page && previewToken
         ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
         : false;

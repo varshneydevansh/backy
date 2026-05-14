@@ -4,6 +4,7 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import { createPreviewToken, getAdminPageById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
+import { repositoryPagePublicPath, repositoryPagePublicSlug } from '@/lib/repositoryPages';
 
 export const runtime = 'nodejs';
 
@@ -26,6 +27,28 @@ const encodePath = (path: string) => (
     .map((segment) => encodeURIComponent(segment))
     .join('/')
 );
+
+const previewUrlsForPage = (
+  origin: string,
+  siteIdentifier: string,
+  page: { slug: string; isHomepage?: boolean },
+  encodedToken: string,
+) => {
+  const publicSlug = repositoryPagePublicSlug({ ...page, isHomepage: page.isHomepage === true });
+  const publicPath = repositoryPagePublicPath({ ...page, isHomepage: page.isHomepage === true });
+  const encodedSlug = encodePath(publicSlug);
+  const encodedPath = encodePath(publicPath);
+  const hostedPath = publicPath === '/' ? '' : encodedPath;
+
+  return {
+    publicSlug,
+    publicPath,
+    hostedPath,
+    hostedUrl: `${origin}/sites/${encodeURIComponent(siteIdentifier)}${hostedPath}?previewToken=${encodedToken}`,
+    renderUrl: `${origin}/api/sites/${encodeURIComponent(siteIdentifier)}/render?path=${encodedPath}&previewToken=${encodedToken}`,
+    pageApiUrl: `${origin}/api/sites/${encodeURIComponent(siteIdentifier)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`,
+  };
+};
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -61,11 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
       const origin = new URL(request.url).origin;
       const encodedToken = encodeURIComponent(preview.token);
-      const encodedSlug = encodePath(page.slug || 'index');
-      const hostedPath = page.slug === 'index' || !page.slug ? '' : `/${encodedSlug}`;
-      const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}?previewToken=${encodedToken}`;
-      const renderUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}&previewToken=${encodedToken}`;
-      const pageApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`;
+      const previewUrls = previewUrlsForPage(origin, site.slug || site.id, page, encodedToken);
 
       await recordAdminAudit({
         repositories,
@@ -80,9 +99,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           slug: page.slug || 'index',
           ttlSeconds: body.ttlSeconds || null,
           expiresAt: preview.expiresAt,
-          hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}`,
-          renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}`,
-          pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}`,
+          publicPath: previewUrls.publicPath,
+          hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${previewUrls.hostedPath}`,
+          renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=${encodePath(previewUrls.publicPath)}`,
+          pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodePath(previewUrls.publicSlug)}`,
           tokenStored: false,
         },
         requestId,
@@ -96,9 +116,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           expiresAt: preview.expiresAt,
           targetType: preview.targetType,
           targetId: preview.targetId,
-          hostedUrl,
-          renderUrl,
-          pageApiUrl,
+          hostedUrl: previewUrls.hostedUrl,
+          renderUrl: previewUrls.renderUrl,
+          pageApiUrl: previewUrls.pageApiUrl,
         },
       });
     }
@@ -123,11 +143,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
     const origin = new URL(request.url).origin;
     const encodedToken = encodeURIComponent(preview.token);
-    const encodedSlug = encodePath(page.slug || 'index');
-    const hostedPath = page.slug === 'index' || !page.slug ? '' : `/${encodedSlug}`;
-    const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}?previewToken=${encodedToken}`;
-    const renderUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}&previewToken=${encodedToken}`;
-    const pageApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`;
+    const previewUrls = previewUrlsForPage(origin, site.slug || site.id, page, encodedToken);
 
     await recordAdminAudit({
       siteId: site.id,
@@ -141,9 +157,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         slug: page.slug || 'index',
         ttlSeconds: body.ttlSeconds || null,
         expiresAt: preview.expiresAt,
-        hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}`,
-        renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}`,
-        pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}`,
+        publicPath: previewUrls.publicPath,
+        hostedPath: `/sites/${encodeURIComponent(site.slug || site.id)}${previewUrls.hostedPath}`,
+        renderPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=${encodePath(previewUrls.publicPath)}`,
+        pageApiPath: `/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodePath(previewUrls.publicSlug)}`,
         tokenStored: false,
       },
       requestId,
@@ -157,9 +174,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         expiresAt: preview.expiresAt,
         targetType: preview.targetType,
         targetId: preview.targetId,
-        hostedUrl,
-        renderUrl,
-        pageApiUrl,
+        hostedUrl: previewUrls.hostedUrl,
+        renderUrl: previewUrls.renderUrl,
+        pageApiUrl: previewUrls.pageApiUrl,
       },
     });
   } catch (error) {

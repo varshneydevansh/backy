@@ -14,6 +14,7 @@ import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collec
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { resolveRedirectRoute, type ResolvedRedirectRoute } from '@/lib/redirectRules';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 
 interface RouteParams {
   params: Promise<{
@@ -248,7 +249,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const pagePath = path === '/' ? 'index' : path.slice(1);
-      const page = await repositories.pages.getBySlug(site.id, pagePath);
+      const page = await getRepositoryPageByPublicPath(repositories, site.id, pagePath);
       const canPreviewPage = page && previewToken
         ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
         : false;

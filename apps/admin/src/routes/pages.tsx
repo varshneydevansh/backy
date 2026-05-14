@@ -500,7 +500,7 @@ function PagesListView() {
         (healthFilter === 'needs-attention' && readiness?.statusLabel === 'needs-attention') ||
         (healthFilter === 'blocked' && readiness?.statusLabel === 'blocked') ||
         (healthFilter === 'route-conflicts' && pageRouteDiagnostics[page.id]?.status === 'conflict') ||
-        (healthFilter === 'homepage' && (page.isHomepage || page.slug === 'home' || page.slug === '')) ||
+        (healthFilter === 'homepage' && (page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === '')) ||
         (healthFilter === 'scheduled' && (page.status === 'scheduled' || Boolean(page.scheduledAt))) ||
         (healthFilter === 'has-canvas' && elementCount > 0) ||
         (healthFilter === 'empty-canvas' && Boolean(readiness) && elementCount === 0) ||
@@ -553,7 +553,7 @@ function PagesListView() {
     const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
     const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
     const totalElements = checkedPages.reduce((total, page) => total + (readinessMap[page.id]?.elementCount || 0), 0);
-    const hasHomepage = activeSitePages.some((page) => page.isHomepage || page.slug === 'home' || page.slug === '');
+    const hasHomepage = activeSitePages.some((page) => page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === '');
     const hasPublishedPage = activeSitePages.some((page) => page.status === 'published');
     const hasCanvasContent = totalElements > 0;
     const checks = [
@@ -566,7 +566,7 @@ function PagesListView() {
       },
       {
         label: 'Homepage route',
-        detail: hasHomepage ? 'A homepage route exists.' : 'Mark one page as homepage or create /home.',
+        detail: hasHomepage ? 'A homepage route exists.' : 'Mark one page as homepage or create the / route.',
         ready: hasHomepage,
       },
       {
@@ -1371,7 +1371,7 @@ function PagesListView() {
       render: (page) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            {page.slug === 'home' || page.slug === '' ? (
+            {page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === '' ? (
               <Home className="w-5 h-5 text-primary" />
             ) : (
               <Layout className="w-5 h-5 text-primary" />
@@ -3357,7 +3357,7 @@ const pagePublicPath = (page: Page): string => {
   if (page.isHomepage) {
     return '/';
   }
-  return !slug || slug === 'home' ? '/' : `/${slug}`;
+  return !slug || slug === 'index' || slug === 'home' ? '/' : `/${slug}`;
 };
 
 const firstPagePathSegment = (path: string): string => (
@@ -3404,7 +3404,7 @@ const pageSlugIsValid = (page: Page): boolean => {
   if (page.isHomepage) return true;
 
   const slug = (page.slug || '').replace(/^\/+|\/+$/g, '');
-  if (!slug || slug === 'home') return true;
+  if (!slug || slug === 'index' || slug === 'home') return true;
 
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 };

@@ -40,6 +40,7 @@ import {
     matchCollectionListRoute,
 } from '@/lib/collectionRoutes';
 import { resolveRedirectRoute } from '@/lib/redirectRules';
+import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -175,7 +176,7 @@ async function getRepositoryFontAssets(hostedSite: Extract<HostedSite, { mode: '
 }
 
 async function getRepositoryPage(hostedSite: Extract<HostedSite, { mode: 'database' }>, pageSlug: string, previewToken?: string) {
-    const page = await hostedSite.repositories.pages.getBySlug(hostedSite.site.id, pageSlug);
+    const page = await getRepositoryPageByPublicPath(hostedSite.repositories, hostedSite.site.id, pageSlug);
     if (!page) {
         return null;
     }
