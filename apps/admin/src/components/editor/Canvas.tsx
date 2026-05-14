@@ -1153,6 +1153,11 @@ interface FormSchemaField {
   validation?: FormSchemaValidationRule[];
 }
 
+interface FormPreviewSubmitState {
+  status: 'idle' | 'submitting' | 'success' | 'error';
+  message: string;
+}
+
 const FORM_SCHEMA_FIELD_TYPES: FormSchemaFieldType[] = [
   'text',
   'email',
@@ -2446,10 +2451,10 @@ function CanvasElementComponent({
   const isLocked = element.locked === true;
   const isEditingEnabled = isEditing && !isPreview && !disabled;
   const canReceiveNestedDrop = !disabled && !isLocked && canAcceptNestedDrop(element.type);
-
-  if (isPreview && isHidden) {
-    return null;
-  }
+  const [formPreviewSubmitState, setFormPreviewSubmitState] = useState<FormPreviewSubmitState>({
+    status: 'idle',
+    message: '',
+  });
 
   const renderChildren = () => (
     <>
@@ -2500,6 +2505,97 @@ function CanvasElementComponent({
           }
         },
       };
+
+  const handleFormPreviewSubmit = useCallback(async (
+    event: React.FormEvent<HTMLFormElement>,
+    options: {
+      actionUrl: string;
+      formActive: boolean;
+      method: string;
+      redirectUrl: string;
+      successMessage: string;
+    },
+  ) => {
+    event.preventDefault();
+
+    if (!isPreview) {
+      return;
+    }
+
+    if (!options.formActive) {
+      setFormPreviewSubmitState({
+        status: 'error',
+        message: 'This form is paused. Enable it before testing submissions.',
+      });
+      return;
+    }
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const normalizedMethod = options.method.toUpperCase() === 'GET'
+      ? 'GET'
+      : options.method.toUpperCase() === 'PUT'
+        ? 'PUT'
+        : 'POST';
+    const actionUrl = options.actionUrl.trim();
+
+    if (!actionUrl) {
+      setFormPreviewSubmitState({
+        status: 'success',
+        message: 'Preview submission captured. Add a Submit Action URL to send this form.',
+      });
+      return;
+    }
+
+    setFormPreviewSubmitState({
+      status: 'submitting',
+      message: 'Submitting preview...',
+    });
+
+    try {
+      let response: Response;
+
+      if (normalizedMethod === 'GET') {
+        const targetUrl = new URL(actionUrl, window.location.origin);
+        for (const [key, value] of formData.entries()) {
+          targetUrl.searchParams.append(key, typeof value === 'string' ? value : value.name);
+        }
+        response = await fetch(targetUrl, {
+          method: 'GET',
+          credentials: 'same-origin',
+        });
+      } else {
+        response = await fetch(actionUrl, {
+          method: normalizedMethod,
+          body: formData,
+          credentials: 'same-origin',
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error(`Submission failed with ${response.status}`);
+      }
+
+      const successMessage = options.successMessage.trim() || 'Preview submission completed.';
+      const redirectMessage = options.redirectUrl.trim()
+        ? ` Redirect configured: ${options.redirectUrl.trim()}`
+        : '';
+      setFormPreviewSubmitState({
+        status: 'success',
+        message: `${successMessage}${redirectMessage}`,
+      });
+      form.reset();
+    } catch (error) {
+      setFormPreviewSubmitState({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Preview submission failed.',
+      });
+    }
+  }, [isPreview]);
+
+  if (isPreview && isHidden) {
+    return null;
+  }
 
   const renderContent = () => {
     const resolvedType = normalizeCanvasElementType(element.type);
@@ -3421,6 +3517,8 @@ function CanvasElementComponent({
         const captchaSiteKey = sanitizeText(p.captchaSiteKey);
         const method = (sanitizeText(p.method) || 'POST').toUpperCase();
         const actionUrl = sanitizeText(p.actionUrl) || sanitizeText(p.action);
+        const successMessage = sanitizeText(p.successMessage);
+        const redirectUrl = sanitizeText(p.successRedirectUrl) || sanitizeText(p.redirectUrl);
         const schemaFields = normalizeFormSchemaFields(p.fields ?? p.formFields ?? p.schema);
         const submitLabel = sanitizeText(p.submitLabel) || 'Submit';
         const formBadges = [
@@ -3445,6 +3543,42 @@ function CanvasElementComponent({
           boxSizing: 'border-box',
           pointerEvents: isPreview ? 'auto' : 'none',
         };
+        const isFormPreviewSubmitting = formPreviewSubmitState.status === 'submitting';
+        const previewFeedbackNode = isPreview && formPreviewSubmitState.status !== 'idle' ? (
+          <div
+            role={formPreviewSubmitState.status === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+            data-testid="editor-form-preview-feedback"
+            data-status={formPreviewSubmitState.status}
+            style={{
+              border: `1px solid ${
+                formPreviewSubmitState.status === 'error'
+                  ? '#fecaca'
+                  : formPreviewSubmitState.status === 'submitting'
+                    ? '#bfdbfe'
+                    : '#bbf7d0'
+              }`,
+              borderRadius: toCssLength(p.fieldBorderRadius ?? 6),
+              background:
+                formPreviewSubmitState.status === 'error'
+                  ? '#fef2f2'
+                  : formPreviewSubmitState.status === 'submitting'
+                    ? '#eff6ff'
+                    : '#f0fdf4',
+              color:
+                formPreviewSubmitState.status === 'error'
+                  ? '#991b1b'
+                  : formPreviewSubmitState.status === 'submitting'
+                    ? '#1d4ed8'
+                    : '#166534',
+              fontSize: 12,
+              lineHeight: 1.4,
+              padding: '8px 10px',
+            }}
+          >
+            {formPreviewSubmitState.message}
+          </div>
+        ) : null;
         const renderSchemaField = (field: FormSchemaField, fieldIndex: number) => {
           const fieldId = `${element.id}-${field.key}`;
           const fieldOptions = parseFormOptions(field.options);
@@ -3653,7 +3787,13 @@ function CanvasElementComponent({
               data-form-id={formId}
               data-form-active={formActive ? 'true' : 'false'}
               data-form-field-count={schemaFields.length}
-              onSubmit={(event) => event.preventDefault()}
+              onSubmit={(event) => handleFormPreviewSubmit(event, {
+                actionUrl,
+                formActive,
+                method,
+                redirectUrl,
+                successMessage,
+              })}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -3719,7 +3859,7 @@ function CanvasElementComponent({
                   <button
                     type="submit"
                     data-testid="editor-form-schema-submit"
-                    disabled={!isPreview || !formActive}
+                    disabled={!isPreview || !formActive || isFormPreviewSubmitting}
                     style={{
                       width: 'fit-content',
                       minHeight: 40,
@@ -3730,17 +3870,18 @@ function CanvasElementComponent({
                       color: p.submitColor ?? '#ffffff',
                       fontSize: p.fontSize ?? 14,
                       fontWeight: 600,
-                      cursor: isPreview && formActive ? 'pointer' : 'default',
+                      cursor: isPreview && formActive && !isFormPreviewSubmitting ? 'pointer' : 'default',
                       pointerEvents: isPreview ? 'auto' : 'none',
                     }}
                   >
-                    {submitLabel}
+                    {isFormPreviewSubmitting ? 'Submitting...' : submitLabel}
                   </button>
                 </div>
               ) : null}
               <div style={{ width: '100%', minHeight: 0, flex: 1, position: 'relative' }}>
                 {renderChildren()}
               </div>
+              {previewFeedbackNode}
             </form>
 
             {schemaFields.length === 0 && childElements.length === 0 && !isPreview ? (

@@ -604,6 +604,12 @@ assertIncludes(canvasEditorSource, 'publicationStateChanging', 'canvas editor se
 assertIncludes(canvasEditorSource, "disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)}", 'canvas editor publish/unpublish button must require pages.publish in both directions');
 const pageSettingsModalSource = read('apps/admin/src/components/editor/PageSettingsModal.tsx');
 assertIncludes(pageSettingsModalSource, 'isPublicationStatus(initialSettings.status)', 'page settings modal must guard unpublishing published or scheduled pages');
+const canvasSource = read('apps/admin/src/components/editor/Canvas.tsx');
+assertIncludes(canvasSource, 'handleFormPreviewSubmit', 'editor form preview must have a submit workflow');
+assertIncludes(canvasSource, 'editor-form-preview-feedback', 'editor form preview must render visible submission feedback');
+assertIncludes(canvasSource, 'new FormData(form)', 'editor form preview must collect configured field values before submitting');
+assertIncludes(canvasSource, 'await fetch(actionUrl', 'editor form preview must call the configured action URL');
+assertExcludes(canvasSource, 'data-testid="editor-form-schema"\n              data-form-id={formId}\n              data-form-active={formActive ? \'true\' : \'false\'}\n              data-form-field-count={schemaFields.length}\n              onSubmit={(event) => event.preventDefault()}', 'editor form preview must not silently swallow schema form submissions');
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
