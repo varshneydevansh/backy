@@ -34,6 +34,9 @@ export {
     createSettingsRepository,
 } from './settings';
 export {
+    createTeamRepository,
+} from './teams';
+export {
     createUserRepository,
 } from './users';
 export {

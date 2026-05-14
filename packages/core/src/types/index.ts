@@ -22,7 +22,7 @@
  * - **editor**: Can create/edit content but cannot manage users or settings
  * - **viewer**: Read-only access for reviewing content
  */
-export type UserRole = 'admin' | 'editor' | 'viewer';
+export type UserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 /**
  * Extended user profile that supplements Supabase Auth's auth.users table.

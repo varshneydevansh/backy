@@ -17,6 +17,9 @@ import type {
   PublishStatus,
   Site,
   SiteSettings,
+  Team,
+  TeamMember,
+  TeamSettings,
   ThemeConfig,
 } from './types';
 
@@ -112,6 +115,8 @@ export type BackyRepositoryEntity =
   | 'reusableSection'
   | 'contact'
   | 'comment'
+  | 'team'
+  | 'teamMember'
   | 'user'
   | 'settings'
   | 'auditLog'
@@ -149,6 +154,39 @@ export interface BackySiteListInput extends BackyPaginationInput {
   teamId?: string;
   status?: PublishStatus | 'all';
   search?: string;
+}
+
+export interface BackyTeamListInput extends BackyPaginationInput {
+  ownerId?: string;
+  search?: string;
+}
+
+export interface BackyTeamCreateInput {
+  name: string;
+  slug: string;
+  ownerId?: string | null;
+  settings?: Partial<TeamSettings>;
+}
+
+export interface BackyTeamUpdateInput {
+  name?: string;
+  slug?: string;
+  ownerId?: string | null;
+  settings?: Partial<TeamSettings>;
+}
+
+export interface BackyTeamMemberListInput {
+  teamId: string;
+}
+
+export interface BackyTeamMemberAddInput {
+  teamId: string;
+  userId: string;
+  role: BackyUserRole;
+}
+
+export interface BackyTeamMemberUpdateInput {
+  role: BackyUserRole;
 }
 
 export interface BackyPageCreateInput {
@@ -920,6 +958,19 @@ export interface BackyContentWorkflowRepository {
   deletePreviewTokensForTarget(siteId: string, targetType: BackyContentTargetType, targetId: string, context?: BackyRepositoryContext): Promise<number>;
 }
 
+export interface BackyTeamRepository {
+  list(input: BackyTeamListInput, context?: BackyRepositoryContext): Promise<BackyListResult<Team>>;
+  getById(teamId: string, context?: BackyRepositoryContext): Promise<Team | null>;
+  getBySlug(slug: string, context?: BackyRepositoryContext): Promise<Team | null>;
+  create(input: BackyTeamCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Team>>;
+  update(teamId: string, input: BackyTeamUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Team>>;
+  delete(teamId: string, context?: BackyRepositoryContext): Promise<boolean>;
+  listMembers(input: BackyTeamMemberListInput, context?: BackyRepositoryContext): Promise<BackyListResult<TeamMember>>;
+  addMember(input: BackyTeamMemberAddInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<TeamMember>>;
+  updateMember(teamId: string, memberId: string, input: BackyTeamMemberUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<TeamMember>>;
+  removeMember(teamId: string, memberId: string, context?: BackyRepositoryContext): Promise<boolean>;
+}
+
 export interface BackyUserRepository {
   list(input: BackyUserListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyUser>>;
   getById(userId: string, context?: BackyRepositoryContext): Promise<BackyUser | null>;
@@ -948,6 +999,7 @@ export interface BackyCacheInvalidationRepository {
 }
 
 export interface BackyRepositories {
+  teams: BackyTeamRepository;
   sites: BackySiteRepository;
   pages: BackyPageRepository;
   posts: BackyPostRepository;

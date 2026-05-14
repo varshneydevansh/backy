@@ -10,6 +10,7 @@ import { createFormRepository } from './forms';
 import { createMediaRepository } from './media';
 import { createReusableSectionRepository } from './reusable-sections';
 import { createSettingsRepository } from './settings';
+import { createTeamRepository } from './teams';
 import { createUserRepository } from './users';
 import {
     createPageRepository,
@@ -17,7 +18,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'teams' | 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -27,6 +28,7 @@ export function createDatabaseRepositories(
     input: DatabaseRepositoryFactoryInput,
 ): ImplementedBackyRepositories {
     return {
+        teams: createTeamRepository(input.adapter.db),
         sites: createSiteRepository(input.adapter.db),
         pages: createPageRepository(input.adapter.db),
         posts: createPostRepository(input.adapter.db),

@@ -16,6 +16,7 @@ import {
   createReusableSectionRepository,
   createSettingsRepository,
   createSiteRepository,
+  createTeamRepository,
   createUnimplementedRepositoryProxy,
   createUserRepository,
 } from '../dist/index.js';
@@ -43,6 +44,8 @@ import {
   adminUserCredentials,
   reusableSections,
   sites,
+  teamMembers,
+  teams,
 } from '../dist/schema/index.js';
 
 const assert = (condition, message) => {
@@ -61,6 +64,8 @@ const tableName = (table) => {
   if (table === profiles) return 'profiles';
   if (table === adminUserCredentials) return 'adminUserCredentials';
   if (table === reusableSections) return 'reusableSections';
+  if (table === teams) return 'teams';
+  if (table === teamMembers) return 'teamMembers';
   if (table === blogPosts) return 'blogPosts';
   if (table === blogCategories) return 'blogCategories';
   if (table === blogTags) return 'blogTags';
@@ -89,6 +94,8 @@ const createFakeDb = () => {
     profiles: [],
     adminUserCredentials: [],
     reusableSections: [],
+    teams: [],
+    teamMembers: [],
     blogPosts: [],
     blogCategories: [],
     blogTags: [],
@@ -115,6 +122,8 @@ const createFakeDb = () => {
     profiles: 0,
     adminUserCredentials: 0,
     reusableSections: 0,
+    teams: 0,
+    teamMembers: 0,
     blogPosts: 0,
     blogCategories: 0,
     blogTags: 0,
@@ -190,6 +199,27 @@ const createFakeDb = () => {
         status: 'active',
         createdAt: timestamp,
         updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'teams') {
+      return {
+        id: nextId(name),
+        name: 'Repository Team',
+        slug: 'repository-team',
+        ownerId: null,
+        settings: {},
+        createdAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'teamMembers') {
+      return {
+        id: nextId(name),
+        teamId: 'teams_1',
+        userId: 'profiles_1',
+        role: 'viewer',
+        joinedAt: timestamp,
         ...values,
       };
     }
@@ -737,6 +767,7 @@ assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
 assert(repositorySet.reusableSections, 'Expected reusable section repository factory');
 assert(repositorySet.contentWorkflows, 'Expected content workflow repository factory');
+assert(repositorySet.teams, 'Expected team repository factory');
 assert(repositorySet.users, 'Expected user repository factory');
 assert(repositorySet.settings, 'Expected settings repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
@@ -753,6 +784,7 @@ const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
 const cacheInvalidationRepository = createCacheInvalidationRepository(db);
 const contentWorkflowRepository = createContentWorkflowRepository(db);
+const teamRepository = createTeamRepository(db);
 const userRepository = createUserRepository(db);
 const settingsRepository = createSettingsRepository(db);
 const reusableSectionRepository = createReusableSectionRepository(db);
@@ -1699,6 +1731,36 @@ const updatedCredential = await userRepository.setPasswordCredential(activeUser.
   salt: 'salt_two',
 });
 assert(updatedCredential.passwordHash === 'hash_two' && db.state.adminUserCredentials.length === 1, 'Expected user credential update to replace existing hash');
+const team = (await teamRepository.create({
+  name: 'Repository Team',
+  slug: 'repository-team',
+  ownerId: activeUser.id,
+  settings: { plan: 'pro' },
+})).item;
+assert(team.id === 'teams_1' && team.ownerId === activeUser.id, 'Expected team create');
+assert((await teamRepository.getBySlug('repository-team'))?.id === team.id, 'Expected team getBySlug');
+assert((await teamRepository.list({ ownerId: activeUser.id, search: 'repository' })).items.length === 1, 'Expected team list filters');
+const updatedTeam = (await teamRepository.update(team.id, {
+  name: 'Repository Team Updated',
+  slug: 'repository-team-updated',
+  settings: { plan: 'enterprise' },
+})).item;
+assert(updatedTeam.slug === 'repository-team-updated' && updatedTeam.settings.plan === 'enterprise', 'Expected team update');
+const member = (await teamRepository.addMember({
+  teamId: team.id,
+  userId: activeUser.id,
+  role: 'owner',
+})).item;
+assert(member.teamId === team.id && member.userId === activeUser.id, 'Expected team member add');
+const updatedMember = (await teamRepository.addMember({
+  teamId: team.id,
+  userId: activeUser.id,
+  role: 'admin',
+})).item;
+assert(updatedMember.id === member.id && updatedMember.role === 'admin', 'Expected team member add to update duplicate user');
+assert((await teamRepository.listMembers({ teamId: team.id })).items.length === 1, 'Expected team member list');
+assert(await teamRepository.removeMember(team.id, member.id), 'Expected team member remove');
+assert(await teamRepository.delete(team.id), 'Expected team delete');
 assert(await userRepository.delete(activeUser.id), 'Expected user delete');
 
 const settings = await settingsRepository.get();

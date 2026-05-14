@@ -75,6 +75,22 @@ const protectedRoutes = [
     file: 'apps/public/src/app/api/sites/[siteId]/events/route.ts',
     gates: ["permission: permissionForKind(kind)", "'forms.view'", "'comments.view'", "'commerce.view'", "'activity.export'"],
   },
+  {
+    file: 'apps/public/src/app/api/admin/teams/route.ts',
+    gates: ["permission: 'users.view'", "permission: 'users.manage'"],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/teams/[teamId]/route.ts',
+    gates: ["permission: 'users.view'", "permission: 'users.manage'"],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/teams/[teamId]/members/route.ts',
+    gates: ["permission: 'users.view'", "permission: 'users.manage'"],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/teams/[teamId]/members/[memberId]/route.ts',
+    gates: ["permission: 'users.manage'"],
+  },
 ];
 
 for (const route of protectedRoutes) {
@@ -131,6 +147,21 @@ for (const needle of [
   assertIncludes(adminSitesRoute, needle, 'admin sites route must infer or clearly require a database team id');
 }
 assertExcludes(adminSitesRoute, "'Team ID is required in database mode'", 'admin sites route must not hard-fail when UI omits teamId');
+
+const adminTeamsRoute = read('apps/public/src/app/api/admin/teams/route.ts');
+assertIncludes(adminTeamsRoute, 'repositories.teams.list', 'admin teams route must list database-backed teams');
+assertIncludes(adminTeamsRoute, 'repositories.teams.create', 'admin teams route must create database-backed teams');
+assertIncludes(adminTeamsRoute, 'repositories.teams.addMember', 'admin teams route must add the owner membership on create');
+const adminTeamRoute = read('apps/public/src/app/api/admin/teams/[teamId]/route.ts');
+assertIncludes(adminTeamRoute, 'repositories.teams.update', 'admin team detail route must update database-backed teams');
+assertIncludes(adminTeamRoute, 'repositories.teams.delete', 'admin team detail route must delete database-backed teams');
+assertIncludes(adminTeamRoute, 'TEAM_HAS_SITES', 'admin team delete must block teams that still own sites');
+const adminTeamMembersRoute = read('apps/public/src/app/api/admin/teams/[teamId]/members/route.ts');
+assertIncludes(adminTeamMembersRoute, 'repositories.teams.addMember', 'admin team members route must add database-backed team members');
+assertIncludes(adminTeamMembersRoute, 'repositories.users.create', 'admin team member invite must create invited users when needed');
+const adminTeamMemberRoute = read('apps/public/src/app/api/admin/teams/[teamId]/members/[memberId]/route.ts');
+assertIncludes(adminTeamMemberRoute, 'repositories.teams.updateMember', 'admin team member route must update roles');
+assertIncludes(adminTeamMemberRoute, 'repositories.teams.removeMember', 'admin team member route must remove members');
 
 const commerceCollectionAdminRoutes = [
   {
