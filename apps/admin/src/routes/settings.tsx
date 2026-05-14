@@ -645,8 +645,15 @@ function SettingsPage() {
   const manageKeysPermissionTitle = canManageApiKeys ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'settings.manageKeys', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const mediaConfigurePermissionTitle = canConfigureMedia ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const activityExportPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const canConfigureInfrastructure = canConfigureSettings || canConfigureMedia;
+  const isMediaOnlyInfrastructureEditor = !canConfigureSettings && canConfigureMedia;
+  const infrastructurePermissionTitle = canConfigureInfrastructure
+    ? undefined
+    : mediaConfigurePermissionTitle || configurePermissionTitle;
+  const canSaveActiveSettingsTab = activeTab === 'infrastructure' ? canConfigureInfrastructure : canConfigureSettings;
+  const activeSavePermissionTitle = activeTab === 'infrastructure' ? infrastructurePermissionTitle : configurePermissionTitle;
   const settingsFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureSettings;
-  const infrastructureFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureSettings;
+  const infrastructureFormDisabled = isSaving || isPermissionMatrixPending || !canConfigureInfrastructure;
 
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
     const snapshot = createSettingsDraftSnapshot(backendSettings);
@@ -771,12 +778,13 @@ function SettingsPage() {
 
   const handleSave = async () => {
     if (isSaving) return;
-    if (!canConfigureSettings) {
-      setNotice(configurePermissionTitle || 'Your account cannot configure settings.');
+    const canSaveInfrastructureWithMediaPermission = activeTab === 'infrastructure' && canConfigureMedia;
+    if (!canConfigureSettings && !canSaveInfrastructureWithMediaPermission) {
+      setNotice(activeSavePermissionTitle || 'Your account cannot configure settings.');
       return;
     }
 
-    if (blockingValidationIssues.length > 0) {
+    if (activeBlockingValidationIssues.length > 0) {
       setNotice('Fix settings validation issues before saving.');
       return;
     }
@@ -785,11 +793,18 @@ function SettingsPage() {
     setNotice(null);
 
     try {
-      const backendSettings = await updateBackendSettings({
-        deliveryMode,
-        auth: normalizeAuthSettings(authSettings),
-        integrations,
-      });
+      const backendSettings = await updateBackendSettings(canConfigureSettings
+        ? {
+            deliveryMode,
+            auth: normalizeAuthSettings(authSettings),
+            integrations,
+          }
+        : {
+            integrations: {
+              storage: integrations.storage,
+              supabase: integrations.supabase,
+            },
+          });
       applyBackendSettings(backendSettings);
       window.dispatchEvent(new CustomEvent('backy:settings-saved'));
       setSaved(true);
@@ -890,6 +905,9 @@ function SettingsPage() {
     seoSettings,
   ]);
   const blockingValidationIssues = validationIssues.filter((issue) => issue.severity === 'error');
+  const activeBlockingValidationIssues = isMediaOnlyInfrastructureEditor && activeTab === 'infrastructure'
+    ? blockingValidationIssues.filter((issue) => issue.tab === 'infrastructure' && !issue.label.startsWith('Vercel '))
+    : blockingValidationIssues;
   const platformReadiness = useMemo(() => {
     const savedGeneral = integrations.general;
     const savedAppearance = integrations.appearance;
@@ -1244,8 +1262,8 @@ function SettingsPage() {
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
-              disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings}
-              title={configurePermissionTitle}
+              disabled={isSaving || isPermissionMatrixPending || !canSaveActiveSettingsTab}
+              title={activeSavePermissionTitle}
               onClick={discardUnsavedChanges}
             >
               Discard changes
@@ -1272,8 +1290,8 @@ function SettingsPage() {
           <Button
             variant="primary"
             onClick={() => void handleSave()}
-            disabled={isSaving || isPermissionMatrixPending || !canConfigureSettings || !hasUnsavedChanges || blockingValidationIssues.length > 0}
-            title={configurePermissionTitle}
+            disabled={isSaving || isPermissionMatrixPending || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0}
+            title={activeSavePermissionTitle}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
           >
             {saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes'}
@@ -1289,7 +1307,7 @@ function SettingsPage() {
         <Notice tone="warning">{permissionError}</Notice>
       )}
 
-      {hasUnsavedChanges && blockingValidationIssues.length === 0 && (
+      {hasUnsavedChanges && activeBlockingValidationIssues.length === 0 && (
         <Notice tone="info" title="Unsaved settings">
           Review the current tab or save changes to update Backy’s API, frontend handoff, infrastructure metadata, and security policy.
         </Notice>
@@ -1464,7 +1482,7 @@ function SettingsPage() {
               ? infrastructureFormDisabled
               : settingsFormDisabled}
           className="contents disabled:cursor-not-allowed"
-          title={activeTab === 'infrastructure' ? mediaConfigurePermissionTitle || configurePermissionTitle : configurePermissionTitle}
+          title={activeTab === 'infrastructure' ? infrastructurePermissionTitle : configurePermissionTitle}
         >
         {activeTab === 'general' && (
           <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
@@ -1492,6 +1510,7 @@ function SettingsPage() {
             runtimeVercel={runtimeVercel}
             envContract={infrastructureEnvContract}
             disabled={infrastructureFormDisabled}
+            mediaOnly={isMediaOnlyInfrastructureEditor}
             onChange={setIntegrations}
           />
         )}
@@ -3234,6 +3253,7 @@ function InfrastructureSettings({
   runtimeVercel,
   envContract,
   disabled = false,
+  mediaOnly = false,
   onChange,
 }: {
   integrations: IntegrationSettings;
@@ -3244,18 +3264,22 @@ function InfrastructureSettings({
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
+  mediaOnly?: boolean;
   onChange: Dispatch<SetStateAction<IntegrationSettings>>;
 }) {
   const storage: StorageSettings = integrations.storage || {};
   const supabase: SupabaseSettings = integrations.supabase || {};
   const vercel: VercelSettings = integrations.vercel || {};
+  const storageDisabled = disabled;
+  const supabaseDisabled = disabled;
+  const vercelDisabled = disabled || mediaOnly;
   const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
   const [infrastructureCheckError, setInfrastructureCheckError] = useState('');
   const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
 
   const updateStorage = (next: Partial<StorageSettings>) => {
-    if (disabled) return;
+    if (storageDisabled) return;
 
     onChange((current) => ({
       ...current,
@@ -3267,7 +3291,7 @@ function InfrastructureSettings({
   };
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
-    if (disabled) return;
+    if (supabaseDisabled) return;
 
     onChange((current) => ({
       ...current,
@@ -3279,7 +3303,7 @@ function InfrastructureSettings({
   };
 
   const updateVercel = (next: Partial<VercelSettings>) => {
-    if (disabled) return;
+    if (vercelDisabled) return;
 
     onChange((current) => ({
       ...current,
@@ -3291,7 +3315,7 @@ function InfrastructureSettings({
   };
 
   const useRuntimeStorage = () => {
-    if (disabled) return;
+    if (storageDisabled) return;
 
     updateStorage({
       provider: runtimeStorage?.provider || storage.provider || 'local',
@@ -3303,7 +3327,7 @@ function InfrastructureSettings({
   };
 
   const useRuntimeSupabase = () => {
-    if (disabled) return;
+    if (supabaseDisabled) return;
 
     const projectUrl = runtimeSupabase?.projectUrl || supabase.projectUrl || '';
     const projectRef = runtimeSupabase?.projectRef || supabase.projectRef || '';
@@ -3332,7 +3356,7 @@ function InfrastructureSettings({
   };
 
   const useRuntimeVercel = () => {
-    if (disabled) return;
+    if (vercelDisabled) return;
 
     updateVercel({
       projectId: runtimeVercel?.projectId || vercel.projectId || '',
@@ -3361,7 +3385,9 @@ function InfrastructureSettings({
     setIsCheckingInfrastructure(true);
     setInfrastructureCheckError('');
     try {
-      const result = await validateSettingsInfrastructure({ deliveryMode, integrations });
+      const result = await validateSettingsInfrastructure(mediaOnly
+        ? { deliveryMode, integrations: { storage, supabase } }
+        : { deliveryMode, integrations });
       setInfrastructureDiagnostics(result.diagnostics);
     } catch (error) {
       setInfrastructureCheckError(error instanceof Error ? error.message : 'Unable to run infrastructure check.');
@@ -3378,6 +3404,12 @@ function InfrastructureSettings({
           Backy is the in-house CMS and API control plane. Supabase and Vercel are connected providers: metadata is stored here, while real tokens and database URLs stay in environment variables.
         </p>
       </div>
+
+      {mediaOnly && (
+        <Notice tone="info">
+          Your account can update media storage and Supabase metadata. Vercel and full platform settings require settings.configure.
+        </Notice>
+      )}
 
       <div className="rounded-lg border border-border bg-background p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3514,7 +3546,7 @@ function InfrastructureSettings({
           description="Store the non-secret file-delivery intent that Media, page editors, product downloads, and custom frontends should follow."
           icon={<Database className="size-4" />}
           action={
-            <Button size="sm" disabled={disabled} onClick={useRuntimeStorage}>
+            <Button size="sm" disabled={storageDisabled} onClick={useRuntimeStorage}>
               Use detected storage
             </Button>
           }
@@ -3549,7 +3581,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Provider</span>
                 <select
                   value={storage.provider || ''}
-                  disabled={disabled}
+                  disabled={storageDisabled}
                   onChange={(event) => updateStorage({ provider: event.target.value })}
                   className={inputClassName}
                 >
@@ -3563,7 +3595,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Bucket</span>
                 <input
                   value={storage.bucket || ''}
-                  disabled={disabled}
+                  disabled={storageDisabled}
                   onChange={(event) => updateStorage({ bucket: event.target.value })}
                   placeholder="media"
                   className={inputClassName}
@@ -3573,7 +3605,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Public base URL</span>
                 <input
                   value={storage.publicBaseUrl || ''}
-                  disabled={disabled}
+                  disabled={storageDisabled}
                   onChange={(event) => updateStorage({ publicBaseUrl: event.target.value })}
                   placeholder="https://project-ref.supabase.co/storage/v1/object/public/media"
                   className={inputClassName}
@@ -3583,7 +3615,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Path prefix</span>
                 <input
                   value={storage.pathPrefix || ''}
-                  disabled={disabled}
+                  disabled={storageDisabled}
                   onChange={(event) => updateStorage({ pathPrefix: event.target.value })}
                   placeholder="sites/{siteId}"
                   className={inputClassName}
@@ -3594,7 +3626,7 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={Boolean(storage.privateFilesEnabled)}
-                    disabled={disabled}
+                    disabled={storageDisabled}
                     onChange={(event) => updateStorage({ privateFilesEnabled: event.target.checked })}
                     className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -3604,7 +3636,7 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={storage.imageTransformsEnabled !== false}
-                    disabled={disabled}
+                    disabled={storageDisabled}
                     onChange={(event) => updateStorage({ imageTransformsEnabled: event.target.checked })}
                     className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -3641,7 +3673,7 @@ function InfrastructureSettings({
             description="Use Supabase for Postgres persistence, storage, and auth-ready metadata."
             icon={<Cloud className="size-4" />}
             action={
-              <Button size="sm" disabled={disabled} onClick={useRuntimeSupabase}>
+              <Button size="sm" disabled={supabaseDisabled} onClick={useRuntimeSupabase}>
                 Use detected env
               </Button>
             }
@@ -3652,7 +3684,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project URL</span>
                 <input
                   value={supabase.projectUrl || ''}
-                  disabled={disabled}
+                  disabled={supabaseDisabled}
                   onChange={(event) => updateSupabase({ projectUrl: event.target.value })}
                   placeholder="https://project-ref.supabase.co"
                   className={inputClassName}
@@ -3662,7 +3694,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project ref</span>
                 <input
                   value={supabase.projectRef || ''}
-                  disabled={disabled}
+                  disabled={supabaseDisabled}
                   onChange={(event) => updateSupabase({ projectRef: event.target.value })}
                   placeholder="project-ref"
                   className={inputClassName}
@@ -3678,7 +3710,7 @@ function InfrastructureSettings({
                     <input
                       type="checkbox"
                       checked={Boolean(supabase[key as keyof SupabaseSettings])}
-                      disabled={disabled}
+                      disabled={supabaseDisabled}
                       onChange={(event) => updateSupabase({ [key]: event.target.checked } as Partial<SupabaseSettings>)}
                       className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -3701,7 +3733,7 @@ function InfrastructureSettings({
             description="Track deployment ownership for hosted Backy and future deploy workflows."
             icon={<Rocket className="size-4" />}
             action={
-              <Button size="sm" disabled={disabled} onClick={useRuntimeVercel}>
+              <Button size="sm" disabled={vercelDisabled} onClick={useRuntimeVercel}>
                 Use detected env
               </Button>
             }
@@ -3712,7 +3744,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project ID</span>
                 <input
                   value={vercel.projectId || ''}
-                  disabled={disabled}
+                  disabled={vercelDisabled}
                   onChange={(event) => updateVercel({ projectId: event.target.value })}
                   placeholder="prj_..."
                   className={inputClassName}
@@ -3722,7 +3754,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Team slug</span>
                 <input
                   value={vercel.teamSlug || ''}
-                  disabled={disabled}
+                  disabled={vercelDisabled}
                   onChange={(event) => updateVercel({ teamSlug: event.target.value })}
                   placeholder="team-or-account"
                   className={inputClassName}
@@ -3732,7 +3764,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Production domain</span>
                 <input
                   value={vercel.productionDomain || ''}
-                  disabled={disabled}
+                  disabled={vercelDisabled}
                   onChange={(event) => updateVercel({ productionDomain: event.target.value })}
                   placeholder="backy.example.com"
                   className={inputClassName}
@@ -3743,7 +3775,7 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={Boolean(vercel.autoDeploy)}
-                    disabled={disabled}
+                    disabled={vercelDisabled}
                     onChange={(event) => updateVercel({ autoDeploy: event.target.checked })}
                     className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -3753,7 +3785,7 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={vercel.previewDeployments !== false}
-                    disabled={disabled}
+                    disabled={vercelDisabled}
                     onChange={(event) => updateVercel({ previewDeployments: event.target.checked })}
                     className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
