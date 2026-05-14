@@ -5425,6 +5425,21 @@ export async function createCollectionRecord(
   return toCollectionRecord(payload.data.record);
 }
 
+export async function getCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+): Promise<CollectionRecord> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`);
+  const payload = await readJson<ApiCollectionRecordResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to load collection record');
+  }
+
+  return toCollectionRecord(payload.data.record);
+}
+
 export async function updateCollectionRecord(
   siteId: string,
   collectionId: string,

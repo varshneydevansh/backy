@@ -28,6 +28,7 @@ import {
   deleteCollectionRecord,
   exportCollectionsBackup,
   exportCollectionRecordsCsv,
+  getCollectionRecord,
   getPage,
   getUserPermissions,
   getSiteFrontendDesign,
@@ -1388,6 +1389,7 @@ function CollectionsPage() {
   const [records, setRecords] = useState<CollectionRecord[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(routeSearch.recordId || null);
+  const [deepLinkedRecord, setDeepLinkedRecord] = useState<CollectionRecord | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [isCollectionDraftMode, setIsCollectionDraftMode] = useState(false);
   const collectionDraftModeRef = useRef(false);
@@ -1487,8 +1489,8 @@ function CollectionsPage() {
     [frontendCollectionTemplates],
   );
   const selectedRecord = useMemo(
-    () => records.find((record) => record.id === selectedRecordId) || null,
-    [records, selectedRecordId],
+    () => records.find((record) => record.id === selectedRecordId) || (deepLinkedRecord?.id === selectedRecordId ? deepLinkedRecord : null),
+    [deepLinkedRecord, records, selectedRecordId],
   );
   const dynamicTemplatePreviewRecord = useMemo(
     () => records.find((record) => record.id === dynamicTemplatePreviewRecordId)
@@ -2494,6 +2496,7 @@ function CollectionsPage() {
     setCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
+    setDeepLinkedRecord(null);
     setSelectedRecordIds([]);
     setDynamicTemplatePreviewRecordId('');
     setRecords([]);
@@ -2734,6 +2737,7 @@ function CollectionsPage() {
     setCollectionDraftMode(true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
+    setDeepLinkedRecord(null);
     setSelectedRecordIds([]);
     setRecords([]);
     setRecordFilters({
@@ -2821,6 +2825,7 @@ function CollectionsPage() {
     setCollectionDraftMode(false);
     setSelectedCollectionId(collection.id);
     setSelectedRecordId(preserveRouteState ? routeSearch.recordId || null : null);
+    setDeepLinkedRecord(null);
     setSelectedRecordIds([]);
     setRecordFilters((prev) => ({
       ...prev,
@@ -2863,6 +2868,7 @@ function CollectionsPage() {
       setSelectedCollectionId(null);
       setSelectedRecordId(null);
       setSelectedRecordIds([]);
+      setDeepLinkedRecord(null);
       setError(viewPermissionTitle || 'Your account cannot view collections.');
       setValidationDetails([]);
       setNotice(null);
@@ -2902,6 +2908,7 @@ function CollectionsPage() {
         setRecords([]);
         setSelectedCollectionId(null);
         setSelectedRecordId(null);
+        setDeepLinkedRecord(null);
         setSelectedRecordIds([]);
       }
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collections');
@@ -2915,6 +2922,7 @@ function CollectionsPage() {
     if (!canViewCollections) {
       setRecords([]);
       setSelectedRecordIds([]);
+      setDeepLinkedRecord(null);
       setRecordPagination((prev) => ({ ...prev, total: 0, hasMore: false }));
       return;
     }
@@ -2941,8 +2949,22 @@ function CollectionsPage() {
           record.slug === routeSearch.recordId
         ));
         if (shortcutRecord) {
+          setDeepLinkedRecord(null);
           setSelectedRecordId(shortcutRecord.id);
+        } else {
+          try {
+            const record = await getCollectionRecord(activeSiteId, collectionId, routeSearch.recordId);
+            if (!result.records.some((item) => item.id === record.id)) {
+              setDeepLinkedRecord(record);
+            }
+            setSelectedRecordId(record.id);
+          } catch {
+            setDeepLinkedRecord(null);
+            setSelectedRecordId(null);
+          }
         }
+      } else {
+        setDeepLinkedRecord(null);
       }
       setRecordPagination(result.pagination);
     } catch (loadError) {
@@ -6094,6 +6116,7 @@ function CollectionsPage() {
                                 type="button"
                                 onClick={() => {
                                   if (isCollectionsBusy) return;
+                                  setDeepLinkedRecord(null);
                                   setSelectedRecordId(record.id);
                                   updateCollectionsRouteSearch({ recordId: record.id });
                                 }}
