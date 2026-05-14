@@ -421,6 +421,11 @@ const fetchCollections = async () => {
   return payload.data?.collections || payload.collections || [];
 };
 
+const fetchCollection = async (collectionId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`);
+  return payload.data?.collection || payload.collection || null;
+};
+
 const waitForRecordStatus = async (collectionId, recordSlug, status) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const record = await fetchRecordBySlug(collectionId, recordSlug);
@@ -1258,8 +1263,7 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       button.click();
       return { ok: true };
     })()`);
-    const collections = await fetchCollections();
-    const collection = collections.find((candidate) => candidate.id === collectionId);
+    const collection = await fetchCollection(collectionId);
     const policy = collection?.metadata?.visitorWritePolicy;
     const pageState = await evaluate(client, `(() => ({
       notice: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
