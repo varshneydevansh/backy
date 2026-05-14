@@ -738,7 +738,7 @@ function NewPageRoute() {
         let cancelled = false;
         const siteId = formData.siteId;
 
-        if (!siteId || !formData.collectionId) {
+        if (!siteId) {
             setCollections([]);
             setCollectionsError(null);
             setCollectionsLoading(false);
@@ -779,7 +779,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [canViewCollections, collectionsViewPermissionTitle, formData.collectionId, formData.siteId, isPermissionMatrixPending]);
+    }, [canViewCollections, collectionsViewPermissionTitle, formData.siteId, isPermissionMatrixPending]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
@@ -877,7 +877,12 @@ function NewPageRoute() {
 
     const selectPageSite = (nextSiteId: string) => {
         if (isPageCreateBusy) return;
-        updatePageDraft({ siteId: nextSiteId });
+        updatePageDraft({
+            siteId: nextSiteId,
+            parentPageId: '',
+            collectionId: '',
+            datasetMode: '',
+        });
     };
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
@@ -892,7 +897,10 @@ function NewPageRoute() {
         [formData.designTemplateId, frontendPageTemplates],
     );
     const selectedDatasetCollection = useMemo(
-        () => collections.find((collection) => collection.id === formData.collectionId) || null,
+        () => collections.find((collection) => (
+            collection.id === formData.collectionId ||
+            collection.slug === formData.collectionId
+        )) || null,
         [collections, formData.collectionId],
     );
     const selectedDatasetMode = formData.datasetMode || (selectedDatasetCollection ? 'list' : '');
@@ -950,6 +958,29 @@ function NewPageRoute() {
             navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
             seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
         });
+    };
+    const handleDatasetCollectionChange = (collectionId: string) => {
+        if (isPageCreateBusy || !canEditPages) return;
+
+        const collection = collections.find((item) => item.id === collectionId) || null;
+        const shouldApplyTitle = collection && (!formData.title.trim() || formData.title === TEMPLATE_DEFAULTS[formData.template].title);
+        const shouldApplySlug = collection && !formData.isHomepage && (!formData.slug.trim() || formData.slug === TEMPLATE_DEFAULTS[formData.template].slug);
+        const shouldApplyDescription = collection && (!formData.description.trim() || formData.description === TEMPLATE_DEFAULTS[formData.template].description);
+
+        updatePageDraft({
+            collectionId,
+            datasetMode: collectionId ? formData.datasetMode || 'list' : '',
+            title: shouldApplyTitle ? collection.name : formData.title,
+            slug: shouldApplySlug ? collection.slug : formData.slug,
+            description: shouldApplyDescription ? collection.description || formData.description : formData.description,
+            navigationLabel: shouldApplyTitle ? collection.name : formData.navigationLabel || formData.title,
+            seoTitle: shouldApplyTitle ? collection.name : formData.seoTitle || formData.title,
+        });
+    };
+    const handleDatasetModeChange = (datasetMode: PageDatasetMode) => {
+        if (isPageCreateBusy || !canEditPages || !formData.collectionId) return;
+
+        updatePageDraft({ datasetMode });
     };
     const selectedSiteIdentifiers = useMemo(
         () => [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId, selectedSite?.slug].filter((value): value is string => Boolean(value)),
@@ -2422,6 +2453,89 @@ function NewPageRoute() {
                                     Templates seed real editable canvas elements instead of leaving the editor empty.
                                 </p>
                             </div>
+                        </div>
+
+                        <div className="rounded-lg border border-cyan-200 bg-cyan-50/60 p-4" data-testid="page-create-dataset-selector">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-cyan-950">Collection dataset page</h3>
+                                    <p className="mt-1 text-xs leading-5 text-cyan-900">
+                                        Choose a collection to seed this page with reusable dataset bindings for repeaters, detail routes, media fields, and custom frontend APIs.
+                                    </p>
+                                </div>
+                                <span className="w-fit rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-cyan-900">
+                                    {collectionsLoading ? 'Loading collections' : `${collections.length} collection${collections.length === 1 ? '' : 's'}`}
+                                </span>
+                            </div>
+
+                            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+                                <div>
+                                    <label htmlFor="page-dataset-collection-select" className="mb-2 block text-sm font-medium text-cyan-950">
+                                        Dataset collection
+                                    </label>
+                                    <select
+                                        id="page-dataset-collection-select"
+                                        value={selectedDatasetCollection?.id || ''}
+                                        onChange={(event) => handleDatasetCollectionChange(event.target.value)}
+                                        disabled={isPageCreateBusy || collectionsLoading || !canViewCollections}
+                                        title={!canViewCollections ? collectionsViewPermissionTitle : undefined}
+                                        data-testid="page-dataset-collection-select"
+                                        className="w-full rounded-lg border border-cyan-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <option value="">No dataset seed</option>
+                                        {collections.map((collection) => (
+                                            <option key={collection.id} value={collection.id}>
+                                                {collection.name} /{collection.slug} ({collection.fields.length} fields)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="mt-2 text-xs leading-5 text-cyan-900/80">
+                                        {!canViewCollections
+                                            ? collectionsViewPermissionTitle || 'Your account cannot view collections.'
+                                            : collectionsError
+                                                ? collectionsError
+                                                : selectedDatasetCollection
+                                                    ? `${selectedDatasetCollection.name} will seed ${selectedDatasetCollection.fields.length} mapped field${selectedDatasetCollection.fields.length === 1 ? '' : 's'}.`
+                                                    : 'Leave empty for a normal page template.'}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div className="mb-2 text-sm font-medium text-cyan-950">Dataset mode</div>
+                                    <div className="grid gap-2">
+                                        {(['list', 'item'] as PageDatasetMode[]).map((mode) => (
+                                            <button
+                                                key={mode}
+                                                type="button"
+                                                onClick={() => handleDatasetModeChange(mode)}
+                                                disabled={isPageCreateBusy || !formData.collectionId}
+                                                data-testid={`page-dataset-mode-${mode}`}
+                                                data-active={selectedDatasetMode === mode ? 'true' : 'false'}
+                                                className={cn(
+                                                    'rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                                    selectedDatasetMode === mode
+                                                        ? 'border-cyan-700 bg-white text-cyan-950 ring-1 ring-cyan-700'
+                                                        : 'border-cyan-200 bg-white/80 text-cyan-900 hover:border-cyan-400',
+                                                )}
+                                            >
+                                                {mode === 'list' ? 'List page' : 'Detail page'}
+                                                <span className="mt-0.5 block text-xs font-normal text-cyan-900/70">
+                                                    {mode === 'list' ? 'Repeater and index route' : 'Single-record route template'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {selectedDatasetCollection && selectedDatasetFields && (
+                                <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4" data-testid="page-dataset-field-map">
+                                    <div className="rounded-md bg-white/80 px-2 py-1">collection {selectedDatasetCollection.slug}</div>
+                                    <div className="rounded-md bg-white/80 px-2 py-1">mode {selectedDatasetMode || 'list'}</div>
+                                    <div className="rounded-md bg-white/80 px-2 py-1">title {selectedDatasetFields.titleField?.key || 'unmapped'}</div>
+                                    <div className="rounded-md bg-white/80 px-2 py-1">media {selectedDatasetFields.imageField?.key || 'unmapped'}</div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

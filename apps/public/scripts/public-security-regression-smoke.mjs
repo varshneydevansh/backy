@@ -610,6 +610,12 @@ assertIncludes(canvasSource, 'editor-form-preview-feedback', 'editor form previe
 assertIncludes(canvasSource, 'new FormData(form)', 'editor form preview must collect configured field values before submitting');
 assertIncludes(canvasSource, 'await fetch(actionUrl', 'editor form preview must call the configured action URL');
 assertExcludes(canvasSource, 'data-testid="editor-form-schema"\n              data-form-id={formId}\n              data-form-active={formActive ? \'true\' : \'false\'}\n              data-form-field-count={schemaFields.length}\n              onSubmit={(event) => event.preventDefault()}', 'editor form preview must not silently swallow schema form submissions');
+const pageCreateRoute = read('apps/admin/src/routes/pages.new.tsx');
+assertIncludes(pageCreateRoute, 'page-create-dataset-selector', 'page creation must expose a first-class dataset selector');
+assertIncludes(pageCreateRoute, 'page-dataset-collection-select', 'page creation must let users choose a collection without URL params');
+assertIncludes(pageCreateRoute, "(['list', 'item'] as PageDatasetMode[]).map", 'page creation must expose list and item dataset modes');
+assertIncludes(pageCreateRoute, 'page-dataset-mode-${mode}', 'page creation must test dataset mode controls');
+assertExcludes(pageCreateRoute, 'if (!siteId || !formData.collectionId)', 'page creation must load collections for selector use, not only URL-param dataset imports');
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
