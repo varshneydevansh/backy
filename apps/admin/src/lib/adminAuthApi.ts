@@ -141,6 +141,10 @@ interface AdminPasswordRecoveryResponse {
     accepted: boolean;
     deliveryConfigured: boolean;
     message?: string;
+    localRecovery?: {
+      resetUrl: string;
+      expiresAt: string;
+    };
   };
   error?: {
     message?: string;

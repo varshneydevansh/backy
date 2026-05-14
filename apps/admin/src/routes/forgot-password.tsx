@@ -24,6 +24,7 @@ function ForgotPasswordPage() {
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
   const [recoveryState, setRecoveryState] = useState<RecoveryState>('ready');
   const [message, setMessage] = useState<string | null>(null);
+  const [localRecoveryUrl, setLocalRecoveryUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const readiness = useMemo(() => Math.round(([emailIsValid, !isSubmitting].filter(Boolean).length / 2) * 100), [emailIsValid, isSubmitting]);
@@ -44,11 +45,13 @@ function ForgotPasswordPage() {
     setIsSubmitting(true);
     setRecoveryState('ready');
     setMessage(null);
+    setLocalRecoveryUrl(null);
 
     try {
       const recovery = await requestAdminPasswordRecovery(normalizedEmail);
       setRecoveryState('sent');
       setMessage(recovery.message || 'Password recovery was requested. Check your configured delivery channel for next steps.');
+      setLocalRecoveryUrl(recovery.localRecovery?.resetUrl || null);
     } catch (error) {
       setRecoveryState('error');
       setMessage(error instanceof Error ? error.message : 'Unable to request password recovery.');
@@ -145,6 +148,7 @@ function ForgotPasswordPage() {
                     setEmail(event.target.value);
                     setRecoveryState('ready');
                     setMessage(null);
+                    setLocalRecoveryUrl(null);
                   }}
                   placeholder="admin@backy.io"
                   className={cn(
@@ -170,6 +174,16 @@ function ForgotPasswordPage() {
               >
                 {message}
               </div>
+            )}
+
+            {localRecoveryUrl && (
+              <a
+                href={localRecoveryUrl}
+                className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+              >
+                Open local reset link
+                <ArrowRight className="h-4 w-4" />
+              </a>
             )}
 
             <div className="mt-6 grid gap-3">

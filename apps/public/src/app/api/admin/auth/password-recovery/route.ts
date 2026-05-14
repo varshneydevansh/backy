@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAdminAuthRateLimit } from '@/lib/admin-auth/sessionStore';
+import {
+  checkAdminAuthRateLimit,
+  createAdminPasswordResetToken,
+  type AdminPasswordResetToken,
+} from '@/lib/admin-auth/sessionStore';
+import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
+import { getAdminUserByEmail } from '@/lib/backyStore';
+import {
+  EmailDeliveryError,
+  getEmailDeliveryConfig,
+  sendEmailMessage,
+} from '@/lib/formEmailDelivery';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +32,43 @@ const getClientAddress = (request: NextRequest) => (
   || request.headers.get('x-real-ip')?.trim()
   || 'unknown'
 );
+
+const exposeLocalRecoveryToken = () => (
+  process.env.BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN?.trim().toLowerCase() === 'true'
+);
+
+const buildPasswordRecoveryMessage = (input: {
+  to: string;
+  reset: AdminPasswordResetToken;
+  requestId: string;
+}) => {
+  const config = getEmailDeliveryConfig();
+  return {
+    config,
+    message: {
+      to: input.to,
+      from: config.from,
+      subject: 'Reset your Backy admin password',
+      text: [
+        'A password recovery request was made for your Backy admin account.',
+        '',
+        `Reset URL: ${input.reset.resetUrl}`,
+        `Expires at: ${input.reset.expiresAt}`,
+        `Request: ${input.requestId}`,
+        '',
+        'If you did not request this, ignore this message.',
+      ].join('\n'),
+      siteId: 'admin',
+      entityType: undefined,
+      status: 'queued',
+      requestId: input.requestId,
+      values: {
+        resetTokenId: input.reset.id,
+        expiresAt: input.reset.expiresAt,
+      },
+    },
+  };
+};
 
 const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
   const response = NextResponse.json(
@@ -76,13 +124,46 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
+  const config = getEmailDeliveryConfig();
+  const deliveryConfigured = config.provider !== 'local-outbox';
+  let localRecovery: { resetUrl: string; expiresAt: string } | undefined;
+
+  try {
+    const user = getAdminUserByEmail(email);
+    if (user && user.status !== 'inactive' && user.status !== 'suspended') {
+      const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(user.status, 'active');
+      if (inviteOnlyPolicy.ok) {
+        const reset = createAdminPasswordResetToken({
+          user,
+          requestedById: null,
+          origin: request.headers.get('origin') || request.nextUrl.origin,
+          expiresInMinutes: 60,
+        });
+        const delivery = buildPasswordRecoveryMessage({ to: user.email, reset, requestId });
+        if (delivery.config.provider !== 'local-outbox') {
+          await sendEmailMessage(delivery.config, delivery.message);
+        } else if (exposeLocalRecoveryToken()) {
+          localRecovery = {
+            resetUrl: reset.resetUrl,
+            expiresAt: reset.expiresAt,
+          };
+        }
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown recovery delivery error';
+    const statusCode = error instanceof EmailDeliveryError ? error.statusCode : undefined;
+    console.error('Admin password recovery delivery failed:', { message, statusCode, requestId });
+  }
+
   return NextResponse.json({
     success: true,
     requestId,
     data: {
       accepted: true,
-      deliveryConfigured: false,
+      deliveryConfigured,
       message: 'If recovery is available for this account, the next steps will be sent through the configured recovery channel.',
+      ...(localRecovery ? { localRecovery } : {}),
     },
   });
 }

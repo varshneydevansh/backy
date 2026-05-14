@@ -296,6 +296,17 @@ assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, passwor
 assertIncludes(resetPasswordRoute, "'INVITE_ONLY_REQUIRED'", 'reset password route must return stable invite-only policy code');
 assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route');
 
+const passwordRecoveryRoute = read('apps/public/src/app/api/admin/auth/password-recovery/route.ts');
+for (const needle of [
+  'createAdminPasswordResetToken',
+  'getEmailDeliveryConfig',
+  'sendEmailMessage',
+  'validateAdminInviteOnlyActivationPolicy',
+  'BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN',
+]) {
+  assertIncludes(passwordRecoveryRoute, needle, 'password recovery route must create and deliver reset tokens without account enumeration');
+}
+
 const adminEmailPolicy = read('apps/public/src/lib/admin-auth/emailPolicy.ts');
 assertIncludes(adminEmailPolicy, 'getAdminSettings()', 'admin email policy must read persisted settings');
 assertIncludes(adminEmailPolicy, 'getRequiredDatabaseRepositories()', 'admin email policy must read database-backed settings');
