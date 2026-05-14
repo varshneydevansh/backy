@@ -367,6 +367,23 @@ const validateCheckoutInput = (input: CheckoutOrderInput): string[] => {
   return errors;
 };
 
+const requireGuestCheckoutAllowed = (
+  commerce: CommerceStorefrontContract,
+  requestId: string,
+) => {
+  if (!commerce.checkout.guestCheckout) {
+    return errorResponse(
+      403,
+      'GUEST_CHECKOUT_DISABLED',
+      'Guest checkout is disabled for this site.',
+      requestId,
+      { checkout: { guestCheckout: false } },
+    );
+  }
+
+  return null;
+};
+
 const selectProductVariant = (product: CommerceProduct, item: CheckoutItemInput) => {
   const variantId = textValue(item.variantId);
   const variantSku = textValue(item.variantSku);
@@ -1210,6 +1227,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         hasCatalog: true,
         hasOrderIntake: true,
       });
+      const guestCheckoutResponse = requireGuestCheckoutAllowed(commerce, requestId);
+      if (guestCheckoutResponse) return guestCheckoutResponse;
 
       const lineItems = [];
       const reservationsEnabled = commerce.inventory.reservations;
@@ -1410,6 +1429,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hasCatalog: true,
       hasOrderIntake: true,
     });
+    const guestCheckoutResponse = requireGuestCheckoutAllowed(commerce, requestId);
+    if (guestCheckoutResponse) return guestCheckoutResponse;
 
     const lineItems = [];
     const reservationsEnabled = commerce.inventory.reservations;

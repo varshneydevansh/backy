@@ -395,13 +395,16 @@ assertIncludes(adminFormSubmissionReviewRoute, 'createCollectionRecordFromFormSu
 assertIncludes(adminFormSubmissionReviewRoute, "updated.status === 'approved' && form.collectionTarget?.enabled && !updated.collectionRecord", 'admin submission review must create missing collection records only on approval');
 
 const adminPasswordPolicy = read('apps/public/src/lib/admin-auth/passwordPolicy.ts');
-assertIncludes(adminPasswordPolicy, 'getAdminSettings()', 'admin password policy must read persisted settings');
+assertIncludes(adminPasswordPolicy, 'getAdminAuthPolicySettings', 'admin password policy must read persisted auth settings');
 assertIncludes(adminPasswordPolicy, 'minPasswordLength', 'admin password policy must expose minimum length');
 assertIncludes(adminPasswordPolicy, 'MIN_PASSWORD_LENGTH = 8', 'admin password policy must preserve lower UI bound');
 assertIncludes(adminPasswordPolicy, 'MAX_PASSWORD_LENGTH = 128', 'admin password policy must preserve upper UI bound');
+const adminAuthPolicyHelper = read('apps/public/src/lib/admin-auth/emailPolicy.ts');
+assertIncludes(adminAuthPolicyHelper, 'await repositories.settings.get()', 'admin auth policy helper must read database settings when repositories are configured');
+assertIncludes(adminAuthPolicyHelper, 'getAdminSettings()', 'admin auth policy helper must read demo settings during local fallback');
 const resetPasswordRoute = read('apps/public/src/app/api/admin/auth/reset-password/route.ts');
 assertIncludes(resetPasswordRoute, '@/lib/admin-auth/passwordPolicy', 'reset password route must import password policy');
-assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password)', 'reset password route must enforce persisted password policy');
+assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password, authSettings)', 'reset password route must enforce persisted password policy');
 assertIncludes(resetPasswordRoute, 'getRequiredDatabaseRepositories', 'reset password route must support database-backed users');
 assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, password, repositories', 'reset password route must await repository-aware invite-only reset policy checks');
 assertIncludes(resetPasswordRoute, 'repositories.users.setPasswordCredential(userId, credential)', 'reset password route must persist database-backed password credentials');
@@ -588,6 +591,10 @@ for (const needle of [
 ]) {
   assertIncludes(checkoutGet, needle, 'checkout GET must report only real order-intake readiness');
 }
+assertIncludes(checkoutRoute, 'GUEST_CHECKOUT_DISABLED', 'checkout POST must reject public order intake when guest checkout is disabled');
+assertIncludes(checkoutRoute, '!commerce.checkout.guestCheckout', 'checkout POST must read the guest checkout setting before creating orders');
+const guestCheckoutGuards = checkoutRoute.match(/requireGuestCheckoutAllowed\(commerce, requestId\)/g) || [];
+assert(guestCheckoutGuards.length >= 2, 'checkout POST must enforce guest checkout policy in both repository and demo-store paths');
 const orderCreateAnchor = 'let order: Awaited<ReturnType<typeof repositories.collections.createRecord>>[\'item\'];';
 const orderCreateAnchorIndex = checkoutRoute.indexOf(orderCreateAnchor);
 const applyRepositoryReservationsIndex = checkoutRoute.indexOf('const rollbackInventoryReservations = await applyRepositoryInventoryReservations({');
