@@ -19,6 +19,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
 
 interface RouteParams {
   params: Promise<{
@@ -235,13 +236,6 @@ const eventAllowed = (allowlist: string[], type: string): boolean => (
   allowlist.length === 0 || allowlist.includes(type)
 );
 
-const commerceWebhookSecret = (settings: unknown): string => {
-  if (!isRecord(settings)) return '';
-  const integrations = isRecord(settings.integrations) ? settings.integrations : {};
-  const commerce = isRecord(integrations.commerce) ? integrations.commerce : {};
-  return textValue(commerce.providerWebhookSecretId);
-};
-
 const findRepositoryOrder = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   siteId: string,
@@ -332,8 +326,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!commerce.webhooks.eventsEnabled) {
         return errorResponse(409, 'COMMERCE_WEBHOOKS_DISABLED', 'Commerce webhook events are disabled in Settings.', requestId);
       }
-      const webhookSecret = commerceWebhookSecret(settings);
-      if (webhookSecret && !verifyWebhookSignature(rawBody, webhookSecret, signatureHeaderValue(request))) {
+      const webhookSecret = resolveCommerceWebhookSecret(settings);
+      if (webhookSecret.source === 'unresolved') {
+        return errorResponse(409, 'COMMERCE_WEBHOOK_SECRET_UNRESOLVED', 'Commerce webhook signing secret reference is not configured in the runtime environment.', requestId, {
+          reference: webhookSecret.reference,
+          envKeys: webhookSecret.envKeys,
+        });
+      }
+      if (webhookSecret.secret && !verifyWebhookSignature(rawBody, webhookSecret.secret, signatureHeaderValue(request))) {
         return errorResponse(401, 'COMMERCE_WEBHOOK_SIGNATURE_INVALID', 'Commerce webhook signature is missing or invalid.', requestId);
       }
       if (!eventAllowed(commerce.webhooks.eventAllowlist, type)) {
@@ -441,8 +441,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!commerce.webhooks.eventsEnabled) {
       return errorResponse(409, 'COMMERCE_WEBHOOKS_DISABLED', 'Commerce webhook events are disabled in Settings.', requestId);
     }
-    const webhookSecret = commerceWebhookSecret(settings);
-    if (webhookSecret && !verifyWebhookSignature(rawBody, webhookSecret, signatureHeaderValue(request))) {
+    const webhookSecret = resolveCommerceWebhookSecret(settings);
+    if (webhookSecret.source === 'unresolved') {
+      trackWebhookEvent({
+        kind: 'commerce-webhook',
+        siteId: site.id,
+        target: `commerce:${type || 'unknown'}`,
+        status: 'failed',
+        requestId,
+        reason: 'signature-secret-unresolved',
+        actor: 'commerce-webhook',
+        metadata: { type, providerEventId, reference: webhookSecret.reference, envKeys: webhookSecret.envKeys },
+        error: 'Commerce webhook signing secret reference is not configured in the runtime environment.',
+      });
+      return errorResponse(409, 'COMMERCE_WEBHOOK_SECRET_UNRESOLVED', 'Commerce webhook signing secret reference is not configured in the runtime environment.', requestId, {
+        reference: webhookSecret.reference,
+        envKeys: webhookSecret.envKeys,
+      });
+    }
+    if (webhookSecret.secret && !verifyWebhookSignature(rawBody, webhookSecret.secret, signatureHeaderValue(request))) {
       trackWebhookEvent({
         kind: 'commerce-webhook',
         siteId: site.id,

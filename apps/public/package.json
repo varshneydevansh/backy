@@ -17,6 +17,7 @@
         "test:media-safety": "tsx scripts/media-safety-provider-smoke.ts",
         "test:media-scope": "tsx scripts/media-scope-smoke.ts",
         "test:commerce-webhook": "tsx scripts/commerce-webhook-idempotency-smoke.ts",
+        "test:commerce-webhook-secret": "tsx scripts/commerce-webhook-secret-smoke.ts",
         "test:repository-runtime": "tsx scripts/repository-runtime-smoke.ts",
         "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
