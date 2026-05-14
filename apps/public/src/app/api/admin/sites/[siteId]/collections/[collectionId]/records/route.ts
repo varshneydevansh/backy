@@ -23,7 +23,7 @@ import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAc
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedCollectionRecordInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
-import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -356,7 +356,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
       const body = seeded.body;
-      const values = toRecord(body.values);
+      const values = normalizeCollectionRecordMediaValues(collection, toRecord(body.values));
       const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || 'record');
 
       if (!slug) {
@@ -369,6 +369,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
+        mediaRepository: repositories.media,
         siteId: site.id,
         collection,
         values,
@@ -435,7 +436,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
     const body = seeded.body;
-    const values = toRecord(body.values);
+    const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, toRecord(body.values));
     const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || 'record');
 
     if (!slug) {

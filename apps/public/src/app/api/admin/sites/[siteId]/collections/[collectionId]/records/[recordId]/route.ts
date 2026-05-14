@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyJsonObject, BackyJsonValue, PublishStatus } from '@backy-cms/core';
+import type { BackyCollection, BackyJsonObject, BackyJsonValue, PublishStatus } from '@backy-cms/core';
 import {
   deleteAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -21,7 +21,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   applyDemoOrderInventoryRestore,
@@ -218,7 +218,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
-      const values = body.values === undefined ? record.values : toRecord(body.values);
+      const values = body.values === undefined
+        ? record.values
+        : normalizeCollectionRecordMediaValues(collection, toRecord(body.values));
       const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
       const nextScheduledAt = typeof body.scheduledAt === 'string' || body.scheduledAt === null
         ? body.scheduledAt
@@ -237,6 +239,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
+        mediaRepository: repositories.media,
         siteId: site.id,
         collection,
         values,
@@ -304,7 +307,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
-    const values = body.values === undefined ? {} : toRecord(body.values);
+    const values = body.values === undefined
+      ? {}
+      : normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, toRecord(body.values));
     const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
 
     if (body.slug !== undefined && !nextSlug) {

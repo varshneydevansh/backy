@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyCollectionRecord, BackyJsonValue } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyJsonValue } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -20,7 +20,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionFrontendDesign, withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
-import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -287,7 +287,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = await parseJsonBody(request);
       const submittedValues = toRecord(body.values || body.fields);
       const visitorWritePolicy = applyVisitorCreateFieldPolicy(collection, submittedValues);
-      const values = visitorWritePolicy.values;
+      const values = normalizeCollectionRecordMediaValues(collection, visitorWritePolicy.values);
+      const normalizedVisitorWritePolicy = { ...visitorWritePolicy, values };
       const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || `submission-${Date.now()}`);
 
       if (!slug) {
@@ -300,6 +301,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
+        mediaRepository: repositories.media,
         siteId: site.id,
         collection,
         values,
@@ -320,9 +322,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         {
           success: true,
           requestId,
-          data: { record, visitorWritePolicy },
+          data: { record, visitorWritePolicy: normalizedVisitorWritePolicy },
           record,
-          visitorWritePolicy,
+          visitorWritePolicy: normalizedVisitorWritePolicy,
         },
         requestId,
         201,
@@ -347,7 +349,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await parseJsonBody(request);
     const submittedValues = toRecord(body.values || body.fields);
     const visitorWritePolicy = applyVisitorCreateFieldPolicy(collection, submittedValues);
-    const values = visitorWritePolicy.values;
+    const values = normalizeCollectionRecordMediaValues(
+      collection as unknown as BackyCollection,
+      visitorWritePolicy.values,
+    );
+    const normalizedVisitorWritePolicy = { ...visitorWritePolicy, values };
     const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || `submission-${Date.now()}`);
 
     if (!slug) {
@@ -377,9 +383,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       {
         success: true,
         requestId,
-        data: { record, visitorWritePolicy },
+        data: { record, visitorWritePolicy: normalizedVisitorWritePolicy },
         record,
-        visitorWritePolicy,
+        visitorWritePolicy: normalizedVisitorWritePolicy,
       },
       requestId,
       201,

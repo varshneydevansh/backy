@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyJsonValue } from '@backy-cms/core';
+import type { BackyCollection, BackyJsonValue } from '@backy-cms/core';
 import {
   deleteAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -18,7 +18,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
-import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -201,9 +201,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const updatePolicy = applyPublicUpdateFieldPolicy(collection, submittedValues);
-      const values = { ...record.values, ...updatePolicy.values };
+      const normalizedUpdateValues = normalizeCollectionRecordMediaValues(collection, updatePolicy.values);
+      const updatePolicyResponse = { ...updatePolicy, values: normalizedUpdateValues };
+      const values = normalizeCollectionRecordMediaValues(collection, { ...record.values, ...normalizedUpdateValues });
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
+        mediaRepository: repositories.media,
         siteId: site.id,
         collection,
         values,
@@ -221,9 +224,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return privateResponse({
         success: true,
         requestId,
-        data: { record: withCollectionRecordFrontendDesign(updated), visitorWritePolicy: updatePolicy },
+        data: { record: withCollectionRecordFrontendDesign(updated), visitorWritePolicy: updatePolicyResponse },
         record: withCollectionRecordFrontendDesign(updated),
-        visitorWritePolicy: updatePolicy,
+        visitorWritePolicy: updatePolicyResponse,
       }, requestId);
     }
 
@@ -259,7 +262,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updatePolicy = applyPublicUpdateFieldPolicy(collection, submittedValues);
-    const values = { ...record.values, ...updatePolicy.values };
+    const normalizedUpdateValues = normalizeCollectionRecordMediaValues(
+      collection as unknown as BackyCollection,
+      updatePolicy.values,
+    );
+    const updatePolicyResponse = { ...updatePolicy, values: normalizedUpdateValues };
+    const values = normalizeCollectionRecordMediaValues(
+      collection as unknown as BackyCollection,
+      { ...record.values, ...normalizedUpdateValues },
+    );
     const validationErrors = validateCollectionRecordValues(collection, values, {
       existingValues: record.values,
       excludeRecordId: record.id,
@@ -276,9 +287,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return privateResponse({
       success: true,
       requestId,
-      data: { record: withCollectionRecordFrontendDesign(updated), visitorWritePolicy: updatePolicy },
+      data: { record: withCollectionRecordFrontendDesign(updated), visitorWritePolicy: updatePolicyResponse },
       record: withCollectionRecordFrontendDesign(updated),
-      visitorWritePolicy: updatePolicy,
+      visitorWritePolicy: updatePolicyResponse,
     }, requestId);
   } catch (error) {
     console.error('Public collection record update API error:', error);

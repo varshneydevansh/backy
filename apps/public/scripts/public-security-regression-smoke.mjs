@@ -332,7 +332,7 @@ for (const route of repositoryCollectionRecordWriteRoutes) {
   const source = read(route);
   assertIncludes(
     source,
-    "import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';",
+    'validateRepositoryCollectionRecordValues',
     `${route} repository-backed collection record validation`,
   );
   assertIncludes(
@@ -876,6 +876,30 @@ assertIncludes(publicBackyStoreSource, 'validation?: BackyJsonObject;', 'fallbac
 assertIncludes(publicBackyStoreSource, 'const isCollectionMultiFileField = (field: StoreCollectionField): boolean => {', 'fallback collection normalizer must detect multi-file media fields');
 assertIncludes(publicBackyStoreSource, 'return normalizeCollectionListValue(value);', 'fallback collection normalizer must preserve multi-file arrays');
 assertIncludes(publicBackyStoreSource, "code: 'max_items'", 'fallback collection validation must enforce multi-file maxItems');
+const collectionRecordValidationSource = read('apps/public/src/lib/collectionRecordValidation.ts');
+assertIncludes(collectionRecordValidationSource, 'export const normalizeCollectionRecordMediaValues =', 'collection record API validation must expose schema-aware media value normalization');
+assertIncludes(collectionRecordValidationSource, 'mediaRepository?: CollectionMediaRepository;', 'collection record API validation must accept media repository checks');
+assertIncludes(collectionRecordValidationSource, "code: 'invalid_media_shape'", 'collection record API validation must reject array values for single media fields');
+assertIncludes(collectionRecordValidationSource, "code: 'media_not_found'", 'collection record API validation must reject missing Backy media references');
+assertIncludes(collectionRecordValidationSource, "code: 'media_type_mismatch'", 'collection record API validation must reject image/video media type mismatches');
+for (const routePath of [
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+]) {
+  const routeSource = read(routePath);
+  assertIncludes(routeSource, 'normalizeCollectionRecordMediaValues', `${routePath} must normalize schema-aware media values before persistence`);
+}
+for (const routePath of [
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+]) {
+  const routeSource = read(routePath);
+  assertIncludes(routeSource, 'mediaRepository: repositories.media', `${routePath} must validate Backy media references in repository mode`);
+}
 
 const mediaAdminRoute = read('apps/admin/src/routes/media.tsx');
 assertIncludes(mediaAdminRoute, 'setBulkNotice(`Deleted ${file.name}.`);', 'single media delete must show a success notice');
