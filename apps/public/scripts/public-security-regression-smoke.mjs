@@ -863,6 +863,19 @@ assertIncludes(collectionsAdminRoute, "isAdminPermissionAllowed(permissionMatrix
 assertIncludes(collectionsAdminRoute, 'canView={canViewMedia}', 'collections media picker modal must receive media.view state');
 assertIncludes(collectionsAdminRoute, 'canCreate={canCreateMedia}', 'collections media picker modal must receive media.create state');
 assertIncludes(collectionsAdminRoute, "setNotice(`Collection record ${selectedRecordId ? 'updated' : 'created'}.`);", 'collections record save must show a success notice');
+assertIncludes(collectionsAdminRoute, 'const isCollectionMultiFileField = (field: CollectionField): boolean => {', 'collections file media fields must support explicit multi-file semantics');
+assertIncludes(collectionsAdminRoute, 'validation: { multiple: true }', 'collections gallery template field must be marked as multi-file');
+assertIncludes(collectionsAdminRoute, 'Allow multiple media files', 'collections schema editor must expose multi-file toggle for file fields');
+assertIncludes(collectionsAdminRoute, 'Stores an ordered list of Backy media IDs from the central library', 'collections record editor must describe multi-file media storage');
+assertIncludes(collectionsAdminRoute, 'formatCollectionListValue([...currentItems, asset.id])', 'collections media picker must append selected assets for multi-file fields');
+const adminContentApiSource = read('apps/admin/src/lib/adminContentApi.ts');
+assertIncludes(adminContentApiSource, 'validation?: Record<string, unknown>;', 'admin content API collection field type must carry validation metadata');
+assertIncludes(adminContentApiSource, 'validation: field.validation,', 'admin content API collection field mapper must preserve validation metadata');
+const publicBackyStoreSource = read('apps/public/src/lib/backyStore.ts');
+assertIncludes(publicBackyStoreSource, 'validation?: BackyJsonObject;', 'fallback collection fields must persist validation metadata');
+assertIncludes(publicBackyStoreSource, 'const isCollectionMultiFileField = (field: StoreCollectionField): boolean => {', 'fallback collection normalizer must detect multi-file media fields');
+assertIncludes(publicBackyStoreSource, 'return normalizeCollectionListValue(value);', 'fallback collection normalizer must preserve multi-file arrays');
+assertIncludes(publicBackyStoreSource, "code: 'max_items'", 'fallback collection validation must enforce multi-file maxItems');
 
 const mediaAdminRoute = read('apps/admin/src/routes/media.tsx');
 assertIncludes(mediaAdminRoute, 'setBulkNotice(`Deleted ${file.name}.`);', 'single media delete must show a success notice');

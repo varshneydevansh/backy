@@ -278,6 +278,7 @@ interface StoreCollectionField {
   options?: string[];
   referenceCollectionId?: string | null;
   defaultValue?: unknown;
+  validation?: BackyJsonObject;
 }
 
 interface StoreCollectionPermissions {
@@ -4752,6 +4753,7 @@ const normalizeCollectionField = (
       ? existing?.referenceCollectionId || null
       : sanitizeString(input.referenceCollectionId) || null,
     ...(input.defaultValue !== undefined ? { defaultValue: input.defaultValue } : existing && 'defaultValue' in existing ? { defaultValue: existing.defaultValue } : {}),
+    ...(asJsonObject(input.validation) ? { validation: asJsonObject(input.validation) } : existing?.validation ? { validation: existing.validation } : {}),
   };
 };
 
@@ -4805,6 +4807,31 @@ const normalizeCollectionPermissions = (
   };
 };
 
+const collectionFieldValidationRecord = (field: StoreCollectionField): BackyJsonObject => (
+  field.validation && typeof field.validation === 'object' && !Array.isArray(field.validation)
+    ? field.validation
+    : {}
+);
+
+const isCollectionMultiFileField = (field: StoreCollectionField): boolean => {
+  if (field.type !== 'file') return false;
+  const validation = collectionFieldValidationRecord(field);
+  return validation.multiple === true || Number.isFinite(Number(validation.maxItems));
+};
+
+const collectionFileMaxItems = (field: StoreCollectionField): number | null => {
+  const maxItems = Number(collectionFieldValidationRecord(field).maxItems);
+  return Number.isFinite(maxItems) && maxItems > 0 ? Math.floor(maxItems) : null;
+};
+
+const normalizeCollectionListValue = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeString).filter(Boolean);
+  }
+  const text = sanitizeString(value);
+  return text ? text.split(/[\n,]/).map((item) => item.trim()).filter(Boolean) : [];
+};
+
 const normalizeCollectionRecordValue = (type: CollectionFieldType, value: unknown): unknown => {
   if (value === null || value === undefined) {
     return null;
@@ -4842,6 +4869,13 @@ const normalizeCollectionRecordValue = (type: CollectionFieldType, value: unknow
   return sanitizeString(value);
 };
 
+const normalizeCollectionRecordFieldValue = (field: StoreCollectionField, value: unknown): unknown => {
+  if (isCollectionMultiFileField(field)) {
+    return normalizeCollectionListValue(value);
+  }
+  return normalizeCollectionRecordValue(field.type, value);
+};
+
 const normalizeCollectionRecordValues = (
   collection: StoreCollection,
   values: Record<string, unknown>,
@@ -4851,7 +4885,7 @@ const normalizeCollectionRecordValues = (
 
   for (const field of collection.fields) {
     if (values[field.key] !== undefined) {
-      normalized[field.key] = normalizeCollectionRecordValue(field.type, values[field.key]);
+      normalized[field.key] = normalizeCollectionRecordFieldValue(field, values[field.key]);
       continue;
     }
 
@@ -4861,7 +4895,7 @@ const normalizeCollectionRecordValues = (
     }
 
     if ('defaultValue' in field) {
-      normalized[field.key] = normalizeCollectionRecordValue(field.type, field.defaultValue);
+      normalized[field.key] = normalizeCollectionRecordFieldValue(field, field.defaultValue);
     }
   }
 
@@ -5216,6 +5250,18 @@ export function validateCollectionRecordValues(
 
       if (duplicate) {
         errors.push({ field: field.key, code: 'unique', message: `${field.label} must be unique.`, label: field.label });
+      }
+    }
+
+    if (isCollectionMultiFileField(field) && Array.isArray(value)) {
+      const maxItems = collectionFileMaxItems(field);
+      if (maxItems && value.length > maxItems) {
+        errors.push({
+          field: field.key,
+          code: 'max_items',
+          message: `${field.label} allows at most ${maxItems} file${maxItems === 1 ? '' : 's'}.`,
+          label: field.label,
+        });
       }
     }
 

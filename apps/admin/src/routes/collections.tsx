@@ -254,7 +254,7 @@ const COLLECTION_TEMPLATES: CollectionTemplate[] = [
       { key: 'client', label: 'Client', type: 'text', required: false, unique: false, sortOrder: 20 },
       { key: 'role', label: 'Role', type: 'text', required: false, unique: false, sortOrder: 30 },
       { key: 'cover_image', label: 'Cover image', type: 'image', required: false, unique: false, sortOrder: 40 },
-      { key: 'gallery', label: 'Gallery files', type: 'file', required: false, unique: false, sortOrder: 50 },
+      { key: 'gallery', label: 'Gallery files', type: 'file', required: false, unique: false, sortOrder: 50, validation: { multiple: true } },
       { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 60 },
       { key: 'project_url', label: 'Project URL', type: 'url', required: false, unique: false, sortOrder: 70 },
       { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 80, defaultValue: false },
@@ -793,6 +793,44 @@ const formatValue = (value: unknown): string => {
   }
 };
 
+const parseCollectionListValue = (value: string): string[] => (
+  value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+);
+
+const formatCollectionListValue = (items: string[]): string => Array.from(new Set(items)).join(', ');
+
+const collectionFieldValidationRecord = (field: CollectionField): Record<string, unknown> => (
+  field.validation && typeof field.validation === 'object' && !Array.isArray(field.validation)
+    ? field.validation
+    : {}
+);
+
+const isCollectionMultiFileField = (field: CollectionField): boolean => {
+  if (field.type !== 'file') return false;
+  const validation = collectionFieldValidationRecord(field);
+  return validation.multiple === true || Number.isFinite(Number(validation.maxItems));
+};
+
+const collectionFileMaxItems = (field: CollectionField): number | null => {
+  const maxItems = Number(collectionFieldValidationRecord(field).maxItems);
+  return Number.isFinite(maxItems) && maxItems > 0 ? Math.floor(maxItems) : null;
+};
+
+const mediaFieldValidationWithMultiple = (field: CollectionField, multiple: boolean): Record<string, unknown> | undefined => {
+  const current = collectionFieldValidationRecord(field);
+  const next = { ...current };
+  if (multiple) {
+    next.multiple = true;
+  } else {
+    delete next.multiple;
+    delete next.maxItems;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+};
+
 const formatRecordFormValue = (field: CollectionField, value: unknown): string => {
   if (field.type === 'json') {
     if (value === null || value === undefined || value === '') return '';
@@ -815,7 +853,11 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
     return value === 'true';
   }
   if (field.type === 'tags' || field.type === 'multiReference') {
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
+    return parseCollectionListValue(value);
+  }
+  if (isCollectionMultiFileField(field)) {
+    const mediaIds = parseCollectionListValue(value);
+    return mediaIds;
   }
   if (field.type === 'json') {
     if (!value.trim()) return {};
@@ -5944,6 +5986,47 @@ function CollectionsPage() {
                                   <option key={collection.id} value={collection.id}>{collection.name}</option>
                                 ))}
                             </select>
+                          ) : field.type === 'file' ? (
+                            <div className="grid gap-2">
+                              <input
+                                value={field.helpText || ''}
+                                onChange={(event) => updateField(index, { helpText: event.target.value || null })}
+                                className="w-full rounded-lg border bg-background px-2 py-1"
+                                placeholder="Help text"
+                              />
+                              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                  type="checkbox"
+                                  checked={isCollectionMultiFileField(field)}
+                                  onChange={(event) => updateField(index, {
+                                    validation: mediaFieldValidationWithMultiple(field, event.target.checked),
+                                  })}
+                                />
+                                Allow multiple media files
+                              </label>
+                              {isCollectionMultiFileField(field) && (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={collectionFileMaxItems(field) || ''}
+                                  onChange={(event) => {
+                                    const maxItems = Number(event.target.value);
+                                    const validation = {
+                                      ...collectionFieldValidationRecord(field),
+                                      multiple: true,
+                                      ...(Number.isFinite(maxItems) && maxItems > 0 ? { maxItems: Math.floor(maxItems) } : {}),
+                                    };
+                                    if (!event.target.value.trim()) {
+                                      delete validation.maxItems;
+                                    }
+                                    updateField(index, { validation });
+                                  }}
+                                  className="w-full rounded-lg border bg-background px-2 py-1"
+                                  placeholder="Optional max items"
+                                  aria-label={`Maximum files for ${field.label}`}
+                                />
+                              )}
+                            </div>
                           ) : (
                             <input
                               value={field.helpText || ''}
@@ -6581,7 +6664,19 @@ function CollectionsPage() {
           if (!mediaPickerField || recordMutationDisabled) return;
           if (!canViewMedia) return;
 
-          updateRecordFormValue(setRecordForm, mediaPickerField.key, asset.id);
+          if (isCollectionMultiFileField(mediaPickerField)) {
+            const currentItems = parseCollectionListValue(recordForm.values[mediaPickerField.key] || '');
+            const nextItems = formatCollectionListValue([...currentItems, asset.id]);
+            const maxItems = collectionFileMaxItems(mediaPickerField);
+            if (maxItems && parseCollectionListValue(nextItems).length > maxItems) {
+              setError(`${mediaPickerField.label} allows at most ${maxItems} file${maxItems === 1 ? '' : 's'}.`);
+              setNotice(null);
+              return;
+            }
+            updateRecordFormValue(setRecordForm, mediaPickerField.key, nextItems);
+          } else {
+            updateRecordFormValue(setRecordForm, mediaPickerField.key, asset.id);
+          }
           setNotice(`Attached ${asset.name} to ${mediaPickerField.label}.`);
           setMediaPickerField(null);
         }}
@@ -6960,15 +7055,26 @@ function CollectionRecordFieldEditor({
       ) : field.type === 'image' || field.type === 'video' || field.type === 'file' ? (
         <div className="grid gap-2">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              type="text"
-              value={value}
-              onChange={(event) => onChange(event.target.value)}
-              className={inputClassName}
-              required={field.required}
-              placeholder="Backy media ID or external URL"
-              data-testid={`collections-record-field-${field.key}`}
-            />
+            {isCollectionMultiFileField(field) ? (
+              <textarea
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className="min-h-20 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                required={field.required}
+                placeholder="Backy media IDs or external URLs, one per line"
+                data-testid={`collections-record-field-${field.key}`}
+              />
+            ) : (
+              <input
+                type="text"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className={inputClassName}
+                required={field.required}
+                placeholder="Backy media ID or external URL"
+                data-testid={`collections-record-field-${field.key}`}
+              />
+            )}
             <button
               type="button"
               onClick={() => onOpenMediaPicker(field)}
@@ -6982,7 +7088,9 @@ function CollectionRecordFieldEditor({
             </button>
           </div>
           <span className="text-xs leading-4 text-muted-foreground">
-            Stores a Backy media ID from the central library; external URLs still work for custom frontends.
+            {isCollectionMultiFileField(field)
+              ? 'Stores an ordered list of Backy media IDs from the central library; external URLs still work for custom frontends.'
+              : 'Stores a Backy media ID from the central library; external URLs still work for custom frontends.'}
           </span>
         </div>
       ) : (

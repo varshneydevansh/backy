@@ -1185,6 +1185,7 @@ interface ApiCollectionField {
   options?: string[];
   referenceCollectionId?: string | null;
   defaultValue?: unknown;
+  validation?: Record<string, unknown>;
 }
 
 interface ApiCollection {
@@ -2477,6 +2478,7 @@ export interface CollectionField {
   options?: string[];
   referenceCollectionId?: string | null;
   defaultValue?: unknown;
+  validation?: Record<string, unknown>;
 }
 
 export interface CollectionPermissions {
@@ -3089,6 +3091,7 @@ const toCollectionField = (field: ApiCollectionField, index: number): Collection
   options: field.options,
   referenceCollectionId: field.referenceCollectionId || null,
   defaultValue: field.defaultValue,
+  validation: field.validation,
 });
 
 const toCollection = (collection: ApiCollection): Collection => ({
