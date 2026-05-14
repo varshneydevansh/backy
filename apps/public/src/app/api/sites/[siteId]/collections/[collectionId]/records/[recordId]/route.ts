@@ -18,6 +18,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -201,7 +202,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const updatePolicy = applyPublicUpdateFieldPolicy(collection, submittedValues);
       const values = { ...record.values, ...updatePolicy.values };
-      const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, values, {
+      const validationErrors = await validateRepositoryCollectionRecordValues({
+        repository: repositories.collections,
+        siteId: site.id,
+        collection,
+        values,
         existingValues: record.values,
         excludeRecordId: record.id,
       });

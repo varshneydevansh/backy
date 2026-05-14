@@ -27,6 +27,7 @@ import { verifyFormCaptcha } from '@/lib/formCaptcha';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -646,7 +647,12 @@ const createRepositoryCollectionRecordFromSubmission = async (
     mappedValues[sourceSubmissionFieldKey] = submission.id;
   }
 
-  const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, mappedValues);
+  const validationErrors = await validateRepositoryCollectionRecordValues({
+    repository: repositories.collections,
+    siteId,
+    collection,
+    values: mappedValues,
+  });
   if (validationErrors.length > 0) {
     return { record: null, errors: validationErrors };
   }

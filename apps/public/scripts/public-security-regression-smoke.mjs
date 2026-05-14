@@ -248,6 +248,31 @@ for (const needle of [
 }
 assertExcludes(adminCollectionImportRoute, 'const parseFields =', 'admin collection backup import field validation');
 
+const repositoryCollectionRecordWriteRoutes = [
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/import/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/collections/import/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts',
+];
+
+for (const route of repositoryCollectionRecordWriteRoutes) {
+  const source = read(route);
+  assertIncludes(
+    source,
+    "import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';",
+    `${route} repository-backed collection record validation`,
+  );
+  assertIncludes(
+    source,
+    'validateRepositoryCollectionRecordValues({',
+    `${route} repository-backed collection record validation`,
+  );
+}
+
 const commerceReconcileRoute = read('apps/public/src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts');
 const commerceReconcilePost = functionSource(commerceReconcileRoute, 'POST', 'commerce reconcile route');
 assertIncludes(

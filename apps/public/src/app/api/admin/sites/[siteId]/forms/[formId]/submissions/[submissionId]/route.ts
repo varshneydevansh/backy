@@ -13,6 +13,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -205,7 +206,12 @@ const createRepositoryCollectionRecordFromSubmission = async (
     mappedValues[sourceSubmissionFieldKey] = submission.id;
   }
 
-  const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, mappedValues);
+  const validationErrors = await validateRepositoryCollectionRecordValues({
+    repository: repositories.collections,
+    siteId,
+    collection,
+    values: mappedValues,
+  });
   if (validationErrors.length > 0) {
     return { record: null, errors: validationErrors };
   }

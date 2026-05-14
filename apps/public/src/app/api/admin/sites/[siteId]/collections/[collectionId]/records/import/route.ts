@@ -19,6 +19,7 @@ import {
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -174,6 +175,10 @@ const importRows = async (
     rows: string[][];
     headers: string[];
     upsert: boolean;
+    validate: (
+      slug: string,
+      values: Record<string, unknown>,
+    ) => Promise<unknown[]>;
     save: (
       slug: string,
       values: Record<string, unknown>,
@@ -203,7 +208,7 @@ const importRows = async (
     const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
     const status = parseStatus(rowData.status);
     const scheduledAt = rowData.scheduledAt || null;
-    const validationErrors = validateCollectionRecordValues(input.collection as unknown as StoreCollection, values);
+    const validationErrors = await input.validate(slug, values);
 
     if (validationErrors.length > 0) {
       skipped += 1;
@@ -289,6 +294,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         rows,
         headers,
         upsert,
+        validate: async (slug, values) => {
+          const existing = await repositories.collections.getRecordBySlug(site.id, collection.id, slug);
+          return validateRepositoryCollectionRecordValues({
+            repository: repositories.collections,
+            siteId: site.id,
+            collection,
+            values,
+            existingValues: existing?.values,
+            excludeRecordId: existing?.id,
+          });
+        },
         save: async (slug, values, status, scheduledAt) => {
           const existing = await repositories.collections.getRecordBySlug(site.id, collection.id, slug);
           if (existing && !upsert) {

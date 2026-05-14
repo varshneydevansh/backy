@@ -20,6 +20,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionFrontendDesign, withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -297,7 +298,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A collection record with this slug already exists', requestId);
       }
 
-      const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, values);
+      const validationErrors = await validateRepositoryCollectionRecordValues({
+        repository: repositories.collections,
+        siteId: site.id,
+        collection,
+        values,
+      });
       if (validationErrors.length > 0) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid', requestId, validationErrors);
       }

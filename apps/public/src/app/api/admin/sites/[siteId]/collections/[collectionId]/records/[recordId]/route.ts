@@ -24,6 +24,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -503,7 +504,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, values, {
+      const validationErrors = await validateRepositoryCollectionRecordValues({
+        repository: repositories.collections,
+        siteId: site.id,
+        collection,
+        values,
         existingValues: record.values,
         excludeRecordId: record.id,
       });

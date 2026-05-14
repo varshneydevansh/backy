@@ -22,6 +22,7 @@ import {
 } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';
+import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   isValidCollectionListRoutePattern,
@@ -318,7 +319,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               recordSlug: recordInput.slug,
             });
           }
-          const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, recordInput.values, {
+          const validationErrors = await validateRepositoryCollectionRecordValues({
+            repository: repositories.collections,
+            siteId: site.id,
+            collection,
+            values: recordInput.values,
             existingValues: existingRecord?.values,
             excludeRecordId: existingRecord?.id,
           });
