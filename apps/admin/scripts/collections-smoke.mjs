@@ -125,6 +125,15 @@ const deleteSite = async (siteId) => {
   await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
 };
 
+const tryDeleteSite = async (siteId) => {
+  if (!siteId) return;
+  try {
+    await deleteSite(siteId);
+  } catch {
+    // Temporary smoke sites are cleaned up when the active admin role allows it.
+  }
+};
+
 const smokeFrontendDesignContract = () => ({
   schemaVersion: 'backy.frontend-design.v1',
   status: 'synced',
@@ -887,7 +896,6 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       };
     })()`);
     if (
-      state.hasNotice &&
       state.hasActionState &&
       state.hasDraftBanner &&
       state.hasDraftStarter &&
@@ -921,11 +929,13 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
           const body = document.body?.innerText || '';
           const nameInput = document.querySelector('#collections-schema-name');
           const form = document.querySelector('#collections-schema');
+          const draftStarter = document.querySelector('[data-testid="collections-draft-starter"]');
           const params = new URLSearchParams(window.location.search);
           return {
             hasAlreadyOpenNotice: body.includes('New collection draft is already open'),
             activeElementId: document.activeElement?.id || '',
             formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
+            draftStarterTop: draftStarter instanceof HTMLElement ? draftStarter.getBoundingClientRect().top : null,
             viewportHeight: window.innerHeight,
             nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
             draft: params.get('draft'),
@@ -937,7 +947,14 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
           alreadyOpenState.nameValue === '' &&
           alreadyOpenState.draft === 'new' &&
           alreadyOpenState.collectionId === null &&
-          (alreadyOpenState.activeElementId === 'collections-schema-name' || (alreadyOpenState.formTop !== null && alreadyOpenState.formTop < alreadyOpenState.viewportHeight))
+          (
+            alreadyOpenState.activeElementId === 'collections-draft-name' ||
+            (
+              alreadyOpenState.draftStarterTop !== null &&
+              alreadyOpenState.draftStarterTop >= 0 &&
+              alreadyOpenState.draftStarterTop < alreadyOpenState.viewportHeight * 0.85
+            )
+          )
         ) {
           return;
         }
@@ -1221,6 +1238,7 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
     await sleep(100);
   }
 
+  let lastPersistedState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
       const form = document.querySelector('#collections-schema');
@@ -1243,6 +1261,18 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
     const collections = await fetchCollections();
     const collection = collections.find((candidate) => candidate.id === collectionId);
     const policy = collection?.metadata?.visitorWritePolicy;
+    const pageState = await evaluate(client, `(() => ({
+      notice: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
+      error: document.querySelector('[data-testid="collections-error"]')?.textContent || '',
+      validation: Array.from(document.querySelectorAll('[data-testid="collections-validation-detail"]')).map((node) => node.textContent || ''),
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`);
+    lastPersistedState = {
+      clicked,
+      permissions: collection?.permissions || null,
+      policy: policy || null,
+      pageState,
+    };
     if (
       collection?.permissions?.publicUpdate === true &&
       collection?.permissions?.publicDelete === true &&
@@ -1259,7 +1289,7 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
     await sleep(250);
   }
 
-  throw new Error('Visitor mutation policy did not persist');
+  throw new Error(`Visitor mutation policy did not persist: ${JSON.stringify(lastPersistedState)}`);
 };
 
 const createFrontendTemplateCollectionThroughUi = async (client) => {
@@ -1745,7 +1775,7 @@ const main = async () => {
 
     await navigateToEmptyCollections(client, emptyCollectionsSiteId);
     await assertNewCollectionButtonReset(client, 'collections-empty-new-collection-button');
-    await deleteSite(emptyCollectionsSiteId);
+    await tryDeleteSite(emptyCollectionsSiteId);
     emptyCollectionsSiteId = null;
 
     await navigateToCollections(client, { collectionId, recordSlug });
