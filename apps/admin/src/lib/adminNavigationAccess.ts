@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { AdminContentApiError, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
 import { isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
-import type { User } from '@/stores/authStore';
+import { useAuthStore, type User } from '@/stores/authStore';
 
 export type AdminNavigationArea =
   | 'dashboard'
@@ -66,6 +66,7 @@ export const canAccessAdminNavigationArea = (
 export function useCurrentAdminPermissionMatrix(currentAdmin: Pick<User, 'id'> | null | undefined) {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(currentAdmin?.id));
+  const signOut = useAuthStore((state) => state.signOut);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,9 +86,15 @@ export function useCurrentAdminPermissionMatrix(currentAdmin: Pick<User, 'id'> |
           setPermissionMatrix(matrix);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
           setPermissionMatrix(null);
+          if (
+            error instanceof AdminContentApiError &&
+            (error.code === 'UNAUTHORIZED' || error.message.toLowerCase().includes('valid admin session'))
+          ) {
+            signOut();
+          }
         }
       })
       .finally(() => {
@@ -99,7 +106,7 @@ export function useCurrentAdminPermissionMatrix(currentAdmin: Pick<User, 'id'> |
     return () => {
       cancelled = true;
     };
-  }, [currentAdmin?.id]);
+  }, [currentAdmin?.id, signOut]);
 
   return useMemo(() => ({
     permissionMatrix,

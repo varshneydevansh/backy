@@ -39,7 +39,7 @@ function RootComponent() {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
-  const isAuthenticated = useAuthStore((state) => !!state.user);
+  const isAuthenticated = useAuthStore((state) => Boolean(state.user && state.session?.token));
   const sessionToken = useAuthStore((state) => state.session?.token || '');
   const refreshSession = useAuthStore((state) => state.refreshSession);
   const validatedSessionRef = useRef(false);

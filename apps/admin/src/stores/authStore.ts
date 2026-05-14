@@ -188,7 +188,7 @@ export const useAuthStore = create<AuthStore>()(
 // ============================================
 
 export const selectIsAuthenticated = (state: AuthStore): boolean =>
-  !!state.user;
+  Boolean(state.user && state.session?.token);
 
 export const selectIsAdmin = (state: AuthStore): boolean =>
   state.user?.role === 'owner' || state.user?.role === 'admin';

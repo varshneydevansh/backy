@@ -3581,7 +3581,7 @@ export async function getUserPermissions(userId: string): Promise<AdminUserPermi
   const payload = await readJson<ApiUserPermissionsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to load user permissions');
+    throw adminContentApiError(payload, 'Unable to load user permissions');
   }
 
   return payload.data.permissions;
