@@ -146,6 +146,15 @@ const parseImportedValue = (
   }
 
   if (field.type === 'tags' || field.type === 'multiReference') {
+    if (!value.trim()) return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter(Boolean);
+      }
+    } catch {
+      // Fall through to the legacy comma-separated format.
+    }
     return value.split(',').map((item) => item.trim()).filter(Boolean);
   }
 
