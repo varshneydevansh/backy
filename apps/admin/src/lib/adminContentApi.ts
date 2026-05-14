@@ -1587,6 +1587,10 @@ export interface PageUpdateInput {
   expectedUpdatedAt?: string;
 }
 
+export interface PageStatusMutationInput {
+  expectedUpdatedAt?: string;
+}
+
 export interface BlogPostInput {
   title: string;
   slug: string;
@@ -3421,27 +3425,43 @@ export async function getPageRevisionSummary(siteId: string, pageId: string): Pr
   };
 }
 
-export async function publishPage(siteId: string, pageId: string): Promise<Page> {
+export async function publishPage(siteId: string, pageId: string, input: PageStatusMutationInput = {}): Promise<Page> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/publish`, {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
   });
   const payload = await readJson<ApiPageResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to publish page');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to publish page',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePage(payload.data.page);
 }
 
-export async function archivePage(siteId: string, pageId: string): Promise<Page> {
+export async function archivePage(siteId: string, pageId: string, input: PageStatusMutationInput = {}): Promise<Page> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/archive`, {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
   });
   const payload = await readJson<ApiPageResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to archive page');
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to archive page',
+      payload.error?.details,
+      payload.error?.code,
+    );
   }
 
   return toStorePage(payload.data.page);

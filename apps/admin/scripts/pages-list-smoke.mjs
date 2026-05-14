@@ -683,6 +683,12 @@ const assertPublishReviewModal = async (client, page, expectedSearch = page.titl
 };
 
 const clearVisibleBulkSelection = async (client) => evaluate(client, `(() => {
+  const setSelectValue = (select, value) => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    descriptor?.set?.call(select, value);
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
   const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')]
     .filter((input) => input.getAttribute('aria-label')?.startsWith('Select '));
   checkboxes.forEach((checkbox) => {
@@ -691,11 +697,9 @@ const clearVisibleBulkSelection = async (client) => evaluate(client, `(() => {
     }
   });
 
-  const select = [...document.querySelectorAll('select')]
-    .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+  const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
   if (select) {
-    select.value = '';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    setSelectValue(select, '');
   }
 
   return {
@@ -737,44 +741,66 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
 
   await clearVisibleBulkSelection(client);
 
-  const prepared = await evaluate(client, `(() => {
-    const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-      .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
-    if (checkbox && !checkbox.checked) {
-      checkbox.click();
+  let prepared = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    prepared = await evaluate(client, `(() => {
+      const setSelectValue = (select, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        descriptor?.set?.call(select, value);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      if (checkbox instanceof HTMLInputElement && !checkbox.checked && !checkbox.disabled) {
+        checkbox.click();
+      }
+      if (select instanceof HTMLSelectElement && select.value !== 'publish' && !select.disabled) {
+        setSelectValue(select, 'publish');
+      }
+
+      return {
+        prepared: Boolean(checkbox && select),
+        checked: checkbox instanceof HTMLInputElement ? checkbox.checked : false,
+        checkboxDisabled: checkbox instanceof HTMLInputElement ? checkbox.disabled : null,
+        selectValue: select instanceof HTMLSelectElement ? select.value : '',
+        selectDisabled: select instanceof HTMLSelectElement ? select.disabled : null,
+        applyText: document.querySelector('[data-testid="pages-bulk-action-apply"]')?.textContent || '',
+        selectedText: document.body?.innerText?.match(/\\d+ selected/)?.[0] || '',
+      };
+    })()`);
+    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish') {
+      break;
     }
+    await sleep(250);
+  }
 
-    const select = [...document.querySelectorAll('select')]
-      .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
-    if (select) {
-      select.value = 'publish';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    return {
-      prepared: Boolean(checkbox && select),
-      checked: checkbox?.checked === true,
-    };
-  })()`);
-
-  assert(prepared.prepared, `Unable to prepare bulk publish controls: ${JSON.stringify(prepared)}`);
+  assert(prepared?.prepared && prepared.checked && prepared.selectValue === 'publish', `Unable to prepare bulk publish controls: ${JSON.stringify(prepared)}`);
 
   let openedState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const opened = await evaluate(client, `(() => {
+      const setSelectValue = (select, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        descriptor?.set?.call(select, value);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
       const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
-      const applyButton = modal ? null : [...document.querySelectorAll('button')]
-        .find((button) => (
-          button.textContent.includes('Publish selected')
-          || button.textContent.includes('Review publish for 1 page')
-          || button.textContent.includes('Publish 1 page')
-        ));
+      const applyButton = modal ? null : document.querySelector('[data-testid="pages-bulk-action-apply"]');
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      if (!modal && select instanceof HTMLSelectElement && select.value !== 'publish') {
+        setSelectValue(select, 'publish');
+      }
       if (!modal && applyButton && !applyButton.disabled) {
         applyButton.click();
       }
       return {
         hasButton: Boolean(applyButton || modal),
         disabled: applyButton?.disabled === true,
+        buttonText: applyButton?.textContent || '',
+        selectValue: select instanceof HTMLSelectElement ? select.value : '',
         modalText: modal?.textContent || document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
       };
     })()`);
@@ -842,6 +868,9 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
 
 const assertBulkPublishMutation = async (client, page, expectedSearch = page.title) => {
   const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  const beforePage = await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${page.id}`);
+  const expectedUpdatedAt = beforePage.data?.page?.updatedAt;
+  assert(expectedUpdatedAt, `Bulk publish page did not expose updatedAt before mutation: ${JSON.stringify(beforePage.data?.page).slice(0, 500)}`);
   await client.send('Page.navigate', { url });
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -879,43 +908,91 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
 
   await clearVisibleBulkSelection(client);
 
-  const prepared = await evaluate(client, `(() => {
-    const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
-      .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
-    if (checkbox && !checkbox.checked) {
-      checkbox.click();
-    }
+  let prepared = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    prepared = await evaluate(client, `(() => {
+      const setSelectValue = (select, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        descriptor?.set?.call(select, value);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      if (checkbox instanceof HTMLInputElement && !checkbox.checked && !checkbox.disabled) {
+        checkbox.click();
+      }
+      if (select instanceof HTMLSelectElement && select.value !== 'publish' && !select.disabled) {
+        setSelectValue(select, 'publish');
+      }
 
-    const select = [...document.querySelectorAll('select')]
-      .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
-    if (select) {
-      select.value = 'publish';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        prepared: Boolean(checkbox && select),
+        checked: checkbox instanceof HTMLInputElement ? checkbox.checked : false,
+        checkboxDisabled: checkbox instanceof HTMLInputElement ? checkbox.disabled : null,
+        selectValue: select instanceof HTMLSelectElement ? select.value : '',
+        selectDisabled: select instanceof HTMLSelectElement ? select.disabled : null,
+        applyText: document.querySelector('[data-testid="pages-bulk-action-apply"]')?.textContent || '',
+        selectedText: document.body?.innerText?.match(/\\d+ selected/)?.[0] || '',
+      };
+    })()`);
+    if (prepared.prepared && prepared.checked && prepared.selectValue === 'publish') {
+      break;
     }
+    await sleep(250);
+  }
+  assert(prepared?.prepared && prepared.checked && prepared.selectValue === 'publish', `Unable to prepare bulk publish mutation controls: ${JSON.stringify(prepared)}`);
 
-    return {
-      prepared: Boolean(checkbox && select),
-      checked: checkbox?.checked === true,
-      selectValue: select?.value || '',
-    };
+  const captureInstalled = await evaluate(client, `(() => {
+    window.__backyPagesListPublishBodies = [];
+    if (!window.__backyOriginalFetchForPagesListPublish) {
+      window.__backyOriginalFetchForPagesListPublish = window.fetch.bind(window);
+      window.fetch = async (input, init = {}) => {
+        const url = String(input instanceof Request ? input.url : input || '');
+        const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (method === 'POST' && url.includes(${JSON.stringify(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${page.id}/publish`)})) {
+          let body = init?.body || '';
+          if (typeof body !== 'string') {
+            body = String(body || '');
+          }
+          let parsed = null;
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            parsed = body;
+          }
+          window.__backyPagesListPublishBodies.push({ url, method, body: parsed });
+        }
+        return window.__backyOriginalFetchForPagesListPublish(input, init);
+      };
+    }
+    return true;
   })()`);
-  assert(prepared.prepared && prepared.checked && prepared.selectValue === 'publish', `Unable to prepare bulk publish mutation controls: ${JSON.stringify(prepared)}`);
+  assert(captureInstalled, 'Unable to install pages list publish request capture');
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const opened = await evaluate(client, `(() => {
+      const setSelectValue = (select, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        descriptor?.set?.call(select, value);
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
       const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
-      const applyButton = modal ? null : [...document.querySelectorAll('button')]
-        .find((button) => (
-          button.textContent.includes('Publish selected')
-          || button.textContent.includes('Review publish for 1 page')
-          || button.textContent.includes('Publish 1 page')
-        ));
+      const applyButton = modal ? null : document.querySelector('[data-testid="pages-bulk-action-apply"]');
+      const select = document.querySelector('[data-testid="pages-bulk-action-select"]');
+      if (!modal && select instanceof HTMLSelectElement && select.value !== 'publish') {
+        setSelectValue(select, 'publish');
+      }
       if (!modal && applyButton && !applyButton.disabled) {
         applyButton.click();
       }
       return {
         hasButton: Boolean(applyButton || modal),
         disabled: applyButton?.disabled === true,
+        buttonText: applyButton?.textContent || '',
+        selectValue: select instanceof HTMLSelectElement ? select.value : '',
         modalText: modal?.textContent || document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
       };
     })()`);
@@ -958,9 +1035,7 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
         selectedText: [...document.querySelectorAll('input[type="checkbox"]')]
           .filter((input) => input.getAttribute('aria-label')?.startsWith('Select ') && input.checked)
           .length,
-        bulkSelectValue: [...document.querySelectorAll('select')]
-          .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')))
-          ?.value || '',
+        bulkSelectValue: document.querySelector('[data-testid="pages-bulk-action-select"]')?.value || '',
       };
     })()`);
 
@@ -984,6 +1059,12 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
   const apiPage = await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${page.id}`);
   const status = apiPage.data?.page?.status;
   assert(status === 'published', `Bulk publish mutation did not persist published status: ${JSON.stringify(apiPage.data?.page)}`);
+  const capturedBodies = await evaluate(client, `window.__backyPagesListPublishBodies || []`);
+  const publishBody = capturedBodies.find((entry) => entry?.body && Object.prototype.hasOwnProperty.call(entry.body, 'expectedUpdatedAt'));
+  assert(
+    publishBody?.body?.expectedUpdatedAt === expectedUpdatedAt,
+    `Bulk publish mutation did not send expectedUpdatedAt guard: ${JSON.stringify(capturedBodies).slice(0, 500)}`,
+  );
 
   return {
     url,
@@ -994,6 +1075,7 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
       pageId: page.id,
       status,
       publishedAt: apiPage.data?.page?.publishedAt || null,
+      expectedUpdatedAt: publishBody.body.expectedUpdatedAt,
     },
   };
 };
@@ -1111,7 +1193,7 @@ const main = async () => {
     );
     const deliveryVisual = await assertPagesVisualState(client, 'pages delivery row', VISUAL_SCREENSHOT_PATHS.delivery, {
       table: true,
-      expectedText: 'Recent probes',
+      expectedText: 'Health',
     });
     const deliveryRefresh = await assertDeliveryRefreshControl(
       client,
@@ -1138,8 +1220,8 @@ const main = async () => {
     );
     const bulkPublishReview = await assertBulkPublishReviewModal(
       client,
-      hierarchyPages.parentPage,
-      hierarchyPages.parentPage.title,
+      hierarchyPages.childPage,
+      hierarchyPages.childPage.title,
       VISUAL_SCREENSHOT_PATHS.bulkModal,
     );
     const bulkPublishMutation = await assertBulkPublishMutation(

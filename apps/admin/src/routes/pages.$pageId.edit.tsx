@@ -828,7 +828,7 @@ function PageEditorRoute() {
         expectedUpdatedAt: page.lastUpdated,
       });
       const nextPage = shouldPublishThroughWorkflow
-        ? await publishPage(siteId, pageId)
+        ? await publishPage(siteId, pageId, { expectedUpdatedAt: savedPage.lastUpdated })
         : savedPage;
       setPage(nextPage);
       updatePage(pageId, nextPage);
@@ -933,8 +933,8 @@ function PageEditorRoute() {
       }
 
       const nextPage = action === 'publish'
-        ? await publishPage(siteId, pageId)
-        : await archivePage(siteId, pageId);
+        ? await publishPage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated })
+        : await archivePage(siteId, pageId, { expectedUpdatedAt: page.lastUpdated });
       setPage(nextPage);
       updatePage(pageId, nextPage);
       setWorkflowNotice(action === 'publish' ? 'Page published.' : 'Page archived.');

@@ -1152,7 +1152,9 @@ function PagesListView() {
         return;
       }
 
-      const updated = await publishPage(page.siteId || activeSiteId, page.id);
+      const updated = await publishPage(page.siteId || activeSiteId, page.id, {
+        expectedUpdatedAt: page.lastUpdated,
+      });
       updatePage(page.id, updated);
       void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
       setPendingPublishPage(null);
@@ -1176,7 +1178,9 @@ function PagesListView() {
     setNotice(null);
 
     try {
-      const updated = await archivePage(page.siteId || activeSiteId, page.id);
+      const updated = await archivePage(page.siteId || activeSiteId, page.id, {
+        expectedUpdatedAt: page.lastUpdated,
+      });
       updatePage(page.id, updated);
       void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
       setNotice(`${updated.title || page.title} archived.`);
@@ -1304,7 +1308,9 @@ function PagesListView() {
         }
 
         const updatedPages = await Promise.all(
-          selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id)),
+          selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id, {
+            expectedUpdatedAt: page.lastUpdated,
+          })),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
         setPendingBulkPublish(false);
@@ -1313,7 +1319,9 @@ function PagesListView() {
 
       if (bulkAction === 'archive') {
         const updatedPages = await Promise.all(
-          selectedPages.map((page) => archivePage(page.siteId || activeSiteId, page.id)),
+          selectedPages.map((page) => archivePage(page.siteId || activeSiteId, page.id, {
+            expectedUpdatedAt: page.lastUpdated,
+          })),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
         setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} archived.`);
@@ -2425,6 +2433,7 @@ function PagesListView() {
             {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
           <select
+            data-testid="pages-bulk-action-select"
 	            value={bulkAction}
 	            disabled={isPageLibraryBusy || !canRunAnyBulkAction}
 	            title={!canRunAnyBulkAction ? bulkPermissionTitle : undefined}
@@ -2443,6 +2452,7 @@ function PagesListView() {
           </select>
           <button
             type="button"
+            data-testid="pages-bulk-action-apply"
             onClick={() => void handleBulkAction()}
 	            disabled={!bulkAction || selectedPages.length === 0 || isPageLibraryBusy || !selectedBulkActionAllowed || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
 	            title={!selectedBulkActionAllowed
