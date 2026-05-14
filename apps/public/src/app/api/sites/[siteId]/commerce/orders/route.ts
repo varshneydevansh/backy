@@ -399,6 +399,11 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
 };
 
 type CheckoutLineItem = ReturnType<typeof lineItemFromProduct>;
+type InventoryReservation = {
+  record: CommerceSourceRecord;
+  originalValues: Record<string, unknown>;
+  values: Record<string, unknown>;
+};
 
 const taxRateForClass = (taxClass: string, rules: CommerceStorefrontContract['pricing']['rules']): number => {
   const normalized = taxClass.trim().toLowerCase();
@@ -958,6 +963,89 @@ const reserveInventoryForCheckoutItem = (
   };
 };
 
+const applyRepositoryInventoryReservations = async ({
+  siteId,
+  productsCollectionId,
+  repositories,
+  reservations,
+}: {
+  siteId: string;
+  productsCollectionId: string;
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+  reservations: Iterable<InventoryReservation>;
+}) => {
+  const applied: InventoryReservation[] = [];
+
+  try {
+    for (const reservation of reservations) {
+      await repositories.collections.updateRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: toJsonRecord(reservation.values),
+      });
+      applied.push(reservation);
+    }
+  } catch (error) {
+    await Promise.allSettled(applied.map((reservation) => (
+      repositories.collections.updateRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: toJsonRecord(reservation.originalValues),
+      })
+    )));
+    throw error;
+  }
+
+  return async () => {
+    await Promise.allSettled(applied.map((reservation) => (
+      repositories.collections.updateRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: toJsonRecord(reservation.originalValues),
+      })
+    )));
+  };
+};
+
+const applyDemoInventoryReservations = ({
+  siteId,
+  productsCollectionId,
+  reservations,
+}: {
+  siteId: string;
+  productsCollectionId: string;
+  reservations: Iterable<InventoryReservation>;
+}) => {
+  const applied: InventoryReservation[] = [];
+
+  try {
+    for (const reservation of reservations) {
+      const updated = updateAdminCollectionRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: reservation.values,
+      });
+      if (!updated) {
+        throw new Error(`Unable to reserve inventory for product ${reservation.record.id}`);
+      }
+      applied.push(reservation);
+    }
+  } catch (error) {
+    applied.forEach((reservation) => {
+      updateAdminCollectionRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: reservation.originalValues,
+      });
+    });
+    throw error;
+  }
+
+  return () => {
+    applied.forEach((reservation) => {
+      updateAdminCollectionRecord(siteId, productsCollectionId, reservation.record.id, {
+        status: reservation.record.status,
+        values: reservation.originalValues,
+      });
+    });
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -1113,7 +1201,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const lineItems = [];
       const reservationsEnabled = commerce.inventory.reservations;
-      const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
+      const inventoryReservations = new Map<string, InventoryReservation>();
       for (const item of input.items || []) {
         const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
         const record = textValue(item.productId)
@@ -1147,7 +1235,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
           }
           if (reservation.values) {
-            inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+            inventoryReservations.set(record.id, {
+              record: workingRecord,
+              originalValues: reservedRecord?.originalValues || record.values,
+              values: reservation.values,
+            });
           }
         }
 
@@ -1190,7 +1282,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         total: quote.total,
         requestId,
       });
-
       const values = {
         ordernumber: orderNumber,
         customername: input.customer?.name || '',
@@ -1215,15 +1306,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         billingaddress: input.billingAddress || '',
         notes: input.notes || '',
       };
-
-      const order = (await repositories.collections.createRecord({
+      const rollbackInventoryReservations = await applyRepositoryInventoryReservations({
         siteId: site.id,
-        collectionId: ordersCollection.id,
-        slug,
-        status: 'published',
-        values: toJsonRecord(values),
-      })).item;
+        productsCollectionId: productsCollection.id,
+        repositories,
+        reservations: inventoryReservations.values(),
+      });
 
+      let order: Awaited<ReturnType<typeof repositories.collections.createRecord>>['item'];
+      try {
+        order = (await repositories.collections.createRecord({
+          siteId: site.id,
+          collectionId: ordersCollection.id,
+          slug,
+          status: 'published',
+          values: toJsonRecord(values),
+        })).item;
+      } catch (error) {
+        await rollbackInventoryReservations();
+        throw error;
+      }
       customerProfile = await updateRepositoryCheckoutCustomerOrderLink({
         siteId: site.id,
         repositories,
@@ -1234,13 +1336,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         total: quote.total,
         requestId,
       });
-
-      for (const reservation of inventoryReservations.values()) {
-        await repositories.collections.updateRecord(site.id, productsCollection.id, reservation.record.id, {
-          status: reservation.record.status,
-          values: toJsonRecord(reservation.values),
-        });
-      }
 
       return publicContractJson({
         success: true,
@@ -1306,7 +1401,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const lineItems = [];
     const reservationsEnabled = commerce.inventory.reservations;
-    const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
+    const inventoryReservations = new Map<string, InventoryReservation>();
     for (const item of input.items || []) {
       const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
       const record = getCollectionRecordByIdOrSlug(
@@ -1342,7 +1437,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
         }
         if (reservation.values) {
-          inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+          inventoryReservations.set(record.id, {
+            record: workingRecord,
+            originalValues: reservedRecord?.originalValues || record.values,
+            values: reservation.values,
+          });
         }
       }
 
@@ -1384,40 +1483,52 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       total: quote.total,
       requestId,
     });
-
-    const order = createAdminCollectionRecord(site.id, ordersCollection.id, {
-      slug,
-      status: 'published',
-      values: {
-        ordernumber: orderNumber,
-        customername: input.customer?.name || '',
-        email: input.customer?.email || '',
-        phone: input.customer?.phone || '',
-        total: quote.total,
-        subtotal: quote.subtotal,
-        taxamount: quote.taxAmount,
-        shippingamount: quote.shippingAmount,
-        discountamount: quote.discountAmount,
-        currency,
-        items: JSON.stringify(lineItems, null, 2),
-        ordersource: 'web',
-        checkoutsessionid: checkoutSession.id,
-        customerid: customerProfile?.record.id || '',
-        orderstatus: 'open',
-        paymentstatus: 'pending',
-        paymentprovider: checkoutSession.provider,
-        paymentreference: checkoutSession.reference,
-        fulfillmentstatus: 'unfulfilled',
-        shippingaddress: input.shippingAddress || '',
-        billingaddress: input.billingAddress || '',
-        notes: input.notes || '',
-      },
+    const rollbackInventoryReservations = applyDemoInventoryReservations({
+      siteId: site.id,
+      productsCollectionId: productsCollection.id,
+      reservations: inventoryReservations.values(),
     });
 
-    if (!order) {
-      return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
-    }
+    let order: NonNullable<ReturnType<typeof createAdminCollectionRecord>>;
+    try {
+      const createdOrder = createAdminCollectionRecord(site.id, ordersCollection.id, {
+        slug,
+        status: 'published',
+        values: {
+          ordernumber: orderNumber,
+          customername: input.customer?.name || '',
+          email: input.customer?.email || '',
+          phone: input.customer?.phone || '',
+          total: quote.total,
+          subtotal: quote.subtotal,
+          taxamount: quote.taxAmount,
+          shippingamount: quote.shippingAmount,
+          discountamount: quote.discountAmount,
+          currency,
+          items: JSON.stringify(lineItems, null, 2),
+          ordersource: 'web',
+          checkoutsessionid: checkoutSession.id,
+          customerid: customerProfile?.record.id || '',
+          orderstatus: 'open',
+          paymentstatus: 'pending',
+          paymentprovider: checkoutSession.provider,
+          paymentreference: checkoutSession.reference,
+          fulfillmentstatus: 'unfulfilled',
+          shippingaddress: input.shippingAddress || '',
+          billingaddress: input.billingAddress || '',
+          notes: input.notes || '',
+        },
+      });
 
+      if (!createdOrder) {
+        rollbackInventoryReservations();
+        return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+      }
+      order = createdOrder;
+    } catch (error) {
+      rollbackInventoryReservations();
+      throw error;
+    }
     customerProfile = updateDemoCheckoutCustomerOrderLink({
       siteId: site.id,
       customerProfile,
@@ -1427,13 +1538,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       total: quote.total,
       requestId,
     });
-
-    for (const reservation of inventoryReservations.values()) {
-      updateAdminCollectionRecord(site.id, productsCollection.id, reservation.record.id, {
-        status: reservation.record.status,
-        values: reservation.values,
-      });
-    }
 
     return publicContractJson({
       success: true,
