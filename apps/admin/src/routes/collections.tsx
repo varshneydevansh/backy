@@ -2508,9 +2508,9 @@ function CollectionsPage() {
     };
   }, [currentAdmin?.id]);
 
-  const resetCollectionForm = () => {
+  const resetCollectionForm = (options: { draftMode?: boolean } = {}) => {
     collectionInteractionVersionRef.current += 1;
-    setCollectionDraftMode(true);
+    setCollectionDraftMode(options.draftMode ?? true);
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setDeepLinkedRecord(null);
@@ -2615,8 +2615,7 @@ function CollectionsPage() {
 
   const resetCollectionsWorkspace = () => {
     setCollections([]);
-    resetCollectionForm();
-    setCollectionDraftMode(false);
+    resetCollectionForm({ draftMode: false });
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -2917,7 +2916,7 @@ function CollectionsPage() {
       if (nextSelected) {
         selectCollection(nextSelected, Boolean(routeSearch.collectionId));
       } else {
-        resetCollectionForm();
+        resetCollectionForm({ draftMode: false });
       }
     } catch (loadError) {
       if (isAdminPermissionDeniedError(loadError)) {
@@ -3418,7 +3417,7 @@ function CollectionsPage() {
         if (nextCollection) {
           selectCollection(nextCollection);
         } else {
-          resetCollectionForm();
+          resetCollectionForm({ draftMode: false });
         }
       }
       setPendingCollectionDelete(null);

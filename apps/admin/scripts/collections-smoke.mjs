@@ -581,7 +581,10 @@ const navigateToEmptyCollections = (client, siteId) => {
       return {
         ready: Boolean(document.querySelector('[data-testid="collections-empty-new-collection-button"]')) &&
           body.includes('No collections yet') &&
-          params.get('siteId') === ${JSON.stringify(siteId)},
+          params.get('siteId') === ${JSON.stringify(siteId)} &&
+          params.get('draft') === null &&
+          !document.querySelector('[data-testid="collections-draft-banner"]') &&
+          !document.querySelector('[data-testid="collections-new-draft-state"]'),
         body: body.slice(0, 1200),
         path: window.location.pathname,
         search: window.location.search,
