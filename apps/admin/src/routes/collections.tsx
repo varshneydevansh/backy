@@ -5394,8 +5394,12 @@ function CollectionsPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void copyCollectionApiText(renderItemPreviewUrl || renderListPreviewUrl, 'template preview render URL')}
-                    disabled={!renderItemPreviewUrl && !renderListPreviewUrl}
+                    onClick={() => void copyCollectionApiText(renderItemPreviewUrl || renderListPreviewUrl, 'template preview render URL', {
+                      key: 'collections.export',
+                      action: 'copy template preview render URLs',
+                    })}
+                    disabled={(!renderItemPreviewUrl && !renderListPreviewUrl) || isCollectionsBusy || !canExportCollections}
+                    title={!canExportCollections ? exportPermissionTitle : undefined}
                     className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-medium text-indigo-950 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                     data-testid="collections-template-preview-copy-render"
                   >

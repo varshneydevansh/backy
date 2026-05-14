@@ -710,6 +710,13 @@ assertIncludes(ordersAdminRoute, 'ORDER_RECORD_PAGE_SIZE', 'orders admin route m
 assertIncludes(ordersAdminRoute, 'loadMoreOrders', 'orders admin route must expose incremental queue loading');
 assertExcludes(ordersAdminRoute, 'listAllCollectionRecords', 'orders admin route must not walk every order record on page load');
 
+const collectionsAdminRoute = read('apps/admin/src/routes/collections.tsx');
+const templatePreviewCopyIndex = collectionsAdminRoute.indexOf('collections-template-preview-copy-render');
+assert(templatePreviewCopyIndex !== -1, 'collections admin route must expose template preview render URL copy control');
+const templatePreviewCopySource = collectionsAdminRoute.slice(Math.max(0, templatePreviewCopyIndex - 800), templatePreviewCopyIndex + 600);
+assertIncludes(templatePreviewCopySource, "key: 'collections.export'", 'template preview render URL copy must require collections.export');
+assertIncludes(templatePreviewCopySource, '!canExportCollections', 'template preview render URL copy must be disabled without collections.export');
+
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
   'CATALOG_RECORD_PAGE_SIZE',
