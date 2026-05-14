@@ -37,6 +37,7 @@ import {
   getDefaultMediaSiteId,
   getPublicImageTransformUrl,
   getPublicMediaFileUrl,
+  ingestMediaProviderAnalytics,
   listMediaLibrary,
   listMediaFolders,
   listMediaVersions,
@@ -2030,25 +2031,57 @@ function MediaPage() {
     setAssetProviderAnalyticsNotice(null);
 
     try {
-      const updated = await updateMedia(selectedAsset.id, {
+      const result = await ingestMediaProviderAnalytics({
+        source,
+        reportingWindow,
+        mergeMode: 'replace',
+        currency,
+        attributionWindow,
+        entries: [{
+          mediaId: selectedAsset.id,
+          storagePath: typeof selectedAsset.metadata?.storagePath === 'string' ? selectedAsset.metadata.storagePath : undefined,
+          url: selectedAsset.url,
+          totalRequests,
+          bytesServed,
+          conversions,
+          conversionValue,
+          currency,
+          attributionWindow,
+          source,
+          reportingWindow,
+        }],
+      }, siteId);
+      const matched = result.matched.find((entry) => entry.mediaId === selectedAsset.id);
+
+      if (!matched) {
+        throw new Error('Provider analytics were accepted but did not match this asset.');
+      }
+
+      const updated: MediaAsset = {
+        ...selectedAsset,
         metadata: {
           ...selectedAsset.metadata,
           providerDelivery: {
-            totalRequests,
-            bytesServed,
-            conversions,
-            conversionValue,
-            conversionRate: totalRequests > 0 ? Number(((conversions / totalRequests) * 100).toFixed(4)) : 0,
+            ...(selectedAsset.metadata?.providerDelivery && typeof selectedAsset.metadata.providerDelivery === 'object'
+              ? selectedAsset.metadata.providerDelivery
+              : {}),
+            totalRequests: matched.totalRequests,
+            bytesServed: matched.bytesServed,
+            conversions: matched.conversions,
+            conversionValue: matched.conversionValue,
+            conversionRate: matched.totalRequests > 0 ? Number(((matched.conversions / matched.totalRequests) * 100).toFixed(4)) : 0,
             currency,
             attributionWindow,
             source,
             reportingWindow,
             lastSyncedAt: new Date().toISOString(),
+            ingestMode: result.mergeMode,
+            matchedBy: matched.matchedBy,
           },
         },
-      }, siteId);
+      };
       applyUpdatedAsset(updated);
-      setAssetProviderAnalyticsNotice('Provider metrics recorded.');
+      setAssetProviderAnalyticsNotice('Provider metrics recorded through analytics ingest.');
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
       void loadLibraryAuditLogs(0);

@@ -186,6 +186,14 @@ interface ApiDeleteResponse {
   };
 }
 
+interface ApiMediaProviderAnalyticsResponse {
+  success: boolean;
+  data?: MediaProviderAnalyticsResult;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiMediaFolder {
   id: string;
   siteId: string;
@@ -256,6 +264,47 @@ export interface MediaUpdateInput {
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
+}
+
+export interface MediaProviderAnalyticsEntry {
+  mediaId?: string;
+  storagePath?: string;
+  url?: string;
+  totalRequests: number;
+  bytesServed: number;
+  conversions?: number;
+  conversionValue?: number;
+  source?: string;
+  reportingWindow?: string;
+  currency?: string;
+  attributionWindow?: string;
+  lastDeliveredAt?: string;
+}
+
+export interface MediaProviderAnalyticsInput {
+  source?: string;
+  reportingWindow?: string;
+  mergeMode?: 'replace' | 'increment';
+  currency?: string;
+  attributionWindow?: string;
+  entries: MediaProviderAnalyticsEntry[];
+}
+
+export interface MediaProviderAnalyticsResult {
+  source: string;
+  reportingWindow: string;
+  mergeMode: 'replace' | 'increment';
+  matchedCount: number;
+  unmatchedCount: number;
+  matched: Array<{
+    mediaId: string;
+    matchedBy: string;
+    totalRequests: number;
+    bytesServed: number;
+    conversions: number;
+    conversionValue: number;
+  }>;
+  unmatched: MediaProviderAnalyticsEntry[];
 }
 
 export interface MediaReplaceOptions {
@@ -619,6 +668,26 @@ export async function updateMedia(
   }
 
   return toMediaAsset(payload.data.media);
+}
+
+export async function ingestMediaProviderAnalytics(
+  input: MediaProviderAnalyticsInput,
+  siteId = getDefaultMediaSiteId(),
+): Promise<MediaProviderAnalyticsResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/provider-analytics`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json() as ApiMediaProviderAnalyticsResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to ingest provider analytics');
+  }
+
+  return payload.data;
 }
 
 export async function replaceMedia(
