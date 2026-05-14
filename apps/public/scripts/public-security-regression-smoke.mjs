@@ -781,6 +781,11 @@ assertIncludes(settingsRoute, 'Existing integrations using', 'settings UI must w
 assertIncludes(settingsRoute, 'const statusLabel = !canShowValue', 'settings UI must show redacted admin API keys as hidden, not unconfigured');
 assertIncludes(settingsRoute, 'Hidden without settings.manageKeys', 'settings UI must explain hidden admin API key values');
 
+const siteDetailUiRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
+assertIncludes(siteDetailUiRoute, 'siteSettingsNotice', 'site settings page must render a save success notice');
+assertIncludes(siteDetailUiRoute, 'setSiteSettingsNotice(`${savedSite.name} settings saved.`);', 'site settings save must stay on-page with success context');
+assertExcludes(siteDetailUiRoute, "navigate({ to: '/sites' });\n    } catch (error) {", 'site settings save must not immediately redirect away after saving');
+
 const adminSiteDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/route.ts');
 assertIncludes(adminSiteDetailRoute, 'siteStatus: nextStatus', 'admin site detail route must persist archived site lifecycle state in settings');
 assertIncludes(adminSiteDetailRoute, 'persistedSiteStatus(site)', 'admin site detail route must return persisted archived site status');

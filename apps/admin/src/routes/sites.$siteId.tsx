@@ -728,6 +728,7 @@ function EditSitePage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [siteSettingsError, setSiteSettingsError] = useState<string | null>(null);
+  const [siteSettingsNotice, setSiteSettingsNotice] = useState<string | null>(null);
   const [siteWorkspaceNotice, setSiteWorkspaceNotice] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
@@ -2445,6 +2446,7 @@ function EditSitePage() {
 
     setIsLoading(true);
     setSiteSettingsError(null);
+    setSiteSettingsNotice(null);
 
     const nextSite = {
       name: formData.name,
@@ -2461,7 +2463,7 @@ function EditSitePage() {
       if (siteApiId) {
         void loadReadiness();
       }
-      navigate({ to: '/sites' });
+      setSiteSettingsNotice(`${savedSite.name} settings saved.`);
     } catch (error) {
       setSiteSettingsError(error instanceof Error
         ? `${error.message}. Changes were not persisted.`
@@ -3734,6 +3736,11 @@ function EditSitePage() {
           {siteSettingsError && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {siteSettingsError}
+            </div>
+          )}
+          {siteSettingsNotice && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              {siteSettingsNotice}
             </div>
           )}
 
