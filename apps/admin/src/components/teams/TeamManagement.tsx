@@ -41,6 +41,8 @@ export interface Team {
 interface TeamManagementProps {
     teams: Team[];
     currentTeamId: string;
+    currentAdminId?: string;
+    currentAdminEmail?: string;
     canManageTeams?: boolean;
     mutationDisabledReason?: string;
     isMutating?: boolean;
@@ -473,6 +475,8 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
 export function TeamManagement({
     teams,
     currentTeamId,
+    currentAdminId,
+    currentAdminEmail,
     canManageTeams = true,
     mutationDisabledReason = 'You do not have permission to manage teams.',
     isMutating = false,
@@ -494,6 +498,30 @@ export function TeamManagement({
     const currentTeam = teams.find((t) => t.id === currentTeamId);
     const mutationsDisabled = isMutating || !canManageTeams;
     const mutationTitle = canManageTeams ? undefined : mutationDisabledReason;
+    const normalizedCurrentAdminEmail = currentAdminEmail?.trim().toLowerCase() || '';
+
+    const memberMutationBlockReason = useCallback(
+        (team: Team, member: TeamMember, action: 'role' | 'remove') => {
+            const isCurrentAdminMember = Boolean(
+                currentAdminId && member.userId === currentAdminId
+            ) || Boolean(
+                normalizedCurrentAdminEmail && member.email.trim().toLowerCase() === normalizedCurrentAdminEmail
+            );
+            if (isCurrentAdminMember) {
+                return 'Use another owner/admin account to change your own team membership.';
+            }
+
+            const ownerCount = team.members.filter((candidate) => candidate.role === 'owner').length;
+            if (member.role === 'owner' && ownerCount <= 1) {
+                return action === 'remove'
+                    ? 'Add another owner before removing the final team owner.'
+                    : 'Add another owner before changing the final team owner role.';
+            }
+
+            return '';
+        },
+        [currentAdminId, normalizedCurrentAdminEmail]
+    );
 
     const handleInvite = useCallback(
         async (email: string, role: TeamRole) => {
@@ -713,7 +741,13 @@ export function TeamManagement({
                         </button>
                     </div>
 
-                    {currentTeam.members.map((member) => (
+                    {currentTeam.members.map((member) => {
+                        const roleBlockReason = memberMutationBlockReason(currentTeam, member, 'role');
+                        const removeBlockReason = memberMutationBlockReason(currentTeam, member, 'remove');
+                        const roleDisabled = mutationsDisabled || Boolean(roleBlockReason) || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`;
+                        const removeDisabled = mutationsDisabled || Boolean(removeBlockReason) || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`;
+
+                        return (
                         <div key={member.id} style={styles.memberRow}>
                             <div style={styles.memberAvatar}>
                                 {member.avatarUrl ? (
@@ -746,8 +780,8 @@ export function TeamManagement({
                                         style={styles.select}
                                         value={member.role}
                                         onChange={(e) => handleUpdateMemberRole(currentTeam.id, member.id, e.target.value as TeamRole)}
-                                        disabled={mutationsDisabled || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`}
-                                        title={mutationTitle}
+                                        disabled={roleDisabled}
+                                        title={roleBlockReason || mutationTitle}
                                     >
                                         <option value="viewer">Viewer</option>
                                         <option value="editor">Editor</option>
@@ -756,15 +790,16 @@ export function TeamManagement({
                                     <button
                                         style={{ ...styles.button, ...styles.dangerButton }}
                                         onClick={() => handleRemoveMember(currentTeam.id, member.id)}
-                                        disabled={mutationsDisabled || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`}
-                                        title={mutationTitle}
+                                        disabled={removeDisabled}
+                                        title={removeBlockReason || mutationTitle}
                                     >
                                         {busyMemberAction === `remove:${member.id}` ? 'Removing...' : 'Remove'}
                                     </button>
                                 </>
                             )}
                         </div>
-                    ))}
+                    );
+                    })}
                 </div>
             )}
 

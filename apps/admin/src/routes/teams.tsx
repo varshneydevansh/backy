@@ -160,6 +160,33 @@ function TeamsPage() {
     setNotice(message);
   }, [loadTeams]);
 
+  const getTeamMemberMutationBlockReason = useCallback((teamId: string, memberId: string, nextRole?: TeamRole) => {
+    const team = teams.find((candidate) => candidate.id === teamId);
+    const member = team?.members.find((candidate) => candidate.id === memberId);
+    if (!team || !member) {
+      return 'Team member could not be found. Refresh teams and try again.';
+    }
+
+    const isCurrentAdminMember = Boolean(
+      currentAdmin?.id && member.userId === currentAdmin.id,
+    ) || Boolean(
+      currentAdmin?.email && member.email.trim().toLowerCase() === currentAdmin.email.trim().toLowerCase(),
+    );
+    if (isCurrentAdminMember) {
+      return 'Use another owner/admin account to change your own team membership.';
+    }
+
+    const ownerCount = team.members.filter((candidate) => candidate.role === 'owner').length;
+    const demotesFinalOwner = member.role === 'owner' && nextRole !== 'owner';
+    if (demotesFinalOwner && ownerCount <= 1) {
+      return nextRole
+        ? 'Add another owner before changing the final team owner role.'
+        : 'Add another owner before removing the final team owner.';
+    }
+
+    return '';
+  }, [currentAdmin?.email, currentAdmin?.id, teams]);
+
   const handleCreateTeam = useCallback(async (name: string) => {
     if (!canManageTeams) {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
@@ -204,20 +231,28 @@ function TeamsPage() {
     if (!canManageTeams) {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
     }
+    const blockReason = getTeamMemberMutationBlockReason(teamId, memberId, role);
+    if (blockReason) {
+      throw new Error(blockReason);
+    }
     await updateTeamMemberRole(teamId, memberId, role);
     await refreshAfterMutation('Team member role updated.');
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
+  }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
 
   const handleRemoveMember = useCallback(async (teamId: string, memberId: string) => {
     if (!canManageTeams) {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
+    }
+    const blockReason = getTeamMemberMutationBlockReason(teamId, memberId);
+    if (blockReason) {
+      throw new Error(blockReason);
     }
     const confirmed = window.confirm('Remove this member from the team?');
     if (!confirmed) return;
 
     await removeTeamMember(teamId, memberId);
     await refreshAfterMutation('Team member removed.');
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
+  }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
 
   return (
     <PageShell
@@ -266,6 +301,8 @@ function TeamsPage() {
               <TeamManagement
                 teams={teams}
                 currentTeamId={currentTeamId}
+                currentAdminId={currentAdmin?.id}
+                currentAdminEmail={currentAdmin?.email}
                 canManageTeams={canManageTeams}
                 mutationDisabledReason={managePermissionTitle}
                 isMutating={isTeamsBusy}
@@ -283,6 +320,8 @@ function TeamsPage() {
           <TeamManagement
             teams={teams}
             currentTeamId={currentTeamId}
+            currentAdminId={currentAdmin?.id}
+            currentAdminEmail={currentAdmin?.email}
             canManageTeams={canManageTeams}
             mutationDisabledReason={managePermissionTitle}
             isMutating={isTeamsBusy}
