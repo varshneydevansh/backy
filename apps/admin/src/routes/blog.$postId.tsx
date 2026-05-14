@@ -997,6 +997,8 @@ function EditBlogPostPage() {
     };
 
     const setWorkspaceFocusRoute = (focused: boolean) => {
+        if (editorActionBusy) return;
+
         setIsWorkspaceFocus(focused);
         navigate({
             to: '/blog/$postId',
@@ -1444,7 +1446,7 @@ function EditBlogPostPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
-                    disabled={editorBusy}
+                    disabled={editorActionBusy}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
@@ -1943,7 +1945,7 @@ function EditBlogPostPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => setWorkspaceFocusRoute(false)}
-                                            disabled={editorBusy}
+                                            disabled={editorActionBusy}
                                             iconStart={<Minimize2 className="size-4" />}
                                         >
                                             Show panels
