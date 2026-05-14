@@ -83,6 +83,7 @@ async function createSdkSmokeFixture() {
   const siteSlug = `sdk-smoke-site-${unique}`;
   const pageSlug = `sdk-smoke-page-${unique}`;
   const collectionSlug = `sdk-smoke-collection-${unique}`;
+  const publicWriteToken = `sdk-public-write-${unique}`;
 
   const site = await request('/api/admin/sites', {
     method: 'POST',
@@ -113,8 +114,15 @@ async function createSdkSmokeFixture() {
       permissions: {
         publicRead: true,
         publicCreate: true,
-        publicUpdate: false,
-        publicDelete: false,
+        publicUpdate: true,
+        publicDelete: true,
+      },
+      metadata: {
+        visitorWritePolicy: {
+          publicWriteToken,
+          updateFieldMode: 'selected',
+          allowedUpdateFields: ['summary', 'category'],
+        },
       },
     }),
   });
@@ -318,6 +326,7 @@ async function createSdkSmokeFixture() {
     collectionId,
     publishedRecordId,
     publishedRecordSlug,
+    publicWriteToken,
     reusableSectionId,
   };
 }
@@ -713,6 +722,24 @@ if (runWriteSmoke) {
     }, `sdk-public-record-${Date.now()}`);
     assert(createdRecord.data.record?.status === 'draft', 'createRecord() should create draft public records');
     writeChecks.push('createRecord');
+
+    const updatedRecord = await writeClient.updateRecord(fixture.collectionId, createdRecord.data.record.id, {
+      title: 'SDK Public Record Ignored Title',
+      summary: 'Updated through the SDK write smoke.',
+      category: 'Standard',
+    }, { publicWriteToken: fixture.publicWriteToken });
+    assert(updatedRecord.data.record?.values?.summary === 'Updated through the SDK write smoke.', 'updateRecord() did not update an allowed public field');
+    assert(updatedRecord.data.record?.values?.category === 'Standard', 'updateRecord() did not update select field value');
+    assert(updatedRecord.data.record?.values?.title === 'SDK Public Record', 'updateRecord() should respect public update field policy');
+    assert(updatedRecord.data.visitorWritePolicy?.ignoredFields?.includes?.('title'), 'updateRecord() should expose ignored public update fields');
+    writeChecks.push('updateRecord');
+
+    const deletedRecord = await writeClient.deleteRecord(fixture.collectionId, createdRecord.data.record.id, {
+      publicWriteToken: fixture.publicWriteToken,
+    });
+    assert(deletedRecord.data.deleted === true, 'deleteRecord() should report deleted public records');
+    assert(deletedRecord.data.recordId === createdRecord.data.record.id, 'deleteRecord() returned the wrong record id');
+    writeChecks.push('deleteRecord');
 
     const cachedRecords = await writeClient.recordsCached(fixture.collectionId, {
       slug: fixture.publishedRecordSlug,

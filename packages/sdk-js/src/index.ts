@@ -320,6 +320,36 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
   [key: string]: unknown;
 }
 
+export interface BackyCollectionRecordWritePolicy {
+  createFieldMode?: 'all' | 'selected' | string;
+  allowedCreateFields?: string[];
+  updateFieldMode?: 'all' | 'selected' | string;
+  allowedUpdateFields?: string[];
+  ignoredFields?: string[];
+  [key: string]: unknown;
+}
+
+export interface BackyCollectionRecordWriteOptions {
+  siteId?: string;
+  requestId?: string;
+  publicWriteToken?: string;
+}
+
+export interface BackyCollectionRecordCreateOptions extends BackyCollectionRecordWriteOptions {
+  slug?: string;
+}
+
+export interface BackyCollectionRecordMutationResult<TValues extends Record<string, unknown> = Record<string, unknown>> {
+  record: BackyCollectionRecord<TValues>;
+  visitorWritePolicy?: BackyCollectionRecordWritePolicy;
+}
+
+export interface BackyCollectionRecordDeleteResult {
+  deleted: boolean;
+  recordId: string;
+  slug?: string;
+}
+
 export interface BackyCommerceProductDesign {
   templateId?: string;
   templateName?: string;
@@ -1482,11 +1512,47 @@ export class BackyClient {
   createRecord<TValues extends Record<string, unknown> = Record<string, unknown>>(
     collectionId: string,
     values: TValues,
-    slug?: string,
-  ): Promise<BackyEnvelope<{ record: BackyCollectionRecord<TValues> }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
+    slugOrOptions?: string | BackyCollectionRecordCreateOptions,
+    options: BackyCollectionRecordWriteOptions = {},
+  ): Promise<BackyEnvelope<BackyCollectionRecordMutationResult<TValues>>> {
+    const writeOptions = typeof slugOrOptions === 'string'
+      ? { ...options, slug: slugOrOptions }
+      : (slugOrOptions ?? {});
+    const { siteId, requestId, publicWriteToken, slug } = writeOptions;
+
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       method: 'POST',
-      body: { values, slug },
+      body: { values, slug, publicWriteToken },
+      requestId,
+    });
+  }
+
+  updateRecord<TValues extends Record<string, unknown> = Record<string, unknown>>(
+    collectionId: string,
+    recordId: string,
+    values: Partial<TValues>,
+    options: BackyCollectionRecordWriteOptions = {},
+  ): Promise<BackyEnvelope<BackyCollectionRecordMutationResult<TValues>>> {
+    const { siteId, requestId, publicWriteToken } = options;
+
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`, {
+      method: 'PATCH',
+      body: { values, publicWriteToken },
+      requestId,
+    });
+  }
+
+  deleteRecord(
+    collectionId: string,
+    recordId: string,
+    options: BackyCollectionRecordWriteOptions = {},
+  ): Promise<BackyEnvelope<BackyCollectionRecordDeleteResult>> {
+    const { siteId, requestId, publicWriteToken } = options;
+
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE',
+      body: { publicWriteToken },
+      requestId,
     });
   }
 
