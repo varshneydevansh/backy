@@ -35,6 +35,7 @@ import {
   listCollections,
   listForms,
   createForm,
+  deleteForm,
   retryFormEmailDelivery,
   retryFormWebhookDelivery,
   updateForm,
@@ -69,7 +70,7 @@ type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
 type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
-type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'collections.view' | 'activity.export';
+type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'forms.delete' | 'collections.view' | 'activity.export';
 
 const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser['role']>> = {
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -77,6 +78,7 @@ const FORMS_PERMISSION_ROLE_DEFAULTS: Record<FormsPermissionKey, Array<AuthUser[
   'forms.edit': ['owner', 'admin', 'editor'],
   'forms.manage': ['owner', 'admin', 'editor'],
   'forms.export': ['owner', 'admin'],
+  'forms.delete': ['owner', 'admin'],
   'collections.view': ['owner', 'admin', 'editor', 'viewer'],
   'activity.export': ['owner', 'admin'],
 };
@@ -505,6 +507,8 @@ function FormsRoute() {
   const [isCreatingEmbedBlock, setIsCreatingEmbedBlock] = useState(false);
   const [createdEmbedSectionId, setCreatedEmbedSectionId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
+  const [isDeletingFormId, setIsDeletingFormId] = useState<string | null>(null);
+  const [pendingDeleteForm, setPendingDeleteForm] = useState<FormDefinition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
@@ -519,6 +523,7 @@ function FormsRoute() {
   const canEditForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canManageForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canExportForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', FORMS_PERMISSION_ROLE_DEFAULTS);
   const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
@@ -526,7 +531,8 @@ function FormsRoute() {
   const editPermissionTitle = canEditForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCreatingEmbedBlock || isSavingForm || isPermissionMatrixPending;
+  const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1578,6 +1584,62 @@ function FormsRoute() {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
     } finally {
       setIsSavingForm(false);
+    }
+  };
+
+  const requestDeleteSelectedForm = () => {
+    if (isFormsBusy || !selectedForm) return;
+    if (!canDeleteForms) {
+      setError(deletePermissionTitle || 'Your account cannot delete forms.');
+      setNotice(null);
+      return;
+    }
+
+    setPendingDeleteForm(selectedForm);
+    setError(null);
+    setNotice(null);
+  };
+
+  const confirmDeleteForm = async () => {
+    if (isFormsBusy || !pendingDeleteForm) return;
+    if (!canDeleteForms) {
+      setError(deletePermissionTitle || 'Your account cannot delete forms.');
+      setNotice(null);
+      return;
+    }
+
+    const deletedForm = pendingDeleteForm;
+    const nextForm = forms.find((form) => form.id !== deletedForm.id) || null;
+    setIsDeletingFormId(deletedForm.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await deleteForm(activeSiteId, deletedForm.id);
+      setForms((current) => current.filter((form) => form.id !== deletedForm.id));
+      setInboxByForm((current) => {
+        const rest = { ...current };
+        delete rest[deletedForm.id];
+        return rest;
+      });
+      setDeliveryEventsByForm((current) => {
+        const rest = { ...current };
+        delete rest[deletedForm.id];
+        return rest;
+      });
+      setSelectedFormId(nextForm?.id || null);
+      setFormDraft(nextForm ? cloneFormDefinition(nextForm) : null);
+      setPendingDeleteForm(null);
+      updateFormsRouteSearch({
+        formId: nextForm?.id,
+        status: undefined,
+        submissionQ: undefined,
+      });
+      setNotice(`${deletedForm.title || deletedForm.name} deleted.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete form');
+    } finally {
+      setIsDeletingFormId(null);
     }
   };
 
@@ -2809,6 +2871,16 @@ function FormsRoute() {
                         </Link>
                       )}
                       <StatusBadge status={selectedForm.audience} type="info" />
+                      <Button
+                        variant="danger"
+                        onClick={requestDeleteSelectedForm}
+                        disabled={isFormsBusy || !canDeleteForms}
+                        title={!canDeleteForms ? deletePermissionTitle : undefined}
+                        iconStart={<Trash2 className="size-4" />}
+                        data-testid="form-delete-button"
+                      >
+                        Delete
+                      </Button>
                     </div>
                   }
                 />
@@ -3905,6 +3977,54 @@ function FormsRoute() {
                 )}
               </PanelContent>
             </Panel>
+          </div>
+        </div>
+      )}
+      {pendingDeleteForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="form-delete-confirm-dialog">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteForm.title || pendingDeleteForm.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the form definition, public definition endpoint, and submission intake for this form.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Form ID: <span className="font-mono font-medium text-foreground">{pendingDeleteForm.id}</span>
+              {pendingDeleteForm.pageId || pendingDeleteForm.postId ? (
+                <div className="mt-1 text-amber-700">
+                  This form is owned by a canvas source. Open the page or blog canvas if you want to remove the visible form block too.
+                </div>
+              ) : null}
+              {formDraftDirty && pendingDeleteForm.id === selectedForm?.id ? (
+                <div className="mt-1 text-amber-700">
+                  Unsaved builder changes will be discarded.
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPendingDeleteForm(null)}
+                disabled={Boolean(isDeletingFormId)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void confirmDeleteForm()}
+                disabled={Boolean(isDeletingFormId) || !canDeleteForms}
+                title={!canDeleteForms ? deletePermissionTitle : undefined}
+                data-testid="form-delete-confirm-button"
+              >
+                {isDeletingFormId === pendingDeleteForm.id ? 'Deleting...' : 'Delete form'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -740,6 +740,41 @@ const getAdminForm = async (formId) => {
   return payload.data?.form || payload.form;
 };
 
+const assertFormDeleteActionWired = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const deleteButton = document.querySelector('[data-testid="form-delete-button"]');
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-button-missing', body: document.body?.innerText?.slice(0, 500) || '' };
+      }
+      if (deleteButton.disabled) {
+        return { ok: false, reason: 'delete-button-disabled', text: deleteButton.textContent || '' };
+      }
+      deleteButton.click();
+      const dialog = document.querySelector('[data-testid="form-delete-confirm-dialog"]');
+      const confirmButton = document.querySelector('[data-testid="form-delete-confirm-button"]');
+      const cancelButton = Array.from(dialog?.querySelectorAll('button') || []).find((button) => (button.textContent || '').trim() === 'Cancel');
+      if (!(dialog instanceof HTMLElement) || !(confirmButton instanceof HTMLButtonElement) || !(cancelButton instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'delete-dialog-missing',
+          body: document.body?.innerText?.slice(0, 800) || '',
+        };
+      }
+      cancelButton.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) return;
+
+    if (attempt === 79) {
+      throw new Error(`Form delete action was not wired: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
 const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1837,6 +1872,7 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
+    await assertFormDeleteActionWired(client);
     await editFormBuilderInUi(client, createdFormId, smokeCollection.id, webhookReceiver.url);
     const embedSection = await createEmbedBlockInUi(client, createdFormId);
     createdEmbedSectionId = embedSection.id;
