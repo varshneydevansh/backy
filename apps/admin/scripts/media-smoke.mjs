@@ -133,6 +133,30 @@ const expectForbiddenPermission = async (endpoint, options = {}, label = endpoin
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `${label} should return FORBIDDEN_PERMISSION, got: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
+const assertMediaViewPermissionIsEnforced = async () => {
+  const fakeMediaId = 'media-denied-view-smoke';
+
+  try {
+    await setAdminPermissionOverrides({
+      'media.view': 'deny',
+    });
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media?limit=1`, {
+      method: 'GET',
+    }, 'Denied media.view library list');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/folders`, {
+      method: 'GET',
+    }, 'Denied media.view folder list');
+    await expectForbiddenPermission(`/api/admin/sites/${SITE_ID}/media/${fakeMediaId}/signed-url`, {
+      method: 'POST',
+      body: JSON.stringify({ expiresInSeconds: 300 }),
+    }, 'Denied media.view signed URL');
+  } finally {
+    await setAdminPermissionOverrides({
+      'media.view': null,
+    });
+  }
+};
+
 const assertMediaMutationPermissionOverridesAreEnforced = async () => {
   const fakeMediaId = 'media-denied-permission-smoke';
   const fakeFolderId = 'folder-denied-permission-smoke';
@@ -521,6 +545,51 @@ const assertFolderFilterShowsAsset = async (client, { folderId, assetName, searc
   }
 
   return null;
+};
+
+const assertDeniedMediaViewUi = async (client, searchText, hiddenAssetName) => {
+  try {
+    await setAdminPermissionOverrides({
+      'media.view': 'deny',
+    });
+    await navigateToMedia(client, searchText);
+
+    let lastState = null;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      lastState = await evaluate(client, `(() => {
+        const uploadInput = document.querySelector('[data-testid="media-upload-input"]');
+        const modeButtons = Array.from(document.querySelectorAll('[data-testid^="media-upload-mode-"]'));
+        const createFolderButton = document.querySelector('button[aria-label="Create media folder"]');
+        const body = document.body?.innerText || '';
+        return {
+          hasDeniedNotice: body.includes('needs media.view'),
+          hidesAsset: !body.includes(${JSON.stringify(hiddenAssetName)}),
+          uploadInputDisabled: uploadInput instanceof HTMLInputElement ? uploadInput.disabled : null,
+          modeButtonsDisabled: modeButtons.length > 0 && modeButtons.every((button) => button instanceof HTMLButtonElement && button.disabled),
+          createFolderDisabled: createFolderButton instanceof HTMLButtonElement ? createFolderButton.disabled : null,
+          body: body.slice(0, 1800),
+        };
+      })()`);
+
+      if (
+        lastState.hasDeniedNotice &&
+        lastState.hidesAsset &&
+        lastState.uploadInputDisabled === true &&
+        lastState.modeButtonsDisabled === true &&
+        lastState.createFolderDisabled === true
+      ) {
+        return lastState;
+      }
+      await sleep(250);
+    }
+
+    throw new Error(`Denied media.view UI did not disable library controls: ${JSON.stringify(lastState)}`);
+  } finally {
+    await setAdminPermissionOverrides({
+      'media.view': null,
+    });
+    await navigateToMedia(client, searchText);
+  }
 };
 
 const assertTagFilterShowsOnlyExactMatches = async (client, { searchText, tag, includedName, excludedName }) => {
@@ -1932,6 +2001,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await assertMediaViewPermissionIsEnforced();
     await assertMediaConfigurePermissionIsEnforced();
     await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
@@ -2030,6 +2100,8 @@ const main = async () => {
     await navigateToMedia(client, marker);
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
+    const deniedViewUi = await assertDeniedMediaViewUi(client, marker, imageName);
+    await waitForMediaPageAsset(client, imageName);
     await assertTagFilterShowsOnlyExactMatches(client, {
       searchText: marker,
       tag: 'central-upload',
@@ -2282,6 +2354,7 @@ const main = async () => {
       replacementName,
       screenshot: SCREENSHOT_PATH,
       restoredSettings,
+      deniedViewUi,
     }, null, 2));
   } finally {
     if (!restoredSettings) {
