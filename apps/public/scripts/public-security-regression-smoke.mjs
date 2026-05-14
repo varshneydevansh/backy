@@ -693,6 +693,15 @@ assertIncludes(pageCreateRoute, 'findCollectionRouteConflictForPageCreate', 'pag
 assertIncludes(pageCreateRoute, 'routePathMatchesPatternForPageCreate', 'page creation must match dynamic collection item route patterns before submit');
 assertIncludes(pageCreateRoute, '&& !collectionRouteCheckError', 'page creation must block submit when collection route verification fails');
 assertIncludes(pageCreateRoute, 'checkedCollections: collections.length', 'page creation route handoff must report collection route checks');
+assertIncludes(pageCreateRoute, "schemaVersion: 'backy.collection-dataset-page.v1'", 'page creation must save a versioned collection dataset page contract');
+assertIncludes(pageCreateRoute, 'collectionDataset: selectedDatasetContract || undefined', 'page creation must persist dataset route contracts in page meta');
+assertIncludes(pageCreateRoute, "recordParam: mode === 'item' ? 'recordSlug' : null", 'dataset detail pages must persist their record slug parameter contract');
+const publicRenderPayload = read('apps/public/src/lib/renderPayload.ts');
+assertIncludes(publicRenderPayload, 'const collectionDataset = isRecord(page.meta.collectionDataset)', 'public render payload must read saved collection dataset contracts');
+assertIncludes(publicRenderPayload, 'dataset: collectionDataset', 'public render route metadata must expose collection dataset contracts');
+assertIncludes(publicRenderPayload, 'collectionDataset,', 'public render data bindings must expose collection dataset contracts');
+const publicRenderRouteSource = read('apps/public/src/app/api/sites/[siteId]/render/route.ts');
+assertIncludes(publicRenderRouteSource, 'collectionDataset: page.meta?.collectionDataset', 'database render adapter must preserve collection dataset page meta');
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',

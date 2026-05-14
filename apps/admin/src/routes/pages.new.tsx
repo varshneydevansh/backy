@@ -290,6 +290,23 @@ type PageCreateCollectionRouteConflict = {
     collection?: Collection;
 };
 
+type PageCollectionDatasetContract = {
+    schemaVersion: 'backy.collection-dataset-page.v1';
+    mode: PageDatasetMode;
+    collectionId: string;
+    collectionSlug: string;
+    collectionName: string;
+    datasetId: string;
+    routePattern: string;
+    listRoutePattern: string;
+    resolvedPath: string;
+    recordParam: 'recordSlug' | null;
+    slugField: string | null;
+    titleField: string | null;
+    descriptionField: string | null;
+    imageField: string | null;
+};
+
 const findCollectionRouteConflictForPageCreate = (
     path: string,
     collections: Collection[],
@@ -330,6 +347,32 @@ const findCollectionRouteConflictForPageCreate = (
     }
 
     return null;
+};
+
+const buildPageCollectionDatasetContract = (
+    collection: Collection,
+    mode: PageDatasetMode,
+): PageCollectionDatasetContract => {
+    const fields = buildPageCollectionDatasetFields(collection);
+    const routePattern = normalizeCollectionDatasetItemPath(collection);
+    const listRoutePattern = normalizeCollectionDatasetListPath(collection);
+
+    return {
+        schemaVersion: 'backy.collection-dataset-page.v1',
+        mode,
+        collectionId: collection.id,
+        collectionSlug: collection.slug,
+        collectionName: collection.name,
+        datasetId: `dataset_${collection.id}`,
+        routePattern,
+        listRoutePattern,
+        resolvedPath: mode === 'item' ? routePattern : listRoutePattern,
+        recordParam: mode === 'item' ? 'recordSlug' : null,
+        slugField: fields.titleField?.type === 'slug' ? fields.titleField.key : collection.fields.find((field) => field.type === 'slug')?.key || null,
+        titleField: fields.titleField?.key || null,
+        descriptionField: fields.descriptionField?.key || null,
+        imageField: fields.imageField?.key || null,
+    };
 };
 
 const normalizeCanonicalPath = (value: string) => {
@@ -982,6 +1025,12 @@ function NewPageRoute() {
         () => selectedDatasetCollection ? buildPageCollectionDatasetFields(selectedDatasetCollection) : null,
         [selectedDatasetCollection],
     );
+    const selectedDatasetContract = useMemo(
+        () => selectedDatasetCollection
+            ? buildPageCollectionDatasetContract(selectedDatasetCollection, selectedDatasetMode || 'list')
+            : null,
+        [selectedDatasetCollection, selectedDatasetMode],
+    );
     const effectiveTemplateName = selectedFrontendTemplate
         ? `${selectedFrontendTemplate.name} frontend template`
         : selectedDatasetCollection
@@ -1403,14 +1452,7 @@ function NewPageRoute() {
             : formData.template === 'blog-index'
                 ? 'Backy blog feed placeholders'
                 : 'none',
-        datasetImport: selectedDatasetCollection ? {
-            mode: selectedDatasetMode || 'list',
-            collectionId: selectedDatasetCollection.id,
-            collectionSlug: selectedDatasetCollection.slug,
-            titleField: selectedDatasetFields?.titleField?.key || null,
-            descriptionField: selectedDatasetFields?.descriptionField?.key || null,
-            imageField: selectedDatasetFields?.imageField?.key || null,
-        } : null,
+        datasetImport: selectedDatasetContract,
         navigation: formData.navigationPlacement === 'none'
             ? { placement: 'none', parentPageId: selectedParentPage?.id || null }
             : {
@@ -1451,6 +1493,7 @@ function NewPageRoute() {
         formData.title,
         formData.designTemplateId,
         selectedDatasetCollection,
+        selectedDatasetContract,
         selectedDatasetFields,
         selectedDatasetMode,
         effectiveSeoDescription,
@@ -1519,15 +1562,7 @@ function NewPageRoute() {
             parentPageId: selectedParentPage?.id || null,
             parentTitle: selectedParentPage?.title || null,
         },
-        datasetImport: selectedDatasetCollection ? {
-            mode: selectedDatasetMode || 'list',
-            collectionId: selectedDatasetCollection.id,
-            collectionName: selectedDatasetCollection.name,
-            collectionSlug: selectedDatasetCollection.slug,
-            titleField: selectedDatasetFields?.titleField?.key || null,
-            descriptionField: selectedDatasetFields?.descriptionField?.key || null,
-            imageField: selectedDatasetFields?.imageField?.key || null,
-        } : null,
+        datasetImport: selectedDatasetContract,
         hierarchy: selectedParentPage
             ? {
                 parentPageId: selectedParentPage.id,
@@ -1614,6 +1649,7 @@ function NewPageRoute() {
         selectedParentPage,
         selectedFrontendTemplate,
         selectedDatasetCollection,
+        selectedDatasetContract,
         selectedDatasetFields,
         selectedDatasetMode,
         selectedTemplate.id,
@@ -1875,6 +1911,7 @@ function NewPageRoute() {
                 navigationLabel: formData.navigationLabel.trim() || title,
                 parentPageId: selectedParentPage?.id || undefined,
                 parentPageTitle: selectedParentPage?.title || undefined,
+                collectionDataset: selectedDatasetContract || undefined,
             },
             content,
         };

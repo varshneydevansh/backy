@@ -143,6 +143,9 @@ const repositoryPageToStorePage = (page: BackyPage): StorePage => {
       canonical: typeof page.meta?.canonical === 'string' ? page.meta.canonical : null,
       noIndex: page.meta?.noIndex === true,
       noFollow: page.meta?.noFollow === true,
+      collectionDataset: page.meta?.collectionDataset && typeof page.meta.collectionDataset === 'object' && !Array.isArray(page.meta.collectionDataset)
+        ? page.meta.collectionDataset as Record<string, unknown>
+        : null,
     },
     createdAt: page.createdAt,
     updatedAt: page.updatedAt,

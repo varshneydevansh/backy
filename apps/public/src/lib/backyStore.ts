@@ -56,6 +56,7 @@ interface PageMeta {
   frontendDesignChrome?: Record<string, unknown> | null;
   frontendDesignCustomCss?: string | null;
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
+  collectionDataset?: Record<string, unknown> | null;
 }
 
 type SiteVercelDeploymentRun = NonNullable<NonNullable<SiteSettings['vercelDeployment']>['history']>[number];
@@ -5596,6 +5597,9 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       frontendDesignBindingHints: Array.isArray(metaInput.frontendDesignBindingHints)
         ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
         : undefined,
+      collectionDataset: isObjectRecord(metaInput.collectionDataset)
+        ? clone(metaInput.collectionDataset)
+        : null,
     },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : [],
     createdAt: now,
@@ -5716,6 +5720,11 @@ export function updateAdminPage(
             : Array.isArray(metaInput.frontendDesignBindingHints)
               ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
               : undefined,
+          collectionDataset: metaInput.collectionDataset === undefined
+            ? current.meta.collectionDataset
+            : isObjectRecord(metaInput.collectionDataset)
+              ? clone(metaInput.collectionDataset)
+              : null,
         },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : current.forms,
     updatedAt: now,

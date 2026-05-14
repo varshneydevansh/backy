@@ -2275,6 +2275,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const actions = collectElementActions(elements);
   const dataBindings = collectDataBindingManifest(site.id, elements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
+  const collectionDataset = isRecord(page.meta.collectionDataset) ? page.meta.collectionDataset : null;
 
   return {
     success: true,
@@ -2297,6 +2298,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         status: page.status,
         canonical,
         params: {},
+        dataset: collectionDataset,
       },
       content: buildCanonicalContentPayload({
         id: page.id,
@@ -2351,6 +2353,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
       },
       dataBindings: {
         ...dataBindings,
+        collectionDataset,
       },
       editableMap: buildEditableMap(elements),
     },

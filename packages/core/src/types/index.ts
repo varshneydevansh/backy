@@ -895,6 +895,24 @@ export interface PageMeta {
 
   /** Editable binding hints captured from the frontend design template */
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
+
+  /** Collection dataset route/record-resolution contract for dynamic list/detail pages */
+  collectionDataset?: {
+    schemaVersion: 'backy.collection-dataset-page.v1';
+    mode: 'list' | 'item';
+    collectionId: string;
+    collectionSlug: string;
+    collectionName?: string;
+    datasetId: string;
+    routePattern: string;
+    listRoutePattern: string;
+    resolvedPath: string;
+    recordParam: 'recordSlug' | null;
+    slugField?: string | null;
+    titleField?: string | null;
+    descriptionField?: string | null;
+    imageField?: string | null;
+  };
 }
 
 /**
