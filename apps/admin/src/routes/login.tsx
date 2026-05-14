@@ -67,13 +67,13 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const navigate = useNavigate();
   const search = Route.useSearch() as LoginSearch;
-  const { signIn, isLoading, error, clearError, user } = useAuthStore();
+  const { signIn, isLoading, error, clearError, user, session } = useAuthStore();
 
   useEffect(() => {
-    if (user) {
+    if (user && session?.token) {
       navigate({ to: '/' });
     }
-  }, [user, navigate]);
+  }, [session?.token, user, navigate]);
 
   // Form state
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
