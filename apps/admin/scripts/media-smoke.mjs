@@ -330,9 +330,10 @@ const expectApiError = async (endpoint, options, expectedStatus, expectedCode) =
   throw new Error(`Expected ${endpoint} to fail with ${expectedStatus} ${expectedCode}`);
 };
 
-const listMedia = async (search) => {
+const listMedia = async (search, options = {}) => {
   const query = new URLSearchParams({ limit: '100' });
   if (search) query.set('search', search);
+  if (options.tag) query.set('tag', options.tag);
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media?${query.toString()}`);
   return payload.data?.media || payload.media || [];
 };
@@ -483,6 +484,7 @@ const navigate = async (client, url, readyExpression, description) => {
 const navigateToMedia = (client, searchText = '', options = {}) => {
   const params = new URLSearchParams({ siteId: SITE_ID });
   if (searchText) params.set('q', searchText);
+  if (options.tag) params.set('tag', options.tag);
   if (options.folderId !== undefined) params.set('folderId', options.folderId === null ? 'root' : options.folderId);
   return navigate(
     client,
@@ -514,6 +516,44 @@ const assertFolderFilterShowsAsset = async (client, { folderId, assetName, searc
     }
     if (attempt === 119) {
       throw new Error(`Media folder filter did not show descendant asset ${assetName}: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertTagFilterShowsOnlyExactMatches = async (client, { searchText, tag, includedName, excludedName }) => {
+  const taggedMedia = await listMedia(searchText, { tag });
+  assert(
+    taggedMedia.some((item) => item.originalName === includedName || item.name === includedName),
+    `Media API tag filter did not include ${includedName}: ${JSON.stringify(taggedMedia).slice(0, 1000)}`,
+  );
+  assert(
+    !taggedMedia.some((item) => item.originalName === excludedName || item.name === excludedName),
+    `Media API tag filter included ${excludedName}: ${JSON.stringify(taggedMedia).slice(0, 1000)}`,
+  );
+
+  await navigateToMedia(client, searchText, { tag });
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const tagInput = document.querySelector('[data-testid="media-tag-filter"]');
+      const body = document.body?.innerText || '';
+      return {
+        ready: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
+        tagParam: params.get('tag'),
+        tagValue: tagInput instanceof HTMLInputElement ? tagInput.value : null,
+        hasIncluded: body.includes(${JSON.stringify(includedName)}),
+        hasExcluded: body.includes(${JSON.stringify(excludedName)}),
+        body: body.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.tagParam === tag && state.tagValue === tag && state.hasIncluded && !state.hasExcluded) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Media tag filter did not isolate exact tag ${tag}: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -668,6 +708,78 @@ const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName) => {
     }
     if (attempt === 159) {
       throw new Error(`Central upload input did not complete: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertUploadModeRejectsDroppedFiles = async (client, rejectedName) => {
+  const selected = await evaluate(client, `(() => {
+    const modeButton = document.querySelector('[data-testid="media-upload-mode-image"]');
+    if (!(modeButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'image-mode-button-not-found' };
+    }
+    if (modeButton.disabled) {
+      return { ok: false, reason: 'image-mode-button-disabled' };
+    }
+    modeButton.click();
+    return { ok: true };
+  })()`);
+  assert(selected.ok, `Unable to select image upload mode: ${JSON.stringify(selected)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const selectedButton = document.querySelector('[data-testid="media-upload-mode-image"]');
+      const input = document.querySelector('[data-testid="media-upload-input"]');
+      return {
+        selected: selectedButton instanceof HTMLButtonElement ? selectedButton.className.includes('bg-primary') : false,
+        accept: input instanceof HTMLInputElement ? input.accept : '',
+      };
+    })()`);
+    if (state.selected && state.accept.includes('image/*')) {
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`Image upload mode was not selected before rejected drop: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  const dropped = await evaluate(client, `(() => {
+    const dropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+    if (!(dropzone instanceof HTMLElement)) {
+      return { ok: false, reason: 'dropzone-not-found' };
+    }
+    const file = new File(['Backy rejected upload mode smoke'], ${JSON.stringify(rejectedName)}, { type: 'text/plain' });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    dropzone.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: transfer,
+    }));
+    return { ok: true };
+  })()`);
+  assert(dropped.ok, `Unable to dispatch rejected upload-mode drop: ${JSON.stringify(dropped)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        hasSummary: Boolean(document.querySelector('[data-testid="media-upload-summary"]')),
+        hasSkippedMessage: body.includes(${JSON.stringify(`${rejectedName} skipped because Images upload mode is selected.`)}),
+        hasFailedCount: body.includes('Last upload: 0/1 saved') && body.includes('1 failed'),
+        uploading: body.includes('Uploading files'),
+        body: body.slice(0, 1800),
+      };
+    })()`);
+    if (state.hasSummary && state.hasSkippedMessage && state.hasFailedCount && !state.uploading) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Upload mode drop rejection did not render feedback: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -1811,6 +1923,7 @@ const main = async () => {
   const privateName = `${marker}.txt`;
   const childFolderAssetName = `${marker}-child-folder.txt`;
   const centralUploadName = `${marker}-central-upload.txt`;
+  const rejectedUploadModeName = `${marker}-image-mode-rejected.txt`;
   const bulkName = `${marker}-bulk.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
   const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
@@ -1917,6 +2030,13 @@ const main = async () => {
     await navigateToMedia(client, marker);
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
+    await assertTagFilterShowsOnlyExactMatches(client, {
+      searchText: marker,
+      tag: 'central-upload',
+      includedName: imageName,
+      excludedName: privateName,
+    });
+    await navigateToMedia(client, marker);
     await assertMediaLayout(client, imageName);
     await assertMediaPaginationControls(client);
     await applySingleAssetBulkUpdate(client, bulkName, { folderId });
@@ -1959,6 +2079,9 @@ const main = async () => {
     await assertFolderFilterShowsAsset(client, { folderId, assetName: childFolderAssetName, searchText: marker });
     await navigateToMedia(client, marker);
     await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
+    await assertUploadModeRejectsDroppedFiles(client, rejectedUploadModeName);
+    const rejectedModeMatches = await listMedia(rejectedUploadModeName);
+    assert(rejectedModeMatches.length === 0, `Upload mode rejected file should not be persisted: ${JSON.stringify(rejectedModeMatches).slice(0, 500)}`);
     centralUploadedFile = await waitForMedia(marker, (item) => (
       item.originalName === centralUploadName &&
       (item.type === 'document' || item.type === 'file') &&

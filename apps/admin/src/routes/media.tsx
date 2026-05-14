@@ -76,6 +76,7 @@ interface MediaSearch {
   assetId?: string;
   folderId?: string;
   q?: string;
+  tag?: string;
   type?: MediaTypeFilter;
   visibility?: MediaVisibilityFilter;
   usage?: MediaUsageFilter;
@@ -417,6 +418,7 @@ export const Route = createFileRoute('/media')({
     assetId: normalizedSearchString(search.assetId),
     folderId: normalizedSearchString(search.folderId),
     q: normalizedSearchString(search.q),
+    tag: normalizedSearchString(search.tag),
     type: isMediaTypeFilter(search.type) ? search.type : undefined,
     visibility: isMediaVisibilityFilter(search.visibility) ? search.visibility : undefined,
     usage: isMediaUsageFilter(search.usage) ? search.usage : undefined,
@@ -608,6 +610,18 @@ const getCentralUploadType = (file: File): MediaAsset['type'] => {
   return 'other';
 };
 
+const isFileAllowedForUploadMode = (file: File, mode: MediaUploadMode): boolean => {
+  if (mode === 'all') return true;
+  const uploadType = getCentralUploadType(file);
+  if (mode === 'file') return uploadType === 'file' || uploadType === 'other';
+  return uploadType === mode;
+};
+
+const uploadModeRejectMessage = (file: File, mode: MediaUploadMode): string => {
+  const label = MEDIA_UPLOAD_MODES.find((item) => item.value === mode)?.label || mode;
+  return `${file.name} skipped because ${label} upload mode is selected.`;
+};
+
 const cleanFontFamilyFromFilename = (name: string): string => (
   name
     .replace(/\.[a-z0-9]+$/i, '')
@@ -708,6 +722,7 @@ function MediaPage() {
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
+  const [tagFilter, setTagFilter] = useState(routeSearch.tag || '');
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(routeSearch.type || 'all');
   const [visibilityFilter, setVisibilityFilter] = useState<MediaVisibilityFilter>(routeSearch.visibility || 'all');
   const [usageFilter, setUsageFilter] = useState<MediaUsageFilter>(routeSearch.usage || 'all');
@@ -859,10 +874,11 @@ function MediaPage() {
     ...(selectedAsset ? { assetId: selectedAsset.id } : {}),
     ...(folderSelectionToRoute(selectedFolderId) ? { folderId: folderSelectionToRoute(selectedFolderId) } : {}),
     ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+    ...(tagFilter.trim() ? { tag: tagFilter.trim() } : {}),
     ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
     ...(visibilityFilter !== 'all' ? { visibility: visibilityFilter } : {}),
     ...(usageFilter !== 'all' ? { usage: usageFilter } : {}),
-  }), [searchQuery, selectedAsset, selectedFolderId, siteId, typeFilter, usageFilter, visibilityFilter]);
+  }), [searchQuery, selectedAsset, selectedFolderId, siteId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
 
   const updateMediaRouteSearch = (next: MediaSearch) => {
     const merged: MediaSearch = {
@@ -874,6 +890,7 @@ function MediaPage() {
       ...(merged.assetId ? { assetId: merged.assetId } : {}),
       ...(merged.folderId ? { folderId: merged.folderId } : {}),
       ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.tag?.trim() ? { tag: merged.tag.trim() } : {}),
       ...(merged.type && merged.type !== 'all' ? { type: merged.type } : {}),
       ...(merged.visibility && merged.visibility !== 'all' ? { visibility: merged.visibility } : {}),
       ...(merged.usage && merged.usage !== 'all' ? { usage: merged.usage } : {}),
@@ -893,6 +910,7 @@ function MediaPage() {
     setSelectedAsset(null);
     setSelectedFolderId(undefined);
     setSearchQuery('');
+    setTagFilter('');
     setTypeFilter('all');
     setVisibilityFilter('all');
     setUsageFilter('all');
@@ -911,6 +929,7 @@ function MediaPage() {
     }
 
     setSearchQuery(routeSearch.q || '');
+    setTagFilter(routeSearch.tag || '');
     setTypeFilter(routeSearch.type || 'all');
     setVisibilityFilter(routeSearch.visibility || 'all');
     setUsageFilter(routeSearch.usage || 'all');
@@ -924,6 +943,7 @@ function MediaPage() {
     routeSearch.folderId,
     routeSearch.q,
     routeSearch.siteId,
+    routeSearch.tag,
     routeSearch.type,
     routeSearch.usage,
     routeSearch.visibility,
@@ -1031,6 +1051,7 @@ function MediaPage() {
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
   const displayedFiles = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
+    const normalizedTagFilter = tagFilter.trim().toLowerCase();
 
     return files.filter((file) => {
       if (typeFilter !== 'all' && file.type !== typeFilter) {
@@ -1066,6 +1087,10 @@ function MediaPage() {
         }
       }
 
+      if (normalizedTagFilter && !(file.tags || []).some((tag) => tag.trim().toLowerCase() === normalizedTagFilter)) {
+        return false;
+      }
+
       if (usageFilter === 'unused') {
         return !hasMediaReferences(file);
       }
@@ -1080,7 +1105,7 @@ function MediaPage() {
       }
       return true;
     });
-  }, [files, searchQuery, selectedFolderFilterIds, selectedFolderId, typeFilter, usageFilter, visibilityFilter]);
+  }, [files, searchQuery, selectedFolderFilterIds, selectedFolderId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
   const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
     ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
     : 0;
@@ -1479,6 +1504,7 @@ function MediaPage() {
         scope: 'all',
         limit: MEDIA_LIBRARY_PAGE_SIZE,
         search: searchQuery.trim() || undefined,
+        tag: tagFilter.trim() || undefined,
         type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
         folderId: selectedFolderId === null ? null : undefined,
@@ -1528,7 +1554,7 @@ function MediaPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, selectedFolderId, setMedia, siteId, typeFilter, visibilityFilter]);
+  }, [searchQuery, selectedFolderId, setMedia, siteId, tagFilter, typeFilter, visibilityFilter]);
 
   useEffect(() => {
     void loadLibrary();
@@ -2198,7 +2224,12 @@ function MediaPage() {
       return;
     }
     if (!fileList || fileList.length === 0) return;
-    const uploadFiles = Array.from(fileList);
+    const allFiles = Array.from(fileList);
+    const targetUploadMode = uploadMode;
+    const uploadFiles = allFiles.filter((file) => isFileAllowedForUploadMode(file, targetUploadMode));
+    const skippedModeMessages = allFiles
+      .filter((file) => !isFileAllowedForUploadMode(file, targetUploadMode))
+      .map((file) => uploadModeRejectMessage(file, targetUploadMode));
     const targetFolderMode = uploadFolderId;
     const targetFolderId = uploadTargetFolderId;
     const targetFolderLabel = uploadTargetFolderLabel;
@@ -2234,9 +2265,12 @@ function MediaPage() {
         .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
         .map((result) => result.value);
       const failures = results.filter((result) => result.status === 'rejected');
-      const failureMessages = failures.map((failure) => (
-        failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
-      ));
+      const failureMessages = [
+        ...skippedModeMessages,
+        ...failures.map((failure) => (
+          failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
+        )),
+      ];
 
       if (uploaded.length) {
         setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
@@ -2250,9 +2284,9 @@ function MediaPage() {
       }
 
       setRecentUploadSummary({
-        attempted: uploadFiles.length,
+        attempted: allFiles.length,
         uploaded: uploaded.length,
-        failed: failures.length,
+        failed: failureMessages.length,
         fontsRegistered: uploaded.filter((asset) => asset.type === 'font').length,
         folderLabel: targetFolderLabel,
         visibility: targetVisibility,
@@ -2266,11 +2300,11 @@ function MediaPage() {
         completedAt: new Date().toISOString(),
       });
 
-      if (failures.length) {
+      if (failureMessages.length) {
         const firstReason = failureMessages[0];
         setError(firstReason
-          ? `${firstReason}. ${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`
-          : `${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`);
+          ? `${firstReason}. ${failureMessages.length} file${failureMessages.length === 1 ? '' : 's'} were not uploaded.`
+          : `${failureMessages.length} file${failureMessages.length === 1 ? '' : 's'} were not uploaded.`);
       }
     } finally {
       setIsUploading(false);
@@ -4552,7 +4586,7 @@ function MediaPage() {
         </PanelContent>
       </Panel>
 
-      <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+      <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
         <input
           type="text"
           value={searchQuery}
@@ -4566,6 +4600,21 @@ function MediaPage() {
           className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Search filenames, captions, alt text, or tags"
           aria-label="Search media"
+        />
+        <input
+          type="text"
+          value={tagFilter}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const tag = event.target.value;
+            setTagFilter(tag);
+            updateMediaRouteSearch({ tag: tag || undefined });
+          }}
+          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          placeholder="Exact tag"
+          aria-label="Filter media by exact tag"
+          data-testid="media-tag-filter"
         />
         <select
           value={typeFilter}
