@@ -151,10 +151,33 @@ interface AdminPasswordRecoveryResponse {
   };
 }
 
+interface AdminPasswordPolicyResponse {
+  success: boolean;
+  data?: {
+    policy: {
+      minPasswordLength: number;
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 const readJson = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => null);
   return payload as T;
 };
+
+export async function fetchAdminPasswordPolicy() {
+  const response = await fetch(`${getAdminApiBase()}/auth/password-policy`);
+  const payload = await readJson<AdminPasswordPolicyResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to load password policy');
+  }
+
+  return payload.data.policy;
+}
 
 export async function loginAdmin(email: string, password: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/login`, {

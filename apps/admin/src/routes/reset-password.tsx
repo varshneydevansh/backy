@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { fetchAdminPasswordPolicy } from '@/lib/adminAuthApi';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +18,8 @@ export const Route = createFileRoute('/reset-password')({
 });
 
 type ResetState = 'ready' | 'reset' | 'error';
+
+const DEFAULT_MIN_PASSWORD_LENGTH = 12;
 
 const maskToken = (value: string) => {
   const trimmed = value.trim();
@@ -37,11 +40,33 @@ function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [resetState, setResetState] = useState<ResetState>('ready');
   const [message, setMessage] = useState<string | null>(null);
-  const passwordIsValid = password.length >= 8;
+  const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH);
+  const passwordIsValid = password.length >= minPasswordLength;
   const passwordsMatch = Boolean(password) && password === confirmPassword;
+  const passwordRequirement = `Use at least ${minPasswordLength} characters.`;
   const readiness = useMemo(() => (
     Math.round(([Boolean(token), passwordIsValid, passwordsMatch, !isLoading].filter(Boolean).length / 4) * 100)
   ), [isLoading, passwordIsValid, passwordsMatch, token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchAdminPasswordPolicy()
+      .then((policy) => {
+        if (!cancelled) {
+          setMinPasswordLength(policy.minPasswordLength);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMinPasswordLength(DEFAULT_MIN_PASSWORD_LENGTH);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (user && resetState === 'reset') {
@@ -61,7 +86,7 @@ function ResetPasswordPage() {
 
     if (!passwordIsValid || !passwordsMatch) {
       setResetState('error');
-      setMessage('Use a matching password with at least 8 characters.');
+      setMessage(`Use a matching password with at least ${minPasswordLength} characters.`);
       return;
     }
 
@@ -170,7 +195,7 @@ function ResetPasswordPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   className="min-h-11 flex-1 rounded-l-lg bg-transparent px-3 text-sm outline-none"
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={minPasswordLength}
                 />
                 <button
                   type="button"
@@ -181,6 +206,7 @@ function ResetPasswordPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <span className="mt-1 block text-xs text-muted-foreground">{passwordRequirement}</span>
             </label>
 
             <label className="mt-4 block text-sm">
@@ -191,7 +217,7 @@ function ResetPasswordPage() {
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 className="mt-2 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:ring-2 focus:ring-ring"
                 autoComplete="new-password"
-                minLength={8}
+                minLength={minPasswordLength}
               />
             </label>
 
