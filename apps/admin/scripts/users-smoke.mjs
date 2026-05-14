@@ -419,34 +419,106 @@ const navigateToUsers = (client, expectedText = 'Users command center') => navig
 );
 
 const fillInviteForm = async (client, { fullName, email }) => {
-  const result = await evaluate(client, `(() => {
-    const setInputValue = (input, value) => {
-      const previousValue = input.value;
-      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-      descriptor?.set?.call(input, value);
-      input._valueTracker?.setValue(previousValue);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    };
-    const nameInput = document.querySelector('input[type="text"]');
-    const emailInput = document.querySelector('input[type="email"]');
-    const adminRole = document.querySelector('input[name="role"][value="admin"]');
-    const invitedStatus = document.querySelector('input[name="status"][value="invited"]');
-    if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
-      return { ok: false, reason: 'inputs-missing' };
-    }
-    setInputValue(nameInput, ${JSON.stringify(fullName)});
-    setInputValue(emailInput, ${JSON.stringify(email)});
-    if (adminRole instanceof HTMLInputElement) {
-      adminRole.click();
-    }
-    if (invitedStatus instanceof HTMLInputElement && !invitedStatus.checked) {
-      invitedStatus.click();
-    }
-    return { ok: true };
-  })()`);
+  let result = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const previousValue = input.value;
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input._valueTracker?.setValue(previousValue);
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('blur', { bubbles: true }));
+      };
+      const inviteSection = document.querySelector('#user-invite-identity');
+      const labels = Array.from(inviteSection?.querySelectorAll('label') || []);
+      const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+      const findInput = (labelText, type) => {
+        const label = labels.find((candidate) => normalize(candidate.querySelector('span')?.textContent || candidate.textContent) === labelText);
+        const input = label?.querySelector(\`input[type="\${type}"]\`);
+        return input instanceof HTMLInputElement ? input : null;
+      };
+      const nameInput = findInput('Full name', 'text');
+      const emailInput = findInput('Email address', 'email');
+      const adminRole = document.querySelector('input[name="role"][value="admin"]');
+      const invitedStatus = document.querySelector('input[name="status"][value="invited"]');
+      if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'inputs-missing', labels: labels.map((label) => normalize(label.querySelector('span')?.textContent || label.textContent)).slice(0, 20) };
+      }
+      setInputValue(nameInput, ${JSON.stringify(fullName)});
+      setInputValue(emailInput, ${JSON.stringify(email)});
+      if (adminRole instanceof HTMLInputElement && !adminRole.checked) {
+        adminRole.click();
+      }
+      if (invitedStatus instanceof HTMLInputElement && !invitedStatus.checked) {
+        invitedStatus.click();
+      }
+      return { ok: nameInput.value === ${JSON.stringify(fullName)} && emailInput.value === ${JSON.stringify(email)}, name: nameInput.value, email: emailInput.value };
+    })()`);
+    if (result.ok) return result;
+    await sleep(250);
+  }
 
-  assert(result.ok, `Unable to fill invite form: ${JSON.stringify(result)}`);
+  assert(result?.ok, `Unable to fill invite form: ${JSON.stringify(result)}`);
+};
+
+const submitInviteFormAndAssertLink = async (client, email) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const buttons = Array.from(document.querySelectorAll('button')).filter((candidate) => (
+        (candidate.textContent || '').trim() === 'Send invite'
+      ));
+      const button = buttons.find((candidate) => candidate instanceof HTMLButtonElement && !candidate.disabled) || buttons[0];
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'button-missing' };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'button-disabled',
+          buttonCount: buttons.length,
+          values: {
+            name: document.querySelector('input[type="text"]') instanceof HTMLInputElement ? document.querySelector('input[type="text"]').value : null,
+            email: document.querySelector('input[type="email"]') instanceof HTMLInputElement ? document.querySelector('input[type="email"]').value : null,
+            body: document.body?.innerText?.slice(0, 700) || '',
+          },
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Unable to click Send invite: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-invite-created-panel"]');
+      const text = panel?.textContent || '';
+      return {
+        hasPanel: Boolean(panel),
+        hasNotice: (document.body?.innerText || '').includes('Invited user created. Copy the invite link below for manual delivery.'),
+        hasLink: text.includes('/accept-invite?token='),
+        hasCopy: text.includes('Copy link'),
+        hasEmail: (document.body?.innerText || '').includes(${JSON.stringify(email)}),
+        text: text.slice(0, 900),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+    if (state.hasPanel && state.hasNotice && state.hasLink && state.hasCopy && state.hasEmail) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Invite form did not expose manual invite link after create: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const waitForUsersPageUser = async (client, email) => {
@@ -1225,11 +1297,14 @@ const main = async () => {
   let createdUserId;
   let bulkUserId;
   let importedUserId;
+  let previewInviteUserId;
   const suffix = Date.now().toString(36);
   const fullName = `Users Smoke ${suffix}`;
   const email = `users-smoke-${suffix}@example.com`;
   const bulkFullName = `Users Bulk ${suffix}`;
   const bulkEmail = `users-bulk-${suffix}@example.com`;
+  const previewFullName = `${fullName} Preview`;
+  const previewEmail = `preview-${email}`;
   const importedFullName = `Users Import ${suffix}`;
   const importedUpdatedFullName = `Users Import Updated ${suffix}`;
   const importedEmail = `users-import-${suffix}@example.com`;
@@ -1262,8 +1337,14 @@ const main = async () => {
     await signInAdmin(client);
 
     await navigateToInvite(client);
-    await fillInviteForm(client, { fullName: `${fullName} Preview`, email: `preview-${email}` });
-    await navigateToUsers(client);
+    await fillInviteForm(client, { fullName: previewFullName, email: previewEmail });
+    await submitInviteFormAndAssertLink(client, previewEmail);
+    const previewInviteUser = await waitForUser(previewEmail, (user) => (
+      user.fullName === previewFullName && user.status === 'invited'
+    ));
+    previewInviteUserId = previewInviteUser.id;
+    await clickButton(client, 'Back to users');
+    await waitForUsersPageUser(client, previewEmail);
     await waitForUsersPageUser(client, email);
     await waitForUsersPageUser(client, bulkEmail);
     const importCsvPath = path.join(os.tmpdir(), `backy-users-import-${suffix}.csv`);
@@ -1397,6 +1478,9 @@ const main = async () => {
     }
     if (bulkUserId) {
       await deleteUser(bulkUserId).catch(() => undefined);
+    }
+    if (previewInviteUserId) {
+      await deleteUser(previewInviteUserId).catch(() => undefined);
     }
   }
 };
