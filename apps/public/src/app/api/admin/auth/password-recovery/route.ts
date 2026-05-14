@@ -162,13 +162,19 @@ export async function POST(request: NextRequest) {
     console.error('Admin password recovery delivery failed:', { message, statusCode, requestId });
   }
 
+  const message = localRecovery
+    ? 'Local recovery link generated. Open it to reset the password in this development environment.'
+    : deliveryConfigured
+      ? 'If recovery is available for this account, the next steps will be sent through the configured recovery channel.'
+      : 'If recovery is available for this account, configure email delivery or ask an owner to generate a reset link from Users.';
+
   return NextResponse.json({
     success: true,
     requestId,
     data: {
       accepted: true,
       deliveryConfigured,
-      message: 'If recovery is available for this account, the next steps will be sent through the configured recovery channel.',
+      message,
       ...(localRecovery ? { localRecovery } : {}),
     },
   });

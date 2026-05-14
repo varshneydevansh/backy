@@ -275,6 +275,20 @@ const main = async () => {
       })()`,
       'Forgot password page',
     );
+    await clickButton(client, 'Request Recovery');
+    await waitForState(
+      client,
+      `(() => {
+        const body = document.body?.innerText || '';
+        return {
+          ready: window.location.pathname === '/forgot-password' &&
+            body.includes('If recovery is available for this account'),
+          path: window.location.pathname,
+          body: body.slice(0, 900),
+        };
+      })()`,
+      'Forgot password request confirmation',
+    );
     await clickButton(client, 'Back to login');
     await waitForState(
       client,
