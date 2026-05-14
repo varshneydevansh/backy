@@ -23,7 +23,7 @@ import {
   listBlogCategories,
   listBlogPosts,
   listBlogTags,
-  listComments,
+  listAllComments,
   publishBlogPost,
   updateBlogCategory,
   updateBlogPost,
@@ -399,7 +399,7 @@ function BlogListView() {
           listBlogAuthors(siteId),
         ]);
         const commentResult = canViewComments
-          ? await listComments(siteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }))
+          ? await listAllComments(siteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
           : { comments: [] };
         setPosts(backendPosts);
         setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
@@ -445,7 +445,7 @@ function BlogListView() {
           listBlogAuthors(activeSiteId),
         ]);
         const commentResult = canViewComments
-          ? await listComments(activeSiteId, { targetType: 'post', status: 'all', limit: 500 }).catch(() => ({ comments: [] }))
+          ? await listAllComments(activeSiteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
           : { comments: [] };
         if (!cancelled) {
           setPosts(backendPosts);

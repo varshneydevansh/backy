@@ -29,7 +29,7 @@ import {
   listAdminAuditLogs,
   listBlogPosts,
   listCommentBlocklist,
-  listComments,
+  listAllComments,
   listPages,
   retryCommentDelivery,
   updateSite,
@@ -1045,7 +1045,7 @@ function CommentsRoute() {
 
     try {
       const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult, auditResult] = await Promise.all([
-        listComments(activeSiteId, {
+        listAllComments(activeSiteId, {
           status: routeSearch.status || 'all',
           targetType: routeSearch.targetType || 'all',
           targetId: routeSearch.targetId,

@@ -14,7 +14,7 @@ import {
     getBlogPost,
     getBlogPostReadiness,
     getUserPermissions,
-    listComments,
+    listAllComments,
     listBlogAuthors,
     listBlogCategories,
     listBlogPosts,
@@ -541,7 +541,7 @@ function EditBlogPostPage() {
       setCommentError(null);
 
       try {
-        const result = await listComments(activeSiteId, {
+        const result = await listAllComments(activeSiteId, {
           targetType: 'post',
           targetId: postId,
           status: 'all',

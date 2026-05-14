@@ -635,6 +635,7 @@ interface ApiListBlogResponse {
   success: boolean;
   data?: {
     posts: ApiBlogPost[];
+    pagination?: ApiPagination;
   };
   error?: {
     message?: string;
@@ -4103,20 +4104,36 @@ export async function listBlogPosts(
   siteId: string,
   filters: { status?: BlogPost['status']; categoryId?: string; tagId?: string; authorId?: string } = {},
 ): Promise<BlogPost[]> {
-  const query = new URLSearchParams({ limit: '100' });
-  if (filters.status) query.set('status', filters.status);
-  if (filters.categoryId) query.set('categoryId', filters.categoryId);
-  if (filters.tagId) query.set('tagId', filters.tagId);
-  if (filters.authorId) query.set('authorId', filters.authorId);
+  const posts: BlogPost[] = [];
+  const limit = 100;
+  let offset = 0;
 
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
-  const payload = await readJson<ApiListBlogResponse>(response);
+  for (let pageIndex = 0; pageIndex < 1000; pageIndex += 1) {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (filters.status) query.set('status', filters.status);
+    if (filters.categoryId) query.set('categoryId', filters.categoryId);
+    if (filters.tagId) query.set('tagId', filters.tagId);
+    if (filters.authorId) query.set('authorId', filters.authorId);
 
-  if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to load blog posts');
+    const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
+    const payload = await readJson<ApiListBlogResponse>(response);
+
+    if (!response.ok || !payload.success || !payload.data) {
+      throw new Error(payload.error?.message || 'Unable to load blog posts');
+    }
+
+    posts.push(...payload.data.posts.map(toStorePost));
+
+    const pagination = payload.data.pagination;
+    const nextOffset = (pagination?.offset ?? offset) + (pagination?.limit ?? limit);
+    if (!pagination?.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
   }
 
-  return payload.data.posts.map(toStorePost);
+  return posts;
 }
 
 export async function listBlogCategories(siteId: string): Promise<BlogCategory[]> {
@@ -5059,6 +5076,53 @@ export async function listComments(
     comments,
     count,
     pagination,
+  };
+}
+
+export async function listAllComments(
+  siteId: string,
+  filters: CommentListFilters = {},
+): Promise<CommentListResult> {
+  const limit = Math.max(1, Math.min(1000, filters.limit || 100));
+  const firstOffset = Math.max(0, filters.offset || 0);
+  const comments: AdminComment[] = [];
+  let count = 0;
+  let pagination: ApiPagination = {
+    total: 0,
+    limit,
+    offset: firstOffset,
+    hasMore: false,
+  };
+  let offset = firstOffset;
+
+  for (let pageIndex = 0; pageIndex < 1000; pageIndex += 1) {
+    const page = await listComments(siteId, {
+      ...filters,
+      limit,
+      offset,
+    });
+
+    comments.push(...page.comments);
+    count = page.count;
+    pagination = page.pagination;
+
+    const nextOffset = page.pagination.offset + page.pagination.limit;
+    if (!page.pagination.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return {
+    comments,
+    count: count || comments.length,
+    pagination: {
+      total: pagination.total || count || comments.length,
+      limit: comments.length || limit,
+      offset: firstOffset,
+      hasMore: pagination.hasMore,
+    },
   };
 }
 
