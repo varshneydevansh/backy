@@ -327,6 +327,7 @@ function ReusableSectionsRoute() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingDeleteSection, setPendingDeleteSection] = useState<ReusableSection | null>(null);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -646,6 +647,7 @@ function ReusableSectionsRoute() {
     setSelectedSiteId(nextSiteId);
     setSections([]);
     setSelectedSectionId(null);
+    setPendingDeleteSection(null);
     setFormFromSection(null);
     navigate({ to: '/reusable-sections', search: { siteId: nextSiteId }, replace: true });
   };
@@ -729,8 +731,21 @@ function ReusableSectionsRoute() {
     }
   };
 
-  const handleDeleteSection = async (section: ReusableSection) => {
+  const requestDeleteSection = (section: ReusableSection) => {
     if (isBusy) return;
+    if (!canDeleteSections) {
+      showPermissionDenied('pages.delete', 'delete reusable sections');
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setPendingDeleteSection(section);
+  };
+
+  const confirmDeleteSection = async () => {
+    const section = pendingDeleteSection;
+    if (!section || isBusy) return;
     if (!canDeleteSections) {
       showPermissionDenied('pages.delete', 'delete reusable sections');
       return;
@@ -747,6 +762,7 @@ function ReusableSectionsRoute() {
         setFormFromSection(null);
         updateRouteSearch({ sectionId: null });
       }
+      setPendingDeleteSection(null);
       setNotice(`${section.name} deleted.`);
     } catch (deleteError) {
       setError(isAdminPermissionDeniedError(deleteError)
@@ -800,6 +816,48 @@ function ReusableSectionsRoute() {
       {notice ? (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
+        </div>
+      ) : null}
+      {pendingDeleteSection ? (
+        <div
+          className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="reusable-section-delete-title"
+          data-testid="reusable-section-delete-confirmation"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div id="reusable-section-delete-title" className="font-semibold">
+                Delete reusable section?
+              </div>
+              <p className="mt-1 text-red-900">
+                This removes "{pendingDeleteSection.name}" from the section library and page editor inserts. This cannot be undone from the admin UI.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingDeleteSection(null)}
+                disabled={isSaving}
+                data-testid="reusable-section-delete-cancel"
+              >
+                Keep section
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => void confirmDeleteSection()}
+                disabled={isSaving || !canDeleteSections}
+                title={!canDeleteSections ? deletePermissionTitle : undefined}
+                iconStart={<Trash2 className="size-3.5" />}
+                data-testid="reusable-section-delete-confirm"
+              >
+                {isSaving ? 'Deleting...' : 'Delete section'}
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -987,7 +1045,10 @@ function ReusableSectionsRoute() {
                 {filteredSections.map((section) => {
                   const frontendTemplateId = getSectionFrontendTemplateId(section);
                   return (
-                    <article key={section.id} className={cn(
+                    <article
+                      key={section.id}
+                      data-testid={`reusable-section-card-${section.id}`}
+                      className={cn(
                       'rounded-lg border bg-background p-4 transition',
                       selectedSectionId === section.id ? 'border-primary shadow-sm' : 'border-border',
                     )}
@@ -1015,7 +1076,17 @@ function ReusableSectionsRoute() {
                         <div className="text-xs text-muted-foreground">Updated {formatDate(section.updatedAt || section.createdAt || '')}</div>
                         <div className="flex gap-2">
                             <Button size="sm" onClick={() => selectSection(section)} disabled={isBusy}>{canEditSections ? 'Edit' : 'View'}</Button>
-                            <Button size="sm" variant="danger" onClick={() => void handleDeleteSection(section)} disabled={isBusy || !canDeleteSections} title={!canDeleteSections ? deletePermissionTitle : undefined} iconStart={<Trash2 className="size-3.5" />}>Delete</Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => requestDeleteSection(section)}
+                              disabled={isBusy || !canDeleteSections}
+                              title={!canDeleteSections ? deletePermissionTitle : undefined}
+                              iconStart={<Trash2 className="size-3.5" />}
+                              data-testid={`reusable-section-delete-${section.id}`}
+                            >
+                              Delete
+                            </Button>
                         </div>
                       </div>
                     </article>

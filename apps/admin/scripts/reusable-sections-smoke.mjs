@@ -451,6 +451,53 @@ const createManualReusableSectionThroughUi = async (client) => {
   throw new Error('Manual reusable section was not created');
 };
 
+const deleteReusableSectionThroughUi = async (client, section) => {
+  const deleteTestId = `reusable-section-delete-${section.id}`;
+
+  const firstDelete = await clickReusableSectionControl(client, deleteTestId);
+  assert(firstDelete.ok, `Unable to open reusable section delete confirmation: ${JSON.stringify(firstDelete)}`);
+
+  await waitForPageText(client, 'Delete reusable section?', 'delete confirmation title');
+  await waitForPageText(client, section.name, 'delete confirmation section name');
+
+  const cancelled = await clickReusableSectionControl(client, 'reusable-section-delete-cancel');
+  assert(cancelled.ok, `Unable to cancel reusable section deletion: ${JSON.stringify(cancelled)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      dialogOpen: Boolean(document.querySelector('[data-testid="reusable-section-delete-confirmation"]')),
+      cardVisible: Boolean(document.querySelector(${JSON.stringify(`[data-testid="reusable-section-card-${section.id}"]`)})),
+    }))()`);
+    if (!state.dialogOpen && state.cardVisible) break;
+    if (attempt === 39) {
+      throw new Error(`Reusable section delete cancel did not keep the section: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  const secondDelete = await clickReusableSectionControl(client, deleteTestId);
+  assert(secondDelete.ok, `Unable to reopen reusable section delete confirmation: ${JSON.stringify(secondDelete)}`);
+  const confirmed = await clickReusableSectionControl(client, 'reusable-section-delete-confirm');
+  assert(confirmed.ok, `Unable to confirm reusable section deletion: ${JSON.stringify(confirmed)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const sections = await listReusableSections();
+    const deleted = !sections.some((candidate) => candidate.id === section.id);
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        deleted: ${JSON.stringify(section.id)} && !document.querySelector(${JSON.stringify(`[data-testid="reusable-section-card-${section.id}"]`)}),
+        hasNotice: body.includes(${JSON.stringify(`${section.name} deleted.`)}),
+      };
+    })()`);
+
+    if (deleted && state.deleted && state.hasNotice) return true;
+    await sleep(250);
+  }
+
+  throw new Error('Reusable section delete confirmation did not remove the section');
+};
+
 const createFrontendTemplateSectionThroughUi = async (client) => {
   const before = await listReusableSections();
   const beforeIds = new Set(before.map((section) => section.id));
@@ -585,6 +632,11 @@ const main = async () => {
     await assertReusableSectionsLayout(client);
     const manualSection = await createManualReusableSectionThroughUi(client);
     sectionIds.push(manualSection.id);
+    await deleteReusableSectionThroughUi(client, manualSection);
+    const deletedManualIndex = sectionIds.indexOf(manualSection.id);
+    if (deletedManualIndex !== -1) {
+      sectionIds.splice(deletedManualIndex, 1);
+    }
     const section = await createFrontendTemplateSectionThroughUi(client);
     sectionIds.push(section.id);
 
