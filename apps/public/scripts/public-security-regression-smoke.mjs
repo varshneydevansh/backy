@@ -452,4 +452,33 @@ for (const needle of [
   assertIncludes(mediaTransformRoute, needle, 'media transform route');
 }
 
+const adminMediaDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/media/[mediaId]/route.ts');
+const adminMediaDelete = functionSource(adminMediaDetailRoute, 'DELETE', 'admin media detail route');
+for (const needle of [
+  'collectRetainedVersionStoragePaths',
+  'generatedTransformStoragePaths(media.metadata)',
+  'addScopedStoragePath(siteId, storagePaths, version.storagePath)',
+  'storagePath.startsWith(`sites/${siteId}/`)',
+]) {
+  assertIncludes(adminMediaDetailRoute, needle, 'admin media delete storage cleanup');
+}
+for (const needle of [
+  'repositories.media.listVersions({',
+  'const retainedVersionStoragePaths = collectRetainedVersionStoragePaths(',
+  'await repositories.media.delete(site.id, mediaId)',
+  'await deleteUploadedFile(site.id, media, retainedVersionStoragePaths)',
+]) {
+  assertIncludes(adminMediaDelete, needle, 'admin media delete storage cleanup');
+}
+assert(
+  adminMediaDelete.indexOf('repositories.media.listVersions({') <
+    adminMediaDelete.indexOf('await repositories.media.delete(site.id, mediaId)'),
+  'admin media delete must capture retained version storage paths before deleting version rows',
+);
+assert(
+  adminMediaDelete.indexOf('await repositories.media.delete(site.id, mediaId)') <
+    adminMediaDelete.indexOf('await deleteUploadedFile(site.id, media, retainedVersionStoragePaths)'),
+  'admin media delete must clean up storage with retained version paths after catalog delete',
+);
+
 console.log('Public security regression smoke passed');

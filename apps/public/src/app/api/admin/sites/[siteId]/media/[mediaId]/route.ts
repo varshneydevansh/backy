@@ -225,34 +225,61 @@ const buildPreviousVersion = (
   reason: input.reason,
 });
 
-const deleteUploadedFile = async (
+const addScopedStoragePath = (siteId: string, storagePaths: Set<string>, value: unknown) => {
+  const storagePath = typeof value === 'string' ? value.trim() : '';
+  if (storagePath.length > 0 && storagePath.startsWith(`sites/${siteId}/`)) {
+    storagePaths.add(storagePath);
+  }
+};
+
+const collectMediaStoragePaths = (
   siteId: string,
   media: { url?: string | null; metadata?: unknown },
 ) => {
   const storagePaths = new Set<string>();
-  const storagePath = getMediaStoragePathFromMedia(siteId, media);
-
-  if (storagePath) {
-    storagePaths.add(storagePath);
-  }
+  addScopedStoragePath(siteId, storagePaths, getMediaStoragePathFromMedia(siteId, media));
 
   if (media.metadata && typeof media.metadata === 'object' && !Array.isArray(media.metadata)) {
     generatedTransformStoragePaths(media.metadata).forEach((path) => {
-      storagePaths.add(path);
+      addScopedStoragePath(siteId, storagePaths, path);
     });
 
     const versions = (media.metadata as Record<string, unknown>).replacementVersions;
     if (Array.isArray(versions)) {
       versions.forEach((version) => {
         if (version && typeof version === 'object' && !Array.isArray(version)) {
-          const versionPath = (version as Record<string, unknown>).storagePath;
-          if (typeof versionPath === 'string' && versionPath.trim().length > 0) {
-            storagePaths.add(versionPath);
-          }
+          addScopedStoragePath(siteId, storagePaths, (version as Record<string, unknown>).storagePath);
         }
       });
     }
   }
+
+  return storagePaths;
+};
+
+const collectRetainedVersionStoragePaths = (
+  siteId: string,
+  versions: Array<{ url?: string | null; metadata?: unknown; storagePath?: string | null }>,
+) => {
+  const storagePaths = new Set<string>();
+
+  versions.forEach((version) => {
+    addScopedStoragePath(siteId, storagePaths, version.storagePath);
+    addScopedStoragePath(siteId, storagePaths, getMediaStoragePathFromMedia(siteId, version));
+  });
+
+  return Array.from(storagePaths);
+};
+
+const deleteUploadedFile = async (
+  siteId: string,
+  media: { url?: string | null; metadata?: unknown },
+  retainedStoragePaths: string[] = [],
+) => {
+  const storagePaths = collectMediaStoragePaths(siteId, media);
+  retainedStoragePaths.forEach((path) => {
+    addScopedStoragePath(siteId, storagePaths, path);
+  });
 
   if (storagePaths.size === 0) {
     return;
@@ -748,8 +775,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
       }
 
+      const retainedVersionStoragePaths = collectRetainedVersionStoragePaths(
+        site.id,
+        (await repositories.media.listVersions({
+          siteId: site.id,
+          mediaId,
+          limit: 200,
+          offset: 0,
+        })).items,
+      );
+
       await repositories.media.delete(site.id, mediaId);
-      await deleteUploadedFile(site.id, media);
+      await deleteUploadedFile(site.id, media, retainedVersionStoragePaths);
       await recordAdminAudit({
         repositories,
         siteId: site.id,
