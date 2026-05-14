@@ -805,7 +805,16 @@ const configureFormBuilderThroughUi = async (client, expected) => {
   await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Site form builder changes saved.', 'Site form save notice');
 };
 
-const configureNavigationThroughUi = async (client, { routeLabel, routePath, footerLabel, footerHref }) => {
+const configureNavigationThroughUi = async (client, {
+  routeLabel,
+  routePath,
+  navChildOneLabel,
+  navChildOnePath,
+  navChildTwoLabel,
+  navChildTwoPath,
+  footerLabel,
+  footerHref,
+}) => {
   await waitForNavigationEditorReady(client);
 
   const addResult = await evaluate(client, `(() => {
@@ -909,6 +918,13 @@ const configureNavigationThroughUi = async (client, { routeLabel, routePath, foo
       setNativeValue(primaryPath, ${JSON.stringify(routePath)});
       setNativeValue(footerLabelInput, ${JSON.stringify(footerLabel)});
       setNativeValue(footerHrefInput, ${JSON.stringify(footerHref)});
+      const childRouteButton = Array.from(primary.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Child route'
+      ));
+      if (childRouteButton instanceof HTMLButtonElement) {
+        childRouteButton.click();
+        childRouteButton.click();
+      }
 
       const headerSearch = Array.from(section.querySelectorAll('label')).find((label) => (
         (label.textContent || '').includes('Search')
@@ -933,6 +949,142 @@ const configureNavigationThroughUi = async (client, { routeLabel, routePath, foo
       throw new Error(`Unable to configure navigation through UI: ${JSON.stringify(result)}`);
     }
     await sleep(150);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      ${setInputValue}
+      const section = document.querySelector('[data-testid="site-navigation-panel"]');
+      if (!section) return { ok: false, reason: 'section-missing' };
+      const heading = Array.from(section.querySelectorAll('h3')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Primary menu'
+      ));
+      let primary = heading?.parentElement || null;
+      while (primary && primary !== section) {
+        const text = primary.textContent || '';
+        const buttons = Array.from(primary.querySelectorAll('button')).map((button) => (
+          (button.textContent || '').replace(/\\s+/g, ' ').trim()
+        ));
+        const hasEditorBody = Array.from(primary.children).some((child) => (
+          typeof child.className === 'string' && child.className.includes('space-y-3')
+        ));
+        if (text.includes('Primary menu') && buttons.includes('Route') && buttons.includes('URL') && hasEditorBody) break;
+        primary = primary.parentElement;
+      }
+      if (!primary || primary === section) return { ok: false, reason: 'primary-missing' };
+      const labelInputs = Array.from(primary.querySelectorAll('input')).filter((input) => input.getAttribute('placeholder') === 'Label');
+      const pathInputs = Array.from(primary.querySelectorAll('input')).filter((input) => input.getAttribute('placeholder') === '/about');
+      const firstChildLabel = labelInputs[1];
+      const secondChildLabel = labelInputs[2];
+      const firstChildPath = pathInputs[1];
+      const secondChildPath = pathInputs[2];
+      if (
+        !(firstChildLabel instanceof HTMLInputElement) ||
+        !(secondChildLabel instanceof HTMLInputElement) ||
+        !(firstChildPath instanceof HTMLInputElement) ||
+        !(secondChildPath instanceof HTMLInputElement)
+      ) {
+        return {
+          ok: false,
+          reason: 'child-inputs-missing',
+          labels: labelInputs.map((input) => input.value),
+          paths: pathInputs.map((input) => input.value),
+        };
+      }
+      setNativeValue(firstChildLabel, ${JSON.stringify(navChildOneLabel)});
+      setNativeValue(firstChildPath, ${JSON.stringify(navChildOnePath)});
+      setNativeValue(secondChildLabel, ${JSON.stringify(navChildTwoLabel)});
+      setNativeValue(secondChildPath, ${JSON.stringify(navChildTwoPath)});
+      return {
+        ok: true,
+        childLabels: [firstChildLabel.value, secondChildLabel.value],
+        childPaths: [firstChildPath.value, secondChildPath.value],
+      };
+    })()`);
+    if (result.ok) {
+      break;
+    }
+    if (attempt === 59) {
+      throw new Error(`Unable to configure child navigation through UI: ${JSON.stringify(result)}`);
+    }
+    await sleep(150);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-navigation-panel"]');
+      if (!section) return { ok: false, reason: 'section-missing' };
+      const primary = Array.from(section.querySelectorAll('[data-navigation-item-label]')).find((node) => (
+        node.getAttribute('data-navigation-item-label') === ${JSON.stringify(routeLabel)}
+      ));
+      const firstChild = Array.from(section.querySelectorAll('[data-navigation-item-label]')).find((node) => (
+        node.getAttribute('data-navigation-item-label') === ${JSON.stringify(navChildOneLabel)}
+      ));
+      const secondChild = Array.from(section.querySelectorAll('[data-navigation-item-label]')).find((node) => (
+        node.getAttribute('data-navigation-item-label') === ${JSON.stringify(navChildTwoLabel)}
+      ));
+      if (!(primary instanceof HTMLElement) || !(firstChild instanceof HTMLElement) || !(secondChild instanceof HTMLElement)) {
+        return {
+          ok: false,
+          reason: 'drag-nodes-missing',
+          labels: Array.from(section.querySelectorAll('[data-navigation-item-label]')).map((node) => node.getAttribute('data-navigation-item-label')),
+        };
+      }
+      const dropBeforeFirst = firstChild.querySelector(${JSON.stringify(`[aria-label="Drop before ${navChildOneLabel}"]`)});
+      if (!(dropBeforeFirst instanceof HTMLElement)) {
+        return { ok: false, reason: 'drop-zone-missing', html: firstChild.outerHTML.slice(0, 500) };
+      }
+      const dragHandle = secondChild.querySelector(${JSON.stringify(`[aria-label="Drag ${navChildTwoLabel}"]`)});
+      if (!(dragHandle instanceof HTMLElement) || dragHandle.getAttribute('draggable') !== 'true') {
+        return { ok: false, reason: 'drag-handle-missing', html: secondChild.outerHTML.slice(0, 500) };
+      }
+      return { ok: true };
+    })()`);
+    if (result.ok) {
+      break;
+    }
+    if (attempt === 59) {
+      throw new Error(`Unable to find nested navigation drag controls through UI: ${JSON.stringify(result)}`);
+    }
+    await sleep(150);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-navigation-panel"]');
+      if (!section) return { ok: false, reason: 'section-missing' };
+      const firstChild = Array.from(section.querySelectorAll('[data-navigation-item-label]')).find((node) => (
+        node.getAttribute('data-navigation-item-label') === ${JSON.stringify(navChildOneLabel)}
+      ));
+      const secondChild = Array.from(section.querySelectorAll('[data-navigation-item-label]')).find((node) => (
+        node.getAttribute('data-navigation-item-label') === ${JSON.stringify(navChildTwoLabel)}
+      ));
+      if (!(firstChild instanceof HTMLElement) || !(secondChild instanceof HTMLElement)) {
+        return { ok: false, reason: 'nested-nodes-missing' };
+      }
+      const orderedLabels = Array.from(firstChild.parentElement?.children || [])
+        .map((node) => node instanceof HTMLElement ? node.getAttribute('data-navigation-item-label') : null)
+        .filter(Boolean);
+      if (orderedLabels[0] === ${JSON.stringify(navChildTwoLabel)}) {
+        return { ok: true, mode: 'already-ordered', orderedLabels };
+      }
+      const moveUpButton = Array.from(secondChild.querySelectorAll('button')).find((button) => (
+        button.getAttribute('aria-label') === 'Move up'
+      ));
+      if (!(moveUpButton instanceof HTMLButtonElement) || moveUpButton.disabled) {
+        return { ok: false, reason: 'move-up-unavailable', orderedLabels };
+      }
+      moveUpButton.click();
+      return { ok: true, mode: 'button-clicked', orderedLabels };
+    })()`);
+    assert(result.ok, `Unable to reorder nested navigation item through UI: ${JSON.stringify(result)}`);
+    if (result.mode === 'already-ordered') {
+      break;
+    }
+    await sleep(150);
+    if (attempt === 59) {
+      throw new Error(`Nested navigation item did not move into expected order: ${JSON.stringify(result)}`);
+    }
   }
 
   await clickButtonByText(client, '[data-testid="site-navigation-panel"]', 'Save navigation');
@@ -1264,6 +1416,14 @@ const assertApiReadback = async (siteId, expected) => {
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
     `Navigation API did not include primary route item: ${JSON.stringify(navigation).slice(0, 1000)}`,
   );
+  const primaryRouteItem = navigation?.settings?.primary?.find((item) => item.label === expected.routeLabel);
+  assert(
+    primaryRouteItem?.children?.[0]?.label === expected.navChildTwoLabel &&
+      primaryRouteItem?.children?.[0]?.path === expected.navChildTwoPath &&
+      primaryRouteItem?.children?.[1]?.label === expected.navChildOneLabel &&
+      primaryRouteItem?.children?.[1]?.path === expected.navChildOnePath,
+    `Navigation API did not preserve drag-reordered child route order: ${JSON.stringify(primaryRouteItem).slice(0, 1200)}`,
+  );
   assert(
     navigation?.settings?.footer?.some((item) => item.label === expected.footerLabel && item.href === expected.footerHref),
     `Navigation API did not include footer URL item: ${JSON.stringify(navigation).slice(0, 1000)}`,
@@ -1483,6 +1643,10 @@ const main = async () => {
   const expected = {
     routeLabel: `Smoke Route ${suffix}`,
     routePath: `/smoke-route-${suffix}`,
+    navChildOneLabel: `Smoke Child Alpha ${suffix}`,
+    navChildOnePath: `/smoke-child-alpha-${suffix}`,
+    navChildTwoLabel: `Smoke Child Beta ${suffix}`,
+    navChildTwoPath: `/smoke-child-beta-${suffix}`,
     footerLabel: `Smoke Docs ${suffix}`,
     footerHref: `https://docs.example.com/${suffix}`,
     redirectFrom: `/old-smoke-${suffix}`,

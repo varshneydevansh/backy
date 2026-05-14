@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
@@ -972,6 +972,141 @@ function moveNavigationRootItem(
   return next;
 }
 
+function moveNavigationSiblingItem(
+  items: SiteNavigationConfigItem[],
+  itemId: string,
+  direction: -1 | 1,
+): { items: SiteNavigationConfigItem[]; moved: boolean } {
+  const index = items.findIndex((item) => item.id === itemId || (!item.id && item.label === itemId));
+  if (index >= 0) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) {
+      return { items, moved: false };
+    }
+    return { items: moveNavigationRootItem(items, itemId, direction), moved: true };
+  }
+
+  let moved = false;
+  const nextItems = items.map((item) => {
+    if (!item.children || moved) {
+      return item;
+    }
+    const childResult = moveNavigationSiblingItem(item.children, itemId, direction);
+    if (!childResult.moved) {
+      return item;
+    }
+    moved = true;
+    return { ...item, children: childResult.items };
+  });
+
+  return { items: nextItems, moved };
+}
+
+function findNavigationItem(
+  items: SiteNavigationConfigItem[],
+  itemId: string,
+): SiteNavigationConfigItem | null {
+  for (const item of items) {
+    if (item.id === itemId || (!item.id && item.label === itemId)) {
+      return item;
+    }
+    const childMatch = item.children ? findNavigationItem(item.children, itemId) : null;
+    if (childMatch) {
+      return childMatch;
+    }
+  }
+  return null;
+}
+
+function navigationItemContains(item: SiteNavigationConfigItem, itemId: string): boolean {
+  return Boolean(item.children?.some((child) => (
+    child.id === itemId ||
+    (!child.id && child.label === itemId) ||
+    navigationItemContains(child, itemId)
+  )));
+}
+
+function removeNavigationItemWithResult(
+  items: SiteNavigationConfigItem[],
+  itemId: string,
+): { items: SiteNavigationConfigItem[]; removed: SiteNavigationConfigItem | null } {
+  let removed: SiteNavigationConfigItem | null = null;
+  const nextItems: SiteNavigationConfigItem[] = [];
+
+  for (const item of items) {
+    if (item.id === itemId || (!item.id && item.label === itemId)) {
+      removed = item;
+      continue;
+    }
+
+    if (item.children && item.children.length > 0) {
+      const childResult = removeNavigationItemWithResult(item.children, itemId);
+      if (childResult.removed) {
+        removed = childResult.removed;
+        nextItems.push({ ...item, children: childResult.items });
+        continue;
+      }
+    }
+
+    nextItems.push(item);
+  }
+
+  return { items: nextItems, removed };
+}
+
+function insertNavigationItemRelative(
+  items: SiteNavigationConfigItem[],
+  targetId: string,
+  draggedItem: SiteNavigationConfigItem,
+  placement: 'before' | 'after',
+): { items: SiteNavigationConfigItem[]; inserted: boolean } {
+  const targetIndex = items.findIndex((item) => item.id === targetId || (!item.id && item.label === targetId));
+  if (targetIndex >= 0) {
+    const nextItems = [...items];
+    nextItems.splice(placement === 'before' ? targetIndex : targetIndex + 1, 0, draggedItem);
+    return { items: nextItems, inserted: true };
+  }
+
+  let inserted = false;
+  const nextItems = items.map((item) => {
+    if (!item.children || inserted) {
+      return item;
+    }
+    const childResult = insertNavigationItemRelative(item.children, targetId, draggedItem, placement);
+    if (!childResult.inserted) {
+      return item;
+    }
+    inserted = true;
+    return { ...item, children: childResult.items };
+  });
+
+  return { items: nextItems, inserted };
+}
+
+function moveNavigationItemByDrop(
+  items: SiteNavigationConfigItem[],
+  draggedId: string,
+  targetId: string,
+  placement: 'before' | 'after',
+): SiteNavigationConfigItem[] {
+  if (draggedId === targetId) {
+    return items;
+  }
+
+  const draggedItem = findNavigationItem(items, draggedId);
+  if (!draggedItem || navigationItemContains(draggedItem, targetId)) {
+    return items;
+  }
+
+  const removal = removeNavigationItemWithResult(items, draggedId);
+  if (!removal.removed) {
+    return items;
+  }
+
+  const insertion = insertNavigationItemRelative(removal.items, targetId, removal.removed, placement);
+  return insertion.inserted ? insertion.items : items;
+}
+
 const apiBase = (() => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   const envBase = (
@@ -1483,8 +1618,17 @@ function EditSitePage() {
     updateNavigationMenu(menu, (items) => removeNavigationItem(items, itemId));
   };
 
-  const handleMoveNavigationRootItem = (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => {
-    updateNavigationMenu(menu, (items) => moveNavigationRootItem(items, itemId, direction));
+  const handleMoveNavigationItem = (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => {
+    updateNavigationMenu(menu, (items) => moveNavigationSiblingItem(items, itemId, direction).items);
+  };
+
+  const handleDropNavigationItem = (
+    menu: NavigationMenuKey,
+    draggedId: string,
+    targetId: string,
+    placement: 'before' | 'after',
+  ) => {
+    updateNavigationMenu(menu, (items) => moveNavigationItemByDrop(items, draggedId, targetId, placement));
   };
 
   const handleSaveNavigation = async () => {
@@ -4534,7 +4678,8 @@ function EditSitePage() {
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
               onRemoveItem={handleRemoveNavigationItem}
-              onMoveRootItem={handleMoveNavigationRootItem}
+              onMoveItem={handleMoveNavigationItem}
+              onDropItem={handleDropNavigationItem}
             />
             <NavigationMenuEditor
               title="Footer menu"
@@ -4547,7 +4692,8 @@ function EditSitePage() {
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
               onRemoveItem={handleRemoveNavigationItem}
-              onMoveRootItem={handleMoveNavigationRootItem}
+              onMoveItem={handleMoveNavigationItem}
+              onDropItem={handleDropNavigationItem}
             />
           </div>
         </section>
@@ -6933,7 +7079,8 @@ interface NavigationMenuEditorProps {
   onAddChild: (menu: NavigationMenuKey, parentId: string, type: SiteNavigationConfigItem['type']) => void;
   onUpdateItem: (menu: NavigationMenuKey, itemId: string, updates: Partial<SiteNavigationConfigItem>) => void;
   onRemoveItem: (menu: NavigationMenuKey, itemId: string) => void;
-  onMoveRootItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+  onMoveItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+  onDropItem: (menu: NavigationMenuKey, draggedId: string, targetId: string, placement: 'before' | 'after') => void;
 }
 
 interface NavigationLayoutEditorProps {
@@ -7211,7 +7358,8 @@ function NavigationMenuEditor({
   onAddChild,
   onUpdateItem,
   onRemoveItem,
-  onMoveRootItem,
+  onMoveItem,
+  onDropItem,
 }: NavigationMenuEditorProps) {
   return (
     <div className="rounded-lg border border-border bg-background">
@@ -7278,7 +7426,8 @@ function NavigationMenuEditor({
               onAddChild={onAddChild}
               onUpdateItem={onUpdateItem}
               onRemoveItem={onRemoveItem}
-              onMoveRootItem={onMoveRootItem}
+              onMoveItem={onMoveItem}
+              onDropItem={onDropItem}
             />
           ))
         )}
@@ -7297,7 +7446,8 @@ interface NavigationItemEditorProps {
   onAddChild: (menu: NavigationMenuKey, parentId: string, type: SiteNavigationConfigItem['type']) => void;
   onUpdateItem: (menu: NavigationMenuKey, itemId: string, updates: Partial<SiteNavigationConfigItem>) => void;
   onRemoveItem: (menu: NavigationMenuKey, itemId: string) => void;
-  onMoveRootItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+  onMoveItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+  onDropItem: (menu: NavigationMenuKey, draggedId: string, targetId: string, placement: 'before' | 'after') => void;
 }
 
 function NavigationItemEditor({
@@ -7310,19 +7460,54 @@ function NavigationItemEditor({
   onAddChild,
   onUpdateItem,
   onRemoveItem,
-  onMoveRootItem,
+  onMoveItem,
+  onDropItem,
 }: NavigationItemEditorProps) {
   const itemId = item.id || item.label;
   const canNest = depth < 2 && Boolean(item.id);
+  const handleDragStart = (event: DragEvent<HTMLElement>) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-backy-navigation-item', itemId);
+    event.dataTransfer.setData('text/plain', itemId);
+  };
+  const handleDrop = (event: DragEvent<HTMLDivElement>, placement: 'before' | 'after') => {
+    event.preventDefault();
+    const draggedId = event.dataTransfer.getData('application/x-backy-navigation-item') ||
+      event.dataTransfer.getData('text/plain');
+    if (draggedId) {
+      onDropItem(menu, draggedId, itemId, placement);
+    }
+  };
 
   return (
-    <div className={cn('rounded-lg border bg-card shadow-sm', depth > 0 && 'ml-5')}>
+    <div
+      className={cn('rounded-lg border bg-card shadow-sm', depth > 0 && 'ml-5')}
+      data-navigation-item-id={itemId}
+      data-navigation-item-label={item.label}
+    >
+      <div
+        className="h-2 rounded-t-lg border-b border-dashed border-transparent transition-colors hover:border-primary hover:bg-primary/10"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={(event) => handleDrop(event, 'before')}
+        aria-label={`Drop before ${item.label}`}
+      />
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        {depth > 0 ? (
-          <CornerDownRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <Menu className="h-4 w-4 shrink-0 text-muted-foreground" />
-        )}
+        <span
+          className="cursor-grab rounded-md p-1 text-muted-foreground active:cursor-grabbing"
+          draggable
+          onDragStart={handleDragStart}
+          title="Drag to reorder"
+          aria-label={`Drag ${item.label}`}
+        >
+          {depth > 0 ? (
+            <CornerDownRight className="h-4 w-4 shrink-0" />
+          ) : (
+            <Menu className="h-4 w-4 shrink-0" />
+          )}
+        </span>
         <select
           value={item.type}
           onChange={(event) => onUpdateItem(menu, itemId, {
@@ -7352,30 +7537,26 @@ function NavigationItemEditor({
         >
           {item.visible === false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
-        {depth === 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => onMoveRootItem(menu, itemId, -1)}
-              disabled={rootIndex === 0}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title="Move up"
-              aria-label="Move up"
-            >
-              <ChevronUp className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onMoveRootItem(menu, itemId, 1)}
-              disabled={rootIndex >= rootCount - 1}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title="Move down"
-              aria-label="Move down"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          onClick={() => onMoveItem(menu, itemId, -1)}
+          disabled={rootIndex === 0}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          title="Move up"
+          aria-label="Move up"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onMoveItem(menu, itemId, 1)}
+          disabled={rootIndex >= rootCount - 1}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          title="Move down"
+          aria-label="Move down"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={() => onRemoveItem(menu, itemId)}
@@ -7471,11 +7652,21 @@ function NavigationItemEditor({
               onAddChild={onAddChild}
               onUpdateItem={onUpdateItem}
               onRemoveItem={onRemoveItem}
-              onMoveRootItem={onMoveRootItem}
+              onMoveItem={onMoveItem}
+              onDropItem={onDropItem}
             />
           ))}
         </div>
       )}
+      <div
+        className="h-2 rounded-b-lg border-t border-dashed border-transparent transition-colors hover:border-primary hover:bg-primary/10"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={(event) => handleDrop(event, 'after')}
+        aria-label={`Drop after ${item.label}`}
+      />
     </div>
   );
 }
