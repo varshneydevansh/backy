@@ -182,6 +182,115 @@ await record('password recovery rate limits repeated requests', async () => {
   assertCorsAndRequestId(limited);
 });
 
+await record('password reset follows configured minimum length', async () => {
+  const settingsBefore = await request('/api/admin/settings', {
+    headers: {
+      origin: adminDevOrigin,
+      'x-backy-admin-key': adminApiKey,
+    },
+  });
+  assert(settingsBefore.response.status === 200, `${settingsBefore.url} expected settings read 200`);
+  const originalAuth = settingsBefore.json?.data?.settings?.auth || {};
+  const minPasswordLength = 14;
+  const unique = Date.now().toString(36);
+  let userId = '';
+
+  try {
+    const updateSettings = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        auth: {
+          ...originalAuth,
+          minPasswordLength,
+        },
+      }),
+    });
+    assert(updateSettings.response.status === 200, `${updateSettings.url} expected settings patch 200`);
+    assert(updateSettings.json?.data?.settings?.auth?.minPasswordLength === minPasswordLength, `${updateSettings.url} did not persist minimum password length`);
+
+    const createUser = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        fullName: `Password Policy ${unique}`,
+        email: `password-policy-${unique}@example.test`,
+        role: 'viewer',
+        status: 'active',
+      }),
+    });
+    assert(createUser.response.status === 201, `${createUser.url} expected user create 201, got ${createUser.response.status}`);
+    userId = createUser.json?.data?.user?.id || '';
+    assert(userId, `${createUser.url} missing created user id`);
+
+    const resetTokenResponse = await request(`/api/admin/users/${userId}/password-reset`, {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ expiresInMinutes: 15 }),
+    });
+    assert(resetTokenResponse.response.status === 200, `${resetTokenResponse.url} expected reset token 200, got ${resetTokenResponse.response.status}`);
+    const token = resetTokenResponse.json?.data?.reset?.token;
+    assert(token, `${resetTokenResponse.url} missing reset token`);
+
+    const shortReset = await request('/api/admin/auth/reset-password', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.31',
+      },
+      body: JSON.stringify({ token, password: '1234567890123' }),
+    });
+    assert(shortReset.response.status === 400, `${shortReset.url} expected configured minimum-length rejection`);
+    assert(shortReset.json?.error?.code === 'VALIDATION_ERROR', `${shortReset.url} expected validation error`);
+    assert(shortReset.json?.error?.message === `Password must be at least ${minPasswordLength} characters.`, `${shortReset.url} expected configured minimum in message`);
+
+    const validReset = await request('/api/admin/auth/reset-password', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.32',
+      },
+      body: JSON.stringify({ token, password: '12345678901234' }),
+    });
+    assert(validReset.response.status === 200, `${validReset.url} expected valid reset 200, got ${validReset.response.status}`);
+    assert(validReset.json?.data?.reset === true, `${validReset.url} expected reset success`);
+    assert(validReset.json?.data?.session?.token, `${validReset.url} expected reset session`);
+  } finally {
+    if (userId) {
+      await request(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          origin: adminDevOrigin,
+          'x-backy-admin-key': adminApiKey,
+        },
+      }).catch(() => {});
+    }
+    await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({ auth: originalAuth }),
+    }).catch(() => {});
+  }
+});
+
 console.log(`Admin auth smoke passed against ${baseUrl}`);
 for (const check of checks) {
   console.log(`- ${check.name} (${check.ms}ms)`);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
+import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
 import { recordAdminAudit } from '@/lib/adminAudit';
 
 export const runtime = 'nodejs';
@@ -63,8 +64,9 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Password reset token is required.', requestId);
   }
 
-  if (password.length < 8) {
-    return errorResponse(400, 'VALIDATION_ERROR', 'Password must be at least 8 characters.', requestId);
+  const passwordPolicy = validateAdminPasswordPolicy(password);
+  if (!passwordPolicy.ok) {
+    return errorResponse(400, 'VALIDATION_ERROR', passwordPolicy.message, requestId);
   }
 
   const clientAddress = getClientAddress(request);

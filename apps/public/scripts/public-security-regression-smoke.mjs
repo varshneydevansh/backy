@@ -247,6 +247,16 @@ assert(
   'public form submission route must enforce audience in repository and demo branches',
 );
 
+const adminPasswordPolicy = read('apps/public/src/lib/admin-auth/passwordPolicy.ts');
+assertIncludes(adminPasswordPolicy, 'getAdminSettings()', 'admin password policy must read persisted settings');
+assertIncludes(adminPasswordPolicy, 'minPasswordLength', 'admin password policy must expose minimum length');
+assertIncludes(adminPasswordPolicy, 'MIN_PASSWORD_LENGTH = 8', 'admin password policy must preserve lower UI bound');
+assertIncludes(adminPasswordPolicy, 'MAX_PASSWORD_LENGTH = 128', 'admin password policy must preserve upper UI bound');
+const resetPasswordRoute = read('apps/public/src/app/api/admin/auth/reset-password/route.ts');
+assertIncludes(resetPasswordRoute, '@/lib/admin-auth/passwordPolicy', 'reset password route must import password policy');
+assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password)', 'reset password route must enforce persisted password policy');
+assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route');
+
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
   'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',
