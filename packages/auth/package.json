@@ -14,7 +14,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --external @supabase/supabase-js",
     "dev": "tsup src/index.ts --format esm --dts --watch --external @supabase/supabase-js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:oauth": "tsx scripts/oauth-adapter-smoke.ts",
+    "test": "npm run test:oauth"
   },
     "dependencies": {
         "jose": "^5.2.0"
@@ -29,8 +31,9 @@
     },
     "devDependencies": {
         "@types/node": "^20.10.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.0"
+        "tsx": "^4.20.6",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0"
     },
   "keywords": [
         "cms",

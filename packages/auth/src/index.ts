@@ -98,6 +98,8 @@ export interface AuthConfig {
     tokenExpiry?: number;
     /** Refresh token expiration in seconds (default: 7 days) */
     refreshExpiry?: number;
+    /** Password reset token expiration in seconds (default: 1 hour) */
+    passwordResetExpiry?: number;
     /** OAuth configurations */
     oauth?: OAuthConfig[];
     /** Supabase configuration (if using supabase type) */
@@ -279,6 +281,8 @@ export async function createOAuthAdapter(
     callbacks: {
         /** Find user by email */
         findUserByEmail: (email: string) => Promise<AuthUser | null>;
+        /** Find user by ID */
+        findUserById?: (userId: string) => Promise<AuthUser | null>;
         /** Find user by OAuth provider ID */
         findUserByProviderId: (provider: OAuthProvider, id: string) => Promise<AuthUser | null>;
         /** Create new user */
@@ -293,10 +297,17 @@ export async function createOAuthAdapter(
         getRefreshToken: (token: string) => Promise<{ userId: string; expiresAt: Date } | null>;
         /** Invalidate refresh token */
         invalidateRefreshToken: (token: string) => Promise<void>;
+        /** Deliver a generated password reset token. Implement with email, queue, or audit handoff. */
+        sendPasswordReset?: (input: {
+            user: AuthUser;
+            token: string;
+            expiresAt: Date;
+        }) => Promise<void>;
     }
 ): Promise<AuthAdapter> {
     const tokenExpiry = config.tokenExpiry || 3600; // 1 hour
     const refreshExpiry = config.refreshExpiry || 604800; // 7 days
+    const passwordResetExpiry = config.passwordResetExpiry || 3600; // 1 hour
 
     const oauthConfigs = new Map<OAuthProvider, OAuthConfig>();
     config.oauth?.forEach((c) => oauthConfigs.set(c.provider, c));
@@ -394,7 +405,11 @@ export async function createOAuthAdapter(
                 throw new Error('Invalid or expired refresh token');
             }
 
-            const user = await callbacks.findUserByEmail('');
+            if (!callbacks.findUserById) {
+                throw new Error('Refresh token lookup requires findUserById callback');
+            }
+
+            const user = await callbacks.findUserById(stored.userId);
             if (!user) {
                 throw new Error('User not found');
             }
@@ -527,14 +542,32 @@ export async function createOAuthAdapter(
                 return;
             }
 
-            // In a real implementation, generate reset token and send email
-            // This is a placeholder - integrate with your email service
-            console.log(`Password reset requested for ${email}`);
+            if (!callbacks.sendPasswordReset) {
+                // Preserve account-enumeration safety while making delivery an explicit integration hook.
+                return;
+            }
+
+            const expiresAt = new Date(Date.now() + passwordResetExpiry * 1000);
+            const token = await createToken(
+                {
+                    sub: user.id,
+                    email: user.email,
+                    purpose: 'password-reset',
+                },
+                config.jwtSecret,
+                passwordResetExpiry,
+            );
+
+            await callbacks.sendPasswordReset({
+                user,
+                token,
+                expiresAt,
+            });
         },
 
         async updatePassword(token: string, newPassword: string): Promise<void> {
             const payload = await verifyJwt(token, config.jwtSecret);
-            if (!payload) {
+            if (!payload || payload.purpose !== 'password-reset' || typeof payload.sub !== 'string') {
                 throw new Error('Invalid or expired reset token');
             }
 
