@@ -337,6 +337,27 @@ for (const route of [
   assertExcludes(source, 'value as FormFieldDefinition[]', `${route} must not cast raw fields directly`);
 }
 
+const adminFormCollectionTargetPolicy = read('apps/public/src/lib/adminFormCollectionTargetPolicy.ts');
+for (const needle of [
+  'validateAdminFormCollectionTarget',
+  'FORM_COLLECTION_TARGET_NOT_FOUND',
+  'FORM_COLLECTION_TARGET_NOT_WRITABLE',
+  'collection.status !==',
+  '!collection.permissions.publicCreate',
+  'FORM_COLLECTION_TARGET_FIELD_NOT_FOUND',
+  'FORM_COLLECTION_TARGET_SLUG_FIELD_NOT_FOUND',
+]) {
+  assertIncludes(adminFormCollectionTargetPolicy, needle, 'admin form collection target policy');
+}
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, '@/lib/adminFormCollectionTargetPolicy', `${route} must import collection target policy`);
+  assertIncludes(source, 'validateAdminFormCollectionTarget({', `${route} must validate collection targets before persistence`);
+}
+
 const backyStore = read('apps/public/src/lib/backyStore.ts');
 const submissionValidationStart = backyStore.indexOf('function validateSubmissionValues(');
 const submissionValidationEnd = backyStore.indexOf('\nfunction makeSubmissionSignature', submissionValidationStart);

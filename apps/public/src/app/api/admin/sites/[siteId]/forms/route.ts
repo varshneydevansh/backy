@@ -4,6 +4,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { createAdminForm, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { parseFormFields } from '@/lib/adminFormFieldPolicy';
+import { validateAdminFormCollectionTarget } from '@/lib/adminFormCollectionTargetPolicy';
 import { seedFormInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -195,9 +196,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
       }
 
+      const collectionTargetValidation = await validateAdminFormCollectionTarget({
+        siteId: site.id,
+        collectionTarget: input.collectionTarget,
+        formFields: input.fields,
+        repositories,
+      });
+      if (!collectionTargetValidation.ok) {
+        return errorResponse(
+          collectionTargetValidation.status,
+          collectionTargetValidation.code,
+          collectionTargetValidation.message,
+          requestId,
+        );
+      }
+
       const created = (await repositories.forms.create({
         ...input,
         siteId: site.id,
+        collectionTarget: collectionTargetValidation.collectionTarget,
       })).item;
       await recordAdminAudit({
         repositories,
@@ -239,9 +256,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
     }
 
+    const collectionTargetValidation = await validateAdminFormCollectionTarget({
+      siteId: site.id,
+      collectionTarget: input.collectionTarget,
+      formFields: input.fields,
+    });
+    if (!collectionTargetValidation.ok) {
+      return errorResponse(
+        collectionTargetValidation.status,
+        collectionTargetValidation.code,
+        collectionTargetValidation.message,
+        requestId,
+      );
+    }
+
     const created = createAdminForm({
       ...input,
       siteId: site.id,
+      collectionTarget: collectionTargetValidation.collectionTarget,
     });
     await recordAdminAudit({
       siteId: site.id,

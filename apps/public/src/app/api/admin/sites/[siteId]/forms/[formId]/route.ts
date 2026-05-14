@@ -4,6 +4,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { deleteAdminForm, getFormById, getSiteByIdOrSlug, updateAdminForm } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { parseFormFields } from '@/lib/adminFormFieldPolicy';
+import { validateAdminFormCollectionTarget } from '@/lib/adminFormCollectionTargetPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -201,6 +202,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           ),
         }
         : input;
+      if ('collectionTarget' in updateInput) {
+        const collectionTargetValidation = await validateAdminFormCollectionTarget({
+          siteId: site.id,
+          collectionTarget: updateInput.collectionTarget,
+          formFields: updateInput.fields || existing.fields,
+          repositories,
+        });
+        if (!collectionTargetValidation.ok) {
+          return errorResponse(
+            collectionTargetValidation.status,
+            collectionTargetValidation.code,
+            collectionTargetValidation.message,
+            requestId,
+          );
+        }
+        updateInput.collectionTarget = collectionTargetValidation.collectionTarget;
+      }
       const updated = (await repositories.forms.update(site.id, formId, updateInput)).item;
       await recordAdminAudit({
         repositories,
@@ -228,6 +246,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const existing = getFormById(site.id, formId);
     if (!existing) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    }
+
+    if ('collectionTarget' in input) {
+      const collectionTargetValidation = await validateAdminFormCollectionTarget({
+        siteId: site.id,
+        collectionTarget: input.collectionTarget,
+        formFields: input.fields || existing.fields,
+      });
+      if (!collectionTargetValidation.ok) {
+        return errorResponse(
+          collectionTargetValidation.status,
+          collectionTargetValidation.code,
+          collectionTargetValidation.message,
+          requestId,
+        );
+      }
+      input.collectionTarget = collectionTargetValidation.collectionTarget;
     }
 
     const updated = updateAdminForm(site.id, formId, input);
