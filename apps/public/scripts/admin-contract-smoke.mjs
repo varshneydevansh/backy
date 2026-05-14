@@ -6039,7 +6039,7 @@ try {
         providerMode: 'live',
         providerAccountId: `acct_${unique}`,
         providerWebhookUrl: `https://hooks.example.com/commerce/${unique}`,
-        providerWebhookSecretId: `stripe_whsec_${unique}`,
+        providerWebhookSecretId: `env:BACKY_CONTRACT_WEBHOOK_SECRET_${unique.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`,
         providerWebhookEvents: 'checkout.session.completed,charge.refunded',
         reconciliationMode: 'webhook',
         reconciliationWindowHours: 36,

@@ -3917,9 +3917,12 @@ function CommerceSettings({
               <input
                 value={resolved.providerWebhookSecretId}
                 onChange={(event) => update({ providerWebhookSecretId: event.target.value })}
-                placeholder="stripe_whsec_live"
+                placeholder="env:STRIPE_WEBHOOK_SECRET"
                 className={inputClassName}
               />
+              <span className="text-xs text-muted-foreground">
+                Store the provider signing secret in the runtime environment, then reference it here.
+              </span>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Webhook event allowlist</span>

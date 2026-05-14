@@ -666,6 +666,15 @@ assert(originalValuesRollbackIndex !== -1, 'checkout route must restore original
 assert(applyRepositoryReservationsIndex < createOrderIndex, 'checkout route must reserve inventory before creating the private order');
 assert(createOrderIndex < rollbackOnOrderFailureIndex, 'checkout route must roll back after failed order creation');
 
+const settingsRoute = read('apps/admin/src/routes/settings.tsx');
+assertIncludes(settingsRoute, 'env:STRIPE_WEBHOOK_SECRET', 'settings UI must show env-reference webhook secret guidance');
+assertIncludes(settingsRoute, 'Store the provider signing secret in the runtime environment', 'settings UI must explain webhook secret references');
+assertExcludes(settingsRoute, 'placeholder="stripe_whsec_live"', 'settings UI must not encourage storing raw webhook secrets');
+
+const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
+assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');
+assertExcludes(adminContractSmoke, 'providerWebhookSecretId: `stripe_whsec_', 'admin contract smoke must not persist raw webhook secrets');
+
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
   'CATALOG_RECORD_PAGE_SIZE',
