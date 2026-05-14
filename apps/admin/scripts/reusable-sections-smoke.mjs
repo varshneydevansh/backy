@@ -219,6 +219,70 @@ const deleteReusableSection = async (sectionId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, { method: 'DELETE' });
 };
 
+const exportReusableSections = async (sectionIds = []) => {
+  const query = new URLSearchParams({ status: 'all' });
+  if (sectionIds.length > 0) query.set('sectionIds', sectionIds.join(','));
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/export?${query.toString()}`);
+  assert(payload.data?.export?.schemaVersion === 'backy.reusable-sections.export.v1', `Unexpected reusable section export: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data;
+};
+
+const updateReusableSection = async (sectionId, body) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  return payload.data?.section;
+};
+
+const createDemoPageWithReusableSectionInstance = async (section, pageIds = []) => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Reusable section smoke page ${suffix}`,
+      slug: `reusable-section-smoke-page-${suffix}`,
+      status: 'draft',
+      content: {
+        elements: [
+          {
+            id: `smoke-instance-${suffix}`,
+            type: 'section',
+            name: 'Smoke reusable section instance',
+            x: 0,
+            y: 0,
+            width: 1200,
+            height: 520,
+            zIndex: 1,
+            props: {
+              reusableSection: {
+                mode: 'synced',
+                sectionId: section.id,
+                slug: section.slug,
+                name: section.name,
+                sourceUpdatedAt: '2000-01-01T00:00:00.000Z',
+              },
+            },
+            styles: {},
+            children: [],
+          },
+        ],
+        canvasSize: { width: 1200, height: 520 },
+      },
+      seo: {},
+    }),
+  });
+  const page = payload.data?.page;
+  assert(page?.id, `Unable to create reusable section smoke page: ${JSON.stringify(payload).slice(0, 500)}`);
+  pageIds.push(page.id);
+  return page;
+};
+
+const deleteDemoPage = async (pageId) => {
+  if (!pageId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -357,12 +421,17 @@ const assertReusableSectionsLayout = async (client) => {
       hasLibrary: Boolean(document.querySelector('[data-testid="reusable-sections-library"]')) &&
         body.includes('Section library'),
       hasEditor: body.includes('Create section') && body.includes('Content JSON'),
+      hasWorkflowPanel: Boolean(document.querySelector('[data-testid="reusable-sections-workflows"]')) &&
+        Boolean(document.querySelector('[data-testid="reusable-sections-export-visible"]')) &&
+        Boolean(document.querySelector('[data-testid="reusable-sections-import"]')) &&
+        body.includes('Import, versions, and instances') &&
+        body.includes('Instance propagation'),
     };
   })()`);
 
   assert(layout.scrollWidth <= layout.width + 8, `Reusable sections page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor,
+    layout.hasCommandCenter && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -555,6 +624,88 @@ const createFrontendTemplateSectionThroughUi = async (client) => {
   throw new Error('Frontend template reusable section was not created');
 };
 
+const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) => {
+  const exported = await exportReusableSections([section.id]);
+  assert(exported.export.sectionCount === 1, `Selected reusable section export should contain one section: ${JSON.stringify(exported.export)}`);
+  assert(exported.sections?.[0]?.slug === section.slug, `Selected reusable section export did not include expected slug: ${JSON.stringify(exported.sections?.[0])}`);
+
+  const page = await createDemoPageWithReusableSectionInstance(section, pageIds);
+  try {
+    const workflowLoaded = await clickReusableSectionControl(client, 'reusable-section-workflow-load');
+    assert(workflowLoaded.ok, `Unable to load reusable section workflow state: ${JSON.stringify(workflowLoaded)}`);
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const body = document.body?.innerText || '';
+        return {
+          hasInstanceTotals: body.includes('1 stale') || body.includes('1\\nStale'),
+          hasVersionHistory: body.includes('Version history') && body.includes('v1'),
+          hasMetadataButton: Boolean(document.querySelector('[data-testid="reusable-section-metadata-save"]')),
+          body: body.slice(0, 1800),
+        };
+      })()`);
+      if (state.hasInstanceTotals && state.hasVersionHistory && state.hasMetadataButton) break;
+      if (attempt === 99) {
+        throw new Error(`Reusable section workflow state did not load: ${JSON.stringify(state)}`);
+      }
+      await sleep(250);
+    }
+
+    const metadataSaved = await clickReusableSectionControl(client, 'reusable-section-metadata-save');
+    assert(metadataSaved.ok, `Unable to save reusable section metadata: ${JSON.stringify(metadataSaved)}`);
+    await waitForPageText(client, `${section.name} metadata saved.`, 'metadata save notice');
+
+    const changed = await updateReusableSection(section.id, {
+      name: section.name,
+      content: {
+        ...section.content,
+        elements: [
+          {
+            ...section.content.elements[0],
+            props: {
+              ...(section.content.elements[0]?.props || {}),
+              content: 'Reusable section smoke version changed',
+            },
+          },
+        ],
+      },
+      updatedBy: 'smoke',
+    });
+    assert(changed?.id === section.id, `Unable to update reusable section for version smoke: ${JSON.stringify(changed)}`);
+
+    await navigateToReusableSections(client);
+    const selected = await evaluate(client, `(() => {
+      const cardButton = document.querySelector(${JSON.stringify(`[data-testid="reusable-section-card-${section.id}"] button`)});
+      if (!(cardButton instanceof HTMLButtonElement)) return { ok: false, reason: 'section-card-button-missing' };
+      cardButton.click();
+      return { ok: true };
+    })()`);
+    assert(selected.ok, `Unable to reselect reusable section after version update: ${JSON.stringify(selected)}`);
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const body = document.body?.innerText || '';
+        return {
+          hasCurrentVersion: body.includes('v3 current'),
+          hasPreviousVersion: body.includes('v2') && body.includes('v1'),
+          body: body.slice(0, 1800),
+        };
+      })()`);
+      if (state.hasCurrentVersion && state.hasPreviousVersion) break;
+      if (attempt === 99) {
+        throw new Error(`Reusable section versions did not show update history: ${JSON.stringify(state)}`);
+      }
+      await sleep(250);
+    }
+  } finally {
+    await deleteDemoPage(page.id);
+    const pageIndex = pageIds.indexOf(page.id);
+    if (pageIndex !== -1) {
+      pageIds.splice(pageIndex, 1);
+    }
+  }
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -573,7 +724,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, sectionIds, originalFrontendDesign }) => {
+const cleanup = async ({ client, childProcess, userDataDir, sectionIds, pageIds, originalFrontendDesign }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -592,6 +743,16 @@ const cleanup = async ({ client, childProcess, userDataDir, sectionIds, original
 
   if (userDataDir) {
     fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+
+  for (const pageId of pageIds || []) {
+    if (pageId) {
+      try {
+        await deleteDemoPage(pageId);
+      } catch {
+        // Temporary smoke pages are deleted best-effort.
+      }
+    }
   }
 
   for (const sectionId of sectionIds || []) {
@@ -618,6 +779,7 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   const sectionIds = [];
+  const pageIds = [];
   let originalFrontendDesign;
 
   try {
@@ -650,6 +812,7 @@ const main = async () => {
     }
     const section = await createFrontendTemplateSectionThroughUi(client);
     sectionIds.push(section.id);
+    await exerciseReusableSectionWorkflows(client, section, pageIds);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -675,6 +838,7 @@ const main = async () => {
       childProcess,
       userDataDir,
       sectionIds,
+      pageIds,
       originalFrontendDesign,
     });
   }

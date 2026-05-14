@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -6,25 +6,42 @@ import {
   Code2,
   Copy,
   Database,
+  Download,
+  GitBranch,
+  History,
   Layers3,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Sparkles,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import type { SiteSettings } from '@backy-cms/core';
 import {
   createReusableSection,
   deleteReusableSection,
+  exportReusableSections,
   getSiteFrontendDesign,
+  getReusableSectionInstances,
+  getReusableSectionMetadata,
   getUserPermissions,
+  importReusableSections,
   listReusableSections,
+  listReusableSectionVersions,
+  refreshReusableSectionInstances,
+  restoreReusableSectionVersion,
+  updateReusableSectionMetadata,
   updateReusableSection,
   type AdminUserPermissionMatrix,
   type ReusableSection,
   type ReusableSectionContent,
   type ReusableSectionInput,
+  type ReusableSectionInstancesReport,
+  type ReusableSectionMetadata,
+  type ReusableSectionVersions,
+  type ReusableSectionExportEntry,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { PageShell } from '@/components/layout/PageShell';
@@ -68,6 +85,14 @@ interface SectionTemplateBlueprint {
   status: ReusableSection['status'];
   tags: string[];
   content: ReusableSectionContent;
+}
+
+interface SectionMetadataDraft {
+  displayName: string;
+  summary: string;
+  usageNotes: string;
+  previewPath: string;
+  labels: string;
 }
 
 const SECTION_STATUS_FILTERS: SectionStatusFilter[] = ['active', 'archived', 'all'];
@@ -124,6 +149,46 @@ const optionalStringListFromRecord = (record: Record<string, unknown> | undefine
   if (!Array.isArray(value)) return undefined;
   const strings = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
   return strings.length > 0 ? Array.from(new Set(strings)) : undefined;
+};
+
+const stringOrEmpty = (value: unknown): string => (
+  typeof value === 'string' ? value : ''
+);
+
+const metadataDraftFromLibrary = (metadata: ReusableSectionMetadata | null): SectionMetadataDraft => {
+  const library = metadata?.library || {};
+  return {
+    displayName: stringOrEmpty(library.displayName),
+    summary: stringOrEmpty(library.summary),
+    usageNotes: stringOrEmpty(library.usageNotes),
+    previewPath: stringOrEmpty(library.previewPath),
+    labels: Array.isArray(library.labels) ? library.labels.filter((label): label is string => typeof label === 'string').join(', ') : '',
+  };
+};
+
+const reusableSectionExportEntriesFromPayload = (payload: unknown): ReusableSectionExportEntry[] => {
+  const root = isPlainRecord(payload) ? payload : {};
+  const data = isPlainRecord(root.data) ? root.data : {};
+  const sections = Array.isArray(root.sections)
+    ? root.sections
+    : Array.isArray(data.sections)
+      ? data.sections
+      : isPlainRecord(root.section)
+        ? [root.section]
+        : [];
+  return sections.filter(isPlainRecord).map((section) => section as unknown as ReusableSectionExportEntry);
+};
+
+const downloadJson = (payload: unknown, filename: string) => {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 };
 
 const optionalCanvasSizeFromRecord = (record: Record<string, unknown> | undefined): CanvasSize | undefined => {
@@ -298,6 +363,7 @@ function ReusableSectionsRoute() {
   const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [sections, setSections] = useState<ReusableSection[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(routeSearch.sectionId || null);
@@ -321,7 +387,12 @@ function ReusableSectionsRoute() {
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isWorkflowLoading, setIsWorkflowLoading] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [sectionVersions, setSectionVersions] = useState<ReusableSectionVersions | null>(null);
+  const [sectionInstances, setSectionInstances] = useState<ReusableSectionInstancesReport | null>(null);
+  const [sectionMetadata, setSectionMetadata] = useState<ReusableSectionMetadata | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState<SectionMetadataDraft>(() => metadataDraftFromLibrary(null));
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -358,6 +429,7 @@ function ReusableSectionsRoute() {
   const editPermissionTitle = canEditSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId) || isPermissionMatrixPending;
+  const isWorkflowBusy = isBusy || isWorkflowLoading;
   const filteredSections = useMemo(() => (
     sections.filter((section) => {
       if (statusFilter !== 'all' && section.status !== statusFilter) return false;
@@ -444,6 +516,10 @@ function ReusableSectionsRoute() {
       setContentJson(JSON.stringify(EMPTY_CONTENT, null, 2));
       setTagsText('');
       setContentValidationMessage(null);
+      setSectionVersions(null);
+      setSectionInstances(null);
+      setSectionMetadata(null);
+      setMetadataDraft(metadataDraftFromLibrary(null));
       return;
     }
 
@@ -537,6 +613,210 @@ function ReusableSectionsRoute() {
     }
   };
 
+  const loadReusableSectionWorkflow = async (sectionId = selectedSectionId) => {
+    if (!activeSiteId || !sectionId || isPermissionMatrixPending) return;
+    if (!canViewSections) {
+      showPermissionDenied('pages.view', 'view reusable section workflow state');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    try {
+      const [versions, instances, metadata] = await Promise.all([
+        listReusableSectionVersions(activeSiteId, sectionId),
+        getReusableSectionInstances(activeSiteId, sectionId),
+        getReusableSectionMetadata(activeSiteId, sectionId),
+      ]);
+      setSectionVersions(versions);
+      setSectionInstances(instances);
+      setSectionMetadata(metadata);
+      setMetadataDraft(metadataDraftFromLibrary(metadata));
+    } catch (workflowError) {
+      setSectionVersions(null);
+      setSectionInstances(null);
+      setSectionMetadata(null);
+      setMetadataDraft(metadataDraftFromLibrary(null));
+      setError(isAdminPermissionDeniedError(workflowError)
+        ? viewPermissionTitle || 'Your account cannot view reusable section workflow state.'
+        : workflowError instanceof Error ? workflowError.message : 'Unable to load reusable section workflow state');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
+  const downloadReusableSectionsExport = async (selectedOnly = false) => {
+    if (isWorkflowBusy) return;
+    if (!canViewSections) {
+      showPermissionDenied('pages.view', 'export reusable sections');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const sectionIds = selectedOnly && activeSection
+        ? [activeSection.id]
+        : filteredSections.map((section) => section.id);
+      const exported = await exportReusableSections(activeSiteId, {
+        status: 'all',
+        sectionIds,
+      });
+      downloadJson(exported, `${activeSiteSlug}-reusable-sections-${selectedOnly && activeSection ? activeSection.slug : 'export'}.json`);
+      setNotice(`Exported ${exported.export.sectionCount} reusable section${exported.export.sectionCount === 1 ? '' : 's'}.`);
+    } catch (exportError) {
+      setError(isAdminPermissionDeniedError(exportError)
+        ? viewPermissionTitle || 'Your account cannot export reusable sections.'
+        : exportError instanceof Error ? exportError.message : 'Unable to export reusable sections');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
+  const handleReusableSectionsImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || isWorkflowBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'import reusable sections');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      const importSections = reusableSectionExportEntriesFromPayload(payload);
+      if (importSections.length === 0) {
+        throw new Error('Import file must contain reusable section exports with content.elements.');
+      }
+
+      const result = await importReusableSections(activeSiteId, {
+        sections: importSections,
+        upsert: true,
+        importedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+      });
+      setSections((current) => [
+        ...result.sections,
+        ...current.filter((section) => !result.sections.some((imported) => imported.id === section.id || imported.slug === section.slug)),
+      ]);
+      const firstImported = result.sections[0] || null;
+      if (firstImported) {
+        setSelectedSectionId(firstImported.id);
+        setFormFromSection(firstImported);
+        updateRouteSearch({ sectionId: firstImported.id });
+        void loadReusableSectionWorkflow(firstImported.id);
+      }
+      setNotice(`Imported ${result.import.total} reusable section${result.import.total === 1 ? '' : 's'} (${result.import.created} created, ${result.import.updated} updated).`);
+    } catch (importError) {
+      setError(isAdminPermissionDeniedError(importError)
+        ? editPermissionTitle || 'Your account cannot import reusable sections.'
+        : importError instanceof Error ? importError.message : 'Unable to import reusable sections');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
+  const restoreSectionVersion = async (version: number) => {
+    if (!activeSection || isWorkflowBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'restore reusable section versions');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await restoreReusableSectionVersion(activeSiteId, activeSection.id, version, {
+        expectedVersion: sectionMetadata?.version || sectionVersions?.currentVersion,
+        expectedUpdatedAt: activeSection.updatedAt,
+        restoredBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+      });
+      setSections((current) => [result.section, ...current.filter((section) => section.id !== result.section.id)]);
+      setSelectedSectionId(result.section.id);
+      setFormFromSection(result.section);
+      await loadReusableSectionWorkflow(result.section.id);
+      setNotice(`Restored ${result.section.name} from version ${result.restoredFromVersion}.`);
+    } catch (restoreError) {
+      setError(isAdminPermissionDeniedError(restoreError)
+        ? editPermissionTitle || 'Your account cannot restore reusable section versions.'
+        : restoreError instanceof Error ? restoreError.message : 'Unable to restore reusable section version');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
+  const refreshSectionInstances = async (dryRun: boolean) => {
+    if (!activeSection || isWorkflowBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'refresh reusable section instances');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await refreshReusableSectionInstances(activeSiteId, activeSection.id, {
+        dryRun,
+        updatedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+      });
+      await loadReusableSectionWorkflow(activeSection.id);
+      setNotice(dryRun
+        ? `${result.totals.instances} stale reusable section instance${result.totals.instances === 1 ? '' : 's'} can be refreshed.`
+        : `Refreshed ${result.totals.instances} reusable section instance${result.totals.instances === 1 ? '' : 's'} across ${result.totals.targets} target${result.totals.targets === 1 ? '' : 's'}.`);
+    } catch (refreshError) {
+      setError(isAdminPermissionDeniedError(refreshError)
+        ? editPermissionTitle || 'Your account cannot refresh reusable section instances.'
+        : refreshError instanceof Error ? refreshError.message : 'Unable to refresh reusable section instances');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
+  const saveSectionMetadata = async () => {
+    if (!activeSection || isWorkflowBusy) return;
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'update reusable section metadata');
+      return;
+    }
+
+    setIsWorkflowLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await updateReusableSectionMetadata(activeSiteId, activeSection.id, {
+        expectedVersion: sectionMetadata?.version,
+        expectedUpdatedAt: activeSection.updatedAt,
+        updatedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+        displayName: metadataDraft.displayName,
+        summary: metadataDraft.summary,
+        usageNotes: metadataDraft.usageNotes,
+        previewPath: metadataDraft.previewPath,
+        labels: metadataDraft.labels,
+      });
+      setSections((current) => [result.section, ...current.filter((section) => section.id !== result.section.id)]);
+      setFormFromSection(result.section);
+      setSectionMetadata({
+        sectionId: result.sectionId,
+        metadata: result.metadata,
+        library: result.library,
+        version: result.version,
+      });
+      setMetadataDraft(metadataDraftFromLibrary(result));
+      setNotice(`${result.section.name} metadata saved.`);
+    } catch (metadataError) {
+      setError(isAdminPermissionDeniedError(metadataError)
+        ? editPermissionTitle || 'Your account cannot update reusable section metadata.'
+        : metadataError instanceof Error ? metadataError.message : 'Unable to update reusable section metadata');
+    } finally {
+      setIsWorkflowLoading(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     setPermissionError(null);
@@ -623,6 +903,12 @@ function ReusableSectionsRoute() {
       cancelled = true;
     };
   }, [activeSiteId, canViewSections, isPermissionMatrixPending, viewPermissionTitle]);
+
+  useEffect(() => {
+    if (!activeSection?.id || isPermissionMatrixPending || !canViewSections) return;
+    void loadReusableSectionWorkflow(activeSection.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection?.id, activeSiteId, canViewSections, isPermissionMatrixPending]);
 
   const copyText = async (value: string, label: string) => {
     if (isBusy) return;
@@ -803,6 +1089,14 @@ function ReusableSectionsRoute() {
         </div>
       }
     >
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => void handleReusableSectionsImport(event)}
+        data-testid="reusable-sections-import-input"
+      />
       {error ? (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
@@ -878,6 +1172,12 @@ function ReusableSectionsRoute() {
             <Button size="sm" onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
+            <Button size="sm" onClick={() => void downloadReusableSectionsExport(false)} disabled={isWorkflowBusy || filteredSections.length === 0 || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />} data-testid="reusable-sections-export-visible">
+              Export visible
+            </Button>
+            <Button size="sm" onClick={() => importInputRef.current?.click()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />} data-testid="reusable-sections-import">
+              Import JSON
+            </Button>
             <Button size="sm" onClick={() => void loadSections()} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
@@ -948,6 +1248,185 @@ function ReusableSectionsRoute() {
               />
             </label>
           </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel className="mb-5" data-testid="reusable-sections-workflows">
+        <PanelHeader
+          title="Import, versions, and instances"
+          description="Use the backend section workflow APIs for portable section exports, version restore, structured metadata, and stale instance refreshes."
+          icon={<GitBranch className="size-4" />}
+          action={
+            activeSection ? (
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {activeSection.slug}
+              </span>
+            ) : null
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Library portability</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Export filtered sections or import a Backy reusable-section JSON backup with upsert.</p>
+                </div>
+                {isWorkflowLoading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" /> : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => void downloadReusableSectionsExport(false)} disabled={isWorkflowBusy || filteredSections.length === 0 || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
+                  Export visible
+                </Button>
+                <Button size="sm" onClick={() => void downloadReusableSectionsExport(true)} disabled={isWorkflowBusy || !activeSection || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />} data-testid="reusable-sections-export-selected">
+                  Export selected
+                </Button>
+                <Button size="sm" onClick={() => importInputRef.current?.click()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
+                  Import JSON
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Instance propagation</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Find synced page/post instances and refresh stale copies from the selected source section.</p>
+                </div>
+                <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  {sectionInstances ? `${sectionInstances.totals.stale} stale` : activeSection ? 'Not loaded' : 'Select section'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md border border-border px-2 py-2">
+                  <div className="font-semibold tabular-nums text-foreground">{sectionInstances?.totals.targets ?? 0}</div>
+                  <div className="text-muted-foreground">Targets</div>
+                </div>
+                <div className="rounded-md border border-border px-2 py-2">
+                  <div className="font-semibold tabular-nums text-foreground">{sectionInstances?.totals.instances ?? 0}</div>
+                  <div className="text-muted-foreground">Instances</div>
+                </div>
+                <div className="rounded-md border border-border px-2 py-2">
+                  <div className="font-semibold tabular-nums text-foreground">{sectionInstances?.totals.stale ?? 0}</div>
+                  <div className="text-muted-foreground">Stale</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => activeSection ? void loadReusableSectionWorkflow(activeSection.id) : undefined} disabled={isWorkflowBusy || !activeSection || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className="size-4" />} data-testid="reusable-section-workflow-load">
+                  Load workflow
+                </Button>
+                <Button size="sm" onClick={() => void refreshSectionInstances(true)} disabled={isWorkflowBusy || !activeSection || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined}>
+                  Dry run
+                </Button>
+                <Button size="sm" variant="primary" onClick={() => void refreshSectionInstances(false)} disabled={isWorkflowBusy || !activeSection || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<RotateCcw className="size-4" />}>
+                  Refresh instances
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {activeSection ? (
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Version history</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">Restore an earlier captured section version with backend conflict checks.</p>
+                  </div>
+                  <History className="size-4 text-muted-foreground" />
+                </div>
+                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {(sectionVersions?.versions || []).slice(0, 8).map((version) => (
+                    <div key={`${version.version}-${version.updatedAt}`} className="rounded-md border border-border p-3 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-foreground">v{version.version}{version.current ? ' current' : ''}</div>
+                          <div className="mt-1 truncate text-muted-foreground">{version.name} · {formatDate(version.updatedAt)}</div>
+                        </div>
+                        <Button size="sm" onClick={() => void restoreSectionVersion(version.version)} disabled={isWorkflowBusy || version.current || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<RotateCcw className="size-3.5" />}>
+                          Restore
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {sectionVersions && sectionVersions.versions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No versions are available yet.</p>
+                  ) : null}
+                  {!sectionVersions ? (
+                    <p className="text-xs text-muted-foreground">Load workflow state to inspect versions.</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Structured library metadata</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">These fields feed section library search, previews, ownership, and handoff labels.</p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    v{sectionMetadata?.version || sectionVersions?.currentVersion || 1}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1 text-xs">
+                    <span className="font-medium">Display name</span>
+                    <input
+                      value={metadataDraft.displayName}
+                      onChange={(event) => setMetadataDraft((prev) => ({ ...prev, displayName: event.target.value }))}
+                      disabled={isWorkflowBusy || !canEditSections}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs">
+                    <span className="font-medium">Preview path</span>
+                    <input
+                      value={metadataDraft.previewPath}
+                      onChange={(event) => setMetadataDraft((prev) => ({ ...prev, previewPath: event.target.value }))}
+                      disabled={isWorkflowBusy || !canEditSections}
+                      placeholder="/sections/hero"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+                <label className="mt-3 block space-y-1 text-xs">
+                  <span className="font-medium">Summary</span>
+                  <textarea
+                    value={metadataDraft.summary}
+                    onChange={(event) => setMetadataDraft((prev) => ({ ...prev, summary: event.target.value }))}
+                    disabled={isWorkflowBusy || !canEditSections}
+                    rows={2}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="mt-3 block space-y-1 text-xs">
+                  <span className="font-medium">Usage notes</span>
+                  <textarea
+                    value={metadataDraft.usageNotes}
+                    onChange={(event) => setMetadataDraft((prev) => ({ ...prev, usageNotes: event.target.value }))}
+                    disabled={isWorkflowBusy || !canEditSections}
+                    rows={2}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="mt-3 block space-y-1 text-xs">
+                  <span className="font-medium">Labels</span>
+                  <input
+                    value={metadataDraft.labels}
+                    onChange={(event) => setMetadataDraft((prev) => ({ ...prev, labels: event.target.value }))}
+                    disabled={isWorkflowBusy || !canEditSections}
+                    placeholder="marketing, dark, responsive"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" variant="primary" onClick={() => void saveSectionMetadata()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Save className="size-4" />} data-testid="reusable-section-metadata-save">
+                    Save metadata
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </PanelContent>
       </Panel>
 
