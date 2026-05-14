@@ -262,13 +262,19 @@ for (const route of commerceCollectionAdminRoutes) {
 }
 
 const commerceOrderRecordDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
-for (const needle of [
-  'applyRepositoryOrderInventoryRestore',
-  'applyDemoOrderInventoryRestore',
-  'inventoryrestoredat',
-  'shouldRestoreOrderInventory',
+const orderInventoryRestoreHelper = read('apps/public/src/lib/orderInventoryRestore.ts');
+const commerceWebhookRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/webhook/route.ts');
+const commerceReconcileSettlementRoute = read('apps/public/src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts');
+for (const needle of ['inventoryrestoredat', 'shouldRestoreOrderInventory']) {
+  assertIncludes(orderInventoryRestoreHelper, needle, 'shared order inventory helper must restore reserved inventory once on cancel/refund');
+}
+for (const [source, label] of [
+  [commerceOrderRecordDetailRoute, 'admin order workflow'],
+  [commerceWebhookRoute, 'commerce webhook settlement'],
+  [commerceReconcileSettlementRoute, 'commerce reconciliation'],
 ]) {
-  assertIncludes(commerceOrderRecordDetailRoute, needle, 'admin order workflow must restore reserved inventory once on cancel/refund');
+  assertIncludes(source, 'applyRepositoryOrderInventoryRestore', `${label} must restore repository inventory on terminal order states`);
+  assertIncludes(source, 'applyDemoOrderInventoryRestore', `${label} must restore demo inventory on terminal order states`);
 }
 
 const adminCollectionFields = read('apps/public/src/lib/adminCollectionFields.ts');

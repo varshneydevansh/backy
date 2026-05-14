@@ -20,6 +20,10 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
+import {
+  applyDemoOrderInventoryRestore,
+  applyRepositoryOrderInventoryRestore,
+} from '@/lib/orderInventoryRestore';
 
 interface RouteParams {
   params: Promise<{
@@ -381,10 +385,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ...settlement.values,
         notes: appendSettlementNote(order.values.notes, type, providerEventId, settlement.status),
       };
-      const updated = (await repositories.collections.updateRecord(site.id, ordersCollection.id, order.id, {
+      let updated = (await repositories.collections.updateRecord(site.id, ordersCollection.id, order.id, {
         status: order.status,
         values: toJsonRecord(nextValues),
       })).item;
+      updated = await applyRepositoryOrderInventoryRestore({
+        repositories,
+        siteId: site.id,
+        collection: ordersCollection,
+        before: order,
+        after: updated,
+      });
 
       await recordAdminAudit({
         repositories,
@@ -538,13 +549,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ...settlement.values,
       notes: appendSettlementNote(order.values.notes, type, providerEventId, settlement.status),
     };
-    const updated = updateAdminCollectionRecord(site.id, ordersCollection.id, order.id, {
+    const updatedRecord = updateAdminCollectionRecord(site.id, ordersCollection.id, order.id, {
       status: order.status,
       values: nextValues,
     });
-    if (!updated) {
+    if (!updatedRecord) {
       return errorResponse(404, 'COMMERCE_WEBHOOK_ORDER_NOT_FOUND', 'Unable to update matched private order.', requestId);
     }
+    const updated = applyDemoOrderInventoryRestore({
+      siteId: site.id,
+      collection: ordersCollection,
+      before: order,
+      after: updatedRecord,
+    });
 
     trackWebhookEvent({
       kind: 'commerce-webhook',

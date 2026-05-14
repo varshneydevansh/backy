@@ -13,6 +13,10 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import {
+  applyDemoOrderInventoryRestore,
+  applyRepositoryOrderInventoryRestore,
+} from '@/lib/orderInventoryRestore';
 
 interface RouteParams {
   params: Promise<{
@@ -205,10 +209,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
         const nextValues = reconcileValues(record, event);
         if (!nextValues) continue;
-        const updated = (await repositories.collections.updateRecord(site.id, ordersCollection.id, record.id, {
+        let updated = (await repositories.collections.updateRecord(site.id, ordersCollection.id, record.id, {
           status: record.status,
           values: toJsonRecord(nextValues),
         })).item;
+        updated = await applyRepositoryOrderInventoryRestore({
+          repositories,
+          siteId: site.id,
+          collection: ordersCollection,
+          before: record,
+          after: updated,
+        });
         updates.push({
           orderId: updated.id,
           orderNumber: updated.values.ordernumber,
@@ -283,11 +294,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
       const nextValues = reconcileValues(record, event);
       if (!nextValues) continue;
-      const updated = updateAdminCollectionRecord(site.id, ordersCollection.id, record.id, {
+      const updatedRecord = updateAdminCollectionRecord(site.id, ordersCollection.id, record.id, {
         status: record.status,
         values: nextValues,
       });
-      if (!updated) continue;
+      if (!updatedRecord) continue;
+      const updated = applyDemoOrderInventoryRestore({
+        siteId: site.id,
+        collection: ordersCollection,
+        before: record,
+        after: updatedRecord,
+      });
       updates.push({
         orderId: updated.id,
         orderNumber: updated.values.ordernumber,
