@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import {
+  deleteAdminTeam,
+  getAdminTeamById,
+  getAdminTeamBySlug,
+  getAdminUserById,
+  listAdminTeamMembers,
+  updateAdminTeam,
+  type StoreTeam,
+} from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -48,6 +57,24 @@ const normalizeSettings = (value: unknown) => (
     : undefined
 );
 
+const demoTeamWithMembers = (team: StoreTeam) => {
+  const members = listAdminTeamMembers(team.id).map((member) => {
+    const user = getAdminUserById(member.userId);
+    return {
+      ...member,
+      email: user?.email || '',
+      name: user?.fullName || user?.email || member.userId,
+      avatarUrl: null,
+    };
+  });
+
+  return {
+    ...team,
+    members,
+    plan: team.settings?.plan || 'free',
+  };
+};
+
 const withMembers = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   teamId: string,
@@ -80,12 +107,23 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_DETAIL_UNAVAILABLE', 'Team detail requires database mode.', requestId);
-  }
-
   try {
     const { teamId } = await context.params;
+    if (shouldUseDemoStoreFallback()) {
+      const team = getAdminTeamById(teamId);
+      if (!team) {
+        return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          team: demoTeamWithMembers(team),
+        },
+      });
+    }
+
     const repositories = await getRequiredDatabaseRepositories();
     const team = await withMembers(repositories, teamId);
     if (!team) {
@@ -112,14 +150,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_WRITE_UNAVAILABLE', 'Team updates require database mode.', requestId);
-  }
-
   try {
     const { teamId } = await context.params;
-    const repositories = await getRequiredDatabaseRepositories();
-    const before = await withMembers(repositories, teamId);
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const before = repositories
+      ? await withMembers(repositories, teamId)
+      : (() => {
+          const team = getAdminTeamById(teamId);
+          return team ? demoTeamWithMembers(team) : null;
+        })();
     if (!before) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
@@ -143,26 +182,41 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (slug && slug !== before.slug) {
-      const existing = await repositories.teams.getBySlug(slug);
+      const existing = repositories
+        ? await repositories.teams.getBySlug(slug)
+        : getAdminTeamBySlug(slug);
       if (existing && existing.id !== teamId) {
         return errorResponse(409, 'TEAM_SLUG_CONFLICT', 'A team with this slug already exists.', requestId);
       }
     }
 
-    if (ownerId && !(await repositories.users.getById(ownerId))) {
+    const owner = ownerId
+      ? repositories
+        ? await repositories.users.getById(ownerId)
+        : getAdminUserById(ownerId)
+      : null;
+    if (ownerId && !owner) {
       return errorResponse(400, 'OWNER_NOT_FOUND', 'Team owner user was not found.', requestId);
     }
 
-    await repositories.teams.update(teamId, {
+    const updateInput = {
       ...(name !== undefined ? { name } : {}),
       ...(slug !== undefined ? { slug } : {}),
       ...(ownerId !== undefined ? { ownerId } : {}),
       ...(settings !== undefined ? { settings } : {}),
-    });
-    const team = await withMembers(repositories, teamId);
+    };
+    const team = repositories
+      ? await (async () => {
+          await repositories.teams.update(teamId, updateInput);
+          return withMembers(repositories, teamId);
+        })()
+      : (() => {
+          const updated = updateAdminTeam(teamId, updateInput);
+          return updated ? demoTeamWithMembers(updated) : null;
+        })();
 
     await recordAdminAudit({
-      repositories,
+      ...(repositories ? { repositories } : {}),
       actorId: access.session?.user.id || null,
       teamId,
       entity: 'team',
@@ -193,31 +247,36 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_WRITE_UNAVAILABLE', 'Team deletion requires database mode.', requestId);
-  }
-
   try {
     const { teamId } = await context.params;
-    const repositories = await getRequiredDatabaseRepositories();
-    const before = await withMembers(repositories, teamId);
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const before = repositories
+      ? await withMembers(repositories, teamId)
+      : (() => {
+          const team = getAdminTeamById(teamId);
+          return team ? demoTeamWithMembers(team) : null;
+        })();
     if (!before) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
 
-    const ownedSites = await repositories.sites.list({
-      teamId,
-      status: 'all',
-      limit: 1,
-      offset: 0,
-    });
-    if (ownedSites.pagination.total > 0) {
-      return errorResponse(409, 'TEAM_HAS_SITES', "Move or delete this team's sites before deleting the team.", requestId);
+    if (repositories) {
+      const ownedSites = await repositories.sites.list({
+        teamId,
+        status: 'all',
+        limit: 1,
+        offset: 0,
+      });
+      if (ownedSites.pagination.total > 0) {
+        return errorResponse(409, 'TEAM_HAS_SITES', "Move or delete this team's sites before deleting the team.", requestId);
+      }
+      await repositories.teams.delete(teamId);
+    } else {
+      deleteAdminTeam(teamId);
     }
 
-    await repositories.teams.delete(teamId);
     await recordAdminAudit({
-      repositories,
+      ...(repositories ? { repositories } : {}),
       actorId: access.session?.user.id || null,
       teamId,
       entity: 'team',

@@ -260,6 +260,7 @@ function TeamsPage() {
       throw new Error(blockReason);
     }
     await updateTeamMemberRole(teamId, memberId, role);
+    setLatestInviteDelivery(null);
     await refreshAfterMutation('Team member role updated.');
   }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
 
@@ -275,6 +276,7 @@ function TeamsPage() {
     if (!confirmed) return;
 
     await removeTeamMember(teamId, memberId);
+    setLatestInviteDelivery(null);
     await refreshAfterMutation('Team member removed.');
   }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
 

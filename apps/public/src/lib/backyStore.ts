@@ -225,6 +225,24 @@ interface StoreUserPermissionOverride {
   updatedAt: string;
 }
 
+export interface StoreTeam {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string | null;
+  settings: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreTeamMember {
+  id: string;
+  teamId: string;
+  userId: string;
+  role: StoreUser['role'];
+  joinedAt: string;
+}
+
 interface StoreBlogAuthor {
   id: string;
   siteId: string;
@@ -562,6 +580,33 @@ const USER_LIST: StoreUser[] = [
 ];
 
 const USER_PERMISSION_OVERRIDES: StoreUserPermissionOverride[] = [];
+const TEAM_LIST: StoreTeam[] = [
+  {
+    id: 'demo-team',
+    name: 'Demo team',
+    slug: 'demo-team',
+    ownerId: 'user-admin',
+    settings: { plan: 'free' },
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+];
+const TEAM_MEMBERS: StoreTeamMember[] = [
+  {
+    id: 'team-member-demo-admin',
+    teamId: 'demo-team',
+    userId: 'user-admin',
+    role: 'owner',
+    joinedAt: nowIso,
+  },
+  {
+    id: 'team-member-demo-editor',
+    teamId: 'demo-team',
+    userId: 'user-editor',
+    role: 'editor',
+    joinedAt: nowIso,
+  },
+];
 
 const createRuntimeApiKey = (kind: 'public' | 'admin') => (
   `${kind === 'public' ? 'pk' : 'sk'}_live_${randomUUID().replace(/-/g, '').slice(0, 24)}`
@@ -1835,6 +1880,8 @@ interface AdminContentSnapshot {
   reusableSections?: StoreReusableSection[];
   users?: StoreUser[];
   userPermissionOverrides?: StoreUserPermissionOverride[];
+  teams?: StoreTeam[];
+  teamMembers?: StoreTeamMember[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
   previewTokens?: PreviewToken[];
@@ -1985,6 +2032,14 @@ function refreshPersistedAdminContent() {
       USER_PERMISSION_OVERRIDES.splice(0, USER_PERMISSION_OVERRIDES.length, ...parsed.userPermissionOverrides);
     }
 
+    if (Array.isArray(parsed.teams)) {
+      TEAM_LIST.splice(0, TEAM_LIST.length, ...parsed.teams);
+    }
+
+    if (Array.isArray(parsed.teamMembers)) {
+      TEAM_MEMBERS.splice(0, TEAM_MEMBERS.length, ...parsed.teamMembers);
+    }
+
     if (parsed.settings && typeof parsed.settings === 'object') {
       SETTINGS = {
         ...SETTINGS,
@@ -2034,6 +2089,8 @@ function persistAdminContent() {
           reusableSections: REUSABLE_SECTIONS,
           users: USER_LIST,
           userPermissionOverrides: USER_PERMISSION_OVERRIDES,
+          teams: TEAM_LIST,
+          teamMembers: TEAM_MEMBERS,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
@@ -4621,6 +4678,187 @@ export function deleteAdminUser(userId: string): boolean {
       USER_PERMISSION_OVERRIDES.splice(overrideIndex, 1);
     }
   }
+  persistAdminContent();
+  return true;
+}
+
+const normalizeTeamSlug = (value: unknown, fallback: string): string => {
+  const normalized = normalizeSlugInput(value, fallback);
+  return normalized || fallback;
+};
+
+const normalizeTeamRole = (value: unknown, fallback: StoreTeamMember['role'] = 'viewer'): StoreTeamMember['role'] => (
+  value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : fallback
+);
+
+const normalizeTeamSettings = (value: unknown, fallback: Record<string, unknown> = {}): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : { ...fallback }
+);
+
+export function listAdminTeams(): StoreTeam[] {
+  ensurePersistedAdminContentLoaded();
+  return clone(TEAM_LIST);
+}
+
+export function getAdminTeamById(teamId: string): StoreTeam | undefined {
+  ensurePersistedAdminContentLoaded();
+  const team = TEAM_LIST.find((item) => item.id === teamId);
+  return team ? clone(team) : undefined;
+}
+
+export function getAdminTeamBySlug(slug: string): StoreTeam | undefined {
+  ensurePersistedAdminContentLoaded();
+  const normalizedSlug = normalizeTeamSlug(slug, '');
+  const team = TEAM_LIST.find((item) => item.slug === normalizedSlug);
+  return team ? clone(team) : undefined;
+}
+
+export function createAdminTeam(input: Record<string, unknown>): StoreTeam {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled team';
+  const slug = normalizeTeamSlug(input.slug, normalizeTeamSlug(name, `team-${Date.now().toString(36)}`));
+  const ownerId = typeof input.ownerId === 'string' && input.ownerId.trim() ? input.ownerId.trim() : null;
+  const team: StoreTeam = {
+    id: sanitizeString(input.id) || createRuntimeId('team'),
+    name,
+    slug,
+    ownerId,
+    settings: normalizeTeamSettings(input.settings, { plan: 'free' }),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  TEAM_LIST.unshift(team);
+  if (ownerId) {
+    TEAM_MEMBERS.push({
+      id: createRuntimeId('team_member'),
+      teamId: team.id,
+      userId: ownerId,
+      role: 'owner',
+      joinedAt: now,
+    });
+  }
+  persistAdminContent();
+  return clone(team);
+}
+
+export function updateAdminTeam(teamId: string, input: Record<string, unknown>): StoreTeam | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = TEAM_LIST.findIndex((team) => team.id === teamId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = TEAM_LIST[index];
+  const updated: StoreTeam = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeTeamSlug(input.slug, current.slug),
+    ownerId: input.ownerId === undefined
+      ? current.ownerId
+      : input.ownerId === null
+        ? null
+        : sanitizeString(input.ownerId) || current.ownerId,
+    settings: input.settings === undefined
+      ? current.settings
+      : normalizeTeamSettings(input.settings, current.settings),
+    updatedAt: new Date().toISOString(),
+  };
+
+  TEAM_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminTeam(teamId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = TEAM_LIST.findIndex((team) => team.id === teamId);
+  if (index === -1) {
+    return false;
+  }
+
+  TEAM_LIST.splice(index, 1);
+  for (let memberIndex = TEAM_MEMBERS.length - 1; memberIndex >= 0; memberIndex -= 1) {
+    if (TEAM_MEMBERS[memberIndex].teamId === teamId) {
+      TEAM_MEMBERS.splice(memberIndex, 1);
+    }
+  }
+  persistAdminContent();
+  return true;
+}
+
+export function listAdminTeamMembers(teamId: string): StoreTeamMember[] {
+  ensurePersistedAdminContentLoaded();
+  return clone(TEAM_MEMBERS.filter((member) => member.teamId === teamId));
+}
+
+export function addAdminTeamMember(
+  input: Record<string, unknown>,
+  options: { persist?: boolean } = {},
+): StoreTeamMember {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const teamId = sanitizeString(input.teamId);
+  const userId = sanitizeString(input.userId);
+  const existingIndex = TEAM_MEMBERS.findIndex((member) => member.teamId === teamId && member.userId === userId);
+  if (existingIndex !== -1) {
+    TEAM_MEMBERS[existingIndex] = {
+      ...TEAM_MEMBERS[existingIndex],
+      role: normalizeTeamRole(input.role, TEAM_MEMBERS[existingIndex]?.role || 'viewer'),
+    };
+    if (options.persist !== false) persistAdminContent();
+    return clone(TEAM_MEMBERS[existingIndex]);
+  }
+
+  const member: StoreTeamMember = {
+    id: sanitizeString(input.id) || createRuntimeId('team_member'),
+    teamId,
+    userId,
+    role: normalizeTeamRole(input.role, 'viewer'),
+    joinedAt: now,
+  };
+
+  TEAM_MEMBERS.push(member);
+  if (options.persist !== false) persistAdminContent();
+  return clone(member);
+}
+
+export function updateAdminTeamMemberRole(
+  teamId: string,
+  memberId: string,
+  role: StoreTeamMember['role'],
+): StoreTeamMember | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = TEAM_MEMBERS.findIndex((member) => member.teamId === teamId && member.id === memberId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  TEAM_MEMBERS[index] = {
+    ...TEAM_MEMBERS[index],
+    role: normalizeTeamRole(role, TEAM_MEMBERS[index].role),
+  };
+  persistAdminContent();
+  return clone(TEAM_MEMBERS[index]);
+}
+
+export function removeAdminTeamMember(teamId: string, memberId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = TEAM_MEMBERS.findIndex((member) => member.teamId === teamId && member.id === memberId);
+  if (index === -1) {
+    return false;
+  }
+
+  TEAM_MEMBERS.splice(index, 1);
   persistAdminContent();
   return true;
 }

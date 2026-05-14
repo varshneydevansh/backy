@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import {
+  getAdminTeamById,
+  getAdminUserById,
+  listAdminTeamMembers,
+  removeAdminTeamMember,
+  updateAdminTeamMemberRole,
+  type StoreTeamMember,
+} from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -60,6 +68,10 @@ const getMember = async (
   return members.items.find((member) => member.id === memberId) || null;
 };
 
+const getDemoMember = (teamId: string, memberId: string) => (
+  listAdminTeamMembers(teamId).find((member) => member.id === memberId) || null
+);
+
 const enrichMember = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   member: NonNullable<Awaited<ReturnType<typeof getMember>>>,
@@ -73,6 +85,16 @@ const enrichMember = async (
   };
 };
 
+const enrichDemoMember = (member: StoreTeamMember) => {
+  const user = getAdminUserById(member.userId);
+  return {
+    ...member,
+    email: user?.email || '',
+    name: user?.fullName || user?.email || member.userId,
+    avatarUrl: null,
+  };
+};
+
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
@@ -80,19 +102,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_WRITE_UNAVAILABLE', 'Team member changes require database mode.', requestId);
-  }
-
   try {
     const { teamId, memberId } = await context.params;
-    const repositories = await getRequiredDatabaseRepositories();
-    const team = await repositories.teams.getById(teamId);
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const team = repositories ? await repositories.teams.getById(teamId) : getAdminTeamById(teamId);
     if (!team) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
 
-    const before = await getMember(repositories, teamId, memberId);
+    const before = repositories ? await getMember(repositories, teamId, memberId) : getDemoMember(teamId, memberId);
     if (!before) {
       return errorResponse(404, 'TEAM_MEMBER_NOT_FOUND', 'Team member not found.', requestId);
     }
@@ -109,11 +127,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const member = (await repositories.teams.updateMember(teamId, memberId, { role })).item;
-    const responseMember = await enrichMember(repositories, member);
+    const member = repositories
+      ? (await repositories.teams.updateMember(teamId, memberId, { role })).item
+      : updateAdminTeamMemberRole(teamId, memberId, role);
+    if (!member) {
+      return errorResponse(404, 'TEAM_MEMBER_NOT_FOUND', 'Team member not found.', requestId);
+    }
+    const responseMember = repositories ? await enrichMember(repositories, member) : enrichDemoMember(member);
 
     await recordAdminAudit({
-      repositories,
+      ...(repositories ? { repositories } : {}),
       actorId: access.session?.user.id || null,
       teamId,
       entity: 'teamMember',
@@ -149,26 +172,26 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_WRITE_UNAVAILABLE', 'Team member changes require database mode.', requestId);
-  }
-
   try {
     const { teamId, memberId } = await context.params;
-    const repositories = await getRequiredDatabaseRepositories();
-    const team = await repositories.teams.getById(teamId);
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const team = repositories ? await repositories.teams.getById(teamId) : getAdminTeamById(teamId);
     if (!team) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
 
-    const before = await getMember(repositories, teamId, memberId);
+    const before = repositories ? await getMember(repositories, teamId, memberId) : getDemoMember(teamId, memberId);
     if (!before) {
       return errorResponse(404, 'TEAM_MEMBER_NOT_FOUND', 'Team member not found.', requestId);
     }
 
-    await repositories.teams.removeMember(teamId, memberId);
+    if (repositories) {
+      await repositories.teams.removeMember(teamId, memberId);
+    } else {
+      removeAdminTeamMember(teamId, memberId);
+    }
     await recordAdminAudit({
-      repositories,
+      ...(repositories ? { repositories } : {}),
       actorId: access.session?.user.id || null,
       teamId,
       entity: 'teamMember',

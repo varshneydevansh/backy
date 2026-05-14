@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { getSites } from '@/lib/backyStore';
+import {
+  createAdminTeam,
+  getAdminTeamBySlug,
+  getAdminUserById,
+  listAdminTeamMembers,
+  listAdminTeams,
+  type StoreTeam,
+} from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -47,27 +54,22 @@ const normalizeSettings = (value: unknown) => (
     : {}
 );
 
-const demoTeamsFromSites = () => {
-  const teamIds = Array.from(new Set(
-    getSites({ includeUnpublished: true })
-      .map((site) => {
-        const candidate = site as typeof site & { teamId?: unknown };
-        return typeof candidate.teamId === 'string' ? candidate.teamId.trim() : '';
-      })
-      .filter(Boolean),
-  ));
+const demoTeamWithMembers = (team: StoreTeam) => {
+  const members = listAdminTeamMembers(team.id).map((member) => {
+    const user = getAdminUserById(member.userId);
+    return {
+      ...member,
+      email: user?.email || '',
+      name: user?.fullName || user?.email || member.userId,
+      avatarUrl: null,
+    };
+  });
 
-  const ids = teamIds.length > 0 ? teamIds : ['demo-team'];
-  return ids.map((teamId) => ({
-    id: teamId,
-    name: teamId === 'demo-team' ? 'Demo team' : teamId,
-    slug: normalizeSlug(teamId) || teamId,
-    ownerId: 'user-admin',
-    settings: {},
-    createdAt: new Date(0).toISOString(),
-    members: [],
-    mode: 'demo',
-  }));
+  return {
+    ...team,
+    members,
+    plan: team.settings?.plan || 'free',
+  };
 };
 
 const withMembers = async (
@@ -103,7 +105,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     if (shouldUseDemoStoreFallback()) {
-      const teams = demoTeamsFromSites();
+      const teams = listAdminTeams().map(demoTeamWithMembers);
       return NextResponse.json({
         success: true,
         requestId,
@@ -149,12 +151,7 @@ export async function POST(request: NextRequest) {
     return access;
   }
 
-  if (shouldUseDemoStoreFallback()) {
-    return errorResponse(501, 'DEMO_TEAM_WRITE_UNAVAILABLE', 'Team creation requires database mode.', requestId);
-  }
-
   try {
-    const repositories = await getRequiredDatabaseRepositories();
     const body = await parseJsonBody(request);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const slug = normalizeSlug(body.slug) || slugFromName(name);
@@ -167,6 +164,41 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Team name is required.', requestId);
     }
 
+    if (shouldUseDemoStoreFallback()) {
+      if (getAdminTeamBySlug(slug)) {
+        return errorResponse(409, 'TEAM_SLUG_CONFLICT', 'A team with this slug already exists.', requestId);
+      }
+
+      if (ownerId && !getAdminUserById(ownerId)) {
+        return errorResponse(400, 'OWNER_NOT_FOUND', 'Team owner user was not found.', requestId);
+      }
+
+      const team = createAdminTeam({ name, slug, ownerId, settings });
+      const responseTeam = demoTeamWithMembers(team);
+
+      await recordAdminAudit({
+        actorId: access.session?.user.id || null,
+        teamId: team.id,
+        entity: 'team',
+        entityId: team.id,
+        action: 'create',
+        after: responseTeam,
+        requestId,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            team: responseTeam,
+          },
+        },
+        { status: 201 },
+      );
+    }
+
+    const repositories = await getRequiredDatabaseRepositories();
     if (await repositories.teams.getBySlug(slug)) {
       return errorResponse(409, 'TEAM_SLUG_CONFLICT', 'A team with this slug already exists.', requestId);
     }

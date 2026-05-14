@@ -254,6 +254,7 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             Email Address
                         </label>
                         <input
+                            data-testid="teams-invite-email-input"
                             type="email"
                             style={styles.input}
                             value={email}
@@ -268,6 +269,7 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             Role
                         </label>
                         <select
+                            data-testid="teams-invite-role-select"
                             style={{ ...styles.select, width: '100%' }}
                             value={role}
                             onChange={(e) => setRole(e.target.value as TeamRole)}
@@ -293,6 +295,7 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             Cancel
                         </button>
                         <button
+                            data-testid="teams-invite-submit"
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             disabled={isSubmitting}
@@ -344,6 +347,7 @@ function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
                             Team Name
                         </label>
                         <input
+                            data-testid="teams-create-name-input"
                             type="text"
                             style={styles.input}
                             value={name}
@@ -368,6 +372,7 @@ function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
                             Cancel
                         </button>
                         <button
+                            data-testid="teams-create-submit"
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             disabled={isSubmitting}
@@ -419,6 +424,7 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
                             Team Name
                         </label>
                         <input
+                            data-testid="teams-edit-name-input"
                             type="text"
                             style={styles.input}
                             value={name}
@@ -432,6 +438,7 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
                             Slug
                         </label>
                         <input
+                            data-testid="teams-edit-slug-input"
                             type="text"
                             style={styles.input}
                             value={slug}
@@ -455,6 +462,7 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
                             Cancel
                         </button>
                         <button
+                            data-testid="teams-edit-submit"
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             disabled={isSubmitting}
@@ -624,6 +632,7 @@ export function TeamManagement({
             <div style={styles.header}>
                 <h1 style={styles.title}>Team Management</h1>
                 <button
+                    data-testid="teams-create-button"
                     style={{ ...styles.button, ...styles.primaryButton }}
                     onClick={() => setShowCreateModal(true)}
                     disabled={mutationsDisabled}
@@ -639,6 +648,7 @@ export function TeamManagement({
                     Current Team
                 </label>
                 <select
+                    data-testid="teams-current-select"
                     style={{ ...styles.select, width: '300px', padding: '10px 12px' }}
                     value={currentTeamId}
                     onChange={(e) => onSwitchTeam(e.target.value)}
@@ -699,6 +709,7 @@ export function TeamManagement({
                             </span>
                         )}
                         <button
+                            data-testid="teams-edit-button"
                             style={{ ...styles.button, ...styles.secondaryButton }}
                             onClick={() => setEditTeam(currentTeam)}
                             disabled={mutationsDisabled}
@@ -707,6 +718,7 @@ export function TeamManagement({
                             Edit
                         </button>
                         <button
+                            data-testid="teams-delete-button"
                             style={{ ...styles.button, ...styles.dangerButton }}
                             onClick={() => handleDelete(currentTeam)}
                             disabled={mutationsDisabled}
@@ -729,6 +741,7 @@ export function TeamManagement({
                             Team Members ({currentTeam.members.length})
                         </h3>
                         <button
+                            data-testid="teams-invite-button"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             onClick={() => {
                                 setInviteTeamId(currentTeam.id);
@@ -777,6 +790,7 @@ export function TeamManagement({
                             {member.role !== 'owner' && (
                                 <>
                                     <select
+                                        data-testid={`teams-member-role-${member.id}`}
                                         style={styles.select}
                                         value={member.role}
                                         onChange={(e) => handleUpdateMemberRole(currentTeam.id, member.id, e.target.value as TeamRole)}
@@ -788,6 +802,7 @@ export function TeamManagement({
                                         <option value="admin">Admin</option>
                                     </select>
                                     <button
+                                        data-testid={`teams-member-remove-${member.id}`}
                                         style={{ ...styles.button, ...styles.dangerButton }}
                                         onClick={() => handleRemoveMember(currentTeam.id, member.id)}
                                         disabled={removeDisabled}
