@@ -6605,6 +6605,15 @@ function CollectionPreviewLink({ label, value }: { label: string; value: string 
   );
 }
 
+function collectionRecordInputType(fieldType: CollectionFieldType) {
+  if (fieldType === 'number') return 'number';
+  if (fieldType === 'date') return 'date';
+  if (fieldType === 'datetime') return 'datetime-local';
+  if (fieldType === 'email') return 'email';
+  if (fieldType === 'url') return 'url';
+  return 'text';
+}
+
 function CollectionRecordFieldEditor({
   field,
   value,
@@ -6700,7 +6709,8 @@ function CollectionRecordFieldEditor({
         </div>
       ) : (
         <input
-          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
+          type={collectionRecordInputType(field.type)}
+          data-testid={`collections-record-field-${field.key}`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={inputClassName}
