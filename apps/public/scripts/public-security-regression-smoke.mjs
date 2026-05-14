@@ -516,6 +516,9 @@ assertIncludes(adminUsersNewUiRoute, 'notice: `${created.user.fullName} was crea
 const adminUserDetailUiRoute = read('apps/admin/src/routes/users.$userId.tsx');
 assertIncludes(adminUserDetailUiRoute, 'notice: `${saved.fullName} was saved.`', 'admin user edit page must carry a save success notice back to the users list');
 assertIncludes(adminUserDetailUiRoute, 'notice: `${user.fullName} was removed.`', 'admin user edit page must carry a delete success notice back to the users list');
+assertIncludes(adminUserDetailUiRoute, 'const [isLoadingUser, setIsLoadingUser] = useState(!user)', 'admin user detail must start loading when deep-linked user is not in the local store');
+assertIncludes(adminUserDetailUiRoute, 'if (!user && (isLoadingUser || isCurrentAdminPermissionMatrixPending))', 'admin user detail must not render not-found before backend lookup finishes');
+assertIncludes(adminUserDetailUiRoute, 'title="Loading user"', 'admin user detail must show a loading state while resolving direct links');
 
 const adminPasswordResetTokenRoute = read('apps/public/src/app/api/admin/users/[userId]/password-reset/route.ts');
 assertIncludes(adminPasswordResetTokenRoute, '@/lib/admin-auth/emailPolicy', 'admin reset-token route must import invite-only policy');

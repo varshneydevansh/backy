@@ -184,7 +184,7 @@ function EditUserPage() {
   const user = users.find((item) => item.id === userId);
   const userDetailUrl = useMemo(() => `${getAdminApiBase()}/users/${userId}`, [userId]);
 
-  const [isLoadingUser, setIsLoadingUser] = useState(Boolean(user));
+  const [isLoadingUser, setIsLoadingUser] = useState(!user);
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isUserAccessDenied, setIsUserAccessDenied] = useState(false);
@@ -253,6 +253,12 @@ function EditUserPage() {
   const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.delete', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'activity.export', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const isUserDetailBusy = isLoadingUser || isLoading || isCurrentAdminPermissionMatrixPending;
+
+  useEffect(() => {
+    setIsLoadingUser(!user);
+    setIsUserAccessDenied(false);
+    setNotice(null);
+  }, [userId]);
 
   useEffect(() => {
     if (user) {
@@ -581,6 +587,24 @@ function EditUserPage() {
         </button>
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {notice || currentAdminPermissionError || viewPermissionTitle || 'Ask an owner or admin with users.view access to open this page.'}
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (!user && (isLoadingUser || isCurrentAdminPermissionMatrixPending)) {
+    return (
+      <PageShell title="Loading user" description="Checking backend user details before opening this account.">
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/users' })}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to users
+        </button>
+        <div className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          Loading user record and permission state...
         </div>
       </PageShell>
     );
