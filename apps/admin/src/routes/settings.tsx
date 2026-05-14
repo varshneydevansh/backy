@@ -4338,6 +4338,7 @@ function SecuritySettings({
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
   const [rotatingKey, setRotatingKey] = useState<'all' | 'public' | 'admin' | null>(null);
+  const [pendingRotateKey, setPendingRotateKey] = useState<'all' | 'public' | 'admin' | null>(null);
   const policy: Required<AuthSettingsConfig> = {
     ...DEFAULT_AUTH_SETTINGS,
     ...(authSettings || {}),
@@ -4373,10 +4374,24 @@ function SecuritySettings({
     setRotatingKey(scope);
     try {
       await onRegenerateKeys(scope);
+      setPendingRotateKey(null);
     } finally {
       setRotatingKey(null);
     }
   };
+
+  const requestRotateKey = (scope: 'all' | 'public' | 'admin') => {
+    if (!canManageApiKeys || rotatingKey !== null) return;
+    setPendingRotateKey(scope);
+  };
+
+  const pendingRotateLabel = pendingRotateKey === 'all'
+    ? 'both API keys'
+    : pendingRotateKey === 'public'
+      ? 'the public API key'
+      : pendingRotateKey === 'admin'
+        ? 'the admin API key'
+        : '';
 
   return (
     <div className="space-y-6">
@@ -4523,9 +4538,10 @@ function SecuritySettings({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => void rotateKey(item.scope)}
+                  onClick={() => requestRotateKey(item.scope)}
                   disabled={!canManageApiKeys || rotatingKey !== null}
                   title={manageKeysPermissionTitle}
+                  data-testid={`settings-api-key-regenerate-${item.scope}`}
                 >
                   {rotatingKey === item.scope ? 'Regenerating...' : `Regenerate ${item.scope}`}
                 </Button>
@@ -4544,9 +4560,10 @@ function SecuritySettings({
             </div>
             <Button
               variant="outline"
-              onClick={() => void rotateKey('all')}
+              onClick={() => requestRotateKey('all')}
               disabled={!canManageApiKeys || rotatingKey !== null}
               title={manageKeysPermissionTitle}
+              data-testid="settings-api-key-regenerate-all"
             >
               {rotatingKey === 'all' ? 'Regenerating...' : 'Regenerate all keys'}
             </Button>
@@ -4558,6 +4575,36 @@ function SecuritySettings({
           ) : null}
         </div>
       </div>
+
+      {pendingRotateKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="settings-api-key-rotation-confirm-dialog">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-foreground">Regenerate {pendingRotateLabel}?</h3>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Existing integrations using {pendingRotateLabel} will stop working until they are updated with the new value.
+              This cannot be undone.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPendingRotateKey(null)}
+                disabled={rotatingKey !== null}
+                data-testid="settings-api-key-rotation-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void rotateKey(pendingRotateKey)}
+                disabled={rotatingKey !== null}
+                data-testid="settings-api-key-rotation-confirm"
+              >
+                {rotatingKey === pendingRotateKey ? 'Regenerating...' : 'Regenerate key'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AuditTrail
         logs={auditLogs}

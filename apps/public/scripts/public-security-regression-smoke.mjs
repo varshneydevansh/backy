@@ -690,6 +690,9 @@ const settingsRoute = read('apps/admin/src/routes/settings.tsx');
 assertIncludes(settingsRoute, 'env:STRIPE_WEBHOOK_SECRET', 'settings UI must show env-reference webhook secret guidance');
 assertIncludes(settingsRoute, 'Store the provider signing secret in the runtime environment', 'settings UI must explain webhook secret references');
 assertExcludes(settingsRoute, 'placeholder="stripe_whsec_live"', 'settings UI must not encourage storing raw webhook secrets');
+assertIncludes(settingsRoute, 'pendingRotateKey', 'settings UI must require confirmation before API key rotation');
+assertIncludes(settingsRoute, 'settings-api-key-rotation-confirm-dialog', 'settings UI must render an API key rotation confirmation dialog');
+assertIncludes(settingsRoute, 'Existing integrations using', 'settings UI must warn that key rotation breaks existing integrations');
 
 const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');
