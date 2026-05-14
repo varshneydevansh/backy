@@ -1308,30 +1308,54 @@ function OrdersRoute() {
     setError(null);
     setNotice(null);
 
+    const actionLabel = action === 'paid'
+      ? 'marked paid'
+      : action === 'processing'
+        ? 'moved to processing'
+        : action === 'fulfilled'
+          ? 'fulfilled'
+          : 'marked cancelled in Backy';
+
     try {
-      const updatedOrders = await Promise.all(selectedOrders.map((order) => (
-        updateCollectionRecord(activeSiteId, ordersCollection.id, order.id, {
-          status: order.status,
-          values: {
-            ...order.values,
-            ...toOrderValueUpdates(actionUpdates(order)),
-          },
-        })
-      )));
+      const updateResults = await Promise.all(selectedOrders.map(async (order) => {
+        try {
+          const updated = await updateCollectionRecord(activeSiteId, ordersCollection.id, order.id, {
+            status: order.status,
+            values: {
+              ...order.values,
+              ...toOrderValueUpdates(actionUpdates(order)),
+            },
+          });
+          return { ok: true as const, order, updated };
+        } catch (error) {
+          return { ok: false as const, order, error };
+        }
+      }));
+
+      const updatedOrders = updateResults
+        .filter((result): result is Extract<typeof result, { ok: true }> => result.ok)
+        .map((result) => result.updated);
+      const failedResults = updateResults.filter((result): result is Extract<typeof result, { ok: false }> => !result.ok);
+
+      if (updatedOrders.length === 0) {
+        const firstError = failedResults[0]?.error;
+        throw firstError instanceof Error ? firstError : new Error('Unable to update selected orders');
+      }
+
       const updatedById = new Map(updatedOrders.map((order) => [order.id, order]));
       setOrders((current) => current.map((order) => updatedById.get(order.id) || order));
       const updatedSelectedOrder = selectedOrderId ? updatedById.get(selectedOrderId) : null;
       if (updatedSelectedOrder) {
         setFormState(orderToForm(updatedSelectedOrder));
       }
-      const actionLabel = action === 'paid'
-        ? 'marked paid'
-        : action === 'processing'
-          ? 'moved to processing'
-          : action === 'fulfilled'
-            ? 'fulfilled'
-            : 'marked cancelled in Backy';
       setNotice(`${updatedOrders.length} selected order${updatedOrders.length === 1 ? '' : 's'} ${actionLabel}.`);
+      if (failedResults.length > 0) {
+        const failedOrderNumbers = failedResults
+          .map((result) => String(readOrderValue(result.order.values, 'ordernumber', result.order.slug) || result.order.slug || result.order.id))
+          .slice(0, 5);
+        const remainingFailures = Math.max(0, failedResults.length - failedOrderNumbers.length);
+        setError(`${failedResults.length} selected order${failedResults.length === 1 ? '' : 's'} could not be updated: ${failedOrderNumbers.join(', ')}${remainingFailures ? `, +${remainingFailures} more` : ''}.`);
+      }
     } catch (bulkError) {
       setError(bulkError instanceof Error ? bulkError.message : 'Unable to update selected orders');
     } finally {

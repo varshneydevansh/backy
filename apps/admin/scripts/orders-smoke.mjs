@@ -24,6 +24,14 @@ const assert = (condition, message) => {
   }
 };
 
+const assertOrdersBulkWorkflowHandlesPartialResults = () => {
+  const source = fs.readFileSync(new URL('../src/routes/orders.tsx', import.meta.url), 'utf8');
+  assert(source.includes('failedResults'), 'Orders bulk workflow must collect failed per-order updates');
+  assert(source.includes('updatedOrders.length === 0'), 'Orders bulk workflow must distinguish total failure from partial success');
+  assert(source.includes('could not be updated'), 'Orders bulk workflow must report partial failures to admins');
+  assert(!source.includes('const updatedOrders = await Promise.all(selectedOrders.map((order) => ('), 'Orders bulk workflow must not collapse all selected updates into one generic Promise.all failure');
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -913,6 +921,7 @@ const main = async () => {
   let collectionId;
   let orderRecordId;
   let importedOrderRecordId;
+  assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
   const suffix = Date.now().toString(36);
