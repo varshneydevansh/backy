@@ -284,6 +284,31 @@ const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined
   };
 };
 
+const normalizeNotificationIntegrations = (value: unknown): BackyJsonObject | undefined => {
+  const notifications = parseJsonObject(value);
+  if (!notifications) {
+    return undefined;
+  }
+
+  const email = parseJsonObject(notifications.email) || {};
+  const inApp = parseJsonObject(notifications.inApp) || {};
+
+  return {
+    ...notifications,
+    email: {
+      ...email,
+      newUser: false,
+      pagePublished: false,
+      systemUpdates: false,
+    },
+    inApp: {
+      ...inApp,
+      mentions: false,
+    },
+    digestFrequency: notifications.digestFrequency === 'off' ? 'off' : 'instant',
+  };
+};
+
 const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
   if (!input) {
@@ -298,9 +323,11 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   const paymentProvider = stringValue(commerce.paymentProvider);
   const providerMode = stringValue(commerce.providerMode);
   const reconciliationMode = stringValue(commerce.reconciliationMode);
+  const notifications = normalizeNotificationIntegrations(input.notifications);
 
   return {
     ...input,
+    ...(notifications ? { notifications } : {}),
     supabase: {
       projectUrl: stringValue(supabase.projectUrl),
       projectRef: stringValue(supabase.projectRef) || inferSupabaseProjectRef(stringValue(supabase.projectUrl)),

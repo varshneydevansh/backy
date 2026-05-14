@@ -594,11 +594,49 @@ function normalizeAuthSettings(settings?: SiteSettingsInput['auth']): SiteSettin
   };
 }
 
+function normalizeNotificationSettings(
+  settings?: NonNullable<SiteSettingsInput['integrations']>['notifications'],
+): NonNullable<SiteSettingsInput['integrations']>['notifications'] | undefined {
+  if (!settings) {
+    return settings;
+  }
+
+  return {
+    ...settings,
+    email: {
+      ...(settings.email || {}),
+      newUser: false,
+      pagePublished: false,
+      systemUpdates: false,
+    },
+    inApp: {
+      ...(settings.inApp || {}),
+      mentions: false,
+    },
+    digestFrequency: settings.digestFrequency === 'off' ? 'off' : 'instant',
+  };
+}
+
+function normalizeSettingsIntegrations(
+  integrations?: SiteSettingsInput['integrations'],
+): NonNullable<SiteSettingsInput['integrations']> {
+  if (!integrations) {
+    return {};
+  }
+
+  return {
+    ...integrations,
+    ...(integrations.notifications
+      ? { notifications: normalizeNotificationSettings(integrations.notifications) }
+      : {}),
+  };
+}
+
 function createSettingsDraftSnapshot(settings: Pick<SiteSettingsInput, 'deliveryMode' | 'auth' | 'integrations'>): SettingsDraftSnapshot {
   return {
     deliveryMode: settings.deliveryMode,
     auth: normalizeAuthSettings(settings.auth),
-    integrations: settings.integrations || {},
+    integrations: normalizeSettingsIntegrations(settings.integrations),
   };
 }
 
@@ -799,7 +837,7 @@ function SettingsPage() {
         ? {
             deliveryMode,
             auth: normalizeAuthSettings(authSettings),
-            integrations,
+            integrations: normalizeSettingsIntegrations(integrations),
           }
         : {
             integrations: {

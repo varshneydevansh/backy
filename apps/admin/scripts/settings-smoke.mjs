@@ -885,11 +885,53 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
   assert(settings.integrations?.notifications?.email?.comments === false, 'Comment notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.email?.formSubmission === true, 'Form notification email toggle was not persisted');
+  assert(settings.integrations?.notifications?.email?.newUser !== true, 'Planned new-user notification email should not persist as enabled');
+  assert(settings.integrations?.notifications?.email?.pagePublished !== true, 'Planned page-published notification email should not persist as enabled');
   assert(settings.integrations?.notifications?.inApp?.comments === false, 'Notification in-app toggle was not persisted');
+  assert(settings.integrations?.notifications?.inApp?.mentions !== true, 'Planned mention notification should not persist as enabled');
+  assert(settings.integrations?.notifications?.digestFrequency === 'instant', 'Planned digest frequency should normalize to instant');
   assert(settings.integrations?.notifications?.webhookUrl === `https://hooks.example.com/${suffix}`, 'Notification webhook was not persisted');
   assert(settings.auth?.requireTwoFactor !== true, 'Require 2FA should not persist as enabled without login enforcement');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
   assert(settings.auth?.minPasswordLength === 12, 'Password length was not persisted');
+};
+
+const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) => {
+  await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        notifications: {
+          ...(settings.integrations?.notifications || {}),
+          email: {
+            ...(settings.integrations?.notifications?.email || {}),
+            newUser: true,
+            pagePublished: true,
+            systemUpdates: true,
+          },
+          inApp: {
+            ...(settings.integrations?.notifications?.inApp || {}),
+            mentions: true,
+          },
+          digestFrequency: 'weekly',
+        },
+      },
+    }),
+  });
+
+  const normalized = await readSettings();
+  assert(normalized.integrations?.notifications?.email?.newUser === false, 'Settings API should normalize planned new-user email notifications');
+  assert(normalized.integrations?.notifications?.email?.pagePublished === false, 'Settings API should normalize planned page-published email notifications');
+  assert(normalized.integrations?.notifications?.email?.systemUpdates === false, 'Settings API should normalize planned system update email notifications');
+  assert(normalized.integrations?.notifications?.inApp?.mentions === false, 'Settings API should normalize planned mention notifications');
+  assert(normalized.integrations?.notifications?.digestFrequency === 'instant', 'Settings API should normalize planned digest frequencies');
+
+  return {
+    email: normalized.integrations?.notifications?.email,
+    inApp: normalized.integrations?.notifications?.inApp,
+    digestFrequency: normalized.integrations?.notifications?.digestFrequency,
+  };
 };
 
 const launchChrome = () => {
@@ -981,6 +1023,7 @@ const main = async () => {
     );
     const persisted = await readSettings();
     assertPersistedSettings(persisted, suffix);
+    const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1007,6 +1050,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}/settings`,
       ui,
       ownerRotation,
+      apiNormalization,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,
