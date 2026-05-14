@@ -1967,6 +1967,9 @@ function EditBlogPostPage() {
                                     hideNavigation={true}
                                     hideSettings={true}
                                     hideSave={true}
+                                    savePersistence="parent"
+                                    saveOwnerLabel="post form"
+                                    saveOwnerVersion={post.updatedAt}
                                     canView={canViewBlog}
                                     canEdit={canEditBlog}
                                     canPublish={canPublishBlog}

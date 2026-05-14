@@ -333,6 +333,7 @@ const waitForEditor = async (client, postId) => {
       const grid = document.querySelector('[data-testid="blog-editor-workspace-grid"]');
       const canvasShell = document.querySelector('[data-testid="blog-editor-canvas-shell"]');
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
+      const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
       const rect = canvasShell?.getBoundingClientRect();
       return {
         ready: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
@@ -356,6 +357,8 @@ const waitForEditor = async (client, postId) => {
             return '';
           }
         })(),
+        savePersistence: saveStatus?.getAttribute('data-save-persistence') || '',
+        saveStatusText: saveStatus?.textContent || '',
         focusButton: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Focus canvas'),
         width: rect?.width || 0,
         height: rect?.height || 0,
@@ -379,6 +382,9 @@ const waitForEditor = async (client, postId) => {
       state.templatePanel &&
       state.templateId === FRONTEND_BLOG_TEMPLATE_ID &&
       state.handoffTemplateId === FRONTEND_BLOG_TEMPLATE_ID &&
+      state.savePersistence === 'parent' &&
+      state.saveStatusText.includes('Post save') &&
+      !state.saveStatusText.includes('Saved') &&
       state.focusButton &&
       state.width >= 900 &&
       state.height >= 760

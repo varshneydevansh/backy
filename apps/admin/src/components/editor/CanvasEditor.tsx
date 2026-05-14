@@ -129,6 +129,7 @@ type CanvasDistribution = 'horizontal' | 'vertical';
 type CanvasZOrderAction = 'front' | 'forward' | 'backward' | 'back';
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorSaveMode = 'manual' | 'autosave';
+type EditorSavePersistence = 'editor' | 'parent';
 type ReusableSectionInstanceMeta = {
   mode: 'synced' | 'detached';
   sectionId: string;
@@ -736,6 +737,9 @@ export interface CanvasEditorProps {
   hideNavigation?: boolean;
   hideSettings?: boolean;
   hideSave?: boolean;
+  savePersistence?: EditorSavePersistence;
+  saveOwnerLabel?: string;
+  saveOwnerVersion?: string | number | null;
   initialSize?: CanvasSize;
   mediaContext?: MediaContext;
   onChange?: (
@@ -864,6 +868,9 @@ export function CanvasEditor({
   hideNavigation,
   hideSettings,
   hideSave,
+  savePersistence = 'editor',
+  saveOwnerLabel,
+  saveOwnerVersion,
   initialSize,
   mediaContext,
   onChange,
@@ -978,6 +985,9 @@ export function CanvasEditor({
   const [lastSaveError, setLastSaveError] = useState<string | null>(null);
   const [pendingChangeCount, setPendingChangeCount] = useState(0);
   const [autosaveDueAt, setAutosaveDueAt] = useState<Date | null>(null);
+  const isParentPersistence = savePersistence === 'parent';
+  const normalizedSaveOwnerLabel = saveOwnerLabel || (mode === 'blog' ? 'post form' : 'parent form');
+  const saveOwnerVersionRef = useRef<string | number | null | undefined>(saveOwnerVersion);
   const isCanvasMutationDisabled = isSaving || isPreview || !canEdit;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
@@ -1052,6 +1062,22 @@ export function CanvasEditor({
   const saveStatusMeta = useMemo(() => {
     const pendingLabel = formatChangeCount(pendingChangeCount);
 
+    if (isParentPersistence) {
+      if (hasUnsavedChanges || saveStatus === 'dirty') {
+        return {
+          label: 'Unsaved',
+          detail: `Use the ${normalizedSaveOwnerLabel} save action to persist ${pendingLabel}.`,
+          className: 'border-amber-200 bg-amber-50 text-amber-700',
+        };
+      }
+
+      return {
+        label: mode === 'blog' ? 'Post save' : 'Parent save',
+        detail: `Canvas persistence is handled by the ${normalizedSaveOwnerLabel}.`,
+        className: 'border-slate-200 bg-slate-50 text-slate-700',
+      };
+    }
+
     if (isSaving && saveStatus !== 'autosaving') {
       return {
         label: 'Saving',
@@ -1101,7 +1127,7 @@ export function CanvasEditor({
       detail: `${savedTime}${modeLabel ? ` • ${modeLabel}` : ''}`,
       className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     };
-  }, [autosaveDueAt, hasUnsavedChanges, isSaving, lastSaveError, lastSaveMode, lastSavedAt, pendingChangeCount, saveStatus]);
+  }, [autosaveDueAt, hasUnsavedChanges, isParentPersistence, isSaving, lastSaveError, lastSaveMode, lastSavedAt, mode, normalizedSaveOwnerLabel, pendingChangeCount, saveStatus]);
 
   const clampCanvasZoom = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -1733,6 +1759,21 @@ export function CanvasEditor({
   useEffect(() => {
     onUnsavedChangesChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
+  useEffect(() => {
+    if (!isParentPersistence || saveOwnerVersionRef.current === saveOwnerVersion) {
+      return;
+    }
+
+    saveOwnerVersionRef.current = saveOwnerVersion;
+    setHasUnsavedChanges(false);
+    setSaveStatus('saved');
+    setLastSavedAt(null);
+    setLastSaveMode(null);
+    setLastSaveError(null);
+    setPendingChangeCount(0);
+    setAutosaveDueAt(null);
+  }, [isParentPersistence, saveOwnerVersion]);
 
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => !!findElementById(elements, id)));
@@ -3604,6 +3645,14 @@ export function CanvasEditor({
     if (isSaving) {
       return false;
     }
+    if (isParentPersistence) {
+      setAutosaveDueAt(null);
+      setSaveStatus(hasUnsavedChanges ? 'dirty' : 'saved');
+      if (!silent) {
+        setEditorNotice(`Use the ${normalizedSaveOwnerLabel} save action to persist canvas changes.`);
+      }
+      return false;
+    }
     if (!canEdit) {
       setHasUnsavedChanges(true);
       setSaveStatus('error');
@@ -3669,7 +3718,7 @@ export function CanvasEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [canEdit, editDisabledReason, isSaving, onSave, pageSettings, size, validateSettings]);
+  }, [canEdit, editDisabledReason, hasUnsavedChanges, isParentPersistence, isSaving, normalizedSaveOwnerLabel, onSave, pageSettings, size, validateSettings]);
 
   const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
     if (!canEdit) {
@@ -3925,7 +3974,7 @@ export function CanvasEditor({
   );
 
   useEffect(() => {
-    if (!hasUnsavedChanges || isSaving) {
+    if (!hasUnsavedChanges || isSaving || isParentPersistence) {
       setAutosaveDueAt(null);
       return;
     }
@@ -3946,7 +3995,7 @@ export function CanvasEditor({
         clearTimeout(autosaveTimeoutRef.current);
       }
     };
-  }, [handleSaveWrapper, hasUnsavedChanges, isSaving]);
+  }, [handleSaveWrapper, hasUnsavedChanges, isParentPersistence, isSaving]);
 
   useEffect(() => () => {
     if (autosaveTimeoutRef.current) {
@@ -4144,6 +4193,7 @@ export function CanvasEditor({
                 data-testid="editor-save-status"
                 data-save-state={saveStatus}
                 data-save-mode={lastSaveMode || ''}
+                data-save-persistence={savePersistence}
                 data-pending-changes={pendingChangeCount}
                 data-last-saved-at={lastSavedAt?.toISOString() || ''}
                 data-last-error={lastSaveError || ''}
@@ -4162,6 +4212,7 @@ export function CanvasEditor({
               data-testid="editor-save-status"
               data-save-state={saveStatus}
               data-save-mode={lastSaveMode || ''}
+              data-save-persistence={savePersistence}
               data-pending-changes={pendingChangeCount}
               data-last-saved-at={lastSavedAt?.toISOString() || ''}
               data-last-error={lastSaveError || ''}

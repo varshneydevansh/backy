@@ -2330,6 +2330,8 @@ function NewBlogPostPage() {
                                     hideNavigation={true}
                                     hideSettings={true}
                                     hideSave={true}
+                                    savePersistence="parent"
+                                    saveOwnerLabel="post form"
                                     canView={canViewBlog}
                                     canEdit={canEditBlog}
                                     canPublish={canPublishBlog}
