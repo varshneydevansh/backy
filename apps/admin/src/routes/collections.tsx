@@ -1569,6 +1569,7 @@ function CollectionsPage() {
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
   const destructiveActionDisabled = isCollectionsBusy || !canDeleteCollections;
+  const scheduledRecordMissingTime = recordForm.status === 'scheduled' && !recordForm.scheduledAt;
   const viewPermissionTitle = canViewCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
   const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
   const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
@@ -3439,6 +3440,16 @@ function CollectionsPage() {
       return;
     }
 
+    const scheduledAt = recordForm.status === 'scheduled'
+      ? toScheduledAtPayload(recordForm.scheduledAt)
+      : null;
+    if (recordForm.status === 'scheduled' && !scheduledAt) {
+      setError('Choose a publish date before scheduling this collection record.');
+      setValidationDetails([]);
+      setNotice(null);
+      return;
+    }
+
     setIsSavingRecord(true);
     setError(null);
     setValidationDetails([]);
@@ -3455,7 +3466,7 @@ function CollectionsPage() {
       const payload = {
         slug: normalizeSlug(recordForm.slug || formatValue(values.title || values.name), 'record'),
         status: recordForm.status,
-        scheduledAt: recordForm.status === 'scheduled' ? toScheduledAtPayload(recordForm.scheduledAt) : null,
+        scheduledAt,
         values,
       };
       const saved = selectedRecordId
@@ -6257,8 +6268,8 @@ function CollectionsPage() {
                     <h3 className="text-sm font-semibold">{selectedRecord ? 'Edit record' : 'Create record'}</h3>
                     <button
                       type="submit"
-                      disabled={recordMutationDisabled}
-                      title={editPermissionTitle}
+                      disabled={recordMutationDisabled || scheduledRecordMissingTime}
+                      title={scheduledRecordMissingTime ? 'Choose a publish date before scheduling this record.' : editPermissionTitle}
                       className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Save className="h-4 w-4" />
@@ -6313,6 +6324,7 @@ function CollectionsPage() {
                           scheduledAt: event.target.value,
                         }))}
                         className="w-full rounded-lg border bg-background px-3 py-2"
+                        required
                         data-testid="collections-record-scheduled-at"
                       />
                     </label>
