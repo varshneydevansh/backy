@@ -72,6 +72,42 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
+const createUser = async (input) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const user = payload.data?.user || payload.user;
+  assert(user?.id, `Create pages RBAC user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return user;
+};
+
+const createInviteToken = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/invite-link`, {
+    method: 'POST',
+    body: JSON.stringify({ expiresInMinutes: 60 }),
+  });
+  const invite = payload.data?.invite || payload.invite;
+  assert(invite?.token, `Invite link endpoint did not return a token: ${JSON.stringify(payload).slice(0, 500)}`);
+  return invite;
+};
+
+const acceptInviteToken = async (token) => {
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+  const session = payload.data?.session;
+  const user = payload.data?.user;
+  assert(session?.token && user?.id, `Invite accept did not return a user session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { session, user };
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
+
 const createHierarchyPages = async () => {
   const suffix = Date.now().toString(36);
   const parentTitle = `Smoke Hierarchy Parent ${suffix}`;
@@ -210,10 +246,10 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = (sessionToken) => `
+const authStorageScript = (sessionToken, user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' }) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    user,
     session: {
       token: sessionToken,
       issuedAt: new Date().toISOString(),
@@ -1080,6 +1116,77 @@ const assertBulkPublishMutation = async (client, page, expectedSearch = page.tit
   };
 };
 
+const assertViewerRbac = async (client, viewerSession, page) => {
+  await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: authStorageScript(viewerSession.session.token, viewerSession.user),
+  });
+  await client.send('Runtime.evaluate', {
+    expression: authStorageScript(viewerSession.session.token, viewerSession.user),
+    awaitPromise: true,
+  });
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}` });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+      hasRow: document.body?.innerText?.includes(${JSON.stringify(page.title)}) || false,
+      path: window.location.pathname,
+      body: document.body?.innerText?.slice(0, 900) || '',
+    }))()`);
+    if (state.ready && state.hasRow && state.path === '/pages') {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`Viewer pages RBAC pass did not load page list: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  const state = await evaluate(client, `(() => {
+    const disabledState = (selector) => {
+      const nodes = Array.from(document.querySelectorAll(selector));
+      return {
+        count: nodes.length,
+        disabled: nodes.every((node) => (
+          node instanceof HTMLButtonElement || node instanceof HTMLSelectElement || node instanceof HTMLInputElement
+            ? node.disabled
+            : node.getAttribute('aria-disabled') === 'true'
+        )),
+      };
+    };
+    const pageId = ${JSON.stringify(page.id)};
+    return {
+      headerCreateDisabled: document.querySelector('[data-testid="pages-header-create"]')?.getAttribute('aria-disabled') === 'true',
+      shortcutLinksDisabled: disabledState('[data-testid^="pages-create-"]'),
+      bulkSelectDisabled: document.querySelector('[data-testid="pages-bulk-action-select"]')?.disabled === true,
+      bulkApplyDisabled: document.querySelector('[data-testid="pages-bulk-action-apply"]')?.disabled === true,
+      rowCheckboxesDisabled: disabledState('input[aria-label^="Select "]'),
+      publishDisabled: disabledState('[data-testid^="pages-publish-"]'),
+      unpublishDisabled: disabledState('[data-testid^="pages-unpublish-"]'),
+      archiveDisabled: disabledState('[data-testid^="pages-archive-"]'),
+      previewDisabled: disabledState('[data-testid^="pages-preview-"]'),
+      editDisabled: disabledState('[data-testid^="pages-edit-"]'),
+      deleteDisabled: disabledState('[data-testid^="pages-delete-"]'),
+      deliveryRefreshAvailable: document.querySelector('[data-testid="pages-delivery-refresh-' + CSS.escape(pageId) + '"]')?.disabled === false,
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    };
+  })()`);
+
+  assert(state.headerCreateDisabled, `Viewer pages page left header create enabled: ${JSON.stringify(state)}`);
+  assert(state.shortcutLinksDisabled.count > 0 && state.shortcutLinksDisabled.disabled, `Viewer pages page left create shortcuts enabled: ${JSON.stringify(state)}`);
+  assert(state.bulkSelectDisabled && state.bulkApplyDisabled, `Viewer pages page left bulk controls enabled: ${JSON.stringify(state)}`);
+  assert(state.rowCheckboxesDisabled.count > 0 && state.rowCheckboxesDisabled.disabled, `Viewer pages page left row selection enabled: ${JSON.stringify(state)}`);
+  assert(state.publishDisabled.disabled, `Viewer pages page left publish controls enabled: ${JSON.stringify(state)}`);
+  assert(state.unpublishDisabled.count > 0 && state.unpublishDisabled.disabled, `Viewer pages page left unpublish controls enabled: ${JSON.stringify(state)}`);
+  assert(state.archiveDisabled.count > 0 && state.archiveDisabled.disabled, `Viewer pages page left archive controls enabled: ${JSON.stringify(state)}`);
+  assert(state.previewDisabled.count > 0 && state.previewDisabled.disabled, `Viewer pages page left preview controls enabled: ${JSON.stringify(state)}`);
+  assert(state.editDisabled.count > 0 && state.editDisabled.disabled, `Viewer pages page left edit controls enabled: ${JSON.stringify(state)}`);
+  assert(state.deleteDisabled.count > 0 && state.deleteDisabled.disabled, `Viewer pages page left delete controls enabled: ${JSON.stringify(state)}`);
+  assert(state.deliveryRefreshAvailable, `Viewer pages page should keep read-only delivery refresh available: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1098,7 +1205,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages }) => {
+const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages, viewerUserId }) => {
   if (hierarchyPages?.childPage?.id) {
     try {
       await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${hierarchyPages.childPage.id}`, { method: 'DELETE' });
@@ -1112,6 +1219,14 @@ const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages }) =>
       await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${hierarchyPages.parentPage.id}`, { method: 'DELETE' });
     } catch (error) {
       console.warn(`Unable to delete smoke parent page ${hierarchyPages.parentPage.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (viewerUserId) {
+    try {
+      await deleteUser(viewerUserId);
+    } catch (error) {
+      console.warn(`Unable to delete smoke viewer user ${viewerUserId}:`, error instanceof Error ? error.message : error);
     }
   }
 
@@ -1141,8 +1256,19 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let hierarchyPages = null;
+  let viewerUserId = null;
+  const suffix = Date.now().toString(36);
 
   try {
+    const viewer = await createUser({
+      fullName: `Pages Viewer ${suffix}`,
+      email: `pages-viewer-${suffix}@example.com`,
+      role: 'viewer',
+      status: 'pending',
+    });
+    viewerUserId = viewer.id;
+    const viewerInvite = await createInviteToken(viewer.id);
+    const viewerSession = await acceptInviteToken(viewerInvite.token);
     hierarchyPages = await createHierarchyPages();
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -1232,6 +1358,7 @@ const main = async () => {
       table: true,
       expectedText: 'Published',
     });
+    const viewerRbac = await assertViewerRbac(client, viewerSession, hierarchyPages.childPage);
 
     await captureScreenshot(client, SCREENSHOT_PATH);
 
@@ -1264,11 +1391,17 @@ const main = async () => {
       publishReview,
       bulkPublishReview,
       bulkPublishMutation,
+      viewerRbac: {
+        headerCreateDisabled: viewerRbac.headerCreateDisabled,
+        rowCheckboxesDisabled: viewerRbac.rowCheckboxesDisabled,
+        editDisabled: viewerRbac.editDisabled,
+        deleteDisabled: viewerRbac.deleteDisabled,
+      },
       visualScreenshotPaths: VISUAL_SCREENSHOT_PATHS,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, hierarchyPages });
+    await cleanup({ client, childProcess, userDataDir, hierarchyPages, viewerUserId });
   }
 };
 

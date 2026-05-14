@@ -1590,6 +1590,7 @@ function PagesListView() {
 	                }}
 	                disabled={isPageLibraryBusy || !canEditPages}
 	                title={!canEditPages ? editPermissionTitle : 'Archive page'}
+                data-testid={`pages-archive-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Archive className="w-4 h-4" />
@@ -1612,6 +1613,7 @@ function PagesListView() {
 	              }}
 	              disabled={isPageLibraryBusy || !canPublishPages}
 	              title={!canPublishPages ? publishPermissionTitle : 'Preview page'}
+              data-testid={`pages-preview-${page.id}`}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Eye className="w-4 h-4" />
@@ -1623,6 +1625,7 @@ function PagesListView() {
 	              }}
 	              disabled={isPageMutationBusy || !canEditPages}
 	              title={!canEditPages ? editPermissionTitle : 'Edit page'}
+              data-testid={`pages-edit-${page.id}`}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Edit className="w-4 h-4" />
@@ -1634,6 +1637,7 @@ function PagesListView() {
 	              }}
 	              disabled={isPageLibraryBusy || !canDeletePages}
 	              title={!canDeletePages ? deletePermissionTitle : 'Delete page'}
+              data-testid={`pages-delete-${page.id}`}
               className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
