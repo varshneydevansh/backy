@@ -324,6 +324,7 @@ interface ApiListPagesResponse {
   success: boolean;
   data?: {
     pages: ApiPage[];
+    pagination?: ApiPagination;
   };
   error?: {
     message?: string;
@@ -3923,15 +3924,51 @@ export async function listAdminAuditLogs(filters: AdminAuditLogListFilters = {})
   return payload.data;
 }
 
-export async function listPages(siteId: string): Promise<Page[]> {
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages?includeUnpublished=true`);
+const PAGE_LIST_PAGE_SIZE = 100;
+const PAGE_LIST_MAX_PAGES = 100;
+
+async function listPagesPage(siteId: string, offset: number): Promise<{
+  pages: Page[];
+  pagination?: ApiPagination;
+}> {
+  const query = new URLSearchParams({
+    includeUnpublished: 'true',
+    limit: String(PAGE_LIST_PAGE_SIZE),
+    offset: String(offset),
+  });
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages?${query.toString()}`);
   const payload = await readJson<ApiListPagesResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load pages');
   }
 
-  return payload.data.pages.map(toStorePage);
+  return {
+    pages: payload.data.pages.map(toStorePage),
+    pagination: payload.data.pagination,
+  };
+}
+
+export async function listPages(siteId: string): Promise<Page[]> {
+  const pages: Page[] = [];
+  let offset = 0;
+
+  for (let pageIndex = 0; pageIndex < PAGE_LIST_MAX_PAGES; pageIndex += 1) {
+    const result = await listPagesPage(siteId, offset);
+    pages.push(...result.pages);
+
+    if (!result.pagination?.hasMore) {
+      return pages;
+    }
+
+    const nextOffset = result.pagination.offset + result.pagination.limit;
+    if (nextOffset <= offset) {
+      break;
+    }
+    offset = nextOffset;
+  }
+
+  throw new Error('Unable to load all pages because the page list exceeded the supported page limit.');
 }
 
 export async function createPage(siteId: string, input: PageCreateInput): Promise<Page> {

@@ -198,6 +198,14 @@ const pageAuditMetadata = (page: {
   parentId: page.parentId || null,
 });
 
+const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
+  const parsed = Number.parseInt(value || '', 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
@@ -208,6 +216,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    const limit = parseBoundedInteger(searchParams.get('limit'), 100, 1, 200);
+    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -221,6 +231,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         includeUnpublished,
         status: includeUnpublished ? 'all' : 'published',
+        limit,
+        offset,
       });
 
       return NextResponse.json({
@@ -241,17 +253,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const includeUnpublished = searchParams.get('includeUnpublished') !== 'false';
     const pages = getPageSummary(site.id, { includeUnpublished });
+    const pagedPages = pages.slice(offset, offset + limit);
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
-        pages,
+        pages: pagedPages,
         pagination: {
           total: pages.length,
-          limit: pages.length,
-          offset: 0,
-          hasMore: false,
+          limit,
+          offset,
+          hasMore: offset + limit < pages.length,
         },
       },
     });
