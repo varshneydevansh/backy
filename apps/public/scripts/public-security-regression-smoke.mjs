@@ -809,6 +809,11 @@ assertIncludes(collectionsAdminRoute, 'Backy media ID from the central library',
 assertIncludes(collectionsAdminRoute, "isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view'", 'collections media picker must respect media.view');
 assertIncludes(collectionsAdminRoute, 'canView={canViewMedia}', 'collections media picker modal must receive media.view state');
 assertIncludes(collectionsAdminRoute, 'canCreate={canCreateMedia}', 'collections media picker modal must receive media.create state');
+assertIncludes(collectionsAdminRoute, "setNotice(`Collection record ${selectedRecordId ? 'updated' : 'created'}.`);", 'collections record save must show a success notice');
+
+const mediaAdminRoute = read('apps/admin/src/routes/media.tsx');
+assertIncludes(mediaAdminRoute, 'setBulkNotice(`Deleted ${file.name}.`);', 'single media delete must show a success notice');
+assertIncludes(mediaAdminRoute, 'setBulkNotice(`${updated.name} details saved.`);', 'media metadata save must show a success notice');
 
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [

@@ -2442,6 +2442,7 @@ function MediaPage() {
     }
 
     setError(null);
+    setBulkNotice(null);
     setIsDeletingAsset(true);
 
     try {
@@ -2452,6 +2453,7 @@ function MediaPage() {
         updateMediaRouteSearch({ assetId: undefined });
       }
       setPendingDeleteAsset(null);
+      setBulkNotice(`Deleted ${file.name}.`);
       void loadLibraryAuditLogs(0);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete media.');
@@ -2664,6 +2666,7 @@ function MediaPage() {
 
     setIsSavingMetadata(true);
     setError(null);
+    setBulkNotice(null);
 
     try {
       const updated = await updateMedia(selectedAsset.id, {
@@ -2701,6 +2704,7 @@ function MediaPage() {
       }, siteId);
       setMedia(files.map((file) => file.id === updated.id ? updated : file));
       setSelectedAsset(updated);
+      setBulkNotice(`${updated.name} details saved.`);
       void loadAssetAuditLogs(updated.id);
       void loadLibraryAuditLogs(0);
     } catch (saveError) {

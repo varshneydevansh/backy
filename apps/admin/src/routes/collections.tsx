@@ -3579,6 +3579,7 @@ function CollectionsPage() {
         setSelectedRecordId(saved.id);
         updateCollectionsRouteSearch({ recordId: saved.id });
       }
+      setNotice(`Collection record ${selectedRecordId ? 'updated' : 'created'}.`);
       if (activeCollection) {
         void loadRecords(activeCollection.id);
       }
