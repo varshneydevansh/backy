@@ -39,6 +39,14 @@ function assertCorsAndRequestId(result) {
   assert(result.response.headers.get('x-backy-admin-contract-version') === 'backy.admin.v1', `${result.url} missing admin contract version`);
 }
 
+function assertSessionDurationMinutes(session, expectedMinutes, label) {
+  const issuedAt = Date.parse(session?.issuedAt || '');
+  const expiresAt = Date.parse(session?.expiresAt || '');
+  assert(Number.isFinite(issuedAt) && Number.isFinite(expiresAt), `${label} expected issuedAt/expiresAt session timestamps`);
+  const actualMinutes = Math.round((expiresAt - issuedAt) / 60000);
+  assert(actualMinutes === expectedMinutes, `${label} expected ${expectedMinutes} minute session, got ${actualMinutes}`);
+}
+
 assert(adminApiKey, 'BACKY_ADMIN_API_KEY or BACKY_ADMIN_SECRET_KEY is required for admin auth smoke');
 
 const checks = [];
@@ -192,6 +200,7 @@ await record('password reset follows configured minimum length', async () => {
   assert(settingsBefore.response.status === 200, `${settingsBefore.url} expected settings read 200`);
   const originalAuth = settingsBefore.json?.data?.settings?.auth || {};
   const minPasswordLength = 14;
+  const sessionTimeoutMinutes = 45;
   const unique = Date.now().toString(36);
   let userId = '';
 
@@ -207,11 +216,13 @@ await record('password reset follows configured minimum length', async () => {
         auth: {
           ...originalAuth,
           minPasswordLength,
+          sessionTimeoutMinutes,
         },
       }),
     });
     assert(updateSettings.response.status === 200, `${updateSettings.url} expected settings patch 200`);
     assert(updateSettings.json?.data?.settings?.auth?.minPasswordLength === minPasswordLength, `${updateSettings.url} did not persist minimum password length`);
+    assert(updateSettings.json?.data?.settings?.auth?.sessionTimeoutMinutes === sessionTimeoutMinutes, `${updateSettings.url} did not persist session timeout`);
 
     const createUser = await request('/api/admin/users', {
       method: 'POST',
@@ -269,6 +280,21 @@ await record('password reset follows configured minimum length', async () => {
     assert(validReset.response.status === 200, `${validReset.url} expected valid reset 200, got ${validReset.response.status}`);
     assert(validReset.json?.data?.reset === true, `${validReset.url} expected reset success`);
     assert(validReset.json?.data?.session?.token, `${validReset.url} expected reset session`);
+    assertSessionDurationMinutes(validReset.json?.data?.session, sessionTimeoutMinutes, validReset.url);
+
+    const login = await request('/api/admin/auth/login', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: `password-policy-${unique}@example.test`,
+        password: '12345678901234',
+      }),
+    });
+    assert(login.response.status === 200, `${login.url} expected login 200, got ${login.response.status}`);
+    assertSessionDurationMinutes(login.json?.data?.session, sessionTimeoutMinutes, login.url);
   } finally {
     if (userId) {
       await request(`/api/admin/users/${userId}`, {

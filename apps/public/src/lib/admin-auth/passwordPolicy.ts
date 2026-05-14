@@ -1,4 +1,4 @@
-import { getAdminSettings } from '@/lib/backyStore';
+import { getAdminAuthPolicySettings } from '@/lib/admin-auth/emailPolicy';
 
 const DEFAULT_MIN_PASSWORD_LENGTH = 12;
 const MIN_PASSWORD_LENGTH = 8;
@@ -18,15 +18,22 @@ const normalizeMinPasswordLength = (value: unknown) => {
   return Math.min(Math.max(Math.round(parsed), MIN_PASSWORD_LENGTH), MAX_PASSWORD_LENGTH);
 };
 
-export const getAdminPasswordPolicy = () => {
-  const settings = getAdminSettings();
+export const getAdminPasswordPolicyFromAuthSettings = (settings: Record<string, unknown> = {}) => {
   return {
-    minPasswordLength: normalizeMinPasswordLength(settings.auth?.minPasswordLength),
+    minPasswordLength: normalizeMinPasswordLength(settings.minPasswordLength),
   };
 };
 
-export const validateAdminPasswordPolicy = (password: string) => {
-  const policy = getAdminPasswordPolicy();
+export const getAdminPasswordPolicy = async (authSettings?: Record<string, unknown>) => {
+  const settings = authSettings ?? await getAdminAuthPolicySettings();
+  return getAdminPasswordPolicyFromAuthSettings(settings);
+};
+
+export const validateAdminPasswordPolicy = async (
+  password: string,
+  authSettings?: Record<string, unknown>,
+) => {
+  const policy = await getAdminPasswordPolicy(authSettings);
 
   if (password.length < policy.minPasswordLength) {
     return {

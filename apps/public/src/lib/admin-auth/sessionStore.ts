@@ -118,6 +118,10 @@ type AdminAuthUserPersistence = {
   updateUser?: (userId: string, input: Partial<Pick<AdminAuthUser, 'status'>>) => Promise<AdminAuthUserLike | null | undefined>;
 };
 
+type AdminAuthSessionSettings = {
+  sessionTimeoutMinutes?: unknown;
+};
+
 const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
   __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
@@ -210,19 +214,32 @@ const toAuthUser = (user: AdminAuthUserLike | null | undefined): AdminAuthUser |
   };
 };
 
-const getSessionTimeoutMinutes = () => {
-  const settings = getAdminSettings();
-  const raw = settings.auth && typeof settings.auth.sessionTimeoutMinutes === 'number'
-    ? settings.auth.sessionTimeoutMinutes
-    : 120;
+const normalizeSessionTimeoutMinutes = (value: unknown) => {
+  const raw = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value)
+      : 120;
 
   if (!Number.isFinite(raw)) return 120;
   return Math.min(Math.max(raw, 15), 10080);
 };
 
-const createAdminSessionForUser = (user: AdminAuthUser): AdminSession => {
+const getSessionTimeoutMinutes = (authSettings?: AdminAuthSessionSettings) => {
+  if (authSettings) {
+    return normalizeSessionTimeoutMinutes(authSettings.sessionTimeoutMinutes);
+  }
+
+  const settings = getAdminSettings();
+  return normalizeSessionTimeoutMinutes(settings.auth?.sessionTimeoutMinutes);
+};
+
+const createAdminSessionForUser = (
+  user: AdminAuthUser,
+  authSettings?: AdminAuthSessionSettings,
+): AdminSession => {
   const issuedAt = new Date();
-  const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes() * 60 * 1000);
+  const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes(authSettings) * 60 * 1000);
   const session: StoredSession = {
     token: `bas_${randomUUID().replace(/-/g, '')}`,
     user,
@@ -291,7 +308,11 @@ export function checkAdminAuthRateLimit(input: {
   };
 }
 
-export function authenticateAdminCredentials(email: string, password: string): AdminSession | null {
+export function authenticateAdminCredentials(
+  email: string,
+  password: string,
+  authSettings?: AdminAuthSessionSettings,
+): AdminSession | null {
   pruneExpiredSessions();
 
   const normalizedEmail = normalizeEmail(email);
@@ -302,7 +323,7 @@ export function authenticateAdminCredentials(email: string, password: string): A
       return null;
     }
 
-    return createAdminSessionForUser(user);
+    return createAdminSessionForUser(user, authSettings);
   }
 
   const credential = DEMO_CREDENTIALS[normalizedEmail];
@@ -315,13 +336,14 @@ export function authenticateAdminCredentials(email: string, password: string): A
     return null;
   }
 
-  return createAdminSessionForUser(user);
+  return createAdminSessionForUser(user, authSettings);
 }
 
 export async function authenticateAdminCredentialsWithPersistence(
   email: string,
   password: string,
   persistence: Pick<AdminAuthUserPersistence, 'getPasswordCredentialByEmail' | 'getUserByEmail'> = {},
+  authSettings?: AdminAuthSessionSettings,
 ): Promise<AdminSession | null> {
   pruneExpiredSessions();
 
@@ -341,7 +363,7 @@ export async function authenticateAdminCredentialsWithPersistence(
       return null;
     }
 
-    return createAdminSessionForUser(user);
+    return createAdminSessionForUser(user, authSettings);
   }
 
   const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
@@ -356,14 +378,14 @@ export async function authenticateAdminCredentialsWithPersistence(
       return null;
     }
 
-    return createAdminSessionForUser(user);
+    return createAdminSessionForUser(user, authSettings);
   }
 
   if (persistence.getUserByEmail) {
     return null;
   }
 
-  return authenticateAdminCredentials(email, password);
+  return authenticateAdminCredentials(email, password, authSettings);
 }
 
 export function setLocalAdminPassword(input: {
@@ -547,6 +569,7 @@ export async function resetAdminPasswordToken(
   token: string | null | undefined,
   password: string,
   persistence: AdminAuthUserPersistence = {},
+  authSettings?: AdminAuthSessionSettings,
 ): Promise<AdminPasswordResetResult> {
   pruneExpiredSessions();
 
@@ -603,7 +626,7 @@ export async function resetAdminPasswordToken(
     setLocalAdminPassword({ user, password });
   }
   PASSWORD_RESET_TOKENS.delete(normalizedToken);
-  const session = createAdminSessionForUser(user);
+  const session = createAdminSessionForUser(user, authSettings);
 
   return {
     reset: true,
@@ -646,6 +669,7 @@ export function createAdminInviteToken(input: {
 export async function acceptAdminInviteToken(
   token: string | null | undefined,
   persistence: AdminAuthUserPersistence = {},
+  authSettings?: AdminAuthSessionSettings,
 ): Promise<AdminInviteAcceptResult> {
   pruneExpiredSessions();
 
@@ -687,7 +711,7 @@ export async function acceptAdminInviteToken(
   }
 
   INVITE_TOKENS.delete(normalizedToken);
-  const session = createAdminSessionForUser(user);
+  const session = createAdminSessionForUser(user, authSettings);
   return {
     accepted: true,
     invite,

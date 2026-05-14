@@ -34,6 +34,12 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+);
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
@@ -47,12 +53,13 @@ export async function POST(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
+  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
   const session = repositories
     ? await authenticateAdminCredentialsWithPersistence(email, password, {
       getPasswordCredentialByEmail: (userEmail) => repositories.users.getPasswordCredentialByEmail(userEmail),
       getUserByEmail: (userEmail) => repositories.users.getByEmail(userEmail),
-    })
-    : authenticateAdminCredentials(email, password);
+    }, authSettings)
+    : authenticateAdminCredentials(email, password, authSettings);
   if (!session) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }

@@ -39,6 +39,12 @@ const getClientAddress = (request: NextRequest) => (
   || 'unknown'
 );
 
+const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+);
+
 const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
   const response = NextResponse.json(
     {
@@ -65,7 +71,12 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Password reset token is required.', requestId);
   }
 
-  const passwordPolicy = validateAdminPasswordPolicy(password);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
+
+  const passwordPolicy = await validateAdminPasswordPolicy(password, authSettings);
   if (!passwordPolicy.ok) {
     return errorResponse(400, 'VALIDATION_ERROR', passwordPolicy.message, requestId);
   }
@@ -89,16 +100,13 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
-  const repositories = !shouldUseDemoStoreFallback()
-    ? await getRequiredDatabaseRepositories()
-    : null;
   const result = await resetAdminPasswordToken(token, password, repositories
     ? {
       getUserById: (userId) => repositories.users.getById(userId),
       setPasswordCredential: (userId, credential) => repositories.users.setPasswordCredential(userId, credential),
       updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
     }
-    : undefined);
+    : undefined, authSettings);
   if (!result.reset) {
     const status = result.reason === 'expired'
       ? 410

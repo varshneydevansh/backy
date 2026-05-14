@@ -32,6 +32,12 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+);
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
@@ -44,12 +50,13 @@ export async function POST(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
+  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
   const result = await acceptAdminInviteToken(token, repositories
     ? {
       getUserById: (userId) => repositories.users.getById(userId),
       updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
     }
-    : undefined);
+    : undefined, authSettings);
   if (!result.accepted) {
     const status = result.reason === 'expired'
       ? 410

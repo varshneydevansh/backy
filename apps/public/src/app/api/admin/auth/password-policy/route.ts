@@ -7,7 +7,7 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 
 export async function GET(request: Request) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const policy = getAdminPasswordPolicy();
+  const policy = await getAdminPasswordPolicy();
 
   return NextResponse.json({
     success: true,
