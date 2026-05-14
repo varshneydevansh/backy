@@ -20,6 +20,23 @@ const FRONTEND_DESIGN_TEMPLATE_ID = 'smoke-page-contract-template';
 const FRONTEND_DESIGN_TEMPLATE_NAME = 'Smoke Contract Landing';
 let apiAdminSessionToken = '';
 
+const EDITOR_SCREENSHOT_THRESHOLDS = {
+  minClipWidth: 600,
+  minClipHeight: 460,
+  minSampledPixels: 60000,
+  minLumaRange: 120,
+  minCanvasNonWhiteRatio: 0.004,
+  minCanvasDarkRatio: 0.0007,
+};
+
+const BLANK_EDITOR_SCREENSHOT_THRESHOLDS = {
+  ...EDITOR_SCREENSHOT_THRESHOLDS,
+  minClipWidth: 560,
+  minClipHeight: 380,
+  minCanvasNonWhiteRatio: 0.0015,
+  minCanvasDarkRatio: 0.0003,
+};
+
 const STARTER_TEMPLATE_BACKEND_CASES = [
   {
     template: 'landing',
@@ -504,10 +521,98 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
-const captureScreenshot = async (client, screenshotPath) => {
+const captureScreenshotData = async (client, screenshotPath) => {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return {
+    screenshotPath,
+    data: screenshot.data,
+  };
+};
+
+const captureScreenshot = async (client, screenshotPath) => {
+  await captureScreenshotData(client, screenshotPath);
   return screenshotPath;
+};
+
+const getEditorScreenshotThresholds = (template) => (
+  template === 'blank' ? BLANK_EDITOR_SCREENSHOT_THRESHOLDS : EDITOR_SCREENSHOT_THRESHOLDS
+);
+
+const assertScreenshotPixelThresholds = async (client, label, screenshotData, thresholds, cropRect) => {
+  const metrics = await evaluate(client, `(async () => {
+    const image = new Image();
+    image.src = ${JSON.stringify(`data:image/png;base64,${screenshotData}`)};
+    await image.decode();
+
+    const crop = ${JSON.stringify(cropRect)};
+    const scaleX = window.innerWidth > 0 ? image.width / window.innerWidth : 1;
+    const scaleY = window.innerHeight > 0 ? image.height / window.innerHeight : 1;
+    const sourceX = Math.max(0, Math.round((crop?.x || 0) * scaleX));
+    const sourceY = Math.max(0, Math.round((crop?.y || 0) * scaleY));
+    const sourceWidth = Math.max(1, Math.min(image.width - sourceX, Math.round((crop?.width || image.width) * scaleX)));
+    const sourceHeight = Math.max(1, Math.min(image.height - sourceY, Math.round((crop?.height || image.height) * scaleY)));
+
+    const scale = Math.min(1, 360 / sourceWidth, 360 / sourceHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    let nonWhitePixels = 0;
+    let darkPixels = 0;
+    let sampledPixels = 0;
+    let minLuma = 255;
+    let maxLuma = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3];
+      if (alpha < 16) continue;
+
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const luma = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+      sampledPixels += 1;
+      minLuma = Math.min(minLuma, luma);
+      maxLuma = Math.max(maxLuma, luma);
+
+      if ((Math.abs(255 - red) + Math.abs(255 - green) + Math.abs(255 - blue)) > 36) {
+        nonWhitePixels += 1;
+      }
+
+      if (luma < 190) {
+        darkPixels += 1;
+      }
+    }
+
+    return {
+      width: sourceWidth,
+      height: sourceHeight,
+      imageWidth: image.width,
+      imageHeight: image.height,
+      crop,
+      sampledWidth: canvas.width,
+      sampledHeight: canvas.height,
+      sampledPixels,
+      nonWhiteRatio: sampledPixels > 0 ? nonWhitePixels / sampledPixels : 0,
+      darkRatio: sampledPixels > 0 ? darkPixels / sampledPixels : 0,
+      minLuma: Math.round(minLuma),
+      maxLuma: Math.round(maxLuma),
+      lumaRange: Math.round(maxLuma - minLuma),
+    };
+  })()`);
+
+  assert(metrics.width >= thresholds.minClipWidth, `${label} screenshot clip is too narrow: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.height >= thresholds.minClipHeight, `${label} screenshot clip is too short: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.sampledPixels >= thresholds.minSampledPixels, `${label} screenshot sample was too small: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.nonWhiteRatio >= thresholds.minCanvasNonWhiteRatio, `${label} screenshot appears visually blank: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.darkRatio >= thresholds.minCanvasDarkRatio, `${label} screenshot is missing rendered text/detail contrast: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.lumaRange >= thresholds.minLumaRange, `${label} screenshot is missing visual contrast range: ${JSON.stringify({ metrics, thresholds })}`);
+
+  return metrics;
 };
 
 const setViewport = async (client, { width, height, mobile = false, deviceScaleFactor = 1 }) => {
@@ -1433,8 +1538,17 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     renderState = await evaluate(client, `(() => {
-      document.querySelector('#page-editor-canvas')?.scrollIntoView({ block: 'start' });
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
+      if (canvas) {
+        const currentRect = canvas.getBoundingClientRect();
+        window.scrollTo({
+          top: Math.max(0, currentRect.top + window.scrollY - 120),
+          left: 0,
+          behavior: 'auto',
+        });
+      } else {
+        document.querySelector('#page-editor-canvas')?.scrollIntoView({ block: 'start' });
+      }
       const elements = Array.from(canvas?.querySelectorAll('[data-element-id]') || []);
       const bodyText = document.body?.innerText || '';
       const requiredElementIds = ${JSON.stringify(requiredElementIds)};
@@ -1452,6 +1566,10 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
         };
       });
       const canvasRect = canvas?.getBoundingClientRect();
+      const clipLeft = Math.max(0, canvasRect?.left || 0);
+      const clipTop = Math.max(0, canvasRect?.top || 0);
+      const clipRight = Math.min(window.innerWidth, canvasRect?.right || 0);
+      const clipBottom = Math.min(window.innerHeight, canvasRect?.bottom || 0);
       return {
         editorLoaded: document.body?.innerText?.includes('Page editor command center') || false,
         backendFallbackVisible: document.body?.innerText?.includes('Using the local page copy.') || false,
@@ -1467,6 +1585,12 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
         missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
         collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
         requiredRects,
+        canvasScreenshotClip: {
+          x: Math.round(clipLeft),
+          y: Math.round(clipTop),
+          width: Math.round(Math.max(0, clipRight - clipLeft)),
+          height: Math.round(Math.max(0, clipBottom - clipTop)),
+        },
         emptyStateVisible: document.body?.innerText?.includes('Drop components onto the canvas') || false,
         horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
         body: bodyText.slice(0, 260),
@@ -1499,11 +1623,19 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
   assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} editor route has horizontal page overflow: ${JSON.stringify(renderState)}`);
 
   const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-editor-${testCase.template}.png`);
-  await captureScreenshot(client, screenshotPath);
+  const screenshot = await captureScreenshotData(client, screenshotPath);
+  const screenshotMetrics = await assertScreenshotPixelThresholds(
+    client,
+    `Created ${testCase.template} editor canvas`,
+    screenshot.data,
+    getEditorScreenshotThresholds(testCase.template),
+    renderState.canvasScreenshotClip,
+  );
 
   return {
     ...renderState,
     screenshotPath,
+    screenshotMetrics,
   };
 };
 
