@@ -8,7 +8,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, 
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import { createUser, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { createUser, getAdminApiBase, getUserPermissions, type AdminInviteToken, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
@@ -90,6 +90,7 @@ function NewUserPage() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [createdInvite, setCreatedInvite] = useState<AdminInviteToken | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -187,6 +188,7 @@ function NewUserPage() {
     email: formData.email.trim().toLowerCase() || 'person@example.com',
     role: formData.role,
     status: formData.status,
+    createInvite: formData.status === 'invited',
   }), [formData.email, formData.fullName, formData.role, formData.status]);
   const inviteHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -320,10 +322,17 @@ function NewUserPage() {
     setIsLoading(true);
     setErrorMessage(null);
     setNoticeMessage(null);
+    setCreatedInvite(null);
 
     try {
       const created = await createUser(invitePayload);
-      setUsers([created, ...users]);
+      setUsers([created.user, ...users.filter((user) => user.id !== created.user.id)]);
+      if (created.invite) {
+        setCreatedInvite(created.invite);
+        setNoticeMessage('Invited user created. Copy the invite link below for manual delivery.');
+        setIsLoading(false);
+        return;
+      }
       navigate({ to: '/users', search: usersRouteSearch });
     } catch (error) {
       setErrorMessage(error instanceof Error
@@ -431,6 +440,39 @@ function NewUserPage() {
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {noticeMessage}
             </div>
+          )}
+
+          {createdInvite && (
+            <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm" data-testid="user-invite-created-panel">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="font-semibold text-foreground">Invite link ready</div>
+                  <p className="mt-1 text-muted-foreground">
+                    Delivery is still manual. Copy this link and send it to the collaborator through your trusted channel.
+                  </p>
+                  <code className="mt-3 block overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    {createdInvite.inviteUrl}
+                  </code>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void copyInviteText(createdInvite.inviteUrl, 'Invite link')}
+                    iconStart={<Copy className="size-4" />}
+                  >
+                    Copy link
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
+                    iconStart={<ArrowLeft className="size-4" />}
+                  >
+                    Back to users
+                  </Button>
+                </div>
+              </div>
+            </section>
           )}
 
           <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">

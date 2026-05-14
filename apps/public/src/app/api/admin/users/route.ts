@@ -14,6 +14,7 @@ import {
   validateAdminInviteOnlyCreatePolicy,
 } from '@/lib/admin-auth/emailPolicy';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
+import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(body.email);
     const role = normalizeRole(body.role);
     const status = normalizeStatus(body.status) || 'invited';
+    const shouldCreateInvite = status === 'invited' && body.createInvite !== false;
 
     if (!fullName) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Full name is required', requestId);
@@ -160,6 +162,13 @@ export async function POST(request: NextRequest) {
         role,
         status,
       })).item;
+      const invite = shouldCreateInvite
+        ? createAdminInviteToken({
+          user,
+          requestedById: access.session?.user.id || null,
+          origin: request.headers.get('origin') || request.nextUrl.origin,
+        })
+        : null;
       await recordAdminAudit({
         repositories,
         entity: 'user',
@@ -170,6 +179,9 @@ export async function POST(request: NextRequest) {
           email: user.email,
           role: user.role,
           status: user.status,
+          inviteTokenId: invite?.id || null,
+          inviteExpiresAt: invite?.expiresAt || null,
+          deliveryConfigured: false,
         },
         requestId,
       });
@@ -180,6 +192,7 @@ export async function POST(request: NextRequest) {
           requestId,
           data: {
             user,
+            invite,
           },
         },
         { status: 201 },
@@ -197,6 +210,13 @@ export async function POST(request: NextRequest) {
       role,
       status,
     });
+    const invite = shouldCreateInvite
+      ? createAdminInviteToken({
+        user,
+        requestedById: access.session?.user.id || null,
+        origin: request.headers.get('origin') || request.nextUrl.origin,
+      })
+      : null;
     await recordAdminAudit({
       entity: 'user',
       entityId: user.id,
@@ -206,6 +226,9 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         status: user.status,
+        inviteTokenId: invite?.id || null,
+        inviteExpiresAt: invite?.expiresAt || null,
+        deliveryConfigured: false,
       },
       requestId,
     });
@@ -216,6 +239,7 @@ export async function POST(request: NextRequest) {
         requestId,
         data: {
           user,
+          invite,
         },
       },
       { status: 201 },

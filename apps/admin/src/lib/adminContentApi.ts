@@ -416,7 +416,9 @@ interface ApiUserResponse {
   success: boolean;
   data?: {
     user: ApiUser;
+    invite?: AdminInviteToken | null;
   };
+  invite?: AdminInviteToken | null;
   error?: {
     message?: string;
   };
@@ -1286,6 +1288,24 @@ export interface UserInput {
   email: string;
   role: User['role'];
   status?: User['status'];
+  createInvite?: boolean;
+}
+
+export interface AdminInviteToken {
+  id: string;
+  token: string;
+  userId?: string;
+  email?: string;
+  createdAt?: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured?: false;
+  inviteUrl: string;
+}
+
+export interface UserCreateResult {
+  user: User;
+  invite?: AdminInviteToken | null;
 }
 
 export interface UserUpdateInput {
@@ -3119,7 +3139,7 @@ export async function updateUserPermissions(
   return payload.data.permissions;
 }
 
-export async function createUser(input: UserInput): Promise<User> {
+export async function createUser(input: UserInput): Promise<UserCreateResult> {
   const response = await adminFetch(`${getAdminApiBase()}/users`, {
     method: 'POST',
     headers: {
@@ -3133,7 +3153,10 @@ export async function createUser(input: UserInput): Promise<User> {
     throw new Error(payload.error?.message || 'Unable to create user');
   }
 
-  return toStoreUser(payload.data.user);
+  return {
+    user: toStoreUser(payload.data.user),
+    invite: payload.data.invite ?? payload.invite ?? null,
+  };
 }
 
 export async function updateUser(userId: string, input: UserUpdateInput): Promise<User> {

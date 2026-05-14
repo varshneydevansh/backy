@@ -458,6 +458,8 @@ await record('admin invite-only setting blocks direct activation', async () => {
     assert(allowedCreate.response.status === 201, `${allowedCreate.url} expected invited create 201, got ${allowedCreate.response.status}`);
     invitedUserId = allowedCreate.json?.data?.user?.id || '';
     assert(invitedUserId, `${allowedCreate.url} missing invited user id`);
+    assert(allowedCreate.json?.data?.invite?.token, `${allowedCreate.url} missing invited user create token`);
+    assert(allowedCreate.json?.data?.invite?.inviteUrl, `${allowedCreate.url} missing invited user create URL`);
 
     const blockedActivation = await request(`/api/admin/users/${invitedUserId}`, {
       method: 'PATCH',

@@ -329,6 +329,12 @@ for (const route of [
 const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
 
+const adminUsersRoute = read('apps/public/src/app/api/admin/users/route.ts');
+assertIncludes(adminUsersRoute, 'createAdminInviteToken', 'admin user create route must create invite tokens for invited users');
+assertIncludes(adminUsersRoute, 'const shouldCreateInvite = status ===', 'admin user create route must gate invite token creation by invited status');
+assertIncludes(adminUsersRoute, 'inviteTokenId', 'admin user create route must audit generated invite token ids');
+assertIncludes(adminUsersRoute, 'invite,', 'admin user create route must return generated invite token data');
+
 const adminPasswordResetTokenRoute = read('apps/public/src/app/api/admin/users/[userId]/password-reset/route.ts');
 assertIncludes(adminPasswordResetTokenRoute, '@/lib/admin-auth/emailPolicy', 'admin reset-token route must import invite-only policy');
 assertIncludes(adminPasswordResetTokenRoute, 'validateAdminInviteOnlyActivationPolicy(user.status,', 'admin reset-token route must block invite-only activation bypass');
