@@ -72,6 +72,15 @@ function parseSearchQuery(raw: string | null): string | undefined {
   return value.length ? value : undefined;
 }
 
+function parseBoundedInteger(raw: string | null, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(max, parsed));
+}
+
 function parseCommentIds(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw
@@ -173,8 +182,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
     const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
     const sort = parseSort(searchParams.get('sort'));
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const offset = parseInt(searchParams.get('offset') || '0', 10);
+    const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
+    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
 
     if (status !== 'approved') {
       const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
@@ -201,8 +210,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         parentId: parentId || null,
         commentThreadId,
         sort,
-        limit: Number.isFinite(limit) ? limit : 20,
-        offset: Number.isFinite(offset) ? offset : 0,
+        limit,
+        offset,
       });
 
       return privateResponse({
@@ -236,8 +245,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       parentId: parentId || null,
       commentThreadId,
       sort,
-      limit: Number.isFinite(limit) ? limit : 20,
-      offset: Number.isFinite(offset) ? offset : 0,
+      limit,
+      offset,
     });
 
     return privateResponse({

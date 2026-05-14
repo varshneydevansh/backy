@@ -113,7 +113,7 @@ function parseStatus(raw: string | null): SubmissionStatus | 'all' {
 
 function parseLimit(value: string | null): number {
   const parsed = Number.parseInt(value || '20', 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : 20;
 }
 
 function parseOffset(value: string | null): number {
