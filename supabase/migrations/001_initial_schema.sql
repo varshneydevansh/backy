@@ -1,12 +1,12 @@
 -- ============================================================================
--- SCYTHIAN CMS - INITIAL DATABASE SCHEMA
+-- BACKY CMS - INITIAL DATABASE SCHEMA
 -- ============================================================================
 --
--- This migration creates the complete database schema for Scythian CMS.
+-- This migration creates the complete database schema for Backy CMS.
 -- Run this in your Supabase SQL Editor to set up the database.
 --
 -- @migration 001_initial_schema
--- @author Scythian CMS Team (Built by Kimi 2.5)
+-- @author Backy CMS Team (Built by Kimi 2.5)
 -- @license MIT
 -- ============================================================================
 
@@ -789,4 +789,4 @@ CREATE INDEX idx_page_views_created_at ON public.page_views(created_at);
 -- COMPLETION
 -- ============================================
 
-SELECT 'Scythian CMS database schema created successfully!' AS message;
+SELECT 'Backy CMS database schema created successfully!' AS message;

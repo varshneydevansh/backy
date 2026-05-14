@@ -3,7 +3,7 @@
 ## Local environment
 
 ```bash
-cd "/Users/devanshvarshney/Downloads/Scythian /backy"
+cd "/Users/devanshvarshney/backy"
 npm install
 ```
 

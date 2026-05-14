@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - ADMIN ENTRY POINT
+ * BACKY CMS - ADMIN ENTRY POINT
  * ============================================================================
  *
- * This is the main entry point for the Scythian CMS Admin Dashboard.
+ * This is the main entry point for the Backy CMS Admin Dashboard.
  * It initializes React, sets up the query client, and renders the app.
  *
  * @module AdminEntry
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

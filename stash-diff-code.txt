@@ -8,24 +8,24 @@ index 783f573..7c042a0 100644
 --- a/BACKY_HANDOFF.md
 +++ b/BACKY_HANDOFF.md
 @@ -1,75 +1,142 @@
- # Backy Continuation Handoff  
--**Date:** 2026-02-24  
-+**Date:** 2026-02-27  
- **Path:** `/Users/devanshvarshney/Downloads/Scythian /backy`  
- 
+ # Backy Continuation Handoff
+-**Date:** 2026-02-24
++**Date:** 2026-02-27
+ **Path:** `/Users/devanshvarshney/backy`
+
  ## 1) Current objective
 -Continue implementation toward **Wix/WordPress/Canva-like CMS parity**, with strict priority on:
 -1. Form submission flow
 -2. Contact/share flow
 -3. Comment moderation flow
 +Continue implementation toward **Wix/WordPress/Canva-like CMS parity** with a headless-first design:
- 
+
 -Everything else is secondary until this is stable.
 +1. Finish remaining Phase A gaps: contracts, auth, and persistence boundaries.
 +2. Close remaining Phase A gaps: contracts, auth, and persistence boundaries.
 +3. Finish remaining Phase C gaps: moderation ergonomics for large-scope workflows and anti-abuse operator tooling.
 +4. Continue into D–J for full platform depth.
- 
+
 -## 2) Reference docs (read first every session)
 +Core outcome: users can use `backy-admin`, or any custom frontend, against the same `backy-public` contracts.
 +
@@ -96,7 +96,7 @@ index 783f573..7c042a0 100644
 +### Phase C (forms/comments production module) — hardening complete for operator use
 +- Public and admin comment moderation endpoints are now feature-complete enough for day-one operations.
 +- Remaining follow-ups are intentionally scoped to scale/perf: identity lookup paging, anti-abuse retention policy tooling, and SOC telemetry export ergonomics.
- 
+
 -## 3) Current known breakages to stabilize first
 -- Text elements and nested element selection became unreliable after recent editor changes.
 -- Right property panel showed duplicated/conflicting formatting UX.
@@ -171,7 +171,7 @@ index 783f573..7c042a0 100644
 +- Use `apply_patch` for all file edits.
 +- Keep fixes minimal and bounded.
 +- Do not run tests/builds unless explicitly requested.
- 
+
  ## 6) Active working files likely to be touched next
 -- `apps/admin/src/components/editor/Canvas.tsx`
 -- `apps/admin/src/components/editor/PropertyPanel.tsx`
@@ -200,7 +200,7 @@ index 783f573..7c042a0 100644
 +- Comment moderation + export + event telemetry flow are end-to-end and deterministic.
 +- Public comment read defaults to approved content unless explicitly querying moderation states.
 +- A-B-C historical checkpoint is maintained in `specs/stash.md`.
- 
+
  ## 8) Commit rule
 -This is a continuity repo. Each meaningful fix should be committed with a message in this pattern:
 -- `fix(editor): ...`
@@ -208,7 +208,7 @@ index 783f573..7c042a0 100644
 +- This is a continuity repo. Each meaningful fix should be committed separately with message prefixes such as:
 +  - `fix(editor): ...`
 +  - `feat(forms-comments): ...`
- 
+
 -Use this handoff file as the canonical context when deciding whether a change is in scope.
 +Use this handoff as canonical scope context before deciding whether a change is in scope.
 diff --git a/NEXT_CHAT_HANDOFF.md b/NEXT_CHAT_HANDOFF.md
@@ -218,20 +218,20 @@ index 7be5b9a..11bb1c1 100644
 @@ -1,23 +1,90 @@
 -# Backy Handoff Notes (2026-02-24)
 +# Backy Handoff Notes (2026-02-27)
- 
+
 -## Current active directory
--- Working repo is now: `/Users/devanshvarshney/Downloads/Scythian /backy`
+-- Working repo is now: `/Users/devanshvarshney/backy`
 -- This is the directory to continue from in future sessions.
 +## Active directory
-+- `/Users/devanshvarshney/Downloads/Scythian /backy`
- 
++- `/Users/devanshvarshney/backy`
+
 -## What was completed in latest pass
 -- Renamed branding references to the product/repo name `backy`.
 -- README and setup docs now reference `backy` paths.
--- Removed old `backy-cms` duplicate/stale folder under `/Users/devanshvarshney/Downloads/Scythian `.
+-- Removed old `backy-cms` duplicate/stale folder under `/Users/devanshvarshney`.
 -- Project metadata aligned to `backy` in:
--  - `/Users/devanshvarshney/Downloads/Scythian /backy/package.json` (repo URL updated)
--  - `/Users/devanshvarshney/Downloads/Scythian /backy/package-lock.json` (root lockfile name updated)
+-  - `/Users/devanshvarshney/backy/package.json` (repo URL updated)
+-  - `/Users/devanshvarshney/backy/package-lock.json` (root lockfile name updated)
 +## Current working focus
 +- This pass completed remaining **Phase B editor action wiring** edge-cases (single-select deterministic stack + save/publish/reload safety).
 +- Phase C has been stabilized around admin moderation parity and parser correctness; this pass also added editor read-only action hardening.
@@ -243,7 +243,7 @@ index 7be5b9a..11bb1c1 100644
 +- `specs/backy-cms-completion-spec.md`
 +- `specs/phase-docs/backy-alpha-vs-numeric-phase-progress-2026-02-27.md`
 +- `specs/stash.md`
- 
+
 -## Important note about remaining `backy-cms` strings
 -- Strings in package names such as `@backy-cms/*` and files like `specs/backy-cms-completion-spec.md` are intentionally preserved for package scope and are not part of repo-folder naming.
 -- Only stale folder/path references and README/path references were cleaned.
@@ -273,14 +273,14 @@ index 7be5b9a..11bb1c1 100644
 +  - `CanvasEditor` now has a read-only mode and page/blog editor routes pass `readOnly={!canEdit}`.
 +- `__root.tsx` now memoizes session-timeout expiry and gates auto-sign-out on active authentication state, which should remove startup router-loop churn and unstable session timeout updates.
 +- `__root.tsx` redirect logic is now effect-driven (`redirectTo` + `navigate`) to avoid render-time navigation loops.
- 
+
 -## Commit status
 -- Initial commit is now being created from this exact directory state.
 +## Remaining in this pass (order of execution)
 +1. Finish Phase A: DB/store boundaries + RBAC/session enforcement.
 +2. Re-check startup loop by hard refresh after root/session hardening.
 +3. Return to Phase C throughput hardening only: bulk operators, anti-abuse retention exports, and alert/forensic signals.
- 
+
 -## Continue points
 -- Next chat should proceed from this repo root and this handoff file first if context is needed.
 +## Current phase note
@@ -331,7 +331,7 @@ index 62960b5..38dc5ca 100644
 @@ -327,6 +327,104 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
      return listTypes.length ? (listTypes[0] as 'ul' | 'ol' | null) : null;
    }, [getActiveEditor, getIsListNode]);
- 
+
 +  const getTextNodeAtPath = useCallback((editor: PlateEditor, path: number[]): Record<string, unknown> | null => {
 +    try {
 +      const [node] = Editor.node(editor as any, path);
@@ -436,7 +436,7 @@ index 62960b5..38dc5ca 100644
 @@ -375,36 +473,18 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
          return false;
        }
- 
+
 -      if (Range.isCollapsed(selection)) {
 -        const marks = Editor.marks(editor as any) as Record<string, any> | null;
 -        return marks ? !!marks[format] : false;
@@ -463,7 +463,7 @@ index 62960b5..38dc5ca 100644
 +      if (markState !== null) {
 +        return markState;
        }
- 
+
 -      return true;
 +      const marks = Editor.marks(editor as any) as Record<string, any> | null;
 +      return marks ? !!marks[format] : false;
@@ -473,7 +473,7 @@ index 62960b5..38dc5ca 100644
      }
 -  }, [getActiveEditor]);
 +  }, [getActiveEditor, getMarkStateForSelection]);
- 
+
    const hasRangeSelection = useCallback(() => {
      const editor = getActiveEditor();
 diff --git a/apps/admin/src/components/editor/Canvas.tsx b/apps/admin/src/components/editor/Canvas.tsx
@@ -483,7 +483,7 @@ index 14daa25..d94e022 100644
 @@ -59,6 +59,18 @@ const sanitizeText = (value: unknown): string => {
    return '';
  };
- 
+
 +const areValuesEquivalent = (left: unknown, right: unknown): boolean => {
 +  if (left === right) {
 +    return true;
@@ -502,7 +502,7 @@ index 14daa25..d94e022 100644
 @@ -299,6 +311,22 @@ const normalizeMapUrl = (addressOrUrl: unknown): string => {
    return `https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`;
  };
- 
+
 +const cloneNodePayload = (value: unknown): unknown => {
 +  if (value === null || value === undefined) {
 +    return value;
@@ -544,7 +544,7 @@ index 14daa25..d94e022 100644
    /** Whether canvas is in preview mode */
    isPreview?: boolean;
  }
- 
+
  const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
 +const TEXT_DRAG_START_THRESHOLD = 5;
 +
@@ -555,7 +555,7 @@ index 14daa25..d94e022 100644
 +  initialX: number;
 +  initialY: number;
 +}
- 
+
  // ============================================
  // COMPONENT
 @@ -513,17 +558,21 @@ const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
@@ -586,7 +586,7 @@ index 14daa25..d94e022 100644
 @@ -533,6 +582,38 @@ export function Canvas({
      return null;
    }, []);
- 
+
 +  const getInteractionPath = useCallback((target: EventTarget | null): Element[] => {
 +    const startElement = getTargetElement(target);
 +    if (!startElement) {
@@ -625,7 +625,7 @@ index 14daa25..d94e022 100644
 @@ -544,24 +625,141 @@ export function Canvas({
      }
    }, [isPreview, selectedId]);
- 
+
 -  const isInteractiveHandle = useCallback((target: EventTarget | null) => {
 -    const element = getTargetElement(target);
 -    if (!element) return false;
@@ -652,7 +652,7 @@ index 14daa25..d94e022 100644
 +      setEditingId(null);
 +      return;
 +    }
- 
+
 -  const isTextEditorInteraction = useCallback((target: EventTarget | null) => {
 -    const element = getTargetElement(target);
 -    if (!element) return false;
@@ -663,7 +663,7 @@ index 14daa25..d94e022 100644
 +    elementsRef.current = elements;
 +    liveElementsRef.current = elements;
 +  }, [elements]);
- 
+
 -    const editorHost = element.closest('[data-backy-text-editor]');
 -    if (!editorHost) {
 +  const isInteractiveHandle = useCallback((target: EventTarget | null) => {
@@ -681,7 +681,7 @@ index 14daa25..d94e022 100644
 +    if (!targetElement) {
        return false;
      }
- 
+
 -    return editorHost.getAttribute('data-backy-text-editor-editable') === 'true';
 +    return Boolean(
 +      targetElement.closest('[data-element-id]')
@@ -693,7 +693,7 @@ index 14daa25..d94e022 100644
 +      || targetElement.closest('[data-role="canvas-resize-handle"]'),
 +    );
    }, [getTargetElement]);
- 
+
 +  const hasPendingTextEditRef = useRef(false);
 +  const pendingTextEditElementIdRef = useRef<string | null>(null);
 +
@@ -778,7 +778,7 @@ index 14daa25..d94e022 100644
 @@ -571,7 +769,7 @@ export function Canvas({
        return;
      }
- 
+
 -    const element = findElementById(elements, elementId);
 +    const element = findElementById(elementsRef.current, elementId);
      if (!element) {
@@ -787,27 +787,27 @@ index 14daa25..d94e022 100644
 @@ -592,6 +790,10 @@ export function Canvas({
        previousEditingId: editingId,
      });
- 
+
 +    if (editingId && editingId !== elementId) {
 +      finalizeTextEditDraft();
 +    }
 +
      onSelect(elementId);
      setEditingId((current) => (current === elementId ? current : elementId));
- 
+
 @@ -632,7 +834,7 @@ export function Canvas({
      };
- 
+
      focusEditable();
 -  }, [debugTextInteraction, elements, editingId, isPreview, onSelect]);
 +  }, [debugTextInteraction, editingId, finalizeTextEditDraft, isPreview, onSelect]);
- 
+
    const handleExternalEditRequest = useCallback((event: Event) => {
      const elementId = (event as CustomEvent<{ elementId?: string }>)?.detail?.elementId;
 @@ -649,6 +851,8 @@ export function Canvas({
      initialY: number;
    } | null>(null);
- 
+
 +  const [pendingTextDrag, setPendingTextDrag] = useState<PendingTextDragState | null>(null);
 +
    // Resize state for resizing elements
@@ -816,7 +816,7 @@ index 14daa25..d94e022 100644
 @@ -667,6 +871,8 @@ export function Canvas({
      initialHeight: number;
    } | null>(null);
- 
+
 +  const hasInteractiveMutationRef = useRef(false);
 +
    /**
@@ -842,17 +842,17 @@ index 14daa25..d94e022 100644
 +        finalizeTextEditDraft();
 +        setEditingId(null);
 +      }
- 
+
        const eventTarget = getTargetElement(e.target);
        const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
 @@ -691,13 +899,35 @@ export function Canvas({
          return;
        }
- 
+
 -      const clickedElement = findElementById(elements, elementId);
 +      const clickedElement = findElementById(elementsRef.current, elementId);
        if (!clickedElement) return;
- 
+
        if (isInteractiveHandle(e.target)) return;
 +
 +      const isTextElement = isTextEditableElement(clickedElement.type);
@@ -876,10 +876,10 @@ index 14daa25..d94e022 100644
 +      }
 +
        debugTextInteraction('handleMouseDown started drag', { elementId, x: e.clientX, y: e.clientY });
- 
+
        onSelect(elementId);
 +      hasInteractiveMutationRef.current = false;
- 
+
        if (editingId) {
          setEditingId(null);
 @@ -711,7 +941,14 @@ export function Canvas({
@@ -896,16 +896,16 @@ index 14daa25..d94e022 100644
 +      requestEditForElement,
 +    ]
    );
- 
+
    /**
 @@ -724,9 +961,10 @@ export function Canvas({
        e.stopPropagation();
        e.preventDefault();
- 
+
 -      const element = findElementById(elements, elementId);
 +      const element = findElementById(elementsRef.current, elementId);
        if (!element) return;
- 
+
 +      hasInteractiveMutationRef.current = false;
        setResizeState({
          elementId,
@@ -917,7 +917,7 @@ index 14daa25..d94e022 100644
 -    [elements, isPreview]
 +    [isPreview]
    );
- 
+
    /**
 @@ -747,6 +985,8 @@ export function Canvas({
    const handleMouseMove = useCallback(
@@ -925,13 +925,13 @@ index 14daa25..d94e022 100644
        if (isPreview) return;
 +      const currentElements = elementsRef.current;
 +      const emitMutation = onElementsInFlightChange || onElementsChange;
- 
+
        // Handle resize
        if (resizeState) {
 @@ -788,15 +1028,30 @@ export function Canvas({
          newWidth = Math.round(newWidth / 10) * 10;
          newHeight = Math.round(newHeight / 10) * 10;
- 
+
 -        onElementsChange(
 -          updateElementById(elements, resizeState.elementId, (element) => ({
 -            ...element,
@@ -967,11 +967,11 @@ index 14daa25..d94e022 100644
 +        emitMutation(nextElements);
          return;
        }
- 
+
 @@ -812,16 +1067,73 @@ export function Canvas({
          const snappedX = Math.round(newX / 10) * 10;
          const snappedY = Math.round(newY / 10) * 10;
- 
+
 -        onElementsChange(
 -          updateElementById(elements, dragState.elementId, (element) => ({
 -            ...element,
@@ -1048,16 +1048,16 @@ index 14daa25..d94e022 100644
 -    [dragState, resizeState, elements, isPreview, onElementsChange]
 +    [dragState, findElementById, isPreview, onElementsChange, onElementsInFlightChange, pendingTextDrag, resizeState]
    );
- 
+
    const handleCanvasElementDrop = useCallback(
 @@ -838,7 +1150,7 @@ export function Canvas({
          const toNumber = (value: number) => Math.round(Math.max(0, value / 10) * 10);
- 
+
          if (forcedParentId) {
 -          const parent = findElementById(elements, forcedParentId);
 +          const parent = findElementById(elementsRef.current, forcedParentId);
            const isDropTarget = parent && canAcceptNestedDrop(parent.type);
- 
+
            const dropHost = canvasRef.current?.querySelector<HTMLElement>(
 @@ -852,7 +1164,7 @@ export function Canvas({
                toNumber(event.clientX - hostRect.left),
@@ -1065,13 +1065,13 @@ index 14daa25..d94e022 100644
              );
 -            const withChild = insertElementAsChild(elements, forcedParentId, child);
 +            const withChild = insertElementAsChild(elementsRef.current, forcedParentId, child);
- 
+
              if (withChild.updated) {
                onElementsChange(withChild.elements);
 @@ -869,27 +1181,44 @@ export function Canvas({
            toNumber(parsedY)
          );
- 
+
 -        onElementsChange([...elements, rootElement]);
 +        onElementsChange([...elementsRef.current, rootElement]);
          onSelect(rootElement.id);
@@ -1082,7 +1082,7 @@ index 14daa25..d94e022 100644
 -    [elements, onElementsChange, onSelect]
 +    [onElementsChange, onSelect]
    );
- 
+
    const handleElementPropsUpdate = useCallback(
      (elementId: string, updates: { [key: string]: unknown }) => {
 -      const next = updateElementById(elements, elementId, (element) => ({
@@ -1102,7 +1102,7 @@ index 14daa25..d94e022 100644
          ...element,
          props: { ...element.props, ...updates },
        }));
- 
+
        if (next.updated) {
 +        if (onElementUpdate) {
 +          onElementUpdate(elementId, next.elements);
@@ -1115,11 +1115,11 @@ index 14daa25..d94e022 100644
 -    [elements, onElementsChange]
 +    [onElementUpdate, onElementsChange]
    );
- 
+
    /**
 @@ -922,10 +1251,14 @@ export function Canvas({
    }, [canvasResizeState, onSizeChange, size]);
- 
+
    const handleGlobalMouseUp = useCallback(() => {
 +    const resized = Boolean(canvasResizeState);
      if (canvasResizeState) {
@@ -1130,7 +1130,7 @@ index 14daa25..d94e022 100644
      }
 -  }, [canvasResizeState]);
 +  }, [canvasResizeState, onSizeCommit, size]);
- 
+
    useEffect(() => {
      if (canvasResizeState) {
 @@ -942,52 +1275,42 @@ export function Canvas({
@@ -1168,7 +1168,7 @@ index 14daa25..d94e022 100644
      }
 -  }, [isPreview, isTextEditorInteraction, onSelect]);
 +  }, [dragState, onElementsMutationCommit, pendingTextEditElementIdRef, resizeState]);
- 
+
 -  const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
 -    const eventTarget = getTargetElement(event.target);
 -    if (!eventTarget) {
@@ -1176,14 +1176,14 @@ index 14daa25..d94e022 100644
 +    if (isPreview) {
        return;
      }
- 
+
 -    const clickedId = eventTarget.closest?.('[data-element-id]')?.getAttribute('data-element-id');
 -    debugTextInteraction('handleCanvasDoubleClick', { clickedId });
 -    requestEditForElement(clickedId || null);
 -  }, [getTargetElement, requestEditForElement]);
 +    const isCanvasBackgroundClick = event.target === event.currentTarget;
 +    const isCanvasElement = isCanvasInteractionTarget(event.target);
- 
+
 -  const handleDoubleClick = useCallback((elementId: string) => {
 -    if (isPreview) {
 -      return;
@@ -1197,7 +1197,7 @@ index 14daa25..d94e022 100644
 -    requestEditForElement(elementId);
 -  }, [isPreview, requestEditForElement]);
 +  }, [finalizeTextEditDraft, isCanvasInteractionTarget, isPreview, onSelect]);
- 
+
    const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
      if (event.key === 'Escape') {
 +      finalizeTextEditDraft();
@@ -1205,7 +1205,7 @@ index 14daa25..d94e022 100644
      }
 -  }, []);
 +  }, [finalizeTextEditDraft]);
- 
+
    useEffect(() => {
      window.addEventListener(EDITOR_ACTIVATION_EVENT, handleExternalEditRequest);
 @@ -1023,8 +1346,7 @@ export function Canvas({
@@ -1241,7 +1241,7 @@ index 14daa25..d94e022 100644
 +      onRequestEdit={requestEditForElement}
          />
        ))}
- 
+
 @@ -1096,6 +1419,7 @@ interface CanvasElementComponentProps {
    isSelected: boolean;
    selectedId: string | null;
@@ -1259,7 +1259,7 @@ index 14daa25..d94e022 100644
 -  onDoubleClick: () => void;
    onStopEditing?: () => void;
  }
- 
+
 @@ -1120,9 +1444,10 @@ function CanvasElementComponent({
    onUpdate,
    onUpdateElement,
@@ -1294,7 +1294,7 @@ index 14daa25..d94e022 100644
          />
        ))}
 @@ -1175,26 +1501,30 @@ function CanvasElementComponent({
- 
+
      switch (resolvedType) {
        case 'text':
 +      case 'paragraph': {
@@ -1302,7 +1302,7 @@ index 14daa25..d94e022 100644
          // We use Tiptap for both states to ensure WYSIWYG consistency if possible,
          // but for performance "Preview" might just be a read-only Tiptap.
 +        const isParagraphType = resolvedType === 'paragraph';
- 
+
        return (
          <div
            style={{ ...sharedStyle, width: '100%', height: '100%' }}
@@ -1334,7 +1334,7 @@ index 14daa25..d94e022 100644
            </div>
          );
 +      }
- 
+
        case 'heading':
        return (
          <div
@@ -1416,7 +1416,7 @@ index 14daa25..d94e022 100644
 @@ -2101,37 +2433,6 @@ function CanvasElementComponent({
          );
        }
- 
+
 -      case 'paragraph':
 -      return (
 -        <div
@@ -1452,7 +1452,7 @@ index 14daa25..d94e022 100644
          return (
            <div
 @@ -2252,10 +2553,10 @@ function CanvasElementComponent({
- 
+
    return (
        <div
 -      className={cn(
@@ -1489,7 +1489,7 @@ index 14daa25..d94e022 100644
 -      onDoubleClick={onDoubleClick}
      >
        {renderContent()}
- 
+
 diff --git a/apps/admin/src/components/editor/CanvasEditor.tsx b/apps/admin/src/components/editor/CanvasEditor.tsx
 index c60c242..be4cc70 100644
 --- a/apps/admin/src/components/editor/CanvasEditor.tsx
@@ -1497,7 +1497,7 @@ index c60c242..be4cc70 100644
 @@ -76,6 +76,22 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
    'comment',
  ];
- 
+
 +const MAX_HISTORY_LENGTH = 50;
 +const TEXT_ELEMENT_TYPES: CanvasElement['type'][] = ['text', 'heading', 'paragraph', 'quote', 'list'];
 +const ROOT_ELEMENT_KEYS: ReadonlySet<keyof CanvasElement | 'styles' | 'props'> = new Set([
@@ -1547,20 +1547,20 @@ index c60c242..be4cc70 100644
 +  removedParentId?: string | null;
 +  nextSelectedId?: string | null;
  }
- 
+
  const normalizeTypeToken = (value: string): string => {
    return typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
  };
- 
+
 -const normalizeElementType = (value: string): CanvasElement['type'] => {
 +  const normalizeElementType = (value: string): CanvasElement['type'] => {
    const normalized = normalizeTypeToken(value);
- 
+
    if (!normalized) {
 @@ -183,6 +215,33 @@ const normalizeElementType = (value: string): CanvasElement['type'] => {
      : 'text';
  };
- 
+
 +const normalizeForComparison = (value: unknown): unknown => {
 +  if (value === null || value === undefined) {
 +    return value;
@@ -1627,7 +1627,7 @@ index c60c242..be4cc70 100644
    const changeSequenceRef = useRef(0);
 +  const persistedHistoryIndexRef = useRef(0);
 +  const historyIndexRef = useRef(0);
- 
+
    // Undo/Redo State
 -  const [history, setHistory] = useState<Array<{ elements: CanvasElement[]; selectedId: string | null }>>([
 -    { elements: initialElements, selectedId: null },
@@ -1641,12 +1641,12 @@ index c60c242..be4cc70 100644
    ]);
    const [historyIndex, setHistoryIndex] = useState(0);
 +  const historyRef = useRef<CanvasHistoryState[]>(history);
- 
+
    // Settings State
    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
    const [pageSettings, setPageSettings] = useState<PageSettings>(initialSettings);
 +  const pageSettingsRef = useRef<PageSettings>(initialSettings);
- 
+
    // Clipboard State
    const [clipboardElement, setClipboardElement] = useState<CanvasElement | null>(
 @@ -262,6 +346,13 @@ export function CanvasEditor({
@@ -1660,13 +1660,13 @@ index c60c242..be4cc70 100644
 +  const hasPendingCanvasResizeRef = useRef(false);
 +  const hasInFlightMutationRef = useRef(false);
 +  const pendingElementsRef = useRef<CanvasElement[]>(elements);
- 
+
    const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
      const normalizedType = normalizeElementType(elementType);
 @@ -280,11 +371,83 @@ export function CanvasEditor({
      JSON.parse(JSON.stringify(nodes)) as CanvasElement[]
    ), []);
- 
+
 +  const cloneNodeWithNewIds = useCallback((node: CanvasElement, offsetX = 0, offsetY = 0): CanvasElement => {
 +    const next = cloneElements([node])[0];
 +    const remapNode = (item: CanvasElement, isRoot: boolean): CanvasElement => {
@@ -1702,7 +1702,7 @@ index c60c242..be4cc70 100644
 +  }), [cloneElements, clonePageSettings]);
 +
    const getInitialElements = useCallback(() => cloneElements(initialElements), [cloneElements, initialElements]);
- 
+
 -  const getInitialSettings = useCallback(() => (
 -    JSON.parse(JSON.stringify(initialSettings)) as PageSettings
 -  ), [initialSettings]);
@@ -1747,13 +1747,13 @@ index c60c242..be4cc70 100644
 +    settings: pageSettings,
 +    size,
 +  }), [elements, pageSettings, size]);
- 
+
    const markChanges = useCallback(() => {
      changeSequenceRef.current += 1;
 @@ -315,6 +478,120 @@ export function CanvasEditor({
      return null;
    }, []);
- 
+
 +  const resolveSelectionForExactMatch = useCallback((
 +    nodes: CanvasElement[],
 +    selectedSnapshot: string | null,
@@ -1886,7 +1886,7 @@ index c60c242..be4cc70 100644
        let updated = false;
        let removedParentId: string | null | undefined;
 +      let nextSelectedId: string | null | undefined;
- 
+
 -      const next = nodes.reduce<CanvasElement[]>((acc, item) => {
 +      const next = nodes.reduce<CanvasElement[]>((acc, item, index) => {
          if (item.id === targetId) {
@@ -1895,10 +1895,10 @@ index c60c242..be4cc70 100644
 +          nextSelectedId = nodes[index + 1]?.id || nodes[index - 1]?.id || parentId || null;
            return acc;
          }
- 
+
 @@ -413,7 +693,8 @@ export function CanvasEditor({
          }
- 
+
          updated = true;
 -        removedParentId = childResult.removedParentId ?? parentId;
 +        removedParentId = childResult.removedParentId ?? removedParentId;
@@ -1909,7 +1909,7 @@ index c60c242..be4cc70 100644
 @@ -421,20 +702,165 @@ export function CanvasEditor({
          return acc;
        }, []);
- 
+
 -      return { elements: next, updated, removedParentId };
 +      return {
 +        elements: next,
@@ -1918,7 +1918,7 @@ index c60c242..be4cc70 100644
 +        nextSelectedId,
 +      };
      };
- 
+
      const removed = walk(items, null);
      if (!removed.updated) {
 -      return { ...removed, removedParentId: undefined };
@@ -1929,7 +1929,7 @@ index c60c242..be4cc70 100644
 +        nextSelectedId: removed.nextSelectedId,
 +      };
      }
- 
+
      return {
 -      ...removed,
 -      removedParentId: removed.removedParentId === null ? null : removed.removedParentId,
@@ -1939,7 +1939,7 @@ index c60c242..be4cc70 100644
 +      nextSelectedId: removed.nextSelectedId === undefined ? null : removed.nextSelectedId,
      };
    };
- 
+
 +  const resetFromInitialState = useCallback(() => {
 +    if (hasUnsavedChanges) {
 +      return;
@@ -2079,7 +2079,7 @@ index c60c242..be4cc70 100644
 @@ -442,6 +868,10 @@ export function CanvasEditor({
      }
    }, [elements, pageSettings, onChange, size]);
- 
+
 +  useEffect(() => {
 +    selectedIdRef.current = selectedId;
 +  }, [selectedId]);
@@ -2090,7 +2090,7 @@ index c60c242..be4cc70 100644
 @@ -462,177 +892,482 @@ export function CanvasEditor({
        return;
      }
- 
+
 -    if (!findElementById(elements, selectedId)) {
 -      setSelectedId(null);
 +    const nextSelectedId = resolveSelectionOrFallback(elements, selectedId);
@@ -2099,7 +2099,7 @@ index c60c242..be4cc70 100644
      }
 -  }, [elements, selectedId, findElementById]);
 +  }, [elements, resolveSelectionOrFallback, selectedId, setCurrentSelection]);
- 
+
    /**
     * Add current state to history
     */
@@ -2134,7 +2134,7 @@ index c60c242..be4cc70 100644
 +    if (previousState && areHistoryStatesEquivalent(previousState, nextState)) {
 +      return false;
 +    }
- 
+
 -    // Limit history size to 50
 -    if (newHistory.length > 50) {
 -      newHistory.shift();
@@ -2143,7 +2143,7 @@ index c60c242..be4cc70 100644
 +    if (isBranchNavigation && hasPersistedHistory && persistedHistoryIndexRef.current > baseIndex) {
 +      persistedHistoryIndexRef.current = -1;
      }
- 
+
 -    setHistory(newHistory);
 -    // Since we just sliced and pushed, the index is the last one
 -    setHistoryIndex(newHistory.length - 1);
@@ -2219,7 +2219,7 @@ index c60c242..be4cc70 100644
 +
 +    return didPushHistory;
 +  }, [addToHistory, getActiveSelectedId, markChanges, resolveSelectionWithHistoryFallback, setDirtyStateFromHistoryIndex]);
- 
+
    /**
     * Undo
     */
@@ -2248,7 +2248,7 @@ index c60c242..be4cc70 100644
 +
 +    applyHistoryState(targetIndex);
 +  }, [applyHistoryState, flushPendingInteractionHistory, isMutating]);
- 
+
    /**
     * Redo
     */
@@ -2278,7 +2278,7 @@ index c60c242..be4cc70 100644
 +
 +    applyHistoryState(targetIndex);
 +  }, [applyHistoryState, flushPendingInteractionHistory, isMutating]);
- 
+
    /**
     * Wrapper for updating elements with history
     */
@@ -2374,7 +2374,7 @@ index c60c242..be4cc70 100644
 +  const cloneElementForClipboard = useCallback((node: CanvasElement): CanvasElement => (
 +    cloneElements([node])[0]
 +  ), [cloneElements]);
- 
+
    /**
     * Copy
     */
@@ -2396,14 +2396,14 @@ index c60c242..be4cc70 100644
      }
 -  }, [selectedId, elements]);
 +  }, [cloneElementForClipboard, findElementById, getActiveSelectedId, isMutating]);
- 
+
    const normalizePastedElement = useCallback(
      (sourceElement: CanvasElement, x = 20, y = 20): CanvasElement => {
 -      const clone = JSON.parse(JSON.stringify(sourceElement)) as CanvasElement;
 -      const highestZ = Math.max(walkTreeMaxZ(elements), 0);
 +      const clone = cloneNodeWithNewIds(sourceElement, x, y);
 +      const highestZ = Math.max(walkTreeMaxZ(elementsRef.current), 0);
- 
+
        return {
          ...clone,
          id: generateId(),
@@ -2418,7 +2418,7 @@ index c60c242..be4cc70 100644
 -    [elements]
 +    [cloneNodeWithNewIds]
    );
- 
+
    /**
     * Paste
     */
@@ -2440,14 +2440,14 @@ index c60c242..be4cc70 100644
 -        : { elements: [...elements, newElement], updated: false };
 +        ? insertElementAsChild(elementsRef.current, selectedElement.id, newElement)
 +        : { elements: [...elementsRef.current, newElement], updated: false };
- 
+
        const nextElements = canNest && newElements.updated ? newElements.elements : newElements.elements;
- 
+
        updateElementsWithHistory(nextElements, newElement.id);
      }
 -  }, [clipboardElement, elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 +  }, [clipboardElement, getActiveSelectedId, isMutating, normalizePastedElement, updateElementsWithHistory]);
- 
+
    const handleDuplicate = useCallback(() => {
 -    if (!selectedId) return;
 -    const selectedElement = findElementById(elements, selectedId);
@@ -2460,7 +2460,7 @@ index c60c242..be4cc70 100644
 +      ? findElementById(elementsRef.current, activeSelection)
 +      : null;
      if (!selectedElement) return;
- 
+
      const duplicate = normalizePastedElement(selectedElement);
 -    const canNest = canAcceptNestedDrop(selectedElement.type);
 -    const duplicated = canNest
@@ -2472,18 +2472,18 @@ index c60c242..be4cc70 100644
        ? duplicated.elements
 -      : [...elements, duplicate];
 +      : [...elementsRef.current, duplicate];
- 
+
      updateElementsWithHistory(nextElements, duplicate.id);
 -  }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 +  }, [findElementById, getActiveSelectedId, insertElementAfterId, isMutating, normalizePastedElement, updateElementsWithHistory]);
- 
+
    // Get selected element
 -  const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
 +  const activeSelection = getActiveSelectedId();
 +  const selectedElement = activeSelection
 +    ? findElementById(elements, activeSelection)
 +    : null;
- 
+
    /**
     * Handle element selection
     */
@@ -2496,7 +2496,7 @@ index c60c242..be4cc70 100644
 +
 +    setCurrentSelection(id);
 +  }, [setCurrentSelection]);
- 
+
    /**
     * Handle elements change
     */
@@ -2564,7 +2564,7 @@ index c60c242..be4cc70 100644
 +    resolveSelectionForLiveMutation,
 +    areCanvasElementsEquivalent,
 +  ]);
- 
+
    /**
     * Handle element update from property panel
     */
@@ -2599,7 +2599,7 @@ index c60c242..be4cc70 100644
 +        if (key === 'props') {
 +          return;
 +        }
- 
+
 -      const result = updateElementById(elements, selectedId, (element) => ({
 -        ...element,
 -        ...updates,
@@ -2636,18 +2636,18 @@ index c60c242..be4cc70 100644
 +
 +        return nextElement;
 +      });
- 
+
        if (!result.updated) {
          return;
        }
- 
+
 -      updateElementsWithHistory(result.elements);
 +      updateElementsWithHistory(result.elements, targetId);
      },
 -    [selectedId, elements, updateElementsWithHistory]
 +    [findElementById, getActiveSelectedId, isMutating, updateElementsWithHistory]
    );
- 
+
    /**
 @@ -647,6 +1382,10 @@ export function CanvasEditor({
     */
@@ -2658,10 +2658,10 @@ index c60c242..be4cc70 100644
 +      }
 +
        e.preventDefault();
- 
+
        try {
 @@ -662,70 +1401,117 @@ export function CanvasEditor({
- 
+
          // Create new element
          const newElement = createCanvasElement(normalizedType, x, y);
 -        const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -2676,12 +2676,12 @@ index c60c242..be4cc70 100644
 -          : { elements: [...elements, normalized], updated: false };
 +          ? insertElementAsChild(elementsRef.current, selectedElement.id, normalized)
 +          : { elements: [...elementsRef.current, normalized], updated: false };
- 
+
          const newElements = result.updated || !isNested
            ? result.elements
 -          : [...elements, normalized];
 +          : [...elementsRef.current, normalized];
- 
+
          updateElementsWithHistory(newElements, normalized.id);
        } catch (err) {
          console.error('Failed to drop element:', err);
@@ -2690,7 +2690,7 @@ index c60c242..be4cc70 100644
 -    [elements, selectedId, updateElementsWithHistory]
 +    [getActiveSelectedId, isMutating, updateElementsWithHistory]
    );
- 
+
    /**
     * Delete selected element
     */
@@ -2709,41 +2709,41 @@ index c60c242..be4cc70 100644
 +
 +    const result = removeElementById(elementsRef.current, targetId);
      if (!result.updated) return;
- 
+
 -    updateElementsWithHistory(result.elements, result.removedParentId || null);
 -  }, [selectedId, elements, updateElementsWithHistory]);
 +    updateElementsWithHistory(result.elements, result.nextSelectedId ?? null);
 +  }, [findElementById, getActiveSelectedId, isMutating, updateElementsWithHistory]);
- 
+
    const handleCut = useCallback(() => {
 -    if (!selectedId) return;
 +    if (isMutating) {
 +      return;
 +    }
- 
+
 -    const selectedElement = findElementById(elements, selectedId);
 +    const activeSelection = getActiveSelectedId();
 +    const selectedElement = activeSelection
 +      ? findElementById(elementsRef.current, activeSelection)
 +      : null;
      if (!selectedElement) return;
- 
+
 -    setClipboardElement(selectedElement);
 +    setClipboardElement(cloneElementForClipboard(selectedElement));
- 
+
 -    const result = removeElementById(elements, selectedId);
 +    const result = removeElementById(elementsRef.current, selectedElement.id);
      if (!result.updated) {
        return;
      }
- 
+
 -    const parentSelection = result.removedParentId || null;
 -    setSelectedId(parentSelection);
 -    updateElementsWithHistory(result.elements, parentSelection);
 -  }, [elements, findElementById, selectedId, updateElementsWithHistory]);
 +    updateElementsWithHistory(result.elements, result.nextSelectedId ?? null);
 +  }, [cloneElementForClipboard, findElementById, getActiveSelectedId, isMutating, updateElementsWithHistory]);
- 
+
    /**
     * Handle save
     */
@@ -2757,7 +2757,7 @@ index c60c242..be4cc70 100644
 -      return;
 +      return false;
      }
- 
+
 +    flushPendingInteractionHistory();
      const saveSequence = changeSequenceRef.current;
 +    const saveHistoryIndex = historyIndexRef.current;
@@ -2817,7 +2817,7 @@ index c60c242..be4cc70 100644
 +    isSaving,
 +    onSave,
 +  ]);
- 
+
    const handleTogglePublish = useCallback(async () => {
 +    if (isReadOnly || isSaving) {
 +      return;
@@ -2838,7 +2838,7 @@ index c60c242..be4cc70 100644
 +      return;
 +    }
 +  }, [handleSaveWrapper, isReadOnly, isSaving]);
- 
+
 -  const handleReload = useCallback(() => {
 +  const handleReload = useCallback(async () => {
      if (isSaving) {
@@ -2847,7 +2847,7 @@ index c60c242..be4cc70 100644
 @@ -762,46 +1561,93 @@ export function CanvasEditor({
        }
      }
- 
+
 -    const nextElements = getInitialElements();
 -    const nextSettings = getInitialSettings();
 -
@@ -2887,7 +2887,7 @@ index c60c242..be4cc70 100644
 +    resetFromInitialState,
 +    setDirtyStateFromHistoryIndex,
 +  ]);
- 
+
    /**
     * Keyboard shortcuts
     */
@@ -2908,7 +2908,7 @@ index c60c242..be4cc70 100644
          e.preventDefault();
          return;
        }
- 
+
 -      const key = e.key.toLowerCase();
 -      // Ignore if typing in an input or textarea
 +      if (isMutating) {
@@ -2941,7 +2941,7 @@ index c60c242..be4cc70 100644
 +        }
          return;
        }
- 
+
 +      if (!isRichTextInteractionTarget && (e.ctrlKey || e.metaKey) && key === 'y') {
 +        e.preventDefault();
 +        handleRedo();
@@ -2963,7 +2963,7 @@ index c60c242..be4cc70 100644
          }
 @@ -809,28 +1655,19 @@ export function CanvasEditor({
        }
- 
+
        // Delete / Backspace
 -      if (e.key === 'Delete' || e.key === 'Backspace') {
 +      if ((e.key === 'Delete' || e.key === 'Backspace') && !isRichTextInteraction) {
@@ -2971,7 +2971,7 @@ index c60c242..be4cc70 100644
          deleteElement();
          return;
        }
- 
+
        // Ctrl+S / Cmd+S (Save)
 -      if ((e.ctrlKey || e.metaKey) && key === 's') {
 +      if ((e.ctrlKey || e.metaKey) && key === 's' && !hideSave) {
@@ -2979,7 +2979,7 @@ index c60c242..be4cc70 100644
          handleSaveWrapper();
          return;
        }
- 
+
 -      // Ctrl+Z / Cmd+Z (Undo)
 -      if ((e.ctrlKey || e.metaKey) && key === 'z') {
 -        if (e.shiftKey) {
@@ -3002,9 +3002,9 @@ index c60c242..be4cc70 100644
 +    isReadOnly,
 +    hideSave,
    ]);
- 
- 
- 
+
+
+
 +  const handleCanvasSizeChange = useCallback((newCanvasSize: CanvasSize) => {
 +    if (isMutating) {
 +      return;
@@ -3077,26 +3077,26 @@ index c60c242..be4cc70 100644
 -    [elements, pageSettings, onChange, markChanges]
 +    [addToHistory, getActiveSelectedId, isMutating, markChanges, size]
    );
- 
+
    useEffect(() => {
 -    if (!hasUnsavedChanges || isSaving) {
 +    if (!hasUnsavedChanges || isSaving || hideSave) {
        return;
      }
- 
+
 @@ -911,7 +1802,7 @@ export function CanvasEditor({
          clearTimeout(autosaveTimeoutRef.current);
        }
      };
 -  }, [handleSaveWrapper, hasUnsavedChanges, isSaving]);
 +  }, [handleSaveWrapper, hasUnsavedChanges, hideSave, isSaving]);
- 
+
    useEffect(() => () => {
      if (autosaveTimeoutRef.current) {
 @@ -953,6 +1844,9 @@ export function CanvasEditor({
      };
    }, [isPreview, size.width, size.height]);
- 
+
 +  const canUndo = (!isMutating) && (historyIndexRef.current > 0 || hasUncommittedInteraction);
 +  const canRedo = (!isMutating) && (historyIndexRef.current < historyRef.current.length - 1);
 +
@@ -3169,7 +3169,7 @@ index c60c242..be4cc70 100644
                aria-label="Delete"
 @@ -1121,7 +2016,7 @@ export function CanvasEditor({
              </button>
- 
+
              {/* Settings */}
 -            {!hideSettings && (
 +            {!hideSettings && !isReadOnly && (
@@ -3178,7 +3178,7 @@ index c60c242..be4cc70 100644
                onClick={() => setIsSettingsOpen(true)}
 @@ -1148,7 +2043,7 @@ export function CanvasEditor({
              <div className="w-px h-6 bg-border mx-1" />
- 
+
              {/* Save */}
 -            {!hideSave && (
 +            {!hideSave && !isReadOnly && (
@@ -3188,7 +3188,7 @@ index c60c242..be4cc70 100644
 @@ -1177,9 +2072,9 @@ export function CanvasEditor({
                    </button>
                  )}
- 
+
 -                <button
 -                  type="button"
 -                  onClick={handleSaveWrapper}
@@ -3201,14 +3201,14 @@ index c60c242..be4cc70 100644
 @@ -1193,10 +2088,10 @@ export function CanvasEditor({
            </div>
          </header>
- 
+
 -        {/* Main Content */}
 +          {/* Main Content */}
          <div className="flex-1 flex overflow-hidden">
            {/* Left Sidebar - Component Library */}
 -          {!isPreview && <ComponentLibrary onDragStart={handleDragStart} />}
 +          {!isPreview && !isReadOnly && <ComponentLibrary onDragStart={handleDragStart} />}
- 
+
            {/* Center - Canvas */}
            <div
 @@ -1217,24 +2112,22 @@ export function CanvasEditor({
@@ -3238,7 +3238,7 @@ index c60c242..be4cc70 100644
                </div>
              </div>
            </div>
- 
+
            {/* Right Sidebar - Property Panel */}
 -          {!isPreview && (
 +          {!isPreview && !isReadOnly && (
@@ -3248,7 +3248,7 @@ index c60c242..be4cc70 100644
 @@ -1244,15 +2137,23 @@ export function CanvasEditor({
            )}
          </div>
- 
+
 -        <PageSettingsModal
 -          isOpen={isSettingsOpen}
 -          onClose={() => setIsSettingsOpen(false)}
@@ -3301,7 +3301,7 @@ index 7a5922a..c681d9d 100644
 @@ -72,6 +72,54 @@ const parseBooleanSetting = (value: unknown, fallback = false): boolean => {
    return fallback;
  };
- 
+
 +const parseIntegerSetting = (value: string, fallback: number, min: number = 0): number => {
 +  if (!value.trim()) {
 +    return fallback;
@@ -3352,7 +3352,7 @@ index 7a5922a..c681d9d 100644
 +
  const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
    const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
- 
+
 @@ -442,7 +490,27 @@ function ContentProperties({
      <div className="space-y-3">
        {/* Rich Text Controls */}
@@ -3380,7 +3380,7 @@ index 7a5922a..c681d9d 100644
 +            <RichTextFormatting elementId={elementId} />
 +          </>
          )}
- 
+
        {/* Image Source */}
 @@ -777,8 +845,57 @@ function ContentProperties({
                    <option value="date">Date</option>
@@ -3646,7 +3646,7 @@ index 7a5922a..c681d9d 100644
 +          </div>
          </div>
        )}
- 
+
 diff --git a/apps/admin/src/components/editor/RichTextFormatting.tsx b/apps/admin/src/components/editor/RichTextFormatting.tsx
 index 0b68a2c..ae81dee 100644
 --- a/apps/admin/src/components/editor/RichTextFormatting.tsx
@@ -3654,7 +3654,7 @@ index 0b68a2c..ae81dee 100644
 @@ -52,6 +52,14 @@ interface RichTextFormattingProps {
  const MARK_ABSENT = Symbol('richtext-mark-absent');
  const MARK_MIXED = Symbol('richtext-mark-mixed');
- 
+
 +interface RangeSelectionRunResult {
 +  executed: boolean;
 +  selectionWasCollapsed: boolean;
@@ -3664,7 +3664,7 @@ index 0b68a2c..ae81dee 100644
 +}
 +
  type MarkStateValue = string | number | boolean | null | undefined | symbol;
- 
+
  export function RichTextFormatting({
 @@ -63,10 +71,11 @@ export function RichTextFormatting({
    const fontFamilies = useMemo(() => getFontFamilyOptions(media), [media]);
@@ -3719,7 +3719,7 @@ index 0b68a2c..ae81dee 100644
 @@ -150,7 +180,7 @@ export function RichTextFormatting({
        return;
      }
- 
+
 -    if (canInteractWithEditor() && !activeEditorMatchesElement) {
 +    if (canInteractInitial && !activeEditorMatchesElement) {
        const activeEditorElementId = getCurrentActiveEditorId();
@@ -3741,7 +3741,7 @@ index 0b68a2c..ae81dee 100644
 +          expectedElementId: elementId,
 +        });
 +      }
- 
+
        if (canInteract && activeMatches) {
          pendingActionRef.current = null;
 @@ -204,13 +242,30 @@ export function RichTextFormatting({
@@ -3775,7 +3775,7 @@ index 0b68a2c..ae81dee 100644
 +
          return;
        }
- 
+
 @@ -246,101 +301,212 @@ export function RichTextFormatting({
    const runForRangeSelection = useCallback((fn: () => void, options?: {
      requireTextSelection?: boolean;
@@ -3795,7 +3795,7 @@ index 0b68a2c..ae81dee 100644
 -      return;
 +      return defaultResult;
      }
- 
+
 -    const currentSelection = editor.selection;
 -    const hasActiveRange = currentSelection && SlateRange.isRange(currentSelection);
 -    const hasValidSelection = hasActiveRange
@@ -3853,7 +3853,7 @@ index 0b68a2c..ae81dee 100644
 +        },
        }
 +      : null;
- 
+
 +    if ((!hadSelection || !hasValidSelection) && shouldFallbackToWholeElement) {
        try {
          const start = Editor.start(editor as any, []);
@@ -3872,7 +3872,7 @@ index 0b68a2c..ae81dee 100644
 +        return defaultResult;
        }
      }
- 
+
 -    storeSelection();
 +    if (!hadSelection || !hasValidSelection) {
 +      if (shouldRequireTextSelection) {
@@ -3882,7 +3882,7 @@ index 0b68a2c..ae81dee 100644
 +        });
 +        return defaultResult;
 +      }
- 
+
 -    const selectionSnapshot = SlateRange.isRange(editor.selection)
 -      ? {
 -        anchor: {
@@ -3925,7 +3925,7 @@ index 0b68a2c..ae81dee 100644
 +    const currentSelection = activeSelection as SlateRange;
 +    const selectionWasCollapsed = SlateRange.isCollapsed(currentSelection);
 +    const shouldSelectWholeElement = shouldFallbackToWholeElement && (!hadSelection || selectionWasCollapsed);
- 
+
 -    if (
 -      options?.fallbackToWholeElement &&
 -      SlateRange.isRange(editor.selection) &&
@@ -3946,7 +3946,7 @@ index 0b68a2c..ae81dee 100644
 +        return defaultResult;
        }
      }
- 
+
 +    logTextAction('runForRangeSelection.state', {
 +      requireTextSelection: options?.requireTextSelection,
 +      fallbackToWholeElement: options?.fallbackToWholeElement,
@@ -3967,7 +3967,7 @@ index 0b68a2c..ae81dee 100644
 +    };
 +
      storeSelection();
- 
+
      try {
        logTextAction('runForRangeSelection.execute', { actionName: activePropertyActionRef.current });
        fn();
@@ -3988,7 +3988,7 @@ index 0b68a2c..ae81dee 100644
 +
 +    return result;
 +  }, [activePropertyActionRef, getActiveEditor, logTextAction, restoreSelection, storeSelection]);
- 
+
    const runForTextSelectionOrCaret = useCallback((fn: () => void, preferSelectionOnly = false) => {
 -    runForRangeSelection(fn, {
 +    return runForRangeSelection(fn, {
@@ -3996,7 +3996,7 @@ index 0b68a2c..ae81dee 100644
        fallbackToWholeElement: !preferSelectionOnly,
      });
    }, [runForRangeSelection]);
- 
+
 +  const syncCollapsedFormatStateAfterWholeSelection = useCallback((
 +    result: RangeSelectionRunResult,
 +    format: string,
@@ -4036,7 +4036,7 @@ index 0b68a2c..ae81dee 100644
 @@ -392,40 +558,112 @@ export function RichTextFormatting({
      }
    }, [activePropertyActionRef, getActiveEditor, logTextAction, restoreSelection, storeSelection]);
- 
+
 +  const readActiveTextMark = useCallback((format: string): MarkStateValue => {
 +    const editor = getActiveEditor();
 +    if (!editor) {
@@ -4100,7 +4100,7 @@ index 0b68a2c..ae81dee 100644
    const stopBubble = useCallback((event: React.MouseEvent) => {
      event.stopPropagation();
    }, []);
- 
+
    const runMark = useCallback((format: string, value?: any) => {
 -    runForTextSelectionOrCaret(() => {
 +    const normalizedValue = value === undefined || value === '' ? '' : value;
@@ -4109,7 +4109,7 @@ index 0b68a2c..ae81dee 100644
        if (!editor) {
          return;
        }
- 
+
 -      if (value === undefined || value === '') {
 +      if (normalizedValue === '') {
          Editor.removeMark(editor as any, format);
@@ -4127,7 +4127,7 @@ index 0b68a2c..ae81dee 100644
 +      normalizedValue === '' ? MARK_ABSENT : normalizedValue,
 +    );
 +  }, [runForTextSelectionOrCaret, syncCollapsedFormatStateAfterWholeSelection, getActiveEditor]);
- 
+
    const toggleTextMark = useCallback((format: string) => {
 -    runForTextSelectionOrCaret(() => {
 +    const isActive = readActiveTextMark(format) === true;
@@ -4137,7 +4137,7 @@ index 0b68a2c..ae81dee 100644
        if (!editor) {
          return;
        }
- 
+
 -      if (isMarkActive(format)) {
 +      if (isActive) {
          Editor.removeMark(editor as any, format);
@@ -4152,12 +4152,12 @@ index 0b68a2c..ae81dee 100644
 +      nextValue,
 +    );
 +  }, [getActiveEditor, readActiveTextMark, runForTextSelectionOrCaret, syncCollapsedFormatStateAfterWholeSelection]);
- 
+
    const insertTextAtSelection = useCallback((text: string) => {
      if (!text) {
 @@ -433,22 +671,12 @@ export function RichTextFormatting({
      }
- 
+
      runForTextSelectionOrCaret(() => {
 -      const editor = getActiveEditor();
 -      if (!editor) {
@@ -4169,7 +4169,7 @@ index 0b68a2c..ae81dee 100644
      });
 -  }, [getActiveEditor, runForTextSelectionOrCaret]);
 +  }, [insertText, runForTextSelectionOrCaret]);
- 
+
    const clearRichTextFormatting = useCallback(() => {
      runForTextSelectionOrCaret(() => {
 -      const editor = getActiveEditor();
@@ -4182,7 +4182,7 @@ index 0b68a2c..ae81dee 100644
          'italic',
 @@ -464,10 +692,10 @@ export function RichTextFormatting({
        ];
- 
+
        marks.forEach((mark) => {
 -        Editor.removeMark(editor as any, mark);
 +        removeMark(mark);
@@ -4190,13 +4190,13 @@ index 0b68a2c..ae81dee 100644
      });
 -  }, [getActiveEditor, runForTextSelectionOrCaret]);
 +  }, [removeMark, runForTextSelectionOrCaret]);
- 
+
    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
    const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ x: number; y: number } | null>(null);
 @@ -522,62 +750,6 @@ export function RichTextFormatting({
      };
    }, [showEmojiPicker]);
- 
+
 -  const readActiveTextMark = useCallback((format: string): MarkStateValue => {
 -    const editor = getActiveEditor();
 -    if (!editor) {
@@ -4365,7 +4365,7 @@ index 6180c68..61bce23 100644
  import { cn } from '@/lib/utils';
 -import { useAuthStore } from '@/stores/authStore';
 +import { useAuthStore, selectCanAdminister } from '@/stores/authStore';
- 
+
  // ============================================
  // TYPES
 @@ -41,6 +41,7 @@ export function Header({ sidebarCollapsed, onSidebarToggle }: HeaderProps) {
@@ -4374,7 +4374,7 @@ index 6180c68..61bce23 100644
    const { user, signOut } = useAuthStore();
 +  const canAdminister = useAuthStore(selectCanAdminister);
    const [userMenuOpen, setUserMenuOpen] = useState(false);
- 
+
    // Get page title from route
 @@ -59,7 +60,7 @@ export function Header({ sidebarCollapsed, onSidebarToggle }: HeaderProps) {
    const handleSignOut = () => {
@@ -4383,7 +4383,7 @@ index 6180c68..61bce23 100644
 -    navigate({ to: '/login' });
 +    navigate({ to: '/login', replace: true });
    };
- 
+
    return (
 @@ -122,27 +123,31 @@ export function Header({ sidebarCollapsed, onSidebarToggle }: HeaderProps) {
                  onClick={() => setUserMenuOpen(false)}
@@ -4447,7 +4447,7 @@ index 3c120e0..ec34368 100644
  } from 'lucide-react';
  import { cn } from '@/lib/utils';
 +import { useAuthStore, selectCanAdminister } from '@/stores/authStore';
- 
+
  // ============================================
  // TYPES
 @@ -45,6 +46,8 @@ interface NavItem {
@@ -4457,7 +4457,7 @@ index 3c120e0..ec34368 100644
 +  /** Restrict this item to administrators */
 +  adminOnly?: boolean;
  }
- 
+
  // ============================================
 @@ -60,8 +63,8 @@ const NAV_ITEMS: NavItem[] = [
    { label: 'Pages', to: '/pages', icon: FileText },
@@ -4468,14 +4468,14 @@ index 3c120e0..ec34368 100644
 +  { label: 'Users', to: '/users', icon: Users, adminOnly: true },
 +  { label: 'Settings', to: '/settings', icon: Settings, adminOnly: true },
  ];
- 
+
  // ============================================
 @@ -78,6 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   */
  export function Sidebar({ collapsed, onToggle }: SidebarProps) {
    const location = useLocation();
 +  const canAdminister = useAuthStore(selectCanAdminister);
- 
+
    return (
      <aside
 @@ -106,6 +110,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -4505,7 +4505,7 @@ index 0edaef2..7792309 100644
   * @author Backy CMS Team
   * @license MIT
   */
- 
+
 -import { useNavigate, createRootRoute, Outlet, useRouterState } from '@tanstack/react-router';
 -import { Suspense, useEffect } from 'react';
 +import { createRootRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -4514,7 +4514,7 @@ index 0edaef2..7792309 100644
  import { LoadingScreen } from '@/components/ui/LoadingScreen';
 -import { useAuthStore } from '@/stores/authStore';
 +import { selectCanAdminister, selectCanEdit, selectIsAuthenticated, useAuthStore } from '@/stores/authStore';
- 
+
 -// ============================================
 -// ROOT ROUTE
 -// ============================================
@@ -4548,11 +4548,11 @@ index 0edaef2..7792309 100644
 +
 +  return remainingMs;
 +};
- 
+
  export const Route = createRootRoute({
    component: RootComponent,
  });
- 
+
 -// ============================================
 -// ROOT COMPONENT
 -// ============================================
@@ -4576,7 +4576,7 @@ index 0edaef2..7792309 100644
 +  const canAdminister = useAuthStore(selectCanAdminister);
 +  const isAuthHydrated = useAuthStore((state) => state.isHydrated);
 +  const timeoutMs = useMemo(() => getSessionTimeoutDelay(sessionExpiresAt), [sessionExpiresAt]);
- 
+
 -  // Routes that should NOT have the main layout
    const publicRoutes = ['/login', '/forgot-password', '/reset-password'];
 -  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
@@ -4585,14 +4585,14 @@ index 0edaef2..7792309 100644
 +    if (!isAuthHydrated) {
 +      return null;
 +    }
- 
+
 -  useEffect(() => {
      if (!isPublicRoute && !isAuthenticated) {
 -      navigate({ to: '/login', replace: true });
 +      return '/login';
      }
 -  }, [isAuthenticated, isPublicRoute, navigate]);
- 
+
 -  // Public routes render without layout
 -  if (isPublicRoute) {
 +    if (isPublicRoute && isAuthenticated && pathname === '/login') {
@@ -4643,7 +4643,7 @@ index 0edaef2..7792309 100644
        </Suspense>
      );
    }
- 
+
 -  if (!isAuthenticated) {
 +  if (redirectTo) {
 +    if (pathname !== redirectTo) {
@@ -4655,7 +4655,7 @@ index 0edaef2..7792309 100644
 @@ -68,7 +133,15 @@ function RootComponent() {
      );
    }
- 
+
 -  // Authenticated routes get the full layout
 +  if (isPublicRoute) {
 +
@@ -4676,7 +4676,7 @@ index dc16543..9ddffbf 100644
 @@ -2,13 +2,14 @@
   * BACKY CMS - EDIT BLOG POST (HYBRID LAYOUT)
   */
- 
+
 -import { useState, useMemo } from 'react';
 +import { useEffect, useState, useMemo } from 'react';
  import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -4695,12 +4695,12 @@ index dc16543..9ddffbf 100644
      const { posts, updatePost, deletePost } = useStore();
 +    const canEdit = useAuthStore(selectCanEdit);
      const post = posts.find((p) => p.id === postId);
- 
+
      const [isLoading, setIsLoading] = useState(false);
 @@ -62,9 +64,76 @@ function EditBlogPostPage() {
        ];
      }, [post, savedElements]);
- 
+
 +    const buildFallbackElements = (postRecord: {
 +      id?: string;
 +      content?: string;
@@ -4728,7 +4728,7 @@ index dc16543..9ddffbf 100644
 +    const [editorSeedSize, setEditorSeedSize] = useState<CanvasSize>(savedCanvasSize);
      const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
      const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
- 
+
 +    useEffect(() => {
 +      const fallbackElements = savedElements.length
 +        ? savedElements
@@ -4775,7 +4775,7 @@ index dc16543..9ddffbf 100644
          return (
              <PageShell title="Post Not Found" description="The article you requested doesn't exist.">
 @@ -84,6 +153,10 @@ function EditBlogPostPage() {
- 
+
      const handleSubmit = async (e: React.FormEvent) => {
          e.preventDefault();
 +        if (!canEdit) {
@@ -4784,9 +4784,9 @@ index dc16543..9ddffbf 100644
 +        }
          setIsLoading(true);
          await new Promise(resolve => setTimeout(resolve, 800));
- 
+
 @@ -102,6 +175,10 @@ function EditBlogPostPage() {
- 
+
      const handleDelete = () => {
          if (confirm('Are you sure you want to delete this post?')) {
 +            if (!canEdit) {
@@ -4891,18 +4891,18 @@ index 6def7bd..4631756 100644
      const { addPost } = useStore();
      const { user } = useAuthStore();
 +    const canEdit = useAuthStore(selectCanEdit);
- 
+
      const [isLoading, setIsLoading] = useState(false);
- 
+
 @@ -50,9 +51,26 @@ function NewBlogPostPage() {
          }),
      ], []);
- 
+
 +    const [editorSeedElements, setEditorSeedElements] = useState<CanvasElement[]>(initialElements);
 +    const [editorSeedSize, setEditorSeedSize] = useState<CanvasSize>(DEFAULT_CANVAS_SIZE);
      const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
      const [canvasSize, setCanvasSize] = useState<CanvasSize>(DEFAULT_CANVAS_SIZE);
- 
+
 +    const handleCanvasSave = (elements: CanvasElement[], _settings: PageSettings, size?: CanvasSize) => {
 +        setCanvasElements(elements);
 +        if (size) {
@@ -4922,7 +4922,7 @@ index 6def7bd..4631756 100644
      const dummySettings: PageSettings = {
          title,
 @@ -63,6 +81,10 @@ function NewBlogPostPage() {
- 
+
      const handleSubmit = async (e: React.FormEvent) => {
          e.preventDefault();
 +        if (!canEdit) {
@@ -4931,7 +4931,7 @@ index 6def7bd..4631756 100644
 +        }
          setIsLoading(true);
          await new Promise(resolve => setTimeout(resolve, 800));
- 
+
 @@ -111,6 +133,7 @@ function NewBlogPostPage() {
                                  }}
                                  placeholder="Post Title"
@@ -4981,7 +4981,7 @@ index 6def7bd..4631756 100644
                                      className="w-full px-4 py-2.5 rounded-lg border bg-background resize-none"
                                      placeholder="Short summary..."
 @@ -180,6 +208,11 @@ function NewBlogPostPage() {
- 
+
                      {/* Footer Actions */}
                      <div className="flex justify-end gap-3 sticky bottom-4 z-50">
 +                        {!canEdit ? (
@@ -5016,16 +5016,16 @@ index 76bd58c..acf9b8e 100644
  import { EmptyState } from '@/components/ui/EmptyState';
  import { formatDate } from '@/lib/utils';
 -import { useState } from 'react';
- 
+
  export const Route = createFileRoute('/blog')({
    component: BlogLayout,
 @@ -32,6 +32,7 @@ function BlogLayout() {
- 
+
  function BlogListView() {
    const navigate = useNavigate();
 +  const canEdit = useAuthStore(selectCanEdit);
    const { posts, deletePost } = useStore();
- 
+
    const columns: Column<BlogPost>[] = [
 @@ -71,7 +72,7 @@ function BlogListView() {
      {
@@ -5054,7 +5054,7 @@ index 76bd58c..acf9b8e 100644
 +      ) : null
      }
    ];
- 
+
 @@ -113,13 +117,15 @@ function BlogListView() {
        title="Blog Posts"
        description="Manage your blog articles and news."
@@ -5108,7 +5108,7 @@ index 4869e9c..912b0fa 100644
 @@ -11,7 +11,7 @@
   * @license MIT
   */
- 
+
 -import { useEffect, useState } from 'react';
 +import { useState } from 'react';
  import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -5126,7 +5126,7 @@ index 4869e9c..912b0fa 100644
 -    }
 -  }, [user, navigate]);
 +  const { signIn, isLoading, error, clearError } = useAuthStore();
- 
+
    // Form state
    const [email, setEmail] = useState('');
 @@ -89,7 +83,7 @@ function LoginPage() {
@@ -5147,7 +5147,7 @@ index fac03fb..7075498 100644
  import { cn } from '@/lib/utils'; // Assuming bytes formatting is in utils, or inline it
  import { useStore } from '@/stores/mockStore';
 +import { useAuthStore, selectCanEdit } from '@/stores/authStore';
- 
+
  export const Route = createFileRoute('/media')({
    component: MediaPage,
 @@ -19,6 +20,7 @@ function MediaPage() {
@@ -5155,16 +5155,16 @@ index fac03fb..7075498 100644
    const addMedia = useStore((state) => state.addMedia);
    const deleteMedia = useStore((state) => state.deleteMedia);
 +  const canEdit = useAuthStore(selectCanEdit);
- 
+
    const handleDragOver = (e: React.DragEvent) => {
      e.preventDefault();
 @@ -30,6 +32,7 @@ function MediaPage() {
    };
- 
+
    const handleFileUpload = (fileList: FileList | null) => {
 +    if (!canEdit) return;
      if (!fileList || fileList.length === 0) return;
- 
+
      Array.from(fileList).forEach(file => {
 @@ -70,23 +73,32 @@ function MediaPage() {
        description="Manage images and files."
@@ -5240,7 +5240,7 @@ index fac03fb..7075498 100644
            <Upload className="w-6 h-6 text-primary" />
          </div>
 @@ -130,11 +145,19 @@ function MediaPage() {
- 
+
                  {/* Overlay */}
                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
 -                  <button className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50" onClick={() => {
@@ -5263,7 +5263,7 @@ index fac03fb..7075498 100644
 +                  ) : null}
                  </div>
                </div>
- 
+
 diff --git a/apps/admin/src/routes/pages.$pageId.edit.tsx b/apps/admin/src/routes/pages.$pageId.edit.tsx
 index e05046e..4f5d030 100644
 --- a/apps/admin/src/routes/pages.$pageId.edit.tsx
@@ -5271,7 +5271,7 @@ index e05046e..4f5d030 100644
 @@ -6,19 +6,50 @@
   * Uses the reusable CanvasEditor component with real data persistence.
   */
- 
+
 -import { useMemo } from 'react';
 +import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -5286,7 +5286,7 @@ index e05046e..4f5d030 100644
    normalizeSavedCanvasContent,
    serializeCanvasContent,
  } from '@/components/editor/editorCatalog';
- 
+
 +const normalizeForComparison = (value: unknown): unknown => {
 +  if (value === null || value === undefined) {
 +    return value;
@@ -5332,13 +5332,13 @@ index e05046e..4f5d030 100644
 +  const lastPersistedEditorFingerprintRef = useRef<string | null>(null);
 +  const lastLocalEditorFingerprintRef = useRef<string | null>(null);
 +  const isApplyingRemoteSyncRef = useRef(false);
- 
+
    // Find the page in the store
    const page = pages.find(p => p.id === pageId);
 @@ -48,57 +87,316 @@ function PageEditorRoute() {
      [page?.content]
    );
- 
+
 +  const buildFallbackElements = (pageRecord: {
 +    id?: string;
 +    title?: string;
@@ -5370,7 +5370,7 @@ index e05046e..4f5d030 100644
      if (initialElements.length) {
        return initialElements;
      }
- 
+
 -    return [
 -      createCanvasElement('heading', 100, 100, {
 -        id: page?.id || 'page-heading',
@@ -5396,7 +5396,7 @@ index e05046e..4f5d030 100644
 -    ];
 +    return buildFallbackElements(page || {});
    }, [initialElements, page?.id, page?.title]);
- 
+
 -  // Load Settings
 -  const initialSettings: PageSettings = {
 +  const [editorElements, setEditorElements] = useState<CanvasElement[]>(
@@ -5581,7 +5581,7 @@ index e05046e..4f5d030 100644
 +
 +    return latestPage.lastUpdated !== lastPersistedAtRef.current;
    };
- 
+
 +  const serializeForSave = (content: CanvasElement[], size: CanvasSize): string =>
 +    serializeCanvasContent(content, size);
 +
@@ -5685,11 +5685,11 @@ index e05046e..4f5d030 100644
 +    lastPersistedAtRef.current = latestPage.lastUpdated;
 +    setSaveError(null);
    };
- 
+
    const handleBack = () => {
 @@ -106,19 +404,31 @@ function PageEditorRoute() {
    };
- 
+
    return (
 -    <CanvasEditor
 -      mode="page"
@@ -5742,19 +5742,19 @@ index 7ef6734..99ac0b8 100644
  import { PageShell } from '@/components/layout/PageShell';
  import { cn } from '@/lib/utils';
 +import { useAuthStore, selectCanEdit } from '@/stores/authStore';
- 
+
  export const Route = createFileRoute('/pages/new')({
      component: NewPageRoute,
 @@ -15,6 +16,7 @@ export const Route = createFileRoute('/pages/new')({
- 
+
  function NewPageRoute() {
      const navigate = useNavigate();
 +    const canEdit = useAuthStore(selectCanEdit);
      const { sites, addPage } = useStore();
      const [isLoading, setIsLoading] = useState(false);
- 
+
 @@ -29,6 +31,11 @@ function NewPageRoute() {
- 
+
      const handleSubmit = async (e: React.FormEvent) => {
          e.preventDefault();
 +        if (!canEdit) {
@@ -5764,7 +5764,7 @@ index 7ef6734..99ac0b8 100644
 +
          setIsLoading(true);
          await new Promise(resolve => setTimeout(resolve, 800));
- 
+
 @@ -52,6 +59,11 @@ function NewPageRoute() {
                  </button>
              }
@@ -5805,7 +5805,7 @@ index 2641d90..69ea6b6 100644
 +++ b/apps/admin/src/routes/pages.tsx
 @@ -7,8 +7,9 @@
   */
- 
+
  import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 -import { Plus, Layout, Edit, Trash2, Home, File } from 'lucide-react';
 +import { Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
@@ -5815,12 +5815,12 @@ index 2641d90..69ea6b6 100644
  import { PageShell } from '@/components/layout/PageShell';
  import { DataGrid } from '@/components/ui/DataGrid';
 @@ -39,6 +40,7 @@ function PagesLayout() {
- 
+
  function PagesListView() {
    const navigate = useNavigate();
 +  const canEdit = useAuthStore(selectCanEdit);
    const { pages, deletePage } = useStore();
- 
+
    const columns: Column<Page>[] = [
 @@ -77,7 +79,7 @@ function PagesListView() {
      {
@@ -5849,7 +5849,7 @@ index 2641d90..69ea6b6 100644
 +      ) : null
      }
    ];
- 
+
 @@ -119,13 +124,15 @@ function PagesListView() {
        title="Pages"
        description="Manage the structure and content of your site."
@@ -5906,11 +5906,11 @@ index 8dd2342..ac4121b 100644
  import { cn } from '@/lib/utils';
 +import { useAuthStore, selectCanAdminister } from '@/stores/authStore';
  import { useStore, type DeliveryMode } from '@/stores/mockStore';
- 
+
  // ============================================
 @@ -185,6 +186,7 @@ function buildCopyText(base: string, path: string): string {
  // ============================================
- 
+
  function SettingsPage() {
 +  const canAdminister = useAuthStore(selectCanAdminister);
    const [activeTab, setActiveTab] = useState('general');
@@ -5918,7 +5918,7 @@ index 8dd2342..ac4121b 100644
    const [saved, setSaved] = useState(false);
 @@ -199,11 +201,30 @@ function SettingsPage() {
    }, [persistedDeliveryMode]);
- 
+
    const handleSave = () => {
 +    if (!canAdminister) {
 +      return;
@@ -5927,7 +5927,7 @@ index 8dd2342..ac4121b 100644
      setSaved(true);
      setTimeout(() => setSaved(false), 2000);
    };
- 
+
 +  if (!canAdminister) {
 +    return (
 +      <div className="space-y-6">
@@ -5964,7 +5964,7 @@ index f3c2343..6c4c87b 100644
 +  CommentAntiAbusePolicy,
    CommentReportReason,
  } from '@backy-cms/core';
- 
+
 @@ -31,6 +33,54 @@ interface SiteFormManagementState {
    submissions: FormSubmission[];
    contacts: Contact[];
@@ -6027,7 +6027,7 @@ index f3c2343..6c4c87b 100644
 +  selectedCommentBlockKeys: string[];
    commentReportReasons: CommentReportReason[];
  }
- 
+
 +interface CommentAntiAbusePolicyForm {
 +  rateLimit: string;
 +  rateWindowMs: string;
@@ -6197,7 +6197,7 @@ index f3c2343..6c4c87b 100644
 @@ -61,14 +275,94 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
    'other',
  ];
- 
+
 -const apiBase = (() => {
 -  const envBase = (import.meta as unknown as { env?: Record<string, string | undefined> }).env
 -    ?.VITE_BACKY_PUBLIC_API_BASE_URL?.trim();
@@ -6216,7 +6216,7 @@ index f3c2343..6c4c87b 100644
 +const fallback = typeof window === 'undefined' ? '' : `${window.location.origin}/api`;
 +  return (candidate || fallback).replace(/\/$/, '');
  })();
- 
+
 +const apiBase = publicApiCandidate;
 +const shouldStripApiPathPrefix = /\/api$/.test(apiBase);
 +
@@ -6292,12 +6292,12 @@ index f3c2343..6c4c87b 100644
 +    return fallback;
 +  }
  }
- 
+
  function formatTime(value?: string): string {
 @@ -99,6 +393,19 @@ function makeCsvBlob(rows: string[][]): Blob {
    return new Blob([csv], { type: 'text/csv;charset=utf-8' });
  }
- 
+
 +function isExpiredCommentBlock(expiresAt?: string): boolean {
 +  if (!expiresAt) {
 +    return false;
@@ -6320,7 +6320,7 @@ index f3c2343..6c4c87b 100644
    const { sites, updateSite, deleteSite } = useStore();
 +  const canEdit = useAuthStore(selectCanEdit);
 +  const adminUser = useAuthStore((state) => state.user);
- 
+
    const site = sites.find((s) => s.id === siteId);
    const siteApiId = site?.publicSiteId || site?.slug || site?.id;
 @@ -133,6 +442,44 @@ function EditSitePage() {
@@ -6375,7 +6375,7 @@ index f3c2343..6c4c87b 100644
 +    selectedCommentBlockKeys: [],
      commentReportReasons: [...DEFAULT_COMMENT_REPORT_REASONS],
    });
- 
+
 @@ -154,8 +502,175 @@ function EditSitePage() {
    const [commentRequestId, setCommentRequestId] = useState('');
    const [commentTargetType, setCommentTargetType] = useState<CommentTargetFilter>('all');
@@ -6549,13 +6549,13 @@ index f3c2343..6c4c87b 100644
 +    const requestPart = commentRequestId.trim() || 'all-requests';
 +    return `comments-${statusPart}-${targetPart}-${requestPart}.csv`;
 +  };
- 
+
    useEffect(() => {
      if (site) {
 @@ -175,16 +690,38 @@ function EditSitePage() {
    const setWorkflowError = (message: string | null) =>
      setState((prev) => ({ ...prev, errorMessage: message }));
- 
+
 +  const publicApiBasePath = siteApiId ? `/api/sites/${siteApiId}` : '';
 +  const pageCommentEndpoint = `${publicApiBasePath}/pages/{pageId}/comments`;
 +  const blogCommentEndpoint = `${publicApiBasePath}/blog/{postId}/comments`;
@@ -6587,7 +6587,7 @@ index f3c2343..6c4c87b 100644
        if (!response.ok) {
          throw new Error('Unable to load form definitions.');
        }
- 
+
 -      const payload = await response.json();
 +      const payload = await parseApiJson(response, 'loadForms');
        const forms = Array.isArray(payload.forms) ? (payload.forms as FormDefinition[]) : [];
@@ -6596,7 +6596,7 @@ index f3c2343..6c4c87b 100644
 @@ -213,16 +750,14 @@ function EditSitePage() {
        }
        const query = searchParams.toString();
- 
+
 -      const response = await fetch(
 -        buildApiUrl(
 -          `/api/sites/${siteApiId}/forms/${formId}/submissions${query ? `?${query}` : ''}`,
@@ -6607,7 +6607,7 @@ index f3c2343..6c4c87b 100644
        if (!response.ok) {
          throw new Error('Unable to load form submissions.');
        }
- 
+
 -      const payload = await response.json();
 +      const payload = await parseApiJson(response, 'loadSubmissions');
        const submissions = Array.isArray(payload?.submissions?.data)
@@ -6616,7 +6616,7 @@ index f3c2343..6c4c87b 100644
 @@ -256,16 +791,14 @@ function EditSitePage() {
        }
        const query = searchParams.toString();
- 
+
 -      const response = await fetch(
 -        buildApiUrl(
 -          `/api/sites/${siteApiId}/forms/${formId}/contacts${query ? `?${query}` : ''}`,
@@ -6627,12 +6627,12 @@ index f3c2343..6c4c87b 100644
        if (!response.ok) {
          throw new Error('Unable to load contacts.');
        }
- 
+
 -      const payload = await response.json();
 +      const payload = await parseApiJson(response, 'loadContacts');
        const contacts = Array.isArray(payload?.contacts) ? (payload.contacts as Contact[]) : [];
        const contactCount = typeof payload?.count === 'number' ? payload.count : contacts.length;
- 
+
 @@ -288,12 +821,12 @@ function EditSitePage() {
      setState((prev) => ({ ...prev, commentsLoading: true, errorMessage: null }));
      try {
@@ -6642,16 +6642,16 @@ index f3c2343..6c4c87b 100644
        if (!response.ok) {
          throw new Error('Unable to load comments.');
        }
- 
+
 -      const payload = await response.json();
 +      const payload = await parseApiJson(response, 'loadComments');
        const comments = Array.isArray(payload?.comments) ? (payload.comments as Comment[]) : [];
        const commentCount = typeof payload?.count === 'number' ? payload.count : comments.length;
- 
+
 @@ -312,6 +845,162 @@ function EditSitePage() {
      }
    };
- 
+
 +  const loadCommentAnalytics = async () => {
 +    if (!siteApiId) return;
 +    try {
@@ -6818,10 +6818,10 @@ index f3c2343..6c4c87b 100644
 +    if (commentThreadId.trim()) searchParams.set('commentThreadId', commentThreadId.trim());
 +    if (commentParentOnly) searchParams.set('parentOnly', 'true');
 +    if (commentParentId.trim()) searchParams.set('parentId', commentParentId.trim());
- 
+
      return searchParams.toString();
    };
- 
+
 +  const buildCommentExportQuery = () => {
 +    const searchParams = new URLSearchParams(buildCommentFilterQuery());
 +    searchParams.set('all', 'true');
@@ -7006,7 +7006,7 @@ index f3c2343..6c4c87b 100644
        if (!response.ok) {
          return;
        }
- 
+
 -      const payload = await response.json().catch(() => null);
 +      const payload = await parseApiJson(response, 'loadCommentReportReasons', null);
        const reasons = Array.isArray(payload?.reasons) ? payload.reasons : [];
@@ -7047,7 +7047,7 @@ index f3c2343..6c4c87b 100644
            headers: { 'Content-Type': 'application/json' },
 @@ -409,13 +1283,15 @@ function EditSitePage() {
    };
- 
+
    const updateContactStatus = async (contact: Contact, status: Contact['status']) => {
 +    if (!canEdit) {
 +      setWorkflowError('You do not have permission to moderate contact leads.');
@@ -7068,7 +7068,7 @@ index f3c2343..6c4c87b 100644
 @@ -443,22 +1319,84 @@ function EditSitePage() {
      }));
    };
- 
+
 +  const toggleVisibleCommentSelection = () => {
 +    const visibleIds = Array.from(new Set(state.comments.map((comment) => comment.id)));
 +    const allSelected = visibleIds.length > 0
@@ -7094,7 +7094,7 @@ index f3c2343..6c4c87b 100644
    const clearCommentSelection = () => {
      setState((prev) => ({ ...prev, selectedCommentIds: [] }));
    };
- 
+
 +  const toggleCommentBlockSelection = (blockKey: string, checked: boolean) => {
 +    setState((prev) => ({
 +      ...prev,
@@ -7145,7 +7145,7 @@ index f3c2343..6c4c87b 100644
      setActionBusyId(comment.id);
      try {
        const effectiveRequestId = requestId?.trim() || comment.requestId || undefined;
- 
+
 -      const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/comments/${comment.id}`), {
 +      const response = await callBackyAdminApi(`/api/sites/${siteApiId}/comments/${comment.id}`, {
          method: 'PATCH',
@@ -7169,7 +7169,7 @@ index f3c2343..6c4c87b 100644
 @@ -501,16 +1440,14 @@ function EditSitePage() {
          const query = new URLSearchParams(baseQuery);
          query.set('offset', `${offset}`);
- 
+
 -        const response = await fetch(
 -          buildApiUrl(
 -            `/api/sites/${siteApiId}/forms/${state.selectedFormId}/submissions?${query.toString()}`,
@@ -7180,7 +7180,7 @@ index f3c2343..6c4c87b 100644
          if (!response.ok) {
            throw new Error('Unable to load submissions for export.');
          }
- 
+
 -        const payload = await response.json();
 +        const payload = await parseApiJson(response, 'exportSubmissions', null);
          const submissions = Array.isArray(payload?.submissions?.data)
@@ -7189,7 +7189,7 @@ index f3c2343..6c4c87b 100644
 @@ -574,16 +1511,14 @@ function EditSitePage() {
          const query = new URLSearchParams(baseQuery);
          query.set('offset', `${offset}`);
- 
+
 -        const response = await fetch(
 -          buildApiUrl(
 -            `/api/sites/${siteApiId}/forms/${state.selectedFormId}/contacts?${query.toString()}`,
@@ -7200,14 +7200,14 @@ index f3c2343..6c4c87b 100644
          if (!response.ok) {
            throw new Error('Unable to load contacts for export.');
          }
- 
+
 -        const payload = await response.json();
 +        const payload = await parseApiJson(response, 'exportContacts', null);
          const contacts = Array.isArray(payload?.contacts) ? (payload.contacts as Contact[]) : [];
          const count = typeof payload?.count === 'number' ? payload.count : contacts.length;
- 
+
 @@ -637,93 +1572,283 @@ function EditSitePage() {
- 
+
    const exportComments = async () => {
      if (!siteApiId) return;
 -    const allComments: Comment[] = [];
@@ -7413,7 +7413,7 @@ index f3c2343..6c4c87b 100644
 +      setWorkflowError('Comment block value is required.');
 +      return;
 +    }
- 
+
 +    setActionBusyId('create-comment-block');
      try {
 -      const baseQuery = buildCommentFilterQuery();
@@ -7439,7 +7439,7 @@ index f3c2343..6c4c87b 100644
 +          },
 +        ],
 +      };
- 
+
 -        const payload = await response.json();
 -        const comments = Array.isArray(payload?.comments) ? payload.comments : [];
 -        const count = typeof payload?.count === 'number' ? payload.count : comments.length;
@@ -7451,14 +7451,14 @@ index f3c2343..6c4c87b 100644
 +        headers: { 'Content-Type': 'application/json' },
 +        body: JSON.stringify(payload),
 +      });
- 
+
 -        if (comments.length === 0) {
 -          break;
 -        }
 +      if (!response.ok) {
 +        throw new Error('Unable to create comment block.');
        }
- 
+
 -      if (!allComments.length) return;
 -
 -      const rows = [
@@ -7501,7 +7501,7 @@ index f3c2343..6c4c87b 100644
 +      setActionBusyId(null);
      }
    };
- 
+
 -  const applyBulkCommentAction = async (status: Comment['status']) => {
 -    if (!siteApiId || state.selectedCommentIds.length === 0) return;
 -    setActionBusyId('bulk-comment');
@@ -7539,12 +7539,12 @@ index f3c2343..6c4c87b 100644
 +          blocks,
          }),
        });
- 
+
        if (!response.ok) {
 -        throw new Error('Unable to apply bulk comment moderation.');
 +        throw new Error('Unable to delete comment blocks.');
        }
- 
+
 -      await loadComments();
 -      clearCommentSelection();
 +      setState((prev) => ({ ...prev, selectedCommentBlockKeys: [] }));
@@ -7558,7 +7558,7 @@ index f3c2343..6c4c87b 100644
        setActionBusyId(null);
 @@ -755,20 +1880,18 @@ function EditSitePage() {
        let hasMore = true;
- 
+
        while (hasMore) {
 -        const response = await fetch(
 -          buildApiUrl(
@@ -7574,7 +7574,7 @@ index f3c2343..6c4c87b 100644
          if (!response.ok) {
            throw new Error('Unable to load audit events.');
          }
- 
+
 -        const payload = await response.json();
 +        const payload = await parseApiJson(response, 'exportCommentEvents', null);
          const events = Array.isArray(payload?.events) ? payload.events : [];
@@ -7613,18 +7613,18 @@ index f3c2343..6c4c87b 100644
 +    commentBlockFilter,
 +    commentBlockIncludeExpired,
 +  ]);
- 
+
    useEffect(() => {
      if (state.selectedFormId && siteApiId) {
 @@ -852,9 +1999,17 @@ function EditSitePage() {
    }, [state.commentReportReasons, commentBlockReason]);
- 
+
    const activeForm = state.forms.find((form) => form.id === state.selectedFormId);
 +  const areAllVisibleCommentsSelected = state.comments.length > 0
 +    && state.comments.every((comment) => state.selectedCommentIds.includes(comment.id));
 +  const areAllVisibleCommentBlocksSelected = state.commentBlocks.length > 0
 +    && state.commentBlocks.every((block) => state.selectedCommentBlockKeys.includes(block.key));
- 
+
    const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
      e.preventDefault();
 +    if (!canEdit) {
@@ -7633,10 +7633,10 @@ index f3c2343..6c4c87b 100644
 +    }
      setIsLoading(true);
      await new Promise((resolve) => setTimeout(resolve, 800));
- 
+
 @@ -870,6 +2025,10 @@ function EditSitePage() {
    };
- 
+
    const handleDelete = () => {
 +    if (!canEdit) {
 +      setWorkflowError('You do not have permission to delete this site.');
@@ -7676,7 +7676,7 @@ index f3c2343..6c4c87b 100644
 @@ -1015,6 +2181,77 @@ function EditSitePage() {
            </div>
          </form>
- 
+
 +        {siteApiId ? (
 +          <section className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4">
 +            <div className="flex items-start justify-between gap-3">
@@ -7910,8 +7910,8 @@ index f3c2343..6c4c87b 100644
 +                         <div className="flex-1 border p-3 rounded-lg flex flex-col justify-center items-center bg-muted/20">
 +                           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Top Requests</p>
 +                           <p className="text-lg font-bold">
-+                             {state.commentAnalytics.antiAbuse.topRequestIds.length > 0 
-+                               ? state.commentAnalytics.antiAbuse.topRequestIds[0].count 
++                             {state.commentAnalytics.antiAbuse.topRequestIds.length > 0
++                               ? state.commentAnalytics.antiAbuse.topRequestIds[0].count
 +                               : 0}
 +                             <span className="text-xs text-muted-foreground font-normal ml-1">hits from max</span>
 +                           </p>
@@ -7919,8 +7919,8 @@ index f3c2343..6c4c87b 100644
 +                         <div className="flex-1 border p-3 rounded-lg flex flex-col justify-center items-center bg-muted/20">
 +                           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Top Block Rsn</p>
 +                           <p className="text-sm font-semibold truncate max-w-full px-2" title={state.commentAnalytics.antiAbuse.topBlockReasons[0]?.reasonAlias}>
-+                             {state.commentAnalytics.antiAbuse.topBlockReasons.length > 0 
-+                               ? state.commentAnalytics.antiAbuse.topBlockReasons[0].reasonAlias 
++                             {state.commentAnalytics.antiAbuse.topBlockReasons.length > 0
++                               ? state.commentAnalytics.antiAbuse.topBlockReasons[0].reasonAlias
 +                               : "None"}
 +                           </p>
 +                         </div>
@@ -7977,7 +7977,7 @@ index f3c2343..6c4c87b 100644
 +                            className="w-full px-3 py-2 bg-background border rounded-lg text-sm shadow-sm focus:ring-primary focus:border-primary transition-colors"
 +                          />
 +                        </div>
-+                        
++
 +                        {/* Advanced row */}
 +                        <div className="space-y-1">
 +                          <label className="text-xs font-semibold text-muted-foreground uppercase">Thread ID</label>
@@ -8564,7 +8564,7 @@ index f3c2343..6c4c87b 100644
 +                  </div>
 +                </div>
 +                </div>
-+              )} 
++              )}
          </section>
        </div>
      </PageShell>
@@ -8579,9 +8579,9 @@ index b19c171..725799f 100644
 +import { useAuthStore, selectCanEdit } from '@/stores/authStore';
  import { PageShell } from '@/components/layout/PageShell';
  import { cn } from '@/lib/utils';
- 
+
 @@ -17,6 +18,7 @@ export const Route = createFileRoute('/sites/new')({
- 
+
  function NewSitePage() {
      const navigate = useNavigate();
 +    const canEdit = useAuthStore(selectCanEdit);
@@ -8589,7 +8589,7 @@ index b19c171..725799f 100644
      const [isLoading, setIsLoading] = useState(false);
      const [formData, setFormData] = useState({
 @@ -29,6 +31,11 @@ function NewSitePage() {
- 
+
      const handleSubmit = async (e: React.FormEvent) => {
          e.preventDefault();
 +        if (!canEdit) {
@@ -8598,7 +8598,7 @@ index b19c171..725799f 100644
 +        }
 +
          setIsLoading(true);
- 
+
          // Simulate network delay
 @@ -58,6 +65,11 @@ function NewSitePage() {
                  </button>
@@ -8633,12 +8633,12 @@ index cafca08..bc7ca3f 100644
  import { PageShell } from '@/components/layout/PageShell';
  import { DataGrid } from '@/components/ui/DataGrid';
 @@ -32,6 +33,7 @@ function SitesLayout() {
- 
+
  function SitesListView() {
    const navigate = useNavigate();
 +  const canEdit = useAuthStore(selectCanEdit);
    const { sites, deleteSite } = useStore();
- 
+
    // Define columns
 @@ -73,7 +75,7 @@ function SitesListView() {
      {
@@ -8667,7 +8667,7 @@ index cafca08..bc7ca3f 100644
 +      ) : null
      }
    ];
- 
+
 diff --git a/apps/admin/src/routes/users.$userId.tsx b/apps/admin/src/routes/users.$userId.tsx
 index 3b7501b..b3201cc 100644
 --- a/apps/admin/src/routes/users.$userId.tsx
@@ -8679,7 +8679,7 @@ index 3b7501b..b3201cc 100644
 +import { useAuthStore, selectCanAdminister } from '@/stores/authStore';
  import { PageShell } from '@/components/layout/PageShell';
  import { cn } from '@/lib/utils';
- 
+
 @@ -16,6 +17,7 @@ export const Route = createFileRoute('/users/$userId')({
  function EditUserPage() {
    const navigate = useNavigate();
@@ -8687,9 +8687,9 @@ index 3b7501b..b3201cc 100644
 +  const canAdminister = useAuthStore(selectCanAdminister);
    const { users, updateUser, deleteUser } = useStore();
    const user = users.find(u => u.id === userId);
- 
+
 @@ -52,6 +54,10 @@ function EditUserPage() {
- 
+
    const handleSubmit = async (e: React.FormEvent) => {
      e.preventDefault();
 +    if (!canAdminister) {
@@ -8698,7 +8698,7 @@ index 3b7501b..b3201cc 100644
 +    }
      setIsLoading(true);
      await new Promise(resolve => setTimeout(resolve, 800));
- 
+
 @@ -65,20 +71,30 @@ function EditUserPage() {
        description={`Manage settings for ${user.fullName}`}
        action={
@@ -8740,7 +8740,7 @@ index 3b7501b..b3201cc 100644
 +      ) : null}
        <div className="max-w-md mx-auto">
          <form onSubmit={handleSubmit} className="space-y-8">
- 
+
 @@ -91,6 +107,7 @@ function EditUserPage() {
                  value={formData.fullName}
                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
@@ -8748,7 +8748,7 @@ index 3b7501b..b3201cc 100644
 +                disabled={!canAdminister}
                />
              </div>
- 
+
 @@ -104,6 +121,7 @@ function EditUserPage() {
                    value={formData.email}
                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -8768,7 +8768,7 @@ index 3b7501b..b3201cc 100644
 @@ -123,19 +142,20 @@ function EditUserPage() {
              </div>
            </div>
- 
+
 -          {/* Danger Zone */}
 -          <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900 rounded-xl p-6">
 -            <h3 className="text-red-800 dark:text-red-400 font-semibold flex items-center gap-2 mb-2">
@@ -8796,7 +8796,7 @@ index 3b7501b..b3201cc 100644
 +              </button>
 +            </div>
 +          ) : null}
- 
+
            <div className="flex justify-end gap-3">
              <button
 @@ -147,6 +167,7 @@ function EditUserPage() {
@@ -8812,7 +8812,7 @@ index 25344db..5aa2f75 100644
 --- a/apps/admin/src/routes/users.new.tsx
 +++ b/apps/admin/src/routes/users.new.tsx
 @@ -4,8 +4,9 @@
- 
+
  import { useState } from 'react';
  import { createFileRoute, useNavigate } from '@tanstack/react-router';
 -import { ArrowLeft, UserPlus, Mail, Lock } from 'lucide-react';
@@ -8821,7 +8821,7 @@ index 25344db..5aa2f75 100644
 +import { useAuthStore, selectCanAdminister } from '@/stores/authStore';
  import { PageShell } from '@/components/layout/PageShell';
  import { cn } from '@/lib/utils';
- 
+
 @@ -16,6 +17,7 @@ export const Route = createFileRoute('/users/new')({
  function NewUserPage() {
    const navigate = useNavigate();
@@ -8831,7 +8831,7 @@ index 25344db..5aa2f75 100644
    const [formData, setFormData] = useState({
      fullName: '',
 @@ -25,6 +27,11 @@ function NewUserPage() {
- 
+
    const handleSubmit = async (e: React.FormEvent) => {
      e.preventDefault();
 +    if (!canAdminister) {
@@ -8841,7 +8841,7 @@ index 25344db..5aa2f75 100644
 +
      setIsLoading(true);
      await new Promise(resolve => setTimeout(resolve, 800));
- 
+
 @@ -42,6 +49,11 @@ function NewUserPage() {
          </button>
        }
@@ -8892,7 +8892,7 @@ index 80ad4bf..68ed9d8 100644
 +++ b/apps/admin/src/routes/users.tsx
 @@ -5,8 +5,9 @@
   */
- 
+
  import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 -import { Plus, User, MoreVertical, Edit, Trash2, Mail } from 'lucide-react';
 +import { Plus, User, Edit, Trash2 } from 'lucide-react';
@@ -8902,12 +8902,12 @@ index 80ad4bf..68ed9d8 100644
  import { PageShell } from '@/components/layout/PageShell';
  import { DataGrid } from '@/components/ui/DataGrid';
 @@ -31,6 +32,7 @@ function UsersLayout() {
- 
+
  function UsersListView() {
    const navigate = useNavigate();
 +  const canAdminister = useAuthStore(selectCanAdminister);
    const { users, deleteUser } = useStore();
- 
+
    const columns: Column<UserType>[] = [
 @@ -73,7 +75,7 @@ function UsersListView() {
      {
@@ -8936,7 +8936,7 @@ index 80ad4bf..68ed9d8 100644
 +      ) : null
      }
    ];
- 
+
 @@ -115,15 +120,22 @@ function UsersListView() {
        title="Team Members"
        description="Manage access and roles for your team."
@@ -9006,7 +9006,7 @@ index d3cdf28..28bd4c8 100644
 +  role: 'owner' | 'admin' | 'editor' | 'viewer';
    avatarUrl?: string;
  }
- 
+
 @@ -30,6 +30,8 @@ interface AuthState {
    user: User | null;
    isLoading: boolean;
@@ -9014,11 +9014,11 @@ index d3cdf28..28bd4c8 100644
 +  sessionExpiresAt: number | null;
 +  isHydrated: boolean;
  }
- 
+
  interface AuthActions {
 @@ -45,6 +47,15 @@ type AuthStore = AuthState & AuthActions;
  // ============================================
- 
+
  const MOCK_USERS: Record<string, { password: string; user: User }> = {
 +  'owner@backy.io': {
 +    password: 'owner123',
@@ -9046,7 +9046,7 @@ index d3cdf28..28bd4c8 100644
 +    },
 +  },
  };
- 
+
 +const isSessionActiveNow = (state: AuthState): boolean => (
 +  Boolean(state.user && state.sessionExpiresAt && state.sessionExpiresAt > Date.now())
 +);
@@ -9069,7 +9069,7 @@ index d3cdf28..28bd4c8 100644
 +      sessionExpiresAt: null,
 +      // Start hydrated to avoid permanent loading when storage has no persisted state.
 +      isHydrated: true,
- 
+
        // ============================================
        // ACTIONS
 @@ -95,12 +122,13 @@ export const useAuthStore = create<AuthStore>()(
@@ -9080,7 +9080,7 @@ index d3cdf28..28bd4c8 100644
 +    });
            throw new Error('Invalid credentials');
          }
- 
+
          set({
            user: mockUser.user,
 +          sessionExpiresAt: Date.now() + 8 * 60 * 60 * 1000,
@@ -9118,15 +9118,15 @@ index d3cdf28..28bd4c8 100644
    )
 @@ -133,10 +171,22 @@ export const useAuthStore = create<AuthStore>()(
  // ============================================
- 
+
  export const selectIsAuthenticated = (state: AuthStore): boolean =>
 -  !!state.user;
 +  isSessionActiveNow(state) && !!state.user;
- 
+
  export const selectIsAdmin = (state: AuthStore): boolean =>
 -  state.user?.role === 'admin';
 +  isSessionActiveNow(state) && (state.user?.role === 'admin' || state.user?.role === 'owner');
- 
+
  export const selectCanEdit = (state: AuthStore): boolean =>
 -  state.user?.role === 'admin' || state.user?.role === 'editor';
 +  isSessionActiveNow(state) && (state.user?.role === 'admin' || state.user?.role === 'owner' || state.user?.role === 'editor');
@@ -9148,7 +9148,7 @@ index f53d485..4983600 100644
 +++ b/apps/admin/src/stores/mockStore.ts
 @@ -288,7 +288,16 @@ export const useStore = create<AppState>()(
              })),
- 
+
              updatePage: (id, updates) => set((state) => ({
 -                pages: state.pages.map(p => p.id === id ? { ...p, ...updates, lastUpdated: new Date().toISOString() } : p)
 +                pages: state.pages.map(p => p.id === id
@@ -9162,7 +9162,7 @@ index f53d485..4983600 100644
 +                  : p
 +                )
              })),
- 
+
              // Post Actions
 diff --git a/apps/admin/src/types/editor.ts b/apps/admin/src/types/editor.ts
 index 3e86839..9aac7e3 100644
@@ -9170,7 +9170,7 @@ index 3e86839..9aac7e3 100644
 +++ b/apps/admin/src/types/editor.ts
 @@ -116,7 +116,7 @@ export interface ElementProps {
    [key: string]: unknown;
- 
+
    // Text/Heading
 -  content?: string;
 +  content?: string | unknown[];
@@ -9188,7 +9188,7 @@ index 3e86839..9aac7e3 100644
 +  commentAntiAbuseAutoBlockSpamCount?: number;
 +  commentAntiAbuseAutoBlockDurationMinutes?: number;
  }
- 
+
  export interface ComponentDefinition {
 diff --git a/apps/public/src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts b/apps/public/src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts
 index 26ca527..6c5e34b 100644
@@ -9205,13 +9205,13 @@ index 26ca527..6c5e34b 100644
 +  readBackyCommentIdentityFromQuery,
 +  readBackyCommentIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -34,12 +41,24 @@ function parseSort(raw: string | null) {
    return raw === 'oldest' ? 'oldest' : 'newest';
  }
- 
+
 -function parseModerationMode(raw: unknown): 'manual' | 'auto-approve' {
 -  return raw === 'auto-approve' ? 'auto-approve' : 'manual';
 +function parseTextInput(raw: unknown) {
@@ -9225,7 +9225,7 @@ index 26ca527..6c5e34b 100644
 +
 +  return '';
  }
- 
+
 -function parseTextInput(raw: unknown) {
 -  return typeof raw === 'string' ? raw.trim() : '';
 +function toRecord(value: unknown): Record<string, unknown> | null {
@@ -9235,12 +9235,12 @@ index 26ca527..6c5e34b 100644
 +
 +  return value as Record<string, unknown>;
  }
- 
+
  function parseBoolean(raw: unknown): boolean | undefined {
 @@ -65,6 +84,254 @@ function parseBoolean(raw: unknown): boolean | undefined {
    return undefined;
  }
- 
+
 +function parseNumber(raw: unknown): number | undefined {
 +  if (typeof raw === 'number' && Number.isFinite(raw)) {
 +    return Math.trunc(raw);
@@ -9495,7 +9495,7 @@ index 26ca527..6c5e34b 100644
 @@ -181,26 +448,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
        );
      }
- 
+
 -    const moderation = parseModerationMode(
 -      (body as { commentModerationMode?: unknown }).commentModerationMode ??
 -      (body as { moderationMode?: unknown }).moderationMode ??
@@ -9523,7 +9523,7 @@ index 26ca527..6c5e34b 100644
      const finalAllowReplies = allowReplies !== false;
      const finalRequireName = requireName !== false;
      const finalRequireEmail = requireEmail === true;
- 
+
 -    const authorName = parseTextInput(body.authorName);
 -    const authorEmail = parseTextInput(body.authorEmail);
 -    const authorWebsite = parseTextInput(body.authorWebsite);
@@ -9540,7 +9540,7 @@ index 26ca527..6c5e34b 100644
 +    const antiAbuse = readCommentAntiAbusePolicy(payload);
      const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
      const ipHash = extractIpHash(request);
- 
+
 -    if (!finalAllowGuests && !userId) {
 +    if (!finalAllowGuests && !hasSignedInBackyCommentIdentity(resolvedIdentity)) {
        return NextResponse.json(
@@ -9563,7 +9563,7 @@ index 26ca527..6c5e34b 100644
 +      spamFlags: classification.spamFlags,
        status: classification.status,
      });
- 
+
 diff --git a/apps/public/src/app/api/sites/[siteId]/comments/[commentId]/report/route.ts b/apps/public/src/app/api/sites/[siteId]/comments/[commentId]/report/route.ts
 index 71bd340..9d375c4 100644
 --- a/apps/public/src/app/api/sites/[siteId]/comments/[commentId]/report/route.ts
@@ -9575,11 +9575,11 @@ index 71bd340..9d375c4 100644
 +  normalizeReportReason,
    reportComment,
  } from '@/lib/backyStore';
- 
+
 @@ -17,15 +18,25 @@ function parseTextInput(raw: unknown): string {
    return typeof raw === 'string' ? raw.trim() : '';
  }
- 
+
 +function readFieldAlias(raw: unknown, key: string): unknown {
 +  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
 +    return undefined;
@@ -9604,12 +9604,12 @@ index 71bd340..9d375c4 100644
 -  return matched || '';
 +  return normalizeReportReason(value) || '';
  }
- 
+
  function parseBody(raw: unknown): {
 @@ -37,9 +48,25 @@ function parseBody(raw: unknown): {
      return null;
    }
- 
+
 -  const reason = parseReason((raw as { reason?: unknown }).reason);
 -  const actor = parseTextInput((raw as { actor?: unknown }).actor);
 -  const requestId = parseTextInput((raw as { requestId?: unknown }).requestId);
@@ -9632,13 +9632,13 @@ index 71bd340..9d375c4 100644
 +    || readFieldAlias(raw, 'request')
 +    || readFieldAlias(raw, 'request_id'),
 +  );
- 
+
    if (!reason) {
      return null;
 @@ -104,7 +131,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
        );
      }
- 
+
 -    return NextResponse.json({ comment: updated }, { status: 201 });
 +    return NextResponse.json(
 +        {
@@ -9668,12 +9668,12 @@ index fcb41be..5cc91b2 100644
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
  import type { Comment } from '@backy-cms/core';
- 
+
  interface RouteParams {
 @@ -15,6 +19,18 @@ interface RouteParams {
- 
+
  type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
- 
+
 +function parseTextInput(raw: unknown): string {
 +  if (typeof raw === 'string') {
 +    return raw.trim();
@@ -9692,7 +9692,7 @@ index fcb41be..5cc91b2 100644
 @@ -29,6 +45,31 @@ function parseStatus(raw: unknown): CommentStatus | null {
    return null;
  }
- 
+
 +function readTextAlias(source: unknown, aliases: string[]): string {
 +  if (!source || typeof source !== 'object' || Array.isArray(source)) {
 +    return '';
@@ -9730,7 +9730,7 @@ index fcb41be..5cc91b2 100644
    if (!raw || typeof raw !== 'object') {
      return null;
    }
- 
+
 -  const status = parseStatus((raw as { status?: unknown }).status);
 +  const status = parseStatus(
 +    readTextAlias(raw, ['status', 'commentStatus', 'state']),
@@ -9738,7 +9738,7 @@ index fcb41be..5cc91b2 100644
    if (!status) {
      return null;
    }
- 
+
 -  const reviewedBy = typeof (raw as { reviewedBy?: unknown }).reviewedBy === 'string'
 -    ? (raw as { reviewedBy: string }).reviewedBy.trim()
 -    : undefined;
@@ -9766,7 +9766,7 @@ index fcb41be..5cc91b2 100644
 +  const blockDurationMinutes = parseBlockDurationMinutes(
 +    readTextAlias(raw, ['blockDurationMinutes', 'blockDuration', 'durationMinutes', 'duration']),
 +  );
- 
+
    return {
      status,
 -    reviewedBy,
@@ -9781,7 +9781,7 @@ index fcb41be..5cc91b2 100644
 +    blockDurationMinutes,
    };
  }
- 
+
  export async function GET(_request: NextRequest, { params }: RouteParams) {
    try {
 -    const { siteId, commentId } = await params;
@@ -9789,7 +9789,7 @@ index fcb41be..5cc91b2 100644
 +    if (!hasBackyAdminPermission(adminIdentity, 'edit')) {
 +      return NextResponse.json({ error: 'Unauthorized to read comment.' }, { status: 403 });
 +    }
- 
+
 +    const { siteId, commentId } = await params;
      const site = getSiteByIdOrSlug(siteId);
      if (!site) {
@@ -9797,7 +9797,7 @@ index fcb41be..5cc91b2 100644
 @@ -104,6 +142,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
    try {
      const { siteId, commentId } = await params;
- 
+
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
 +    if (!hasBackyAdminPermission(adminIdentity, 'edit')) {
 +      return NextResponse.json({ error: 'Unauthorized to update comment.' }, { status: 403 });
@@ -9813,7 +9813,7 @@ index fcb41be..5cc91b2 100644
 +      blockDurationMinutes: payload.blockDurationMinutes,
        requestId: payload.requestId,
      });
- 
+
 diff --git a/apps/public/src/app/api/sites/[siteId]/comments/route.ts b/apps/public/src/app/api/sites/[siteId]/comments/route.ts
 index 5c316df..15a9b72 100644
 --- a/apps/public/src/app/api/sites/[siteId]/comments/route.ts
@@ -9827,11 +9827,11 @@ index 5c316df..15a9b72 100644
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
  import type { CommentTargetType } from '@backy-cms/core';
- 
+
  interface RouteParams {
 @@ -13,6 +17,38 @@ interface RouteParams {
  }
- 
+
  type CommentStatusFilter = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
 +type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
 +type CommentBulkUpdateScope = {
@@ -9865,13 +9865,13 @@ index 5c316df..15a9b72 100644
 +  ids: string[];
 +  truncated: boolean;
 +};
- 
+
  function parseStatus(raw: string | null): CommentStatusFilter {
    if (
 @@ -29,6 +65,41 @@ function parseStatus(raw: string | null): CommentStatusFilter {
    return 'all';
  }
- 
+
 +function parseRequiredStatus(raw: unknown): CommentStatus | null {
 +  const value = parseTextInput(raw);
 +  if (
@@ -9913,7 +9913,7 @@ index 5c316df..15a9b72 100644
 @@ -37,6 +108,19 @@ function parseTargetType(raw: string | null): CommentTargetType | 'all' {
    return 'all';
  }
- 
+
 +function parseOptionalTargetType(raw: unknown): CommentTargetType | undefined {
 +  const value = parseTextInput(raw);
 +  if (value === 'page' || value === 'post') {
@@ -9933,7 +9933,7 @@ index 5c316df..15a9b72 100644
 @@ -45,11 +129,68 @@ function parseBoolean(raw: string | null): boolean {
    return raw === 'true' || raw === '1';
  }
- 
+
 +function parseBooleanInput(raw: unknown): boolean | undefined {
 +  if (typeof raw === 'boolean') {
 +    return raw;
@@ -9990,7 +9990,7 @@ index 5c316df..15a9b72 100644
    const value = raw ? raw.trim() : '';
    return value.length ? value : undefined;
  }
- 
+
 +function parseThreadId(raw: string | null): string | undefined {
 +  const value = raw ? raw.trim() : '';
 +  return value.length ? value : undefined;
@@ -10002,7 +10002,7 @@ index 5c316df..15a9b72 100644
 @@ -72,16 +213,51 @@ function parseCommentIds(raw: unknown): string[] {
      .filter(Boolean);
  }
- 
+
 -function parsePatchPayload(raw: unknown) {
 +function parseCommentScope(raw: unknown): CommentBulkUpdateScope {
 +  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -10040,7 +10040,7 @@ index 5c316df..15a9b72 100644
    if (!raw || typeof raw !== 'object') {
      return null;
    }
- 
+
 -  const status = parseStatus(typeof (raw as { status?: unknown }).status === 'string'
 -    ? ((raw as { status?: string }).status)
 -    : null);
@@ -10050,7 +10050,7 @@ index 5c316df..15a9b72 100644
 +  if (status === null) {
 +    return null;
 +  }
- 
+
 -  const commentIds = parseCommentIds((raw as { commentIds?: unknown }).commentIds);
 +  const commentIds = parseCommentIds(readCommentIdsField(raw));
    const reviewedBy = typeof (raw as { reviewedBy?: unknown }).reviewedBy === 'string'
@@ -10085,7 +10085,7 @@ index 5c316df..15a9b72 100644
 +    parentId: directScope.parentId,
 +    commentThreadId: directScope.commentThreadId,
 +  };
- 
+
    return {
      status,
 -    commentIds,
@@ -10104,7 +10104,7 @@ index 5c316df..15a9b72 100644
 +    },
    };
  }
- 
+
 +function hasScopeCriteria(scope: CommentBulkUpdateScope | null | undefined): boolean {
 +  if (!scope) {
 +    return false;
@@ -10197,7 +10197,7 @@ index 5c316df..15a9b72 100644
      const { siteId } = await params;
 @@ -119,14 +411,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
      }
- 
+
      const { searchParams } = new URL(request.url);
 -    const status = parseStatus(searchParams.get('status'));
 -    const targetType = parseTargetType(searchParams.get('targetType'));
@@ -10225,7 +10225,7 @@ index 5c316df..15a9b72 100644
 +    );
      const limit = parseInt(searchParams.get('limit') || '20', 10);
      const offset = parseInt(searchParams.get('offset') || '0', 10);
- 
+
 @@ -138,6 +442,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
        q,
        parentOnly,
@@ -10251,7 +10251,7 @@ index 5c316df..15a9b72 100644
      if (!site) {
        return NextResponse.json({ error: 'Site not found' }, { status: 404 });
      }
- 
+
      const payload = parsePatchPayload(await request.json().catch(() => null));
 -    if (!payload || !payload.status || payload.commentIds.length === 0) {
 +    if (!payload || !payload.status) {
@@ -10282,7 +10282,7 @@ index 5c316df..15a9b72 100644
          { status: 400 },
        );
      }
- 
+
 +    const commentMatch = payload.all
 +      ? collectBulkCommentIds(site.id, payload.scope)
 +      : { ids: payload.commentIds, truncated: false };
@@ -10332,7 +10332,7 @@ index 5c316df..15a9b72 100644
 +      blockDurationMinutes: payload.blockDurationMinutes,
        requestId: payload.requestId,
      });
- 
+
 @@ -194,6 +567,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
        updated: result.updated,
        updatedCount: result.updated.length,
@@ -10353,11 +10353,11 @@ index 6b315a2..77596b7 100644
 +  hasBackyAdminPermission,
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -40,6 +44,11 @@ function parseTextInput(raw: string | null): string {
- 
+
  export async function GET(request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
@@ -10380,11 +10380,11 @@ index 09dfd54..1a513a7 100644
 +  hasBackyAdminPermission,
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -119,6 +123,11 @@ function parseBody(raw: unknown): { status: ContactStatus } | null {
- 
+
  export async function PATCH(request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
@@ -10407,11 +10407,11 @@ index 981eed2..a6c373b 100644
 +  hasBackyAdminPermission,
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -14,6 +18,11 @@ interface RouteParams {
- 
+
  export async function GET(request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
@@ -10435,10 +10435,10 @@ index 9939f29..49c2f60 100644
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
  import type { FormSubmission } from '@backy-cms/core';
- 
+
  interface RouteParams {
 @@ -162,6 +166,11 @@ async function notifyContactWebhook(params: {
- 
+
  export async function GET(_request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(_request.headers);
@@ -10450,7 +10450,7 @@ index 9939f29..49c2f60 100644
      const site = getSiteByIdOrSlug(siteId);
      if (!site) {
 @@ -187,6 +196,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
- 
+
  export async function PATCH(request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
@@ -10473,13 +10473,13 @@ index cb519ca..3164416 100644
 +  hasBackyAdminPermission,
 +  readBackyAdminIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -25,6 +29,245 @@ interface ContactShareOverridePayload {
    dedupeByEmail?: boolean;
  }
- 
+
 +function parseBoolean(raw: unknown): boolean | undefined {
 +  if (typeof raw === 'boolean') {
 +    return raw;
@@ -10720,12 +10720,12 @@ index cb519ca..3164416 100644
 +}
 +
  const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const;
- 
+
  type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 @@ -66,58 +309,20 @@ function parseRequestBody(raw: unknown) {
      return null;
    }
- 
+
 -  const values = typeof (raw as { values?: unknown }).values === 'object'
 -    && (raw as { values?: unknown }).values !== null
 -      ? ((raw as { values?: Record<string, unknown> }).values as Record<string, unknown>)
@@ -10761,7 +10761,7 @@ index cb519ca..3164416 100644
 +
 +  const values = readFormValues(record);
 +  const contactShareOverride = parseContactShareOverride(record);
- 
+
    return {
      values,
 -    honeypot: typeof (raw as { honeypot?: unknown }).honeypot === 'string'
@@ -10793,7 +10793,7 @@ index cb519ca..3164416 100644
        ? contactShareOverride
        : undefined,
 @@ -224,6 +429,11 @@ async function notifyContactWebhook(params: {
- 
+
  export async function GET(request: NextRequest, { params }: RouteParams) {
    try {
 +    const adminIdentity = readBackyAdminIdentityFromHeaders(request.headers);
@@ -10807,7 +10807,7 @@ index cb519ca..3164416 100644
 @@ -275,7 +485,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
        return NextResponse.json({ error: 'Form is not active' }, { status: 400 });
      }
- 
+
 -    const parsed = parseRequestBody(await request.json().catch(() => null));
 +    const parsed = parseRequestBody(await parseIncomingPayload(request));
      if (!parsed) {
@@ -10831,12 +10831,12 @@ index c2096e9..b1f5347 100644
 +  readBackyCommentIdentityFromQuery,
 +  readBackyCommentIdentityFromHeaders,
 +} from '@/lib/backyAuthBridge';
- 
+
  interface RouteParams {
    params: Promise<{
 @@ -39,7 +47,23 @@ function parseModerationMode(raw: unknown): 'manual' | 'auto-approve' {
  }
- 
+
  function parseTextInput(raw: unknown) {
 -  return typeof raw === 'string' ? raw.trim() : '';
 +  if (typeof raw === 'string') {
@@ -10857,12 +10857,12 @@ index c2096e9..b1f5347 100644
 +
 +  return value as Record<string, unknown>;
  }
- 
+
  function parseBoolean(raw: unknown): boolean | undefined {
 @@ -65,6 +89,266 @@ function parseBoolean(raw: unknown): boolean | undefined {
    return undefined;
  }
- 
+
 +function parseNumber(raw: unknown): number | undefined {
 +  if (typeof raw === 'number' && Number.isFinite(raw)) {
 +    return Math.trunc(raw);
@@ -11129,7 +11129,7 @@ index c2096e9..b1f5347 100644
 @@ -182,26 +466,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
        );
      }
- 
+
 -    const moderation = parseModerationMode(
 -      (body as { commentModerationMode?: unknown }).commentModerationMode ??
 -      (body as { moderationMode?: unknown }).moderationMode ??
@@ -11157,7 +11157,7 @@ index c2096e9..b1f5347 100644
      const finalAllowReplies = allowReplies !== false;
      const finalRequireName = requireName !== false;
      const finalRequireEmail = requireEmail === true;
- 
+
 -    const authorName = parseTextInput(body.authorName);
 -    const authorEmail = parseTextInput(body.authorEmail);
 -    const authorWebsite = parseTextInput(body.authorWebsite);
@@ -11174,7 +11174,7 @@ index c2096e9..b1f5347 100644
 +    const antiAbuse = getMergedCommentAntiAbusePolicy(site.id, payload);
      const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
      const ipHash = extractIpHash(request);
- 
+
 -    if (!finalAllowGuests && !userId) {
 +    if (!finalAllowGuests && !hasSignedInBackyCommentIdentity(resolvedIdentity)) {
        return NextResponse.json(
@@ -11197,7 +11197,7 @@ index c2096e9..b1f5347 100644
 +      spamFlags: classification.spamFlags,
        status: classification.status,
      });
- 
+
 diff --git a/apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx b/apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx
 index 5957ecf..f4fe888 100644
 --- a/apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx
@@ -11210,7 +11210,7 @@ index 5957ecf..f4fe888 100644
 +  readBackyCommentIdentityFromQuery,
 +  type BackyAuthBridgeOptions,
 +} from '@/lib/backyAuthBridge';
- 
+
  async function getSite(subdomain: string) {
      return getSiteByIdOrSlug(subdomain);
 @@ -34,8 +38,31 @@ interface PageProps {
@@ -11219,7 +11219,7 @@ index 5957ecf..f4fe888 100644
      }>;
 +    searchParams?: Record<string, string | string[] | undefined>;
  }
- 
+
 +const buildCommentAuthBridgeQuery = (
 +  searchParams?: Record<string, string | string[] | undefined>,
 +): string | undefined => {
@@ -11248,16 +11248,16 @@ index 5957ecf..f4fe888 100644
 @@ -69,7 +96,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
      };
  }
- 
+
 -export default async function SitePage({ params }: PageProps) {
 +export default async function SitePage({ params, searchParams = {} }: PageProps) {
      const { subdomain, path } = await params;
      const pageSlug = path?.join('/') || 'index';
- 
+
 @@ -84,6 +111,19 @@ export default async function SitePage({ params }: PageProps) {
          notFound();
      }
- 
+
 +    const commentAuthBridgeQuery = buildCommentAuthBridgeQuery(searchParams);
 +    const commentAuthBridgeOptions: BackyAuthBridgeOptions | undefined = commentAuthBridgeQuery
 +      ? {
@@ -11281,7 +11281,7 @@ index 5957ecf..f4fe888 100644
 +                commentIdentity={commentIdentity}
 +                commentAuthBridgeOptions={commentAuthBridgeOptions}
              />
- 
+
              {/* Client-side animation hydration */}
 diff --git a/apps/public/src/components/PageRenderer.tsx b/apps/public/src/components/PageRenderer.tsx
 index 51aa6ae..780a584 100644
@@ -11289,7 +11289,7 @@ index 51aa6ae..780a584 100644
 +++ b/apps/public/src/components/PageRenderer.tsx
 @@ -12,6 +12,13 @@
  'use client';
- 
+
  import React, { useEffect, useRef, useState } from 'react';
 +import { useBackyAuthBridge } from '@/hooks/useBackyAuthBridge';
 +import {
@@ -11298,7 +11298,7 @@ index 51aa6ae..780a584 100644
 +  mergeBackyCommentIdentities,
 +  hasSignedInBackyCommentIdentity,
 +} from '@/lib/backyAuthBridge';
- 
+
  // ============================================================================
  // TYPES (matching page builder editor types)
 @@ -124,68 +131,21 @@ interface CommentFormPayload {
@@ -11318,7 +11318,7 @@ index 51aa6ae..780a584 100644
 +    autoBlockRequestThreshold?: number;
 +  };
  }
- 
+
 -interface CommentIdentity {
 -  userId?: string;
 -  name?: string;
@@ -11380,13 +11380,13 @@ index 51aa6ae..780a584 100644
 -  }
 -}
 +type CommentIdentity = BackyCommentIdentity;
- 
+
  function extractApiErrorMessage(
    payload: unknown,
 @@ -226,112 +186,6 @@ function extractApiErrorMessage(
    return fallback;
  }
- 
+
 -function parseStringValue(raw: unknown): string {
 -  return typeof raw === 'string' ? raw.trim() : '';
 -}
@@ -11495,7 +11495,7 @@ index 51aa6ae..780a584 100644
 -
  const normalizeRendererType = (value: string): KnownElementType => {
    const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
- 
+
 @@ -449,6 +303,8 @@ interface ElementRendererContext {
    siteId?: string;
    pageId?: string;
@@ -11503,12 +11503,12 @@ index 51aa6ae..780a584 100644
 +  commentIdentity?: BackyCommentIdentity | null;
 +  commentAuthBridgeOptions?: BackyAuthBridgeOptions;
  }
- 
+
  interface ElementRendererProps extends ElementRendererContext {
 @@ -473,7 +329,7 @@ function getBoolean(value: unknown): boolean {
    return Boolean(value);
  }
- 
+
 -function parseBooleanSetting(value: unknown, fallback: boolean): boolean {
 +function parseOptionalBoolean(value: unknown): boolean | undefined {
    if (typeof value === 'boolean') {
@@ -11517,7 +11517,7 @@ index 51aa6ae..780a584 100644
 @@ -493,19 +349,144 @@ function parseBooleanSetting(value: unknown, fallback: boolean): boolean {
      }
    }
- 
+
 +  return undefined;
 +}
 +
@@ -11548,7 +11548,7 @@ index 51aa6ae..780a584 100644
 +
    return fallback;
  }
- 
+
 +function readCommentSettingString(props: Record<string, unknown>, keys: string[]): string | undefined {
 +  for (const key of keys) {
 +    if (!(key in props)) {
@@ -11630,7 +11630,7 @@ index 51aa6ae..780a584 100644
 +    'moderationMode',
 +    'mode',
 +  ]);
- 
+
    return {
      moderationMode: moderationValue === 'auto-approve' ? 'auto-approve' : 'manual',
 -    requireName: parseBooleanSetting(props.commentRequireName, true),
@@ -11664,11 +11664,11 @@ index 51aa6ae..780a584 100644
 +    antiAbuse: getCommentAntiAbusePolicy(props),
    };
  }
- 
+
 @@ -626,6 +607,41 @@ function parseNumericAttribute(value: unknown): number | undefined {
    return Number.isFinite(parsed) ? parsed : undefined;
  }
- 
+
 +type SerializedFileValue = {
 +  fileName: string;
 +  fileSize?: number;
@@ -11722,7 +11722,7 @@ index 51aa6ae..780a584 100644
 +  commentAuthBridgeOptions,
 +}: ElementRendererProps) {
    const { props, styles, children } = element;
- 
+
    return (
 @@ -1031,6 +1055,8 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
            siteId={siteId}
@@ -11752,7 +11752,7 @@ index 51aa6ae..780a584 100644
    const [submitMessage, setSubmitMessage] = useState('');
 @@ -1231,21 +1265,23 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
      const startedAt = startedAtRef.current;
- 
+
      formData.forEach((value, key) => {
 -      const normalized = key;
 -      const valueAsText = value.toString();
@@ -11761,24 +11761,24 @@ index 51aa6ae..780a584 100644
 +      if (normalizedValue === null) {
 +        return;
 +      }
- 
+
 +      const existing = values[key];
        if (existing === undefined) {
 -        values[normalized] = valueAsText;
 +        values[key] = normalizedValue;
          return;
        }
- 
+
        if (Array.isArray(existing)) {
 -        existing.push(valueAsText);
 +        existing.push(normalizedValue);
          return;
        }
- 
+
 -      values[normalized] = [existing as string, valueAsText];
 +      values[key] = [existing, normalizedValue];
      });
- 
+
      const body = {
 @@ -1369,6 +1405,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
              siteId={siteId}
@@ -11803,7 +11803,7 @@ index 51aa6ae..780a584 100644
 +  commentIdentity,
 +  commentAuthBridgeOptions,
 +}: ElementRendererProps) {
-+  
++
    const { props, styles } = element;
    const [comments, setComments] = useState<CommentItem[]>([]);
    const [loading, setLoading] = useState(false);
@@ -11827,7 +11827,7 @@ index 51aa6ae..780a584 100644
 +  const commenterIdentity = mergeBackyCommentIdentities(commentIdentity, bridgeIdentity);
    const requestIdRef = useRef<string>(`c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
    const startedAtRef = useRef<number>(Date.now());
- 
+
    const commentApiPath = getCommentApiPath(siteId, pageId, postId);
    const policy = parseCommentPayload(props as Record<string, unknown>);
 -  const canSubmitAsSignedIn = Boolean(commenterIdentity?.userId);
@@ -11839,7 +11839,7 @@ index 51aa6ae..780a584 100644
 +    ? [commenterIdentity?.name, commenterIdentity?.email, commenterIdentity?.userId].find(Boolean)
 +    : undefined;
 +  const policySummary = `Moderation: ${policy.moderationMode} • Replies: ${policy.allowReplies ? 'on' : 'off'} • Guests: ${policy.allowGuests ? 'on' : 'off'} • Name required: ${policy.requireName ? 'on' : 'off'} • Email required: ${policy.requireEmail ? 'on' : 'off'}`;
- 
+
    useEffect(() => {
      requestIdRef.current = `c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
      startedAtRef.current = Date.now();
@@ -11868,7 +11868,7 @@ index 51aa6ae..780a584 100644
 -      window.removeEventListener('popstate', syncIdentity);
 -    };
    }, [siteId, pageId, postId]);
- 
+
 +  useEffect(() => {
 +    if (commenterIdentity?.name) {
 +      setAuthorName((current) => current || commenterIdentity.name || '');
@@ -11920,7 +11920,7 @@ index 51aa6ae..780a584 100644
            Preview mode: comment thread data is not refreshed.
 @@ -1821,11 +1892,11 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
        </div>
- 
+
        <form onSubmit={submitTopLevel} style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 -            {!canSubmitComments ? (
 -              <p style={{ margin: 0, color: '#b91c1c' }}>
@@ -11941,7 +11941,7 @@ index 51aa6ae..780a584 100644
    const maxLength = parseNumericAttribute(props.maxLength);
 +  const accept = getNameClass(props.accept);
 +  const allowMultiple = getBoolean(props.multiple);
- 
+
    return (
      <input
 @@ -1923,6 +1996,8 @@ function InputElement({ element }: ElementRendererProps) {
@@ -11996,7 +11996,7 @@ index 51aa6ae..780a584 100644
 +}: ElementRendererProps) {
    const normalizedType = normalizeRendererType(element.type);
    const Renderer = ELEMENT_RENDERERS[normalizedType];
- 
+
 @@ -2223,6 +2310,8 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId }:
          siteId={siteId}
          pageId={pageId}
@@ -12013,7 +12013,7 @@ index 51aa6ae..780a584 100644
 +  commentIdentity?: BackyCommentIdentity | null;
 +  commentAuthBridgeOptions?: BackyAuthBridgeOptions;
  }
- 
+
  /**
 @@ -2254,6 +2345,8 @@ export function PageRenderer({
    siteId,
@@ -12048,7 +12048,7 @@ index 7490291..4da8215 100644
 @@ -128,6 +129,78 @@ interface Pagination {
    hasMore: boolean;
  }
- 
+
 +interface CommentModerationAnalytics {
 +  siteId: string;
 +  total: number;
@@ -12125,7 +12125,7 @@ index 7490291..4da8215 100644
    field: string;
    message: string;
 @@ -829,10 +902,22 @@ const COMMENT_LIST: Comment[] = [
- 
+
  const FORM_SUBMISSIONS: FormSubmission[] = [];
  const CONTACT_LIST: Contact[] = [];
 -const COMMENT_REPORT_BLOCKLIST = new Map<
@@ -12176,12 +12176,12 @@ index 7490291..4da8215 100644
 +  autoBlockRequestThreshold: 5,
 +};
  const AUDIT_EVENTS: AuditEvent[] = [];
- 
+
  let commentStore: Comment[] = [...COMMENT_LIST];
 @@ -872,40 +972,176 @@ function normalizeIdentifier(value: string) {
    return value.trim().toLowerCase();
  }
- 
+
 -function normalizeReportReason(raw: string | null | undefined): string | null {
 -  const normalized = (raw || '').trim().toLowerCase();
 -  if (!normalized) {
@@ -12193,20 +12193,20 @@ index 7490291..4da8215 100644
    }
 +  return parsed < 0 ? fallback : parsed;
 +}
- 
+
 -  if (COMMENT_REPORT_REASONS.includes(normalized as CommentReportReason)) {
 -    return normalized as CommentReportReason;
 +function resolveAntiAbuseThreshold(raw: number, fallback: number): number {
 +  if (raw === 0) {
 +    return 0;
    }
- 
+
 -  if (normalized === 'off topic' || normalized === 'off-topic' || normalized === 'offtopic') {
 -    return 'off-topic';
 +  if (Number.isFinite(raw) && raw > 0) {
 +    return raw;
    }
- 
+
 -  if (normalized === 'hate' || normalized === 'hatespeech') {
 -    return 'hate-speech';
 +  return fallback;
@@ -12217,7 +12217,7 @@ index 7490291..4da8215 100644
 +  if (existing) {
 +    return existing;
    }
- 
+
 -  if (normalized === 'abusive' || normalized === 'threat') {
 -    return 'abuse';
 +  const created: CommentAntiAbuseCounters = {
@@ -12300,7 +12300,7 @@ index 7490291..4da8215 100644
 +  if (!minutes || minutes <= 0) {
 +    return undefined;
    }
- 
+
 -  if (normalized === 'other') {
 -    return 'other';
 +  return new Date(Date.now() + minutes * 60 * 1000).toISOString();
@@ -12312,7 +12312,7 @@ index 7490291..4da8215 100644
 +  if (!entry.expiresAt) {
 +    return false;
    }
- 
+
 -  return 'other';
 +  const expiresAt = Date.parse(entry.expiresAt);
 +  if (Number.isNaN(expiresAt)) {
@@ -12321,7 +12321,7 @@ index 7490291..4da8215 100644
 +
 +  return Date.now() >= expiresAt;
  }
- 
+
 -function getCommentBlockKey(siteId: string, kind: 'email' | 'ip', value: string) {
 -  return `${siteId}:${kind}:${normalizeIdentifier(value)}`;
 +function removeExpiredCommentBlocks(siteId: string): void {
@@ -12353,7 +12353,7 @@ index 7490291..4da8215 100644
 +    counter.blockedByType[entry.type] = counter.blockedByType[entry.type] + 1;
 +  });
  }
- 
+
 -function isCommentBlockedByIdentity(siteId: string, params: { email?: string | null; ipHash?: string | null }) {
 +function getCommentBlocklistEntry(
 +  siteId: string,
@@ -12376,7 +12376,7 @@ index 7490291..4da8215 100644
 @@ -921,9 +1157,115 @@ function isCommentBlockedByIdentity(siteId: string, params: { email?: string | n
      }
    }
- 
+
 +  const blockedUser = params.userId
 +    ? COMMENT_REPORT_BLOCKLIST.get(getCommentBlockKey(siteId, 'user', params.userId))
 +    : null;
@@ -12397,7 +12397,7 @@ index 7490291..4da8215 100644
 +
    return null;
  }
- 
+
 +function updateAntiAbuseCounter(siteId: string, updates: {
 +  flags: string[];
 +  requestId?: string | null;
@@ -12492,7 +12492,7 @@ index 7490291..4da8215 100644
 @@ -1073,6 +1415,23 @@ function parseNumberValue(value: unknown): number | undefined {
    return Number.isFinite(parsed) ? parsed : undefined;
  }
- 
+
 +function parseBooleanValue(value: unknown): boolean | undefined {
 +  if (typeof value === 'boolean') {
 +    return value;
@@ -12516,7 +12516,7 @@ index 7490291..4da8215 100644
 @@ -1108,6 +1467,101 @@ function parseFieldOptions(rawOptions: unknown): string[] {
    return [];
  }
- 
+
 +interface FileUploadValue {
 +  name: string;
 +  size?: number;
@@ -12618,7 +12618,7 @@ index 7490291..4da8215 100644
 @@ -1118,6 +1572,32 @@ function normalizeFieldOptions(rawOptions: unknown): string[] {
      .filter(Boolean);
  }
- 
+
 +function parseDateValue(raw: unknown): number | undefined {
 +  if (typeof raw === 'number' && Number.isFinite(raw)) {
 +    return raw;
@@ -12651,7 +12651,7 @@ index 7490291..4da8215 100644
 @@ -1135,7 +1615,39 @@ function parseSubmissionValues(value: unknown): string[] {
      return [value ? 'on' : 'off'];
    }
- 
+
 -  return sanitizeString(value).split(',').map((entry) => entry.trim()).filter(Boolean);
 +  if (typeof value === 'object') {
 +    if (typeof File !== 'undefined' && value instanceof File) {
@@ -12687,7 +12687,7 @@ index 7490291..4da8215 100644
 +
 +  return values.some((value) => !isFalseyCheckboxValue(value));
  }
- 
+
  function buildDynamicValidationRules(
 @@ -1147,6 +1659,8 @@ function buildDynamicValidationRules(
    const maxLength = parseNumberValue(props.maxLength);
@@ -12696,12 +12696,12 @@ index 7490291..4da8215 100644
 +  const minDateValue = fieldType === 'date' ? parseDateValue(props.min) : undefined;
 +  const maxDateValue = fieldType === 'date' ? parseDateValue(props.max) : undefined;
    const pattern = sanitizeString(props.pattern);
- 
+
    if (typeof minLength === 'number' && fieldType !== 'checkbox') {
 @@ -1181,6 +1695,22 @@ function buildDynamicValidationRules(
      });
    }
- 
+
 +  if (typeof minDateValue === 'number') {
 +    rules.push({
 +      type: 'min',
@@ -12734,7 +12734,7 @@ index 7490291..4da8215 100644
 @@ -1432,17 +1965,51 @@ function getValueAsString(values: Record<string, unknown>, key: string): string
    return sanitizeString(values[key] || '');
  }
- 
+
 -function evaluateValidationRule(
 -  fieldLabel: string,
 -  fieldType: string,
@@ -12745,7 +12745,7 @@ index 7490291..4da8215 100644
 +function isValidEmailAddress(value: string): boolean {
 +  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 +}
- 
+
 -  if (rule.type === 'required') {
 -    if (trimmed.length === 0) {
 -      return {
@@ -12795,7 +12795,7 @@ index 7490291..4da8215 100644
        };
 @@ -1501,32 +2068,70 @@ function evaluateValidationRule(
    }
- 
+
    if (rule.type === 'min' || rule.type === 'max') {
 -    const numeric = Number(trimmed);
 -    const compare = Number(rule.value);
@@ -12833,12 +12833,12 @@ index 7490291..4da8215 100644
 +
 +      return null;
 +    }
- 
+
 -    if (!Number.isFinite(numeric) || !Number.isFinite(compare)) {
 +    if (!Number.isFinite(compareNumber)) {
        return null;
      }
- 
+
 -    if (rule.type === 'min' && numeric < compare) {
 +    if (!Number.isFinite(asNumber)) {
 +      return {
@@ -12854,7 +12854,7 @@ index 7490291..4da8215 100644
 +        message: rule.message || `${fieldLabel} must be at least ${compareNumber}`,
        };
      }
- 
+
 -    if (rule.type === 'max' && numeric > compare) {
 +    if (rule.type === 'max' && asNumber > compareNumber) {
        return {
@@ -12865,7 +12865,7 @@ index 7490291..4da8215 100644
      }
      return null;
    }
- 
+
    if (fieldType === 'email' && trimmed.length > 0) {
 -    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 -    if (!emailPattern.test(trimmed)) {
@@ -12876,7 +12876,7 @@ index 7490291..4da8215 100644
 @@ -1534,6 +2139,39 @@ function evaluateValidationRule(
      }
    }
- 
+
 +  if (normalizedType === 'number' && trimmed.length > 0 && !Number.isFinite(asNumber)) {
 +    return {
 +      field: fieldLabel,
@@ -12912,7 +12912,7 @@ index 7490291..4da8215 100644
 +
    return null;
  }
- 
+
 @@ -1550,12 +2188,21 @@ function validateSubmissionValues(
    form.fields.forEach((field) => {
      const fieldLabel = field.label || field.key;
@@ -12932,7 +12932,7 @@ index 7490291..4da8215 100644
 +      : normalizedType === 'file'
 +        ? uploadedFiles.length > 0
 +        : hasValue;
- 
+
 -    if (field.required && sanitized.length === 0) {
 +    if (field.required && !effectiveHasValue) {
        details.push({
@@ -12941,7 +12941,7 @@ index 7490291..4da8215 100644
 @@ -1563,7 +2210,23 @@ function validateSubmissionValues(
        return;
      }
- 
+
 -    if ((field.type === 'select' || field.type === 'radio') && normalizedSubmittedValues.length > 0) {
 +    if (normalizedType === 'select' && hasValue) {
 +      if (parsedValues.length > 1) {
@@ -12966,7 +12966,7 @@ index 7490291..4da8215 100644
 @@ -1574,54 +2237,120 @@ function validateSubmissionValues(
        }
      }
- 
+
 -    if ((field.type === 'checkbox') && normalizedSubmittedValues.length > 0 && normalizedAllowedOptions.length > 0) {
 -      const invalid = normalizedSubmittedValues.filter((value) => !normalizedAllowedOptions.includes(value));
 -      if (invalid.length > 0) {
@@ -12997,7 +12997,7 @@ index 7490291..4da8215 100644
          });
        }
      }
- 
+
 -    if (field.type === 'select' && field.required && normalizedAllowedOptions.length === 0) {
 +    if (normalizedType === 'checkbox' && hasValue) {
 +      if (normalizedAllowedOptions.length > 0) {
@@ -13019,7 +13019,7 @@ index 7490291..4da8215 100644
        });
 -      return;
      }
- 
+
 -    if (field.type === 'radio' && submittedValues.length > 0 && normalizedAllowedOptions.length === 0) {
 +    if (
 +      normalizedType === 'number' &&
@@ -13033,7 +13033,7 @@ index 7490291..4da8215 100644
        });
 -      return;
      }
- 
+
 -    if (field.type === 'checkbox' && normalizedAllowedOptions.length === 0 && field.required && sanitized.length > 0) {
 +    if (
 +      normalizedType === 'date' &&
@@ -13047,7 +13047,7 @@ index 7490291..4da8215 100644
        });
 -      return;
      }
- 
+
 -    if (!field.validation || field.validation.length === 0) {
 -      if (field.type === 'email' && sanitized.length > 0) {
 -        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -13101,7 +13101,7 @@ index 7490291..4da8215 100644
        }
 -      return;
      }
- 
+
 -    for (const validation of field.validation) {
 +    for (const validation of field.validation || []) {
        const violation = evaluateValidationRule(
@@ -13142,7 +13142,7 @@ index 7490291..4da8215 100644
 +        userKey,
 +      });
 +    }
- 
+
 -  if (!normalizedContent.length) {
      return {
 -      ok: false,
@@ -13159,14 +13159,14 @@ index 7490291..4da8215 100644
 +  if (!normalizedContent.length) {
 +    return returnResult('rejected', ['validation'], 'Comment content is required.');
    }
- 
+
    const blockedActor = isCommentBlockedByIdentity(params.siteId, {
      email: params.authorEmail,
      ipHash: params.ipHash,
 +    userId: params.authorUserId,
 +    requestId: normalizedRequestId,
    });
- 
+
    if (blockedActor) {
 -    return {
 -      ok: false,
@@ -13176,7 +13176,7 @@ index 7490291..4da8215 100644
 -    };
 +    return returnResult('blocked', ['blocked-actor'], blockedActor.reason);
    }
- 
+
    if (normalizedContent.length > 5000) {
 -    return {
 -      ok: false,
@@ -13186,10 +13186,10 @@ index 7490291..4da8215 100644
 -    };
 +    return returnResult('rejected', ['validation'], 'Comment content is too long.');
    }
- 
+
    if (params.rateLimitBypass) {
 @@ -1787,12 +2533,7 @@ function checkCommentSpamSignals(
- 
+
    if (params.honeypot && sanitizeString(params.honeypot).length > 0) {
      flags.push('honeypot');
 -    return {
@@ -13200,12 +13200,12 @@ index 7490291..4da8215 100644
 -    };
 +    return returnResult('spam', flags, 'Spam signal detected: honeypot.');
    }
- 
+
    const startedAt = typeof params.startedAt === 'number'
 @@ -1801,24 +2542,85 @@ function checkCommentSpamSignals(
        ? Date.parse(String(params.startedAt))
        : NaN;
- 
+
 -  if (Number.isFinite(startedAt) && now - startedAt < COMMENT_MIN_FILL_MS) {
 +  if (Number.isFinite(startedAt) && now - startedAt < antiAbusePolicy.minFillMs) {
      flags.push('timing');
@@ -13277,7 +13277,7 @@ index 7490291..4da8215 100644
 +      return antiAbuseResult;
 +    }
    }
- 
+
 -  const key = getCommentRequestKey(params.siteId, params.targetType, params.targetId, params.ipHash);
 +  const key = getCommentRequestKey(
 +    params.siteId,
@@ -13289,17 +13289,17 @@ index 7490291..4da8215 100644
      total: 0,
      lastSubmissionAt: null,
    };
- 
+
    const isWithinWindow = rateState.lastSubmissionAt !== null
 -    ? now - rateState.lastSubmissionAt <= COMMENT_RATE_WINDOW_MS
 +    ? now - rateState.lastSubmissionAt <= antiAbusePolicy.rateWindowMs
      : false;
- 
+
    if (!isWithinWindow) {
 @@ -1829,31 +2631,87 @@ function checkCommentSpamSignals(
    rateState.total += 1;
    COMMENT_RATE_WINDOWS.set(key, rateState);
- 
+
 -  if (rateState.total > COMMENT_RATE_LIMIT) {
 +  const blockRateLimit = antiAbusePolicy.rateLimit;
 +
@@ -13345,7 +13345,7 @@ index 7490291..4da8215 100644
 +
 +    return antiAbuseResult;
    }
- 
+
    const signature = makeSubmissionSignature({ commentContent: normalizedContent, content: normalizedContent });
    const signatureKey = `${key}:signature:${signature}`;
    const signatures = COMMENT_SIGNATURES.get(signatureKey) || [];
@@ -13353,7 +13353,7 @@ index 7490291..4da8215 100644
 +  const activeSignatures = signatures.filter(
 +    (value) => now - value <= antiAbusePolicy.signatureWindowMs,
 +  );
- 
+
    if (activeSignatures.length > 0) {
      activeSignatures.push(now);
      COMMENT_SIGNATURES.set(signatureKey, activeSignatures);
@@ -13395,7 +13395,7 @@ index 7490291..4da8215 100644
 +
 +    return antiAbuseResult;
    }
- 
+
    activeSignatures.push(now);
 @@ -2124,6 +2982,8 @@ export function validateAndClassifyComment(params: {
    content: string;
@@ -13419,7 +13419,7 @@ index 7490291..4da8215 100644
      rateLimitBypass: params.rateLimitBypass,
 +    antiAbuse: params.antiAbuse,
    });
- 
+
    return {
 @@ -2352,9 +3215,16 @@ export function blockCommentIdentity(params: {
    reason: string;
@@ -13446,7 +13446,7 @@ index 7490291..4da8215 100644
 +      expiresAt,
      });
    }
- 
+
 @@ -2374,8 +3246,125 @@ export function blockCommentIdentity(params: {
        actor: params.actor,
        requestId: params.requestId,
@@ -13571,11 +13571,11 @@ index 7490291..4da8215 100644
 +  removeExpiredCommentBlocks(params.siteId);
 +  return { removed };
  }
- 
+
  export function getCommentReportReasons(): CommentReportReason[] {
 @@ -2402,6 +3391,19 @@ export function reportComment(params: {
    }
- 
+
    const normalizedReason = normalizeReportReason(params.reason || null);
 +  const abuseUserKey = resolveAbuseUserKey({
 +    authorUserId: comment.userId || null,
@@ -13615,7 +13615,7 @@ index 7490291..4da8215 100644
 @@ -2743,6 +3749,211 @@ export function listComments(
    };
  }
- 
+
 +export function getCommentModerationAnalytics(
 +  siteId: string,
 +  params: {
@@ -13835,7 +13835,7 @@ index 7490291..4da8215 100644
 @@ -2794,14 +4006,17 @@ export function updateCommentStatus(
      comment.blockedBy = comment.reviewedBy;
      comment.blockedAt = comment.reviewedAt;
- 
+
 -    blockCommentIdentity({
 -      siteId: comment.siteId,
 -      reason: comment.blockReason || 'manual-block',
@@ -13880,7 +13880,7 @@ index 7490291..4da8215 100644
 +  createdAt: new Date().toISOString(),
 +  updatedAt: new Date().toISOString(),
    };
- 
+
    commentStore = [comment, ...commentStore];
 @@ -2901,6 +4118,7 @@ export function createComment(params: {
        parentId: comment.parentId,
@@ -13889,7 +13889,7 @@ index 7490291..4da8215 100644
 +      spamFlags: comment.spamFlags,
      },
    });
- 
+
 diff --git a/packages/core/src/types/index.ts b/packages/core/src/types/index.ts
 index 4aa0590..d95cece 100644
 --- a/packages/core/src/types/index.ts
@@ -13897,7 +13897,7 @@ index 4aa0590..d95cece 100644
 @@ -789,6 +789,15 @@ export interface FormFieldDefinition {
    /** Validation rules */
    validation?: FormValidationRule[];
- 
+
 +  /** Accepted file extensions or MIME patterns for file field types (e.g. ".pdf,.jpg,image/*") */
 +  acceptedFileTypes?: string[];
 +
@@ -13917,10 +13917,10 @@ index 4aa0590..d95cece 100644
 +  spamFlags?: string[];
    requestId?: string | null;
    ipHash?: string | null;
- 
+
 @@ -995,6 +1005,19 @@ export interface Contact {
  }
- 
+
  /** Commenting policy for page/blog render payload */
 +export interface CommentAntiAbusePolicy {
 +  rateLimit?: number;
@@ -13944,7 +13944,7 @@ index 4aa0590..d95cece 100644
    maxDepth?: number;
 +  antiAbuse?: CommentAntiAbusePolicy;
  }
- 
+
  /**
 diff --git a/specs/backy-cms-completion-spec.md b/specs/backy-cms-completion-spec.md
 index 5f05ae5..e603f84 100644
@@ -13953,7 +13953,7 @@ index 5f05ae5..e603f84 100644
 @@ -15,6 +15,31 @@ Backy should be a production-oriented, open-source backend that enables:
  The working implementation roadmap is maintained in:
  - [specs/backy-wix-canva-cms-v1-roadmap.md](specs/backy-wix-canva-cms-v1-roadmap.md)
- 
+
 +**Authoritative phase status and roadmap:**
 +- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md)
 +- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md)
@@ -13980,7 +13980,7 @@ index 5f05ae5..e603f84 100644
 +- **Custom frontend target:** `backy-public` is the contract boundary for replacement UI surfaces; custom frontends should never require admin internals.
 +
  The goal is parity with “Wix-like editor + WordPress-like content model” for self-hosted or Vercel-hosted backends.
- 
+
  ---
 
 # --- excluded untracked/new files (not in this diff by design) ---

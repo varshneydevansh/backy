@@ -1,16 +1,16 @@
 # Backy Handoff Notes (2026-02-24)
 
 ## Current active directory
-- Working repo is now: `/Users/devanshvarshney/Downloads/Scythian /backy`
+- Working repo is now: `/Users/devanshvarshney/backy`
 - This is the directory to continue from in future sessions.
 
 ## What was completed in latest pass
 - Renamed branding references to the product/repo name `backy`.
 - README and setup docs now reference `backy` paths.
-- Removed old `backy-cms` duplicate/stale folder under `/Users/devanshvarshney/Downloads/Scythian `.
+- Removed old `backy-cms` duplicate/stale folder under `/Users/devanshvarshney`.
 - Project metadata aligned to `backy` in:
-  - `/Users/devanshvarshney/Downloads/Scythian /backy/package.json` (repo URL updated)
-  - `/Users/devanshvarshney/Downloads/Scythian /backy/package-lock.json` (root lockfile name updated)
+  - `/Users/devanshvarshney/backy/package.json` (repo URL updated)
+  - `/Users/devanshvarshney/backy/package-lock.json` (root lockfile name updated)
 
 ## Important note about remaining `backy-cms` strings
 - Strings in package names such as `@backy-cms/*` and files like `specs/backy-cms-completion-spec.md` are intentionally preserved for package scope and are not part of repo-folder naming.

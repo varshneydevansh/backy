@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - UTILITY FUNCTIONS
+ * BACKY CMS - UTILITY FUNCTIONS
  * ============================================================================
  *
  * Shared utility functions for the admin dashboard.
  *
  * @module Utils
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

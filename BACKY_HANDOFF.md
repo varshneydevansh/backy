@@ -1,6 +1,6 @@
-# Backy Continuation Handoff  
-**Date:** 2026-02-24  
-**Path:** `/Users/devanshvarshney/Downloads/Scythian /backy`  
+# Backy Continuation Handoff
+**Date:** 2026-02-24
+**Path:** `/Users/devanshvarshney/backy`
 
 ## 1) Current objective
 Continue implementation toward **Wix/WordPress/Canva-like CMS parity**, with strict priority on:

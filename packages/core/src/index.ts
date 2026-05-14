@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - CORE PACKAGE
+ * BACKY CMS - CORE PACKAGE
  * ============================================================================
  *
  * This package contains shared types, constants, and utilities used across
- * all Scythian CMS applications and packages.
+ * all Backy CMS applications and packages.
  *
- * @package @scythian-cms/core
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @package @backy-cms/core
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

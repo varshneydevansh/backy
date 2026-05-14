@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - MAIN APP COMPONENT
+ * BACKY CMS - MAIN APP COMPONENT
  * ============================================================================
  *
  * The root component that sets up routing and global providers.
  *
  * @module App
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

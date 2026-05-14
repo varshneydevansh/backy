@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - DATABASE CLIENT
+ * BACKY CMS - DATABASE CLIENT
  * ============================================================================
  *
  * This module provides the Supabase client configuration and initialization.
  * It handles both server-side and client-side Supabase instances.
  *
  * @module DatabaseClient
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

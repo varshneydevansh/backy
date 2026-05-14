@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - DATABASE PACKAGE
+ * BACKY CMS - DATABASE PACKAGE
  * ============================================================================
  *
  * This package provides database connectivity, types, and queries for
- * the Scythian CMS. It uses Supabase as the backend database.
+ * the Backy CMS. It uses Supabase as the backend database.
  *
- * @package @scythian-cms/database
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @package @backy-cms/database
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

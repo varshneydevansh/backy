@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - MAIN LAYOUT COMPONENT
+ * BACKY CMS - MAIN LAYOUT COMPONENT
  * ============================================================================
  *
  * The main layout that includes the sidebar navigation and header.
  * This wraps all authenticated routes.
  *
  * @module MainLayout
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

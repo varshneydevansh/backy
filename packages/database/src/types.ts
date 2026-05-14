@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - DATABASE TYPES
+ * BACKY CMS - DATABASE TYPES
  * ============================================================================
  *
  * TypeScript types generated from the Supabase database schema.
  * These types ensure type safety when querying the database.
  *
  * @module DatabaseTypes
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

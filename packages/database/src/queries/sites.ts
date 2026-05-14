@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - SITE QUERIES
+ * BACKY CMS - SITE QUERIES
  * ============================================================================
  *
  * Database queries for site management including CRUD operations,
  * team-based filtering, and domain-related queries.
  *
  * @module SiteQueries
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 

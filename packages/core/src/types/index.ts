@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * SCYTHIAN CMS - CORE TYPES
+ * BACKY CMS - CORE TYPES
  * ============================================================================
  *
  * This module contains all the core type definitions used throughout the CMS.
  * These types represent the data models for users, sites, pages, media, etc.
  *
  * @module CoreTypes
- * @author Scythian CMS Team (Built by Kimi 2.5)
+ * @author Backy CMS Team (Built by Kimi 2.5)
  * @license MIT
  */
 
@@ -127,7 +127,7 @@ export type SSLStatus = 'pending' | 'active' | 'error' | 'expired';
  * A Site is the main container for all content.
  *
  * Each site gets:
- * - A subdomain (site-name.scythian-cms.com)
+ * - A subdomain (site-name.backy-cms.com)
  * - Optional custom domain (example.com)
  * - Its own pages, blog, media, and settings
  */
@@ -141,7 +141,7 @@ export interface Site {
   /** Site name (displayed in admin) */
   name: string;
 
-  /** Subdomain slug (site-name.scythian-cms.com) */
+  /** Subdomain slug (site-name.backy-cms.com) */
   slug: string;
 
   /** Site description */
