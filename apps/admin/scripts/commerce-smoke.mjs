@@ -1184,7 +1184,7 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     '129',
     'USD',
     JSON.stringify([{ id: 'csv-team', title: 'Team', sku: `CSV-${suffix.toUpperCase()}-TEAM`, option: 'Seats', price: 149, inventory: 3 }]),
-    '12',
+    '0',
     '4',
     'continue',
     'digital',
@@ -1220,7 +1220,7 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   const record = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(record?.id, `Imported product was not found by slug ${slug}`);
   assert(record.values?.price === 99, `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`);
-  assert(record.values?.inventory === 12, `Imported inventory did not stay numeric: ${JSON.stringify(record.values?.inventory)}`);
+  assert(record.values?.inventory === 0, `Imported digital inventory did not stay numeric zero: ${JSON.stringify(record.values?.inventory)}`);
   assert(readProductValue(record.values, 'shippingRequired') === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(readProductValue(record.values, 'shippingRequired'))}`);
   assert(readProductValue(record.values, 'shippingProfile') === 'digital-delivery', `Imported shipping profile did not persist: ${JSON.stringify(readProductValue(record.values, 'shippingProfile'))}`);
   assert(readProductValue(record.values, 'taxClass') === 'digital-standard', `Imported tax class did not persist: ${JSON.stringify(readProductValue(record.values, 'taxClass'))}`);
@@ -1230,6 +1230,13 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   assert(record.values?.featured === true, `Imported featured flag did not stay boolean true: ${JSON.stringify(record.values?.featured)}`);
   assert(Array.isArray(record.values?.tags) && record.values.tags.includes('imported'), `Imported tags did not parse as an array: ${JSON.stringify(record.values?.tags)}`);
   assert(Array.isArray(record.values?.variants) && record.values.variants.length === 1, `Imported variants did not parse JSON: ${JSON.stringify(record.values?.variants)}`);
+
+  const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`);
+  const product = catalog.data?.products?.[0] || catalog.products?.[0];
+  assert(product?.productType === 'digital', `Imported public product type was unexpected: ${JSON.stringify(product)}`);
+  assert(product.inventory?.quantity === 0, `Imported public inventory quantity was unexpected: ${JSON.stringify(product?.inventory)}`);
+  assert(product.inventory?.inStock === true, `Imported zero-inventory digital product should be in stock: ${JSON.stringify(product?.inventory)}`);
+  assert(product.inventory?.lowStock === false, `Imported zero-inventory digital product should not be low stock: ${JSON.stringify(product?.inventory)}`);
 
   return record;
 };
@@ -1250,6 +1257,61 @@ const assertProductsLayout = async (client) => {
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasPageBindingContract && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const assertDigitalStockFilters = async (client, productTitle) => {
+  const navigateToProductFilter = async (stock) => {
+    const url = new URL(`${ADMIN_BASE_URL}/products`);
+    url.searchParams.set('siteId', SITE_ID);
+    url.searchParams.set('type', 'digital');
+    url.searchParams.set('stock', stock);
+    url.searchParams.set('search', productTitle);
+    await client.send('Page.navigate', { url: url.toString() });
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const body = document.body?.innerText || '';
+        const stockFilter = document.querySelector('select[aria-label="Product stock filter"]');
+        const typeFilter = document.querySelector('select[aria-label="Product type filter"]');
+        const search = document.querySelector('input[aria-label="Search products"]');
+        return {
+          ready: Boolean(document.querySelector('[data-testid="products-command-center"]')),
+          stockValue: stockFilter instanceof HTMLSelectElement ? stockFilter.value : null,
+          typeValue: typeFilter instanceof HTMLSelectElement ? typeFilter.value : null,
+          searchValue: search instanceof HTMLInputElement ? search.value : null,
+          hasProduct: body.includes(${JSON.stringify(productTitle)}),
+          hasAvailableStock: body.includes('Available') && body.includes('No physical stock limit'),
+          hasEmptyState: body.includes('No products found'),
+          body: body.slice(0, 1200),
+        };
+      })()`);
+
+      if (
+        state.ready &&
+        state.stockValue === stock &&
+        state.typeValue === 'digital' &&
+        state.searchValue === productTitle
+      ) {
+        return state;
+      }
+
+      if (attempt === 99) {
+        throw new Error(`Digital stock filter did not hydrate for ${stock}: ${JSON.stringify(state)}`);
+      }
+      await sleep(250);
+    }
+
+    return null;
+  };
+
+  const inStockState = await navigateToProductFilter('in-stock');
+  assert(inStockState.hasProduct && inStockState.hasAvailableStock, `Zero-inventory digital product should appear in stock: ${JSON.stringify(inStockState)}`);
+
+  const outOfStockState = await navigateToProductFilter('out-of-stock');
+  assert(!outOfStockState.hasProduct && outOfStockState.hasEmptyState, `Zero-inventory digital product should not appear out of stock: ${JSON.stringify(outOfStockState)}`);
+
+  await navigateToRoute(client, '/products', 'products-command-center', 'Products command center');
+  return { inStockState, outOfStockState };
 };
 
 const launchChrome = () => {
@@ -1362,6 +1424,7 @@ const main = async () => {
       suffix,
     });
     importedProductRecordId = importedProduct.id;
+    await assertDigitalStockFilters(client, `Imported Commerce ${suffix}`);
 
     const publicCommerce = await assertPublicCommerce({
       productCollection: finalProductCollection,

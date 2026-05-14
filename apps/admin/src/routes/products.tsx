@@ -674,14 +674,11 @@ function ProductsRoute() {
       if (!matchesStatus) return false;
 
       const values = product.values;
-      const productType = asProductType(readProductValue(values, 'productType'));
-      const inventory = toNumber(readProductValue(values, 'inventory'));
-      const lowStockThreshold = Math.max(0, toNumber(readProductValue(values, 'lowStockThreshold', 5) || 5));
-      const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
+      const stockState = getProductStockState(values);
       const category = String(readProductValue(values, 'category', '') || '').trim();
       const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
 
-      if (productTypeFilter !== 'all' && productType !== productTypeFilter) {
+      if (productTypeFilter !== 'all' && stockState.productType !== productTypeFilter) {
         return false;
       }
 
@@ -689,13 +686,13 @@ function ProductsRoute() {
         return false;
       }
 
-      if (stockFilter === 'in-stock' && inventory <= 0) {
+      if (stockFilter === 'in-stock' && !stockState.inStock) {
         return false;
       }
-      if (stockFilter === 'low-stock' && !isLowStock) {
+      if (stockFilter === 'low-stock' && !stockState.lowStock) {
         return false;
       }
-      if (stockFilter === 'out-of-stock' && inventory > 0) {
+      if (stockFilter === 'out-of-stock' && !stockState.outOfStock) {
         return false;
       }
       if (stockFilter === 'featured' && !readProductValue(values, 'featured')) {
@@ -724,11 +721,7 @@ function ProductsRoute() {
     draft: products.filter((product) => product.status === 'draft').length,
     scheduled: products.filter((product) => product.status === 'scheduled').length,
     inventory: products.reduce((sum, product) => sum + toNumber(readProductValue(product.values, 'inventory')), 0),
-    lowStock: products.filter((product) => {
-      const inventory = toNumber(readProductValue(product.values, 'inventory'));
-      const threshold = Math.max(0, toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5));
-      return inventory > 0 && inventory <= threshold;
-    }).length,
+    lowStock: products.filter((product) => getProductStockState(product.values).lowStock).length,
     digital: products.filter((product) => readProductValue(product.values, 'productType') === 'digital').length,
     categories: new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean)).size,
   }), [products]);
@@ -3095,17 +3088,17 @@ function ProductCard({
   const compareAtPrice = toNumber(readProductValue(product.values, 'compareAtPrice'));
   const currency = normalizeCurrency(String(readProductValue(product.values, 'currency', 'USD') || 'USD'));
   const inventory = toNumber(readProductValue(product.values, 'inventory'));
-  const lowStockThreshold = Math.max(0, toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5));
   const imageUrl = String(readProductValue(product.values, 'imageUrl', '') || '');
   const galleryImages = formatGalleryImages(readProductValue(product.values, 'galleryImages'));
   const variants = formatProductVariants(readProductValue(product.values, 'variants'));
-  const productType = String(readProductValue(product.values, 'productType', 'physical') || 'physical');
-  const inventoryPolicy = asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy'));
+  const stockState = getProductStockState(product.values);
+  const productType = stockState.productType;
+  const inventoryPolicy = stockState.inventoryPolicy;
   const category = String(readProductValue(product.values, 'category', '') || '');
   const vendor = String(readProductValue(product.values, 'vendor', '') || '');
   const tags = formatTags(readProductValue(product.values, 'tags')).slice(0, 3);
   const shippingRequired = readProductValue(product.values, 'shippingRequired') !== false;
-  const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
+  const isLowStock = stockState.lowStock;
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -3201,7 +3194,10 @@ function ProductCard({
         </div>
         <div className="rounded bg-muted px-3 py-2">
           <div className="text-xs text-muted-foreground">Stock</div>
-          <div className="font-semibold">{inventory}</div>
+          <div className="font-semibold">{productType === 'physical' ? inventory : 'Available'}</div>
+          {productType !== 'physical' ? (
+            <div className="text-xs text-muted-foreground">No physical stock limit</div>
+          ) : null}
         </div>
         <div className="rounded bg-muted px-3 py-2">
           <div className="text-xs text-muted-foreground">Updated</div>
@@ -3488,6 +3484,25 @@ const asProductType = (value: unknown): ProductFormState['productType'] => (
 const asInventoryPolicy = (value: unknown): ProductFormState['inventoryPolicy'] => (
   value === 'continue' || value === 'preorder' || value === 'deny' ? value : 'deny'
 );
+
+const getProductStockState = (values: CollectionRecord['values']) => {
+  const productType = asProductType(readProductValue(values, 'productType'));
+  const inventory = toNumber(readProductValue(values, 'inventory'));
+  const lowStockThreshold = Math.max(0, toNumber(readProductValue(values, 'lowStockThreshold', 5) || 5));
+  const inventoryPolicy = asInventoryPolicy(readProductValue(values, 'inventoryPolicy'));
+  const isPhysical = productType === 'physical';
+  const inStock = !isPhysical || inventory > 0 || inventoryPolicy !== 'deny';
+
+  return {
+    productType,
+    inventory,
+    lowStockThreshold,
+    inventoryPolicy,
+    inStock,
+    lowStock: isPhysical && inventory > 0 && inventory <= lowStockThreshold,
+    outOfStock: !inStock,
+  };
+};
 
 const parseTags = (value: string): string[] => (
   parseTagInput(value, 20)
