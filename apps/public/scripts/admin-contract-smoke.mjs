@@ -1453,11 +1453,61 @@ try {
     });
     assert(invalidPage.response.status === 201, `${invalidPage.url} expected 201, got ${invalidPage.response.status}`);
     const invalidPageId = invalidPage.json?.data?.page?.id;
+    const blockedDirectScheduledPage = await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'scheduled',
+        scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
+    });
+    assert(blockedDirectScheduledPage.response.status === 400, `${blockedDirectScheduledPage.url} expected readiness 400 for direct schedule, got ${blockedDirectScheduledPage.response.status}`);
+    assert(blockedDirectScheduledPage.json?.error?.code === 'READINESS_BLOCKED', `${blockedDirectScheduledPage.url} expected direct schedule readiness error code`);
+    const blockedDirectPublishedPage = await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'published' }),
+    });
+    assert(blockedDirectPublishedPage.response.status === 400, `${blockedDirectPublishedPage.url} expected readiness 400 for direct publish, got ${blockedDirectPublishedPage.response.status}`);
+    assert(blockedDirectPublishedPage.json?.error?.code === 'READINESS_BLOCKED', `${blockedDirectPublishedPage.url} expected direct publish readiness error code`);
     const blockedPublish = await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}/publish`, { method: 'POST' });
     assert(blockedPublish.response.status === 400, `${blockedPublish.url} expected readiness 400, got ${blockedPublish.response.status}`);
     assert(blockedPublish.json?.error?.code === 'READINESS_BLOCKED', `${blockedPublish.url} expected readiness error code`);
     assert(blockedPublish.json?.error?.details?.checks?.some((check) => check.severity === 'error'), `${blockedPublish.url} missing readiness error details`);
     await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}`, { method: 'DELETE' });
+
+    const blockedCreateAsPublished = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Invalid Create Published Page',
+        slug: `${pageSlug}-invalid-create-published`,
+        status: 'published',
+        content: {
+          elements: [
+            {
+              id: 'invalid-create-published-heading',
+              type: 'heading',
+              x: -10,
+              y: 10,
+              width: 100,
+              height: 40,
+              zIndex: 1,
+              props: { content: 'Invalid create published' },
+            },
+          ],
+          canvasSize: { width: 200, height: 200 },
+        },
+      }),
+    });
+    assert(blockedCreateAsPublished.response.status === 400, `${blockedCreateAsPublished.url} expected readiness 400 for create-as-published, got ${blockedCreateAsPublished.response.status}`);
+    assert(blockedCreateAsPublished.json?.error?.code === 'READINESS_BLOCKED', `${blockedCreateAsPublished.url} expected create-as-published readiness error code`);
 
     const bindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
       method: 'POST',

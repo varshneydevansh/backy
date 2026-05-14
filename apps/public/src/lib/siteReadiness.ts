@@ -273,6 +273,10 @@ const summarizeChecks = (checks: ReadinessCheck[]) => {
   return { errors, warnings, notices, passedChecks, totalChecks, score, statusLabel } as const;
 };
 
+export const readinessBlockingChecks = (readiness: Pick<PageReadiness, 'checks'>): ReadinessCheck[] => (
+  readiness.checks.filter((check) => check.status !== 'pass' && check.severity === 'error')
+);
+
 export const buildPageReadiness = (page: StorePage): PageReadiness => {
   const elementCount = countElements(page);
   const canvas = page.content.canvasSize || { width: 0, height: 0 };
@@ -307,6 +311,10 @@ export const buildPageReadiness = (page: StorePage): PageReadiness => {
     checks,
   };
 };
+
+export const buildRepositoryPageReadiness = (page: BackyPage): PageReadiness => (
+  buildPageReadiness(repositoryPageToStorePage(page))
+);
 
 export const buildBlogPostReadiness = (post: StoreBlogPost): BlogPostReadiness => {
   const elementCount = countPostElements(post);

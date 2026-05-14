@@ -21,6 +21,7 @@ import {
   getSiteByIdOrSlug,
   listCollections,
   updateAdminPage,
+  type StorePage,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
@@ -34,6 +35,7 @@ import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import { buildPageReadiness, buildRepositoryPageReadiness, readinessBlockingChecks } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
 
@@ -125,6 +127,51 @@ const contentDocumentFromInput = (
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
+};
+
+const storePageContentFromInput = (rawContent: unknown, fallback: StorePage['content']): StorePage['content'] => {
+  if (rawContent === undefined) {
+    return fallback;
+  }
+
+  const contentInput = isRecord(rawContent) ? rawContent : {};
+  const canvasSizeInput = isRecord(contentInput.canvasSize) ? contentInput.canvasSize : {};
+
+  return {
+    elements: (
+      isRecord(rawContent) && Array.isArray(rawContent.elements)
+        ? rawContent.elements
+        : Array.isArray(rawContent)
+          ? rawContent
+          : []
+    ) as StorePage['content']['elements'],
+    canvasSize: {
+      width: Number(canvasSizeInput.width) || fallback.canvasSize?.width || 1200,
+      height: Number(canvasSizeInput.height) || fallback.canvasSize?.height || 900,
+    },
+    customCSS: typeof contentInput.customCSS === 'string' ? contentInput.customCSS : fallback.customCSS,
+    customJS: typeof contentInput.customJS === 'string' ? contentInput.customJS : fallback.customJS,
+    contentDocument: isBackyContentDocument(rawContent)
+      ? rawContent
+      : isBackyContentDocument(contentInput.contentDocument)
+        ? contentInput.contentDocument
+        : fallback.contentDocument,
+  };
+};
+
+const rejectIfReadinessBlocked = (
+  status: 'draft' | 'published' | 'scheduled' | 'archived',
+  readiness: ReturnType<typeof buildPageReadiness>,
+  requestId: string,
+) => {
+  if (!statusRequiresPublishPermission(status)) {
+    return null;
+  }
+
+  const checks = readinessBlockingChecks(readiness);
+  return checks.length > 0
+    ? errorResponse(400, 'READINESS_BLOCKED', 'Resolve page readiness errors before publishing', requestId, { readiness, checks })
+    : null;
 };
 
 const adminPageFromRepositoryPage = (page: BackyPage) => {
@@ -297,6 +344,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
       const shouldUpdateSlug = body.slug !== undefined || (nextIsHomepage && page.slug !== 'index');
       const content = contentDocumentFromInput(body.content, page, { title, slug: nextSlug, status });
+      const prospectivePage: BackyPage = {
+        ...page,
+        title,
+        slug: nextSlug,
+        description: typeof body.description === 'string' || body.description === null ? body.description : page.description,
+        status,
+        scheduledAt: nextScheduledAt,
+        isHomepage: nextIsHomepage,
+        parentId: typeof body.parentId === 'string' || body.parentId === null ? body.parentId : page.parentId,
+        content: content || page.content,
+        meta: isRecord(body.meta) ? body.meta : page.meta,
+      };
+      const readiness = buildRepositoryPageReadiness(prospectivePage);
+      const readinessError = body.status !== undefined
+        ? rejectIfReadinessBlocked(status, readiness, requestId)
+        : null;
+      if (readinessError) {
+        return readinessError;
+      }
       await repositories.contentWorkflows.createRevision({
         siteId: site.id,
         targetType: 'page',
@@ -409,6 +475,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const shouldUpdateSlug = body.slug !== undefined || (nextIsHomepage && page.slug !== 'index');
+    const prospectivePage = {
+      ...page,
+      ...body,
+      slug: nextSlug,
+      title: typeof body.title === 'string' ? body.title : page.title,
+      description: typeof body.description === 'string' || body.description === null ? body.description : page.description,
+      status,
+      scheduledAt: nextScheduledAt,
+      isHomepage: nextIsHomepage,
+      content: storePageContentFromInput(body.content, page.content),
+      meta: isRecord(body.meta) ? body.meta : page.meta,
+    } as StorePage;
+    const readiness = buildPageReadiness(prospectivePage);
+    const readinessError = body.status !== undefined
+      ? rejectIfReadinessBlocked(status, readiness, requestId)
+      : null;
+    if (readinessError) {
+      return readinessError;
+    }
     const updated = updateAdminPage(site.id, page.id, {
       ...body,
       ...(shouldUpdateSlug ? { slug: nextSlug } : {}),

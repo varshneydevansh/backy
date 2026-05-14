@@ -19,6 +19,7 @@ import {
   getPageSummary,
   getSiteByIdOrSlug,
   listCollections,
+  type StorePage,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
@@ -32,6 +33,7 @@ import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import { buildPageReadiness, buildRepositoryPageReadiness, readinessBlockingChecks } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
 
@@ -43,7 +45,7 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   NextResponse.json(
     {
       success: false,
@@ -51,6 +53,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       error: {
         code,
         message,
+        ...(details === undefined ? {} : { details }),
       },
     },
     { status },
@@ -116,6 +119,41 @@ const contentDocumentFromInput = (
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
+};
+
+const storePageContentFromInput = (rawContent: unknown): StorePage['content'] => {
+  const contentInput = isRecord(rawContent) ? rawContent : {};
+  const canvasSizeInput = isRecord(contentInput.canvasSize) ? contentInput.canvasSize : {};
+
+  return {
+    elements: contentElementsFromInput(rawContent) as StorePage['content']['elements'],
+    canvasSize: {
+      width: Number(canvasSizeInput.width) || 1200,
+      height: Number(canvasSizeInput.height) || 900,
+    },
+    customCSS: typeof contentInput.customCSS === 'string' ? contentInput.customCSS : undefined,
+    customJS: typeof contentInput.customJS === 'string' ? contentInput.customJS : undefined,
+    contentDocument: isBackyContentDocument(rawContent)
+      ? rawContent
+      : isBackyContentDocument(contentInput.contentDocument)
+        ? contentInput.contentDocument
+        : undefined,
+  };
+};
+
+const rejectIfReadinessBlocked = (
+  status: 'draft' | 'published' | 'scheduled' | 'archived',
+  readiness: ReturnType<typeof buildPageReadiness>,
+  requestId: string,
+) => {
+  if (!statusRequiresPublishPermission(status)) {
+    return null;
+  }
+
+  const checks = readinessBlockingChecks(readiness);
+  return checks.length > 0
+    ? errorResponse(400, 'READINESS_BLOCKED', 'Resolve page readiness errors before publishing', requestId, { readiness, checks })
+    : null;
 };
 
 const adminPageFromRepositoryPage = (page: BackyPage, includeContent = true) => {
@@ -297,6 +335,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
       }
       const pageId = typeof createBody.id === 'string' && createBody.id.trim().length > 0 ? createBody.id.trim() : `page_${slug}`;
+      const content = contentDocumentFromInput(createBody.content, { id: pageId, title, slug, status });
+      const now = new Date().toISOString();
+      const readiness = buildRepositoryPageReadiness({
+        id: pageId,
+        siteId: site.id,
+        title,
+        slug,
+        description: typeof createBody.description === 'string' ? createBody.description : null,
+        content,
+        meta: isRecord(createBody.meta) ? createBody.meta : {},
+        status,
+        publishedAt: status === 'published' ? now : null,
+        scheduledAt: scheduledAt || null,
+        isHomepage,
+        parentId: typeof createBody.parentId === 'string' ? createBody.parentId : null,
+        sortOrder: typeof createBody.sortOrder === 'number' ? createBody.sortOrder : 0,
+        createdBy: null,
+        updatedBy: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const readinessError = rejectIfReadinessBlocked(status, readiness, requestId);
+      if (readinessError) {
+        return readinessError;
+      }
       const created = await repositories.pages.create({
         siteId: site.id,
         title,
@@ -306,7 +369,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         scheduledAt: scheduledAt || null,
         isHomepage,
         parentId: typeof createBody.parentId === 'string' ? createBody.parentId : null,
-        content: contentDocumentFromInput(createBody.content, { id: pageId, title, slug, status }),
+        content,
         meta: isRecord(createBody.meta) ? createBody.meta : undefined,
       });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
@@ -394,6 +457,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const scheduleValidation = validateScheduledContentStatus(status, scheduledAt);
     if (!scheduleValidation.ok) {
       return errorResponse(400, scheduleValidation.code, scheduleValidation.message, requestId);
+    }
+    const now = new Date().toISOString();
+    const previewPage = {
+      id: typeof seeded.body.id === 'string' && seeded.body.id.trim().length > 0 ? seeded.body.id.trim() : `page_${slug}`,
+      siteId: site.id,
+      title,
+      slug,
+      description: typeof seeded.body.description === 'string' ? seeded.body.description : null,
+      status,
+      isHomepage,
+      parentId: typeof seeded.body.parentId === 'string' ? seeded.body.parentId : null,
+      sortOrder: typeof seeded.body.sortOrder === 'number' ? seeded.body.sortOrder : 0,
+      content: storePageContentFromInput(seeded.body.content),
+      meta: isRecord(seeded.body.meta) ? seeded.body.meta : {},
+      forms: [],
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: status === 'published' ? now : null,
+      scheduledAt: scheduledAt || null,
+    } as StorePage;
+    const readiness = buildPageReadiness(previewPage);
+    const readinessError = rejectIfReadinessBlocked(status, readiness, requestId);
+    if (readinessError) {
+      return readinessError;
     }
 
     const page = createAdminPage(site.id, {
