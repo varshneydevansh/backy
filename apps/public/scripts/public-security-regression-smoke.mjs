@@ -120,6 +120,18 @@ for (const route of publicIntakeRoutes) {
   }
 }
 
+const adminSitesRoute = read('apps/public/src/app/api/admin/sites/route.ts');
+for (const needle of [
+  'resolveSiteCreateTeamId',
+  'BACKY_DEFAULT_TEAM_ID',
+  'BACKY_TEAM_ID',
+  'existingSites.pagination.hasMore',
+  "'TEAM_REQUIRED'",
+]) {
+  assertIncludes(adminSitesRoute, needle, 'admin sites route must infer or clearly require a database team id');
+}
+assertExcludes(adminSitesRoute, "'Team ID is required in database mode'", 'admin sites route must not hard-fail when UI omits teamId');
+
 const commerceCollectionAdminRoutes = [
   {
     file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/route.ts',

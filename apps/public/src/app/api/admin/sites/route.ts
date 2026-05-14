@@ -51,6 +51,45 @@ const statusForRepositorySite = (site: { isPublished: boolean }) => (
   site.isPublished ? 'published' : 'draft'
 );
 
+const configuredDefaultTeamId = () => (
+  process.env.BACKY_DEFAULT_TEAM_ID?.trim()
+  || process.env.BACKY_TEAM_ID?.trim()
+  || process.env.NEXT_PUBLIC_BACKY_DEFAULT_TEAM_ID?.trim()
+  || ''
+);
+
+const resolveSiteCreateTeamId = async (
+  body: Record<string, unknown>,
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+): Promise<string> => {
+  const explicitTeamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0
+    ? body.teamId.trim()
+    : '';
+  if (explicitTeamId) {
+    return explicitTeamId;
+  }
+
+  const envTeamId = configuredDefaultTeamId();
+  if (envTeamId) {
+    return envTeamId;
+  }
+
+  const existingSites = await repositories.sites.list({
+    status: 'all',
+    limit: 100,
+    offset: 0,
+  });
+  const existingTeamIds = Array.from(new Set(
+    existingSites.items
+      .map((site) => typeof site.teamId === 'string' ? site.teamId.trim() : '')
+      .filter(Boolean),
+  ));
+
+  return !existingSites.pagination.hasMore && existingTeamIds.length === 1
+    ? existingTeamIds[0]
+    : '';
+};
+
 const adminSiteFromRepositorySite = (site: Site | null) => {
   if (!site) return null;
   return {
@@ -129,10 +168,15 @@ export async function POST(request: NextRequest) {
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const teamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0 ? body.teamId.trim() : '';
+      const teamId = await resolveSiteCreateTeamId(body, repositories);
 
       if (!teamId) {
-        return errorResponse(400, 'VALIDATION_ERROR', 'Team ID is required in database mode', requestId);
+        return errorResponse(
+          400,
+          'TEAM_REQUIRED',
+          'Database mode site creation requires a teamId, BACKY_DEFAULT_TEAM_ID, or exactly one existing site team to infer from.',
+          requestId,
+        );
       }
 
       const slugCheck = await repositories.sites.checkSlug({ slug, teamId });

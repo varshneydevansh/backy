@@ -1274,6 +1274,7 @@ interface ApiReusableSectionResponse {
 export interface SiteCreateInput {
   name: string;
   slug: string;
+  teamId?: string;
   description?: string;
   customDomain?: string | null;
   status?: Site['status'];
