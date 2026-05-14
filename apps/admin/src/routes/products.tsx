@@ -216,34 +216,101 @@ interface FrontendProductTemplateBlueprint {
   values: Record<string, unknown>;
 }
 
+const PRODUCT_VALUE_KEYS = {
+  title: 'title',
+  sku: 'sku',
+  variants: 'variants',
+  price: 'price',
+  compareAtPrice: 'compareatprice',
+  currency: 'currency',
+  inventory: 'inventory',
+  lowStockThreshold: 'lowstockthreshold',
+  inventoryPolicy: 'inventorypolicy',
+  productType: 'producttype',
+  downloadUrl: 'downloadurl',
+  checkoutUrl: 'checkouturl',
+  shippingRequired: 'shippingrequired',
+  shippingProfile: 'shippingprofile',
+  weight: 'weight',
+  taxClass: 'taxclass',
+  discountCode: 'discountcode',
+  returnPolicy: 'returnpolicy',
+  imageUrl: 'imageurl',
+  galleryImages: 'galleryimages',
+  category: 'category',
+  tags: 'tags',
+  vendor: 'vendor',
+  description: 'description',
+  seoTitle: 'seotitle',
+  featured: 'featured',
+  taxable: 'taxable',
+} satisfies Record<Exclude<keyof ProductFormState, 'slug' | 'status' | 'scheduledAt'>, string>;
+
+type ProductValueKey = keyof typeof PRODUCT_VALUE_KEYS;
+
+const productFieldKey = (key: ProductValueKey) => PRODUCT_VALUE_KEYS[key];
+
+const normalizeProductSchemaKey = (key: string) => key.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+const readProductValue = (values: Record<string, unknown>, key: ProductValueKey, fallback?: unknown): unknown => {
+  const canonical = productFieldKey(key);
+  if (values[canonical] !== undefined) return values[canonical];
+  if (values[key] !== undefined) return values[key];
+  return fallback;
+};
+
+const normalizeProductValues = (values: Record<string, unknown>): Record<string, unknown> => {
+  const normalized = { ...values };
+
+  for (const [legacyKey, canonicalKey] of Object.entries(PRODUCT_VALUE_KEYS) as Array<[ProductValueKey, string]>) {
+    const canonicalValue = values[canonicalKey];
+    const legacyValue = values[legacyKey];
+
+    if (canonicalValue === undefined && legacyValue !== undefined) {
+      normalized[canonicalKey] = legacyValue;
+    }
+
+    if (legacyValue === undefined && canonicalValue !== undefined) {
+      normalized[legacyKey] = canonicalValue;
+    }
+  }
+
+  return normalized;
+};
+
+const normalizeProductRecord = (record: CollectionRecord): CollectionRecord => ({
+  ...record,
+  values: normalizeProductValues(record.values),
+});
+
 const PRODUCT_FIELDS: CollectionField[] = [
-  { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
-  { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
-  { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
-  { key: 'compareAtPrice', label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
-  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
-  { key: 'variants', label: 'Variants', type: 'json', required: false, unique: false, sortOrder: 60, defaultValue: [] },
-  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 0 },
-  { key: 'lowStockThreshold', label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
-  { key: 'inventoryPolicy', label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
-  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
-  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
-  { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
-  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
-  { key: 'shippingProfile', label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
-  { key: 'taxClass', label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
-  { key: 'discountCode', label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: 'returnPolicy', label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
-  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
+  { key: productFieldKey('title'), label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
+  { key: productFieldKey('sku'), label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
+  { key: productFieldKey('price'), label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
+  { key: productFieldKey('compareAtPrice'), label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
+  { key: productFieldKey('currency'), label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
+  { key: productFieldKey('variants'), label: 'Variants', type: 'json', required: false, unique: false, sortOrder: 60, defaultValue: [] },
+  { key: productFieldKey('inventory'), label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 0 },
+  { key: productFieldKey('lowStockThreshold'), label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
+  { key: productFieldKey('inventoryPolicy'), label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
+  { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+  { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
+  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
+  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
+  { key: productFieldKey('weight'), label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
+  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
+  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
+  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
+  { key: productFieldKey('category'), label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
+  { key: productFieldKey('tags'), label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
+  { key: productFieldKey('vendor'), label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
+  { key: productFieldKey('description'), label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
+  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
+  { key: productFieldKey('featured'), label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
+  { key: productFieldKey('taxable'), label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -295,34 +362,65 @@ const PRODUCT_IMPORT_COLUMNS = [
   'slug',
   'status',
   'scheduledAt',
-  'title',
-  'sku',
-  'price',
-  'compareAtPrice',
-  'currency',
-  'variants',
-  'inventory',
-  'lowStockThreshold',
-  'inventoryPolicy',
-  'productType',
-  'downloadUrl',
-  'checkoutUrl',
-  'shippingRequired',
-  'shippingProfile',
-  'weight',
-  'taxClass',
-  'discountCode',
-  'returnPolicy',
-  'imageUrl',
-  'galleryImages',
-  'category',
-  'tags',
-  'vendor',
-  'description',
-  'seoTitle',
-  'featured',
-  'taxable',
+  productFieldKey('title'),
+  productFieldKey('sku'),
+  productFieldKey('price'),
+  productFieldKey('compareAtPrice'),
+  productFieldKey('currency'),
+  productFieldKey('variants'),
+  productFieldKey('inventory'),
+  productFieldKey('lowStockThreshold'),
+  productFieldKey('inventoryPolicy'),
+  productFieldKey('productType'),
+  productFieldKey('downloadUrl'),
+  productFieldKey('checkoutUrl'),
+  productFieldKey('shippingRequired'),
+  productFieldKey('shippingProfile'),
+  productFieldKey('weight'),
+  productFieldKey('taxClass'),
+  productFieldKey('discountCode'),
+  productFieldKey('returnPolicy'),
+  productFieldKey('imageUrl'),
+  productFieldKey('galleryImages'),
+  productFieldKey('category'),
+  productFieldKey('tags'),
+  productFieldKey('vendor'),
+  productFieldKey('description'),
+  productFieldKey('seoTitle'),
+  productFieldKey('featured'),
+  productFieldKey('taxable'),
 ] as const;
+
+const PRODUCT_IMPORT_HEADER_ALIASES = new Map<string, string>(
+  (Object.entries(PRODUCT_VALUE_KEYS) as Array<[ProductValueKey, string]>).flatMap(([legacyKey, canonicalKey]) => {
+    const snakeKey = legacyKey.replace(/([A-Z])/g, '_$1').toLowerCase();
+    return [
+      [legacyKey, canonicalKey],
+      [legacyKey.toLowerCase(), canonicalKey],
+      [snakeKey, canonicalKey],
+      [canonicalKey, canonicalKey],
+    ] as Array<[string, string]>;
+  }),
+);
+
+const normalizeProductImportHeader = (header: string): string => {
+  const trimmed = header.trim().replace(/^"|"$/g, '');
+  return PRODUCT_IMPORT_HEADER_ALIASES.get(trimmed)
+    || PRODUCT_IMPORT_HEADER_ALIASES.get(trimmed.toLowerCase())
+    || trimmed;
+};
+
+const normalizeProductImportCsvHeaders = (csv: string): string => {
+  const newlineIndex = csv.search(/\r?\n/);
+  const headerLine = newlineIndex === -1 ? csv : csv.slice(0, newlineIndex);
+  const rest = newlineIndex === -1 ? '' : csv.slice(newlineIndex);
+  const normalizedHeader = headerLine
+    .split(',')
+    .map(normalizeProductImportHeader)
+    .join(',');
+
+  return `${normalizedHeader}${rest}`;
+};
 
 const PRODUCT_FRONTEND_SYSTEMS = [
   {
@@ -552,7 +650,7 @@ function ProductsRoute() {
     [formState.variants],
   );
   const productCategories = useMemo(() => (
-    [...new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean))]
+    [...new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b))
   ), [products]);
   const hasActiveCatalogFilters = Boolean(
@@ -569,12 +667,12 @@ function ProductsRoute() {
       if (!matchesStatus) return false;
 
       const values = product.values;
-      const productType = asProductType(values.productType);
-      const inventory = toNumber(values.inventory);
-      const lowStockThreshold = Math.max(0, toNumber(values.lowStockThreshold || 5));
+      const productType = asProductType(readProductValue(values, 'productType'));
+      const inventory = toNumber(readProductValue(values, 'inventory'));
+      const lowStockThreshold = Math.max(0, toNumber(readProductValue(values, 'lowStockThreshold', 5) || 5));
       const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
-      const category = String(values.category || '').trim();
-      const checkoutUrl = String(values.checkoutUrl || '').trim();
+      const category = String(readProductValue(values, 'category', '') || '').trim();
+      const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
 
       if (productTypeFilter !== 'all' && productType !== productTypeFilter) {
         return false;
@@ -593,7 +691,7 @@ function ProductsRoute() {
       if (stockFilter === 'out-of-stock' && inventory > 0) {
         return false;
       }
-      if (stockFilter === 'featured' && !values.featured) {
+      if (stockFilter === 'featured' && !readProductValue(values, 'featured')) {
         return false;
       }
       if (stockFilter === 'checkout-missing' && checkoutUrl) {
@@ -602,12 +700,12 @@ function ProductsRoute() {
 
       const matchesSearch = !normalizedSearch || [
         product.slug,
-        values.title,
-        values.sku,
-        values.category,
-        values.vendor,
-        formatTags(values.tags).join(' '),
-        values.description,
+        readProductValue(values, 'title'),
+        readProductValue(values, 'sku'),
+        readProductValue(values, 'category'),
+        readProductValue(values, 'vendor'),
+        formatTags(readProductValue(values, 'tags')).join(' '),
+        readProductValue(values, 'description'),
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
       return matchesSearch;
@@ -618,25 +716,25 @@ function ProductsRoute() {
     published: products.filter((product) => product.status === 'published').length,
     draft: products.filter((product) => product.status === 'draft').length,
     scheduled: products.filter((product) => product.status === 'scheduled').length,
-    inventory: products.reduce((sum, product) => sum + toNumber(product.values.inventory), 0),
+    inventory: products.reduce((sum, product) => sum + toNumber(readProductValue(product.values, 'inventory')), 0),
     lowStock: products.filter((product) => {
-      const inventory = toNumber(product.values.inventory);
-      const threshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
+      const inventory = toNumber(readProductValue(product.values, 'inventory'));
+      const threshold = Math.max(0, toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5));
       return inventory > 0 && inventory <= threshold;
     }).length,
-    digital: products.filter((product) => product.values.productType === 'digital').length,
-    categories: new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean)).size,
+    digital: products.filter((product) => readProductValue(product.values, 'productType') === 'digital').length,
+    categories: new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean)).size,
   }), [products]);
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
     const hasPublished = metrics.published > 0;
-    const hasVariants = products.some((product) => formatProductVariants(product.values.variants).length > 0);
+    const hasVariants = products.some((product) => formatProductVariants(readProductValue(product.values, 'variants')).length > 0);
     const hasInventory = metrics.inventory > 0 || metrics.digital > 0 || hasVariants;
-    const hasImages = products.some((product) => Boolean(product.values.imageUrl) || formatGalleryImages(product.values.galleryImages).length > 0);
-    const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
-    const hasMerchandising = products.some((product) => Boolean(product.values.category) || formatTags(product.values.tags).length > 0 || Boolean(product.values.vendor));
-    const hasCheckoutUrls = products.some((product) => Boolean(String(product.values.checkoutUrl || '').trim()));
+    const hasImages = products.some((product) => Boolean(readProductValue(product.values, 'imageUrl')) || formatGalleryImages(readProductValue(product.values, 'galleryImages')).length > 0);
+    const hasPricing = products.some((product) => toNumber(readProductValue(product.values, 'price')) > 0);
+    const hasMerchandising = products.some((product) => Boolean(readProductValue(product.values, 'category')) || formatTags(readProductValue(product.values, 'tags')).length > 0 || Boolean(readProductValue(product.values, 'vendor')));
+    const hasCheckoutUrls = products.some((product) => Boolean(String(readProductValue(product.values, 'checkoutUrl', '') || '').trim()));
     const checks = [
       {
         label: 'Catalog schema',
@@ -786,12 +884,12 @@ function ProductsRoute() {
         list: productCollection?.listRoutePattern || '/products',
         detail: productCollection?.routePattern || '/products/:recordSlug',
       },
-      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'galleryImages', 'variants', 'category', 'vendor', 'featured'],
+      cardFields: ['title', 'slug', productFieldKey('price'), productFieldKey('compareAtPrice'), productFieldKey('currency'), productFieldKey('imageUrl'), productFieldKey('galleryImages'), productFieldKey('variants'), productFieldKey('category'), productFieldKey('vendor'), productFieldKey('featured')],
       detailFields: PRODUCT_FIELDS.map((field) => field.key),
-      filterFacets: ['status', 'category', 'tags', 'vendor', 'productType', 'featured', 'inventoryPolicy'],
+      filterFacets: ['status', productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('productType'), productFieldKey('featured'), productFieldKey('inventoryPolicy')],
       checkout: {
         mode: orderIntakeReady ? 'Backy order intake or per-product checkoutUrl' : 'per-product checkoutUrl',
-        configuredProducts: products.filter((product) => Boolean(String(product.values.checkoutUrl || '').trim())).length,
+        configuredProducts: products.filter((product) => Boolean(String(readProductValue(product.values, 'checkoutUrl', '') || '').trim())).length,
         orderIntakeReady,
         reservesInventory: orderIntakeReady,
         note: orderIntakeReady
@@ -820,8 +918,8 @@ function ProductsRoute() {
       targets: PRODUCT_PAGE_BINDING_TARGETS,
       starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
-      requiredFields: ['title', 'slug', 'sku', 'price', 'currency', 'inventory', 'productType', 'checkoutUrl'],
-      optionalFields: ['compareAtPrice', 'variants', 'galleryImages', 'downloadUrl', 'shippingProfile', 'taxClass', 'discountCode', 'returnPolicy', 'category', 'tags', 'vendor', 'seoTitle', 'featured', 'taxable'],
+      requiredFields: [productFieldKey('title'), 'slug', productFieldKey('sku'), productFieldKey('price'), productFieldKey('currency'), productFieldKey('inventory'), productFieldKey('productType'), productFieldKey('checkoutUrl')],
+      optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
@@ -852,31 +950,31 @@ function ProductsRoute() {
       slug: product.slug,
       status: product.status,
       updatedAt: product.updatedAt,
-      title: String(product.values.title || product.slug),
-      sku: String(product.values.sku || ''),
-      variants: formatProductVariants(product.values.variants),
-      price: toNumber(product.values.price),
-      compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
+      title: String(readProductValue(product.values, 'title', product.slug) || product.slug),
+      sku: String(readProductValue(product.values, 'sku', '') || ''),
+      variants: formatProductVariants(readProductValue(product.values, 'variants')),
+      price: toNumber(readProductValue(product.values, 'price')),
+      compareAtPrice: readProductValue(product.values, 'compareAtPrice') === null || readProductValue(product.values, 'compareAtPrice') === undefined
         ? null
-        : toNumber(product.values.compareAtPrice),
-      currency: normalizeCurrency(String(product.values.currency || 'USD')),
-      inventory: toNumber(product.values.inventory),
-      productType: asProductType(product.values.productType),
-      imageUrl: String(product.values.imageUrl || ''),
-      galleryImages: formatGalleryImages(product.values.galleryImages),
-      category: String(product.values.category || ''),
-      tags: formatTags(product.values.tags),
-      vendor: String(product.values.vendor || ''),
-      description: String(product.values.description || ''),
-      seoTitle: String(product.values.seoTitle || ''),
-      featured: Boolean(product.values.featured),
-      taxable: product.values.taxable !== false,
-      shippingRequired: product.values.shippingRequired !== false,
-      lowStockThreshold: toNumber(product.values.lowStockThreshold || 5),
-      inventoryPolicy: asInventoryPolicy(product.values.inventoryPolicy),
-      weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
-      downloadUrl: String(product.values.downloadUrl || ''),
-      checkoutUrl: String(product.values.checkoutUrl || ''),
+        : toNumber(readProductValue(product.values, 'compareAtPrice')),
+      currency: normalizeCurrency(String(readProductValue(product.values, 'currency', 'USD') || 'USD')),
+      inventory: toNumber(readProductValue(product.values, 'inventory')),
+      productType: asProductType(readProductValue(product.values, 'productType')),
+      imageUrl: String(readProductValue(product.values, 'imageUrl', '') || ''),
+      galleryImages: formatGalleryImages(readProductValue(product.values, 'galleryImages')),
+      category: String(readProductValue(product.values, 'category', '') || ''),
+      tags: formatTags(readProductValue(product.values, 'tags')),
+      vendor: String(readProductValue(product.values, 'vendor', '') || ''),
+      description: String(readProductValue(product.values, 'description', '') || ''),
+      seoTitle: String(readProductValue(product.values, 'seoTitle', '') || ''),
+      featured: Boolean(readProductValue(product.values, 'featured')),
+      taxable: readProductValue(product.values, 'taxable') !== false,
+      shippingRequired: readProductValue(product.values, 'shippingRequired') !== false,
+      lowStockThreshold: toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5),
+      inventoryPolicy: asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy')),
+      weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? null : toNumber(readProductValue(product.values, 'weight')),
+      downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+      checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
       scheduledAt: product.scheduledAt || null,
       storefrontPath: `/products/${product.slug}`,
       frontendDesignTemplateId: getProductFrontendTemplateId(product),
@@ -971,7 +1069,7 @@ function ProductsRoute() {
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
-      setProducts(result.records);
+      setProducts(result.records.map(normalizeProductRecord));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load products');
     } finally {
@@ -1311,11 +1409,11 @@ function ProductsRoute() {
         ...blueprint.values,
         ...buildFrontendProductTemplateValues(template, frontendDesign),
       };
-      const saved = await createCollectionRecord(activeSiteId, productCollection.id, {
+      const saved = normalizeProductRecord(await createCollectionRecord(activeSiteId, productCollection.id, {
         slug: `${blueprint.slug}-${Date.now().toString(36)}`,
         status: 'draft',
         values,
-      });
+      }));
 
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
       setSelectedProductId(saved.id);
@@ -1363,41 +1461,41 @@ function ProductsRoute() {
       status: formState.status,
       scheduledAt,
       values: {
-        title: formState.title.trim(),
-        sku: formState.sku.trim(),
-        variants: productVariants,
-        price: Number(formState.price || 0),
-        compareAtPrice: formState.compareAtPrice ? Number(formState.compareAtPrice) : null,
-        currency: normalizeCurrency(formState.currency),
-        inventory: Number(formState.inventory || 0),
-        lowStockThreshold: Number(formState.lowStockThreshold || 5),
-        inventoryPolicy: formState.inventoryPolicy,
-        productType: formState.productType,
-        downloadUrl: formState.downloadUrl.trim(),
-        checkoutUrl: formState.checkoutUrl.trim(),
-        shippingRequired: formState.shippingRequired,
-        shippingProfile: formState.shippingProfile.trim(),
-        weight: formState.weight ? Number(formState.weight) : null,
-        taxClass: formState.taxClass.trim(),
-        discountCode: formState.discountCode.trim(),
-        returnPolicy: formState.returnPolicy.trim(),
-        imageUrl: formState.imageUrl.trim(),
-        galleryImages: galleryImageUrls,
-        category: formState.category.trim(),
-        tags: parseTags(formState.tags),
-        vendor: formState.vendor.trim(),
-        description: formState.description.trim(),
-        seoTitle: formState.seoTitle.trim(),
-        featured: formState.featured,
-        taxable: formState.taxable,
+        [productFieldKey('title')]: formState.title.trim(),
+        [productFieldKey('sku')]: formState.sku.trim(),
+        [productFieldKey('variants')]: productVariants,
+        [productFieldKey('price')]: Number(formState.price || 0),
+        [productFieldKey('compareAtPrice')]: formState.compareAtPrice ? Number(formState.compareAtPrice) : null,
+        [productFieldKey('currency')]: normalizeCurrency(formState.currency),
+        [productFieldKey('inventory')]: Number(formState.inventory || 0),
+        [productFieldKey('lowStockThreshold')]: Number(formState.lowStockThreshold || 5),
+        [productFieldKey('inventoryPolicy')]: formState.inventoryPolicy,
+        [productFieldKey('productType')]: formState.productType,
+        [productFieldKey('downloadUrl')]: formState.downloadUrl.trim(),
+        [productFieldKey('checkoutUrl')]: formState.checkoutUrl.trim(),
+        [productFieldKey('shippingRequired')]: formState.shippingRequired,
+        [productFieldKey('shippingProfile')]: formState.shippingProfile.trim(),
+        [productFieldKey('weight')]: formState.weight ? Number(formState.weight) : null,
+        [productFieldKey('taxClass')]: formState.taxClass.trim(),
+        [productFieldKey('discountCode')]: formState.discountCode.trim(),
+        [productFieldKey('returnPolicy')]: formState.returnPolicy.trim(),
+        [productFieldKey('imageUrl')]: formState.imageUrl.trim(),
+        [productFieldKey('galleryImages')]: galleryImageUrls,
+        [productFieldKey('category')]: formState.category.trim(),
+        [productFieldKey('tags')]: parseTags(formState.tags),
+        [productFieldKey('vendor')]: formState.vendor.trim(),
+        [productFieldKey('description')]: formState.description.trim(),
+        [productFieldKey('seoTitle')]: formState.seoTitle.trim(),
+        [productFieldKey('featured')]: formState.featured,
+        [productFieldKey('taxable')]: formState.taxable,
         ...getPersistedFrontendProductValues(selectedProduct),
       },
     };
 
     try {
-      const saved = selectedProduct
+      const saved = normalizeProductRecord(selectedProduct
         ? await updateCollectionRecord(activeSiteId, productCollection.id, selectedProduct.id, input)
-        : await createCollectionRecord(activeSiteId, productCollection.id, input);
+        : await createCollectionRecord(activeSiteId, productCollection.id, input));
 
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
       setSelectedProductId(saved.id);
@@ -1423,11 +1521,11 @@ function ProductsRoute() {
     setNotice(null);
 
     try {
-      const updated = await updateCollectionRecord(activeSiteId, productCollection.id, product.id, {
+      const updated = normalizeProductRecord(await updateCollectionRecord(activeSiteId, productCollection.id, product.id, {
         status,
         scheduledAt: status === 'scheduled' ? product.scheduledAt || new Date().toISOString() : null,
         values: product.values,
-      });
+      }));
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       if (selectedProductId === updated.id) {
         setFormState(productToForm(updated));
@@ -1596,13 +1694,13 @@ function ProductsRoute() {
 
     try {
       const csv = await file.text();
-      const result = await importCollectionRecordsCsv(activeSiteId, productCollection.id, csv, { upsert: true });
+      const result = await importCollectionRecordsCsv(activeSiteId, productCollection.id, normalizeProductImportCsvHeaders(csv), { upsert: true });
       const refreshed = await listCollectionRecords(activeSiteId, productCollection.id, {
         limit: 100,
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
-      setProducts(refreshed.records);
+      setProducts(refreshed.records.map(normalizeProductRecord));
       setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
@@ -1857,14 +1955,14 @@ function ProductsRoute() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description || String(blueprint.values.description || 'Product seeded from the frontend design contract.')}</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description || String(readProductValue(blueprint.values, 'description', 'Product seeded from the frontend design contract.') || 'Product seeded from the frontend design contract.')}</p>
                         </div>
                         <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700">
-                          {String(blueprint.values.productType || 'physical')}
+                          {String(readProductValue(blueprint.values, 'productType', 'physical') || 'physical')}
                         </span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{formatMoney(toNumber(blueprint.values.price), String(blueprint.values.currency || 'USD'))}</span>
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{formatMoney(toNumber(readProductValue(blueprint.values, 'price')), String(readProductValue(blueprint.values, 'currency', 'USD') || 'USD'))}</span>
                         <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.bindingHints?.length || 0} bindings</span>
                         {template.routePattern ? (
                           <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.routePattern}</span>
@@ -2985,21 +3083,21 @@ function ProductCard({
   onArchive: () => void;
   onDelete: () => void;
 }) {
-  const title = String(product.values.title || product.slug);
-  const price = toNumber(product.values.price);
-  const compareAtPrice = toNumber(product.values.compareAtPrice);
-  const currency = normalizeCurrency(String(product.values.currency || 'USD'));
-  const inventory = toNumber(product.values.inventory);
-  const lowStockThreshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
-  const imageUrl = String(product.values.imageUrl || '');
-  const galleryImages = formatGalleryImages(product.values.galleryImages);
-  const variants = formatProductVariants(product.values.variants);
-  const productType = String(product.values.productType || 'physical');
-  const inventoryPolicy = asInventoryPolicy(product.values.inventoryPolicy);
-  const category = String(product.values.category || '');
-  const vendor = String(product.values.vendor || '');
-  const tags = formatTags(product.values.tags).slice(0, 3);
-  const shippingRequired = product.values.shippingRequired !== false;
+  const title = String(readProductValue(product.values, 'title', product.slug) || product.slug);
+  const price = toNumber(readProductValue(product.values, 'price'));
+  const compareAtPrice = toNumber(readProductValue(product.values, 'compareAtPrice'));
+  const currency = normalizeCurrency(String(readProductValue(product.values, 'currency', 'USD') || 'USD'));
+  const inventory = toNumber(readProductValue(product.values, 'inventory'));
+  const lowStockThreshold = Math.max(0, toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5));
+  const imageUrl = String(readProductValue(product.values, 'imageUrl', '') || '');
+  const galleryImages = formatGalleryImages(readProductValue(product.values, 'galleryImages'));
+  const variants = formatProductVariants(readProductValue(product.values, 'variants'));
+  const productType = String(readProductValue(product.values, 'productType', 'physical') || 'physical');
+  const inventoryPolicy = asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy'));
+  const category = String(readProductValue(product.values, 'category', '') || '');
+  const vendor = String(readProductValue(product.values, 'vendor', '') || '');
+  const tags = formatTags(readProductValue(product.values, 'tags')).slice(0, 3);
+  const shippingRequired = readProductValue(product.values, 'shippingRequired') !== false;
   const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
 
   return (
@@ -3016,7 +3114,7 @@ function ProductCard({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="truncate font-semibold">{title}</h3>
-              <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{String(product.values.sku || product.slug)}</div>
+              <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{String(readProductValue(product.values, 'sku', product.slug) || product.slug)}</div>
             </div>
             <StatusBadge status={product.status} />
           </div>
@@ -3034,7 +3132,7 @@ function ProductCard({
                 Low stock
               </span>
             ) : null}
-            {product.values.featured ? (
+            {readProductValue(product.values, 'featured') ? (
               <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
                 Featured
               </span>
@@ -3079,9 +3177,9 @@ function ProductCard({
               ))}
             </div>
           ) : null}
-          {product.values.description ? (
+          {readProductValue(product.values, 'description') ? (
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-              {String(product.values.description)}
+              {String(readProductValue(product.values, 'description'))}
             </p>
           ) : null}
         </div>
@@ -3207,36 +3305,36 @@ const toIsoDateTime = (value: string): string | null => {
 };
 
 const productToForm = (product: CollectionRecord): ProductFormState => ({
-  title: String(product.values.title || ''),
+  title: String(readProductValue(product.values, 'title', '') || ''),
   slug: product.slug,
-  sku: String(product.values.sku || ''),
-  variants: serializeProductVariants(formatProductVariants(product.values.variants)),
-  price: String(product.values.price ?? ''),
-  compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined ? '' : String(product.values.compareAtPrice),
-  currency: String(product.values.currency || 'USD'),
-  inventory: String(product.values.inventory ?? '0'),
-  lowStockThreshold: String(product.values.lowStockThreshold ?? '5'),
-  inventoryPolicy: asInventoryPolicy(product.values.inventoryPolicy),
-  productType: asProductType(product.values.productType),
-  downloadUrl: String(product.values.downloadUrl || ''),
-  checkoutUrl: String(product.values.checkoutUrl || ''),
-  shippingRequired: product.values.shippingRequired !== false,
-  shippingProfile: String(product.values.shippingProfile || ''),
-  weight: product.values.weight === null || product.values.weight === undefined ? '' : String(product.values.weight),
-  taxClass: String(product.values.taxClass || ''),
-  discountCode: String(product.values.discountCode || ''),
-  returnPolicy: String(product.values.returnPolicy || ''),
-  imageUrl: String(product.values.imageUrl || ''),
-  galleryImages: serializeGalleryImages(formatGalleryImages(product.values.galleryImages)),
-  category: String(product.values.category || ''),
-  tags: formatTags(product.values.tags).join(', '),
-  vendor: String(product.values.vendor || ''),
-  description: String(product.values.description || ''),
-  seoTitle: String(product.values.seoTitle || ''),
+  sku: String(readProductValue(product.values, 'sku', '') || ''),
+  variants: serializeProductVariants(formatProductVariants(readProductValue(product.values, 'variants'))),
+  price: String(readProductValue(product.values, 'price') ?? ''),
+  compareAtPrice: readProductValue(product.values, 'compareAtPrice') === null || readProductValue(product.values, 'compareAtPrice') === undefined ? '' : String(readProductValue(product.values, 'compareAtPrice')),
+  currency: String(readProductValue(product.values, 'currency', 'USD') || 'USD'),
+  inventory: String(readProductValue(product.values, 'inventory') ?? '0'),
+  lowStockThreshold: String(readProductValue(product.values, 'lowStockThreshold') ?? '5'),
+  inventoryPolicy: asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy')),
+  productType: asProductType(readProductValue(product.values, 'productType')),
+  downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+  checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
+  shippingRequired: readProductValue(product.values, 'shippingRequired') !== false,
+  shippingProfile: String(readProductValue(product.values, 'shippingProfile', '') || ''),
+  weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? '' : String(readProductValue(product.values, 'weight')),
+  taxClass: String(readProductValue(product.values, 'taxClass', '') || ''),
+  discountCode: String(readProductValue(product.values, 'discountCode', '') || ''),
+  returnPolicy: String(readProductValue(product.values, 'returnPolicy', '') || ''),
+  imageUrl: String(readProductValue(product.values, 'imageUrl', '') || ''),
+  galleryImages: serializeGalleryImages(formatGalleryImages(readProductValue(product.values, 'galleryImages'))),
+  category: String(readProductValue(product.values, 'category', '') || ''),
+  tags: formatTags(readProductValue(product.values, 'tags')).join(', '),
+  vendor: String(readProductValue(product.values, 'vendor', '') || ''),
+  description: String(readProductValue(product.values, 'description', '') || ''),
+  seoTitle: String(readProductValue(product.values, 'seoTitle', '') || ''),
   status: product.status,
   scheduledAt: toDateTimeLocalValue(product.scheduledAt),
-  featured: Boolean(product.values.featured),
-  taxable: product.values.taxable !== false,
+  featured: Boolean(readProductValue(product.values, 'featured')),
+  taxable: readProductValue(product.values, 'taxable') !== false,
 });
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
@@ -3304,33 +3402,33 @@ const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTempl
     slug,
     sku,
     values: {
-      title,
-      sku,
-      variants,
-      price: optionalNumberFromRecord(content, 'price') ?? 0,
-      compareAtPrice: optionalNumberFromRecord(content, 'compareAtPrice') ?? null,
-      currency: normalizeCurrency(optionalStringFromRecord(content, 'currency') || 'USD'),
-      inventory: optionalNumberFromRecord(content, 'inventory') ?? (productType === 'physical' ? 0 : 1),
-      lowStockThreshold: optionalNumberFromRecord(content, 'lowStockThreshold') ?? 5,
-      inventoryPolicy: asInventoryPolicy(optionalStringFromRecord(content, 'inventoryPolicy')),
-      productType,
-      downloadUrl: optionalStringFromRecord(content, 'downloadUrl') || '',
-      checkoutUrl: optionalStringFromRecord(content, 'checkoutUrl') || '',
-      shippingRequired: optionalBooleanFromRecord(content, 'shippingRequired') ?? productType === 'physical',
-      shippingProfile: optionalStringFromRecord(content, 'shippingProfile') || '',
-      weight: optionalNumberFromRecord(content, 'weight') ?? null,
-      taxClass: optionalStringFromRecord(content, 'taxClass') || '',
-      discountCode: optionalStringFromRecord(content, 'discountCode') || '',
-      returnPolicy: optionalStringFromRecord(content, 'returnPolicy') || '',
-      imageUrl: optionalStringFromRecord(content, 'imageUrl') || galleryImages[0] || '',
-      galleryImages,
-      category: optionalStringFromRecord(content, 'category') || '',
-      tags,
-      vendor: optionalStringFromRecord(content, 'vendor') || '',
-      description: template.description || optionalStringFromRecord(content, 'description') || 'Product seeded from the connected frontend design contract.',
-      seoTitle: optionalStringFromRecord(content, 'seoTitle') || title,
-      featured: optionalBooleanFromRecord(content, 'featured') ?? false,
-      taxable: optionalBooleanFromRecord(content, 'taxable') ?? true,
+      [productFieldKey('title')]: title,
+      [productFieldKey('sku')]: sku,
+      [productFieldKey('variants')]: variants,
+      [productFieldKey('price')]: optionalNumberFromRecord(content, 'price') ?? 0,
+      [productFieldKey('compareAtPrice')]: optionalNumberFromRecord(content, 'compareAtPrice') ?? null,
+      [productFieldKey('currency')]: normalizeCurrency(optionalStringFromRecord(content, 'currency') || 'USD'),
+      [productFieldKey('inventory')]: optionalNumberFromRecord(content, 'inventory') ?? (productType === 'physical' ? 0 : 1),
+      [productFieldKey('lowStockThreshold')]: optionalNumberFromRecord(content, 'lowStockThreshold') ?? 5,
+      [productFieldKey('inventoryPolicy')]: asInventoryPolicy(optionalStringFromRecord(content, 'inventoryPolicy')),
+      [productFieldKey('productType')]: productType,
+      [productFieldKey('downloadUrl')]: optionalStringFromRecord(content, 'downloadUrl') || '',
+      [productFieldKey('checkoutUrl')]: optionalStringFromRecord(content, 'checkoutUrl') || '',
+      [productFieldKey('shippingRequired')]: optionalBooleanFromRecord(content, 'shippingRequired') ?? productType === 'physical',
+      [productFieldKey('shippingProfile')]: optionalStringFromRecord(content, 'shippingProfile') || '',
+      [productFieldKey('weight')]: optionalNumberFromRecord(content, 'weight') ?? null,
+      [productFieldKey('taxClass')]: optionalStringFromRecord(content, 'taxClass') || '',
+      [productFieldKey('discountCode')]: optionalStringFromRecord(content, 'discountCode') || '',
+      [productFieldKey('returnPolicy')]: optionalStringFromRecord(content, 'returnPolicy') || '',
+      [productFieldKey('imageUrl')]: optionalStringFromRecord(content, 'imageUrl') || galleryImages[0] || '',
+      [productFieldKey('galleryImages')]: galleryImages,
+      [productFieldKey('category')]: optionalStringFromRecord(content, 'category') || '',
+      [productFieldKey('tags')]: tags,
+      [productFieldKey('vendor')]: optionalStringFromRecord(content, 'vendor') || '',
+      [productFieldKey('description')]: template.description || optionalStringFromRecord(content, 'description') || 'Product seeded from the connected frontend design contract.',
+      [productFieldKey('seoTitle')]: optionalStringFromRecord(content, 'seoTitle') || title,
+      [productFieldKey('featured')]: optionalBooleanFromRecord(content, 'featured') ?? false,
+      [productFieldKey('taxable')]: optionalBooleanFromRecord(content, 'taxable') ?? true,
     },
   };
 };
@@ -3467,21 +3565,22 @@ const serializeProductVariants = (variants: ProductVariant[]): string => (
 );
 
 const getMissingProductFieldKeys = (collection: Collection): string[] => {
-  const existingKeys = new Set(collection.fields.map((field) => field.key));
+  const existingKeys = new Set(collection.fields.map((field) => normalizeProductSchemaKey(field.key)));
   return PRODUCT_FIELDS
-    .filter((field) => !existingKeys.has(field.key))
+    .filter((field) => !existingKeys.has(normalizeProductSchemaKey(field.key)))
     .map((field) => field.key);
 };
 
 const mergeProductFields = (currentFields: CollectionField[]): CollectionField[] => {
-  const fieldsByKey = new Map(currentFields.map((field) => [field.key, field]));
+  const fieldsByKey = new Map(currentFields.map((field) => [normalizeProductSchemaKey(field.key), field]));
   const merged = PRODUCT_FIELDS.map((requiredField) => ({
     ...requiredField,
-    ...fieldsByKey.get(requiredField.key),
+    ...fieldsByKey.get(normalizeProductSchemaKey(requiredField.key)),
+    key: requiredField.key,
     sortOrder: requiredField.sortOrder,
   }));
-  const requiredKeys = new Set(PRODUCT_FIELDS.map((field) => field.key));
-  const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
+  const requiredKeys = new Set(PRODUCT_FIELDS.map((field) => normalizeProductSchemaKey(field.key)));
+  const customFields = currentFields.filter((field) => !requiredKeys.has(normalizeProductSchemaKey(field.key)));
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
@@ -3505,42 +3604,42 @@ const productToExportRecord = (
   active_site_id: context.activeSiteId,
   slug: product.slug,
   status: product.status,
-  title: String(product.values.title || product.slug),
-  sku: String(product.values.sku || ''),
-  variants: formatProductVariants(product.values.variants).map((variant) => `${variant.title}${variant.sku ? ` (${variant.sku})` : ''}`).join('; '),
-  variant_count: formatProductVariants(product.values.variants).length,
-  price: toNumber(product.values.price),
-  compare_at_price: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
+  title: String(readProductValue(product.values, 'title', product.slug) || product.slug),
+  sku: String(readProductValue(product.values, 'sku', '') || ''),
+  variants: formatProductVariants(readProductValue(product.values, 'variants')).map((variant) => `${variant.title}${variant.sku ? ` (${variant.sku})` : ''}`).join('; '),
+  variant_count: formatProductVariants(readProductValue(product.values, 'variants')).length,
+  price: toNumber(readProductValue(product.values, 'price')),
+  compare_at_price: readProductValue(product.values, 'compareAtPrice') === null || readProductValue(product.values, 'compareAtPrice') === undefined
     ? null
-    : toNumber(product.values.compareAtPrice),
-  currency: normalizeCurrency(String(product.values.currency || 'USD')),
-  inventory: toNumber(product.values.inventory),
-  low_stock_threshold: toNumber(product.values.lowStockThreshold || 5),
-  inventory_policy: asInventoryPolicy(product.values.inventoryPolicy),
-  product_type: asProductType(product.values.productType),
-  category: String(product.values.category || ''),
-  tags: formatTags(product.values.tags).join('; '),
-  vendor: String(product.values.vendor || ''),
-  image_url: String(product.values.imageUrl || ''),
-  gallery_images: formatGalleryImages(product.values.galleryImages).join('; '),
-  gallery_image_count: formatGalleryImages(product.values.galleryImages).length,
-  download_url: String(product.values.downloadUrl || ''),
-  checkout_url: String(product.values.checkoutUrl || ''),
-  shipping_required: product.values.shippingRequired !== false,
-  shipping_profile: String(product.values.shippingProfile || ''),
-  tax_class: String(product.values.taxClass || ''),
-  discount_code: String(product.values.discountCode || ''),
-  return_policy: String(product.values.returnPolicy || ''),
-  taxable: product.values.taxable !== false,
-  weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
-  featured: Boolean(product.values.featured),
-  seo_title: String(product.values.seoTitle || ''),
+    : toNumber(readProductValue(product.values, 'compareAtPrice')),
+  currency: normalizeCurrency(String(readProductValue(product.values, 'currency', 'USD') || 'USD')),
+  inventory: toNumber(readProductValue(product.values, 'inventory')),
+  low_stock_threshold: toNumber(readProductValue(product.values, 'lowStockThreshold', 5) || 5),
+  inventory_policy: asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy')),
+  product_type: asProductType(readProductValue(product.values, 'productType')),
+  category: String(readProductValue(product.values, 'category', '') || ''),
+  tags: formatTags(readProductValue(product.values, 'tags')).join('; '),
+  vendor: String(readProductValue(product.values, 'vendor', '') || ''),
+  image_url: String(readProductValue(product.values, 'imageUrl', '') || ''),
+  gallery_images: formatGalleryImages(readProductValue(product.values, 'galleryImages')).join('; '),
+  gallery_image_count: formatGalleryImages(readProductValue(product.values, 'galleryImages')).length,
+  download_url: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+  checkout_url: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
+  shipping_required: readProductValue(product.values, 'shippingRequired') !== false,
+  shipping_profile: String(readProductValue(product.values, 'shippingProfile', '') || ''),
+  tax_class: String(readProductValue(product.values, 'taxClass', '') || ''),
+  discount_code: String(readProductValue(product.values, 'discountCode', '') || ''),
+  return_policy: String(readProductValue(product.values, 'returnPolicy', '') || ''),
+  taxable: readProductValue(product.values, 'taxable') !== false,
+  weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? null : toNumber(readProductValue(product.values, 'weight')),
+  featured: Boolean(readProductValue(product.values, 'featured')),
+  seo_title: String(readProductValue(product.values, 'seoTitle', '') || ''),
   storefront_path: storefrontPath,
   list_api_url: context.storefrontApiUrl,
   detail_api_url: detailApiUrl,
   public_render_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/render?path=${encodeURIComponent(storefrontPath)}`,
   public_resolve_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/resolve?path=${encodeURIComponent(storefrontPath)}`,
-  checkout_mode: String(product.values.checkoutUrl || '').trim() ? 'external checkout URL' : 'not configured',
+  checkout_mode: String(readProductValue(product.values, 'checkoutUrl', '') || '').trim() ? 'external checkout URL' : 'not configured',
   scheduled_at: product.scheduledAt || '',
   frontend_systems: PRODUCT_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
   created_at: product.createdAt || '',
