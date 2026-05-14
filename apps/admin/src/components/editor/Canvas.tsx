@@ -3195,9 +3195,9 @@ function CanvasElementComponent({
                         value={option}
                         required={choiceType === 'checkbox' ? optionIndex === 0 && required : required}
                         disabled={!isPreview || disabled}
-                        checked={Boolean(isChecked)}
-                        readOnly
-                        onChange={() => {}}
+                        {...(isPreview
+                          ? { defaultChecked: Boolean(isChecked) }
+                          : { checked: Boolean(isChecked), readOnly: true })}
                         style={{
                           pointerEvents: isPreview ? 'auto' : 'none',
                         }}

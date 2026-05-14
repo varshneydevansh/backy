@@ -4646,6 +4646,7 @@ export function CanvasEditor({
               type="button"
               onClick={() => setIsPreview(!isPreview)}
               disabled={isSaving}
+              data-testid="editor-preview-toggle"
               className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm disabled:cursor-not-allowed disabled:opacity-60',
                 isPreview

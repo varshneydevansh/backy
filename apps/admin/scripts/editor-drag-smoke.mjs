@@ -10596,6 +10596,66 @@ const assertPersistedSelectFieldBehavior = async (pageId) => {
   return props;
 };
 
+const testChoicePreviewInteractivity = async (client, elementId, fieldType, expected) => {
+  const targetValue = expected.options.find((option) => option !== expected.value) || expected.value;
+
+  await clickControlByTestId(client, 'editor-preview-toggle');
+  const state = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const inputs = Array.from(node?.querySelectorAll('input[type="${fieldType}"]') || []);
+    const target = inputs.find((input) => input instanceof HTMLInputElement && input.value === ${JSON.stringify(targetValue)});
+    const readInputs = () => inputs.map((input) => ({
+      value: input.value,
+      checked: input.checked,
+      disabled: input.disabled,
+      readOnly: input.readOnly,
+    }));
+
+    if (!(target instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        reason: 'missing-preview-choice-input',
+        targetValue: ${JSON.stringify(targetValue)},
+        inputs: readInputs(),
+      };
+    }
+
+    const before = readInputs();
+    target.click();
+    const after = readInputs();
+    return {
+      ok: true,
+      targetValue: ${JSON.stringify(targetValue)},
+      targetChecked: target.checked,
+      targetDisabled: target.disabled,
+      targetReadOnly: target.readOnly,
+      before,
+      after,
+    };
+  })()`);
+  await clickControlByTestId(client, 'editor-preview-toggle');
+
+  assert(state?.ok, `${fieldType} preview interaction target missing: ${JSON.stringify(state)}`);
+  assert(state.targetDisabled === false, `${fieldType} preview input remained disabled: ${JSON.stringify(state)}`);
+  assert(state.targetReadOnly === false, `${fieldType} preview input remained read-only: ${JSON.stringify(state)}`);
+  const beforeTarget = state.before.find((input) => input.value === state.targetValue);
+  const expectedChecked = fieldType === 'checkbox'
+    ? !Boolean(beforeTarget?.checked)
+    : true;
+  assert(
+    state.targetChecked === expectedChecked,
+    `${fieldType} preview input did not toggle to the expected checked state: ${JSON.stringify({ expectedChecked, state })}`,
+  );
+  if (fieldType === 'radio' && targetValue !== expected.value) {
+    assert(
+      state.after.some((input) => input.value === expected.value && input.checked === false),
+      `Radio preview did not clear the previously selected option: ${JSON.stringify(state)}`,
+    );
+  }
+
+  return state;
+};
+
 const testChoiceFieldBehaviorControls = async (client, elementId, fieldType, expected) => {
   await selectLayerById(client, elementId);
   await switchToPropertiesPanel(client);
@@ -10647,7 +10707,12 @@ const testChoiceFieldBehaviorControls = async (client, elementId, fieldType, exp
   assert(state.previewInputs.every((input) => input.name === expected.name), `${fieldType} preview names mismatch: ${JSON.stringify(state)}`);
   assert(state.selectedValue === expected.value && state.previewInputs.some((input) => input.value === expected.value && input.checked), `${fieldType} selected value mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  const previewInteraction = await testChoicePreviewInteractivity(client, elementId, fieldType, expected);
+
+  return {
+    ...state,
+    previewInteraction,
+  };
 };
 
 const assertPersistedChoiceFieldBehavior = async (pageId, elementId, fieldType, expected) => {
