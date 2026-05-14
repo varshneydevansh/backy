@@ -870,6 +870,16 @@ assertIncludes(mediaAdminRoute, 'setBulkNotice(`${updated.name} details saved.`)
 assertIncludes(mediaAdminRoute, 'const deniedExportMessage = `Your account needs activity.export to export media manifests and audit feeds. ${activityPermissionTitle}`;', 'media manifest export must explain activity.export permission failures');
 assertIncludes(mediaAdminRoute, 'const copyMediaHandoffManifest = async () => {', 'media manifest copy must use a dedicated permission-checked handler');
 assertIncludes(mediaAdminRoute, 'setError(deniedExportMessage);', 'media manifest export handlers must fail closed without activity.export');
+assertIncludes(mediaAdminRoute, 'const canBulkSelectMedia = canEditMedia || canDeleteMedia;', 'media bulk selection must require edit or delete permissions');
+assertIncludes(mediaAdminRoute, 'const bulkSelectionPermissionTitle = canBulkSelectMedia', 'media bulk selection must explain edit/delete permission failures');
+assertIncludes(mediaAdminRoute, 'const bulkManagementDescription = canEditMedia && canDeleteMedia', 'media bulk panel copy must reflect available edit/delete actions');
+assertIncludes(mediaAdminRoute, 'setError(deniedBulkSelectionMessage);', 'media bulk selection handlers must fail closed without edit/delete permissions');
+assertIncludes(mediaAdminRoute, 'disabled={isMediaLibraryBusy || allVisibleSelected || !canBulkSelectMedia}', 'media select-visible control must be disabled without edit/delete permissions');
+assertIncludes(mediaAdminRoute, 'disabled={isMediaLibraryBusy || !canBulkSelectMedia}', 'media grid selection controls must be disabled without edit/delete permissions');
+assertIncludes(mediaAdminRoute, 'const hiddenSelectedMediaCount = useMemo(', 'media bulk selection must track selected assets hidden by current filters');
+assertIncludes(mediaAdminRoute, 'const handleClearHiddenSelection = () => {', 'media bulk selection must let users clear hidden selected assets');
+assertIncludes(mediaAdminRoute, 'Selected hidden assets remain selected and are included in bulk actions until cleared.', 'media bulk selection copy must disclose hidden selected assets');
+assertIncludes(mediaAdminRoute, 'if (!canExportMediaActivity) {', 'media audit CSV export must fail closed without activity.export');
 assert(
   occurrenceCount(mediaAdminRoute, 'onClick={() => void copyMediaHandoffManifest()}') >= 2,
   'media manifest copy controls must route through the permission-checked handler',

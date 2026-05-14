@@ -843,16 +843,23 @@ function MediaPage() {
   const canConfigureMediaStorage = !isPermissionMatrixPending && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');
   const canDeleteMedia = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.delete');
   const canExportMediaActivity = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
+  const canBulkSelectMedia = canEditMedia || canDeleteMedia;
   const viewPermissionTitle = canViewMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.view');
   const createPermissionTitle = canCreateMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.create');
   const editPermissionTitle = canEditMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.edit');
   const configurePermissionTitle = canConfigureMediaStorage ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.configure');
   const deletePermissionTitle = canDeleteMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.delete');
   const activityPermissionTitle = canExportMediaActivity ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'activity.export');
+  const bulkSelectionPermissionTitle = canBulkSelectMedia
+    ? undefined
+    : !canViewMedia
+      ? viewPermissionTitle
+      : `Requires media.edit or media.delete. ${editPermissionTitle || ''} ${deletePermissionTitle || ''}`.trim();
   const deniedCreateMessage = `Your account needs media.create to upload or create folders. ${createPermissionTitle}`;
   const deniedEditMessage = `Your account needs media.edit to change media metadata. ${editPermissionTitle}`;
   const deniedDeleteMessage = `Your account needs media.delete to delete media assets. ${deletePermissionTitle}`;
   const deniedExportMessage = `Your account needs activity.export to export media manifests and audit feeds. ${activityPermissionTitle}`;
+  const deniedBulkSelectionMessage = `Your account needs media.edit or media.delete to select media for bulk actions. ${bulkSelectionPermissionTitle}`;
   const isMediaMutationBusy = isUploading ||
     isSavingMetadata ||
     isCreatingSignedUrl ||
@@ -1133,6 +1140,11 @@ function MediaPage() {
     () => files.filter((file) => selectedMediaSet.has(file.id)),
     [files, selectedMediaSet],
   );
+  const visibleMediaSet = useMemo(() => new Set(displayedFiles.map((file) => file.id)), [displayedFiles]);
+  const hiddenSelectedMediaCount = useMemo(
+    () => selectedMediaAssets.filter((file) => !visibleMediaSet.has(file.id)).length,
+    [selectedMediaAssets, visibleMediaSet],
+  );
   const loadedMediaCount = files.length;
   const matchingMediaTotal = Math.max(mediaPagination.total, loadedMediaCount);
   const hasUnloadedMedia = mediaPagination.hasMore || loadedMediaCount < matchingMediaTotal;
@@ -1141,6 +1153,13 @@ function MediaPage() {
     ((bulkTagMode === 'merge' || bulkTagMode === 'replace') && bulkTagList.length > 0);
   const hasBulkSafetyChange = bulkSafetyAction !== 'keep';
   const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep' || hasBulkTagChange || hasBulkSafetyChange;
+  const bulkManagementDescription = canEditMedia && canDeleteMedia
+    ? 'Select visible assets, move them between folders, change delivery visibility, quarantine or release them, retag them, or remove them from the library.'
+    : canEditMedia
+      ? 'Select visible assets, move them between folders, change delivery visibility, quarantine or release them, and retag them.'
+      : canDeleteMedia
+        ? 'Select visible assets and remove them from the library.'
+        : 'Bulk selection is available after media.edit or media.delete is granted.';
   const fontGroups = useMemo(() => {
     const groups = new Map<string, {
       family: string;
@@ -2465,6 +2484,11 @@ function MediaPage() {
 
   const toggleMediaSelection = (mediaId: string) => {
     if (isMediaLibraryBusy) return;
+    if (!canBulkSelectMedia) {
+      setBulkNotice(null);
+      setError(deniedBulkSelectionMessage);
+      return;
+    }
 
     setBulkNotice(null);
     setPendingBulkDelete(false);
@@ -2477,6 +2501,11 @@ function MediaPage() {
 
   const handleSelectVisibleMedia = () => {
     if (isMediaLibraryBusy) return;
+    if (!canBulkSelectMedia) {
+      setBulkNotice(null);
+      setError(deniedBulkSelectionMessage);
+      return;
+    }
 
     setBulkNotice(null);
     setSelectedMediaIds((current) => {
@@ -2492,6 +2521,14 @@ function MediaPage() {
     setBulkNotice(null);
     setPendingBulkDelete(false);
     setSelectedMediaIds([]);
+  };
+
+  const handleClearHiddenSelection = () => {
+    if (isMediaLibraryBusy) return;
+
+    setBulkNotice(null);
+    setPendingBulkDelete(false);
+    setSelectedMediaIds((current) => current.filter((id) => visibleMediaSet.has(id)));
   };
 
   const handleBulkUpdate = async () => {
@@ -3106,6 +3143,11 @@ function MediaPage() {
     setBulkNotice(`${displayedFiles.length} visible media asset${displayedFiles.length === 1 ? '' : 's'} exported.`);
   };
   const exportMediaAuditCsv = () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
     if (libraryAuditLogs.length === 0) return;
 
     const columns = ['createdAt', 'action', 'entityId', 'actorId', 'requestId', 'summary', 'details'];
@@ -5057,11 +5099,11 @@ function MediaPage() {
         <Panel className="mb-6 scroll-mt-24" id="media-bulk">
           <PanelHeader
             title="Bulk management"
-            description="Select visible assets, move them between folders, change delivery visibility, quarantine or release them, retag them, or remove them from the library."
+            description={bulkManagementDescription}
             icon={<CheckSquare className="size-4" />}
             action={
               <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
-                {selectedMediaAssets.length} selected
+                {selectedMediaAssets.length} selected{hiddenSelectedMediaCount > 0 ? `, ${hiddenSelectedMediaCount} hidden` : ''}
               </span>
             }
           />
@@ -5073,10 +5115,11 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isMediaLibraryBusy || allVisibleSelected}
+                    disabled={isMediaLibraryBusy || allVisibleSelected || !canBulkSelectMedia}
+                    title={!canBulkSelectMedia ? bulkSelectionPermissionTitle : undefined}
                     onClick={handleSelectVisibleMedia}
                   >
-                    Select visible loaded
+                    Add visible loaded
                   </Button>
                   <Button
                     type="button"
@@ -5096,8 +5139,19 @@ function MediaPage() {
                   >
                     Clear
                   </Button>
+                  {hiddenSelectedMediaCount > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={isMediaLibraryBusy}
+                      onClick={handleClearHiddenSelection}
+                    >
+                      Clear hidden
+                    </Button>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Selection follows the current search, type, visibility, and folder filters across loaded matching assets.
+                    Add visible assets from the current filters. Selected hidden assets remain selected and are included in bulk actions until cleared.
                   </p>
                 </div>
 
@@ -5336,13 +5390,13 @@ function MediaPage() {
             >
               <label
                 className="absolute left-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background/95 shadow-sm backdrop-blur"
-                title={`Select ${file.name}`}
+                title={canBulkSelectMedia ? `Select ${file.name}` : bulkSelectionPermissionTitle}
               >
                 <input
                   type="checkbox"
                   checked={selectedMediaSet.has(file.id)}
-                  disabled={isMediaLibraryBusy || (!canEditMedia && !canDeleteMedia)}
-                  title={canEditMedia || canDeleteMedia ? undefined : editPermissionTitle}
+                  disabled={isMediaLibraryBusy || !canBulkSelectMedia}
+                  title={canBulkSelectMedia ? undefined : bulkSelectionPermissionTitle}
                   onChange={() => toggleMediaSelection(file.id)}
                   className="h-3.5 w-3.5 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={`Select ${file.name}`}
