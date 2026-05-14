@@ -3365,6 +3365,29 @@ try {
     assert(unauthCollections.status === 401, `Collections admin API should reject missing auth, got ${unauthCollections.status}`);
     assert(unauthCollectionsJson?.success === false && unauthCollectionsJson?.error?.code === 'UNAUTHORIZED', `Collections admin API missing auth envelope: ${JSON.stringify(unauthCollectionsJson).slice(0, 500)}`);
 
+    const scheduledCollectionCreate = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Invalid Scheduled Collection',
+        slug: `invalid-scheduled-collection-${unique}`,
+        status: 'scheduled',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true },
+        ],
+        permissions: {
+          publicRead: false,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(scheduledCollectionCreate.response.status === 400, `${scheduledCollectionCreate.url} expected scheduled collection create to fail`);
+    assert(scheduledCollectionCreate.json?.error?.code === 'VALIDATION_ERROR', `${scheduledCollectionCreate.url} expected validation error for scheduled collection create`);
+
     const createNestedReferenceCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {
@@ -3496,6 +3519,16 @@ try {
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.slug === collectionSlug, `${collectionCreateAudit.url} missing collection create slug metadata`);
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.after?.status === 'published', `${collectionCreateAudit.url} missing collection create after snapshot`);
     assert(collectionCreateAudit.json?.data?.logs?.[0]?.metadata?.publicCreate === false, `${collectionCreateAudit.url} missing collection create permission metadata`);
+
+    const scheduledCollectionUpdate = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'scheduled' }),
+    });
+    assert(scheduledCollectionUpdate.response.status === 400, `${scheduledCollectionUpdate.url} expected scheduled collection update to fail`);
+    assert(scheduledCollectionUpdate.json?.error?.code === 'VALIDATION_ERROR', `${scheduledCollectionUpdate.url} expected validation error for scheduled collection update`);
 
     const createDynamicTemplateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',

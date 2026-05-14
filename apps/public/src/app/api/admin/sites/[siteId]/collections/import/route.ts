@@ -48,11 +48,13 @@ type ImportRecord = {
   scheduledAt?: string | null;
 };
 
+type CollectionSchemaStatus = Exclude<PublishStatus, 'scheduled'>;
+
 type ImportCollection = {
   name: string;
   slug: string;
   description?: string | null;
-  status: PublishStatus;
+  status: CollectionSchemaStatus;
   routePattern?: string | null;
   listRoutePattern?: string | null;
   fields: BackyCollectionField[];
@@ -92,11 +94,17 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
-const parseStatus = (value: unknown, fallback: PublishStatus = 'draft'): PublishStatus => (
+const parseRecordStatus = (value: unknown, fallback: PublishStatus = 'draft'): PublishStatus => (
   value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
     ? value
     : fallback
 );
+
+const parseCollectionStatus = (value: unknown, fallback: CollectionSchemaStatus = 'draft'): CollectionSchemaStatus | null => {
+  if (value === undefined) return fallback;
+  if (value === 'draft' || value === 'published' || value === 'archived') return value;
+  return null;
+};
 
 const parsePermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
   isRecord(value) ? value as Partial<BackyCollectionPermissions> : undefined
@@ -137,7 +145,7 @@ const normalizeImportRecord = (value: unknown): ImportRecord | null => {
 
   return {
     slug,
-    status: parseStatus(value.status),
+    status: parseRecordStatus(value.status),
     values: parseValues(value.values),
     scheduledAt: typeof value.scheduledAt === 'string' && value.scheduledAt.trim() ? value.scheduledAt.trim() : null,
   };
@@ -172,6 +180,14 @@ const normalizeImportCollection = (value: unknown, index: number): ImportCollect
 
   const routePattern = parseRoutePattern(value.routePattern, slug);
   const listRoutePattern = parseListRoutePattern(value.listRoutePattern, slug);
+  const status = parseCollectionStatus(value.status);
+  if (!status) {
+    return {
+      ok: false,
+      message: `Imported collection ${index + 1} status must be draft, published, or archived.`,
+      details: { index, slug },
+    };
+  }
   const records = Array.isArray(value.records)
     ? value.records.map(normalizeImportRecord).filter(Boolean) as ImportRecord[]
     : [];
@@ -182,7 +198,7 @@ const normalizeImportCollection = (value: unknown, index: number): ImportCollect
       name,
       slug,
       description: typeof value.description === 'string' ? value.description.trim() || null : null,
-      status: parseStatus(value.status),
+      status,
       routePattern,
       listRoutePattern,
       fields: parsedFields.fields || [],

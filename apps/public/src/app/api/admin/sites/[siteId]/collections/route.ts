@@ -48,6 +48,8 @@ interface CollectionAuditSource {
   permissions?: Partial<BackyCollectionPermissions> | null;
 }
 
+type CollectionSchemaStatus = Exclude<PublishStatus, 'scheduled'>;
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
@@ -83,8 +85,8 @@ const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined => (
     : undefined
 );
 
-const parseStatus = (value: unknown): PublishStatus | undefined => (
-  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+const parseStatus = (value: unknown): CollectionSchemaStatus | undefined => (
+  value === 'draft' || value === 'published' || value === 'archived'
     ? value
     : undefined
 );
@@ -231,6 +233,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!slug) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
       }
+      const status = parseStatus(body.status);
+      if (body.status !== undefined && !status) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
+      }
 
       const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
       if (commerceAccess) {
@@ -278,7 +284,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         routePattern,
         listRoutePattern,
         description: typeof body.description === 'string' ? body.description : null,
-        status: parseStatus(body.status) || 'draft',
+        status: status || 'draft',
         fields: parsedFields.fields || [],
         permissions: toCollectionPermissions(body.permissions),
         metadata: toCollectionMetadata(body.metadata),
@@ -329,6 +335,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+    }
+    const status = parseStatus(body.status);
+    if (body.status !== undefined && !status) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
     }
 
     const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');

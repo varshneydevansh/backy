@@ -52,6 +52,8 @@ interface CollectionAuditSource {
   permissions?: Partial<BackyCollectionPermissions> | null;
 }
 
+type CollectionSchemaStatus = Exclude<PublishStatus, 'scheduled'>;
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
@@ -87,8 +89,8 @@ const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined => (
     : undefined
 );
 
-const parseStatus = (value: unknown): PublishStatus | undefined => (
-  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+const parseStatus = (value: unknown): CollectionSchemaStatus | undefined => (
+  value === 'draft' || value === 'published' || value === 'archived'
     ? value
     : undefined
 );
@@ -227,6 +229,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (body.slug !== undefined && !nextSlug) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
       }
+      const status = parseStatus(body.status);
+      if (body.status !== undefined && !status) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
+      }
 
       if (nextSlug && nextSlug !== collection.slug) {
         const conflict = await repositories.collections.getBySlug(site.id, nextSlug);
@@ -269,7 +275,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const updated = (await repositories.collections.update(site.id, collection.id, {
         ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
         ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
-        ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
+        ...(status ? { status } : {}),
         ...(parsedFields.fields === undefined ? {} : { fields: parsedFields.fields }),
         ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
         ...(body.metadata === undefined ? {} : { metadata: toCollectionMetadata(body.metadata) || {} }),
@@ -325,6 +331,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (body.slug !== undefined && !nextSlug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+    }
+    const status = parseStatus(body.status);
+    if (body.status !== undefined && !status) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
     }
 
     if (nextSlug && nextSlug !== collection.slug) {
