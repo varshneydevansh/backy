@@ -272,9 +272,14 @@ const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined
   if (!input) {
     return undefined;
   }
+  const {
+    passwordResetTokens: _passwordResetTokens,
+    inviteTokens: _inviteTokens,
+    ...safeInput
+  } = input;
 
   return {
-    ...input,
+    ...safeInput,
     requireTwoFactor: false,
   };
 };

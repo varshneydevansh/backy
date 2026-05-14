@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
+import {
+  getPersistedPasswordResetToken,
+  removePersistedPasswordResetToken,
+} from '@/lib/adminAuthTokenPersistence';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -105,6 +109,13 @@ export async function POST(request: NextRequest) {
       getUserById: (userId) => repositories.users.getById(userId),
       setPasswordCredential: (userId, credential) => repositories.users.setPasswordCredential(userId, credential),
       updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
+      getPasswordResetToken: async (candidateToken) => getPersistedPasswordResetToken((await repositories.settings.get()).auth, candidateToken),
+      consumePasswordResetToken: async (candidateToken) => {
+        const current = await repositories.settings.get();
+        await repositories.settings.update({
+          auth: removePersistedPasswordResetToken(current.auth, candidateToken),
+        });
+      },
     }
     : undefined, authSettings);
   if (!result.reset) {

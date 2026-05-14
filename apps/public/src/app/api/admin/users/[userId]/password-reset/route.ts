@@ -5,6 +5,7 @@ import { getAdminUserById } from '@/lib/backyStore';
 import {
   createAdminPasswordResetToken,
 } from '@/lib/admin-auth/sessionStore';
+import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -84,7 +85,14 @@ export async function POST(
       requestedById: access.session?.user.id || null,
       origin,
       expiresInMinutes,
+      persistInMemory: !repositories,
     });
+    if (repositories) {
+      const currentSettings = await repositories.settings.get();
+      await repositories.settings.update({
+        auth: addPersistedPasswordResetToken(currentSettings.auth, reset),
+      });
+    }
 
     await recordAdminAudit({
       repositories,

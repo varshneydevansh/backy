@@ -8,6 +8,7 @@ import {
   validateAdminInviteOnlyCreatePolicy,
 } from '@/lib/admin-auth/emailPolicy';
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
+import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import {
   createAdminUser,
   getAdminUserByEmail,
@@ -181,8 +182,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestedById: formAccess.session?.user.id || null,
           origin: request.headers.get('origin') || request.nextUrl.origin,
           expiresInMinutes,
+          persistInMemory: false,
         })
         : null;
+      if (invite) {
+        const currentSettings = await repositories.settings.get();
+        await repositories.settings.update({
+          auth: addPersistedInviteToken(currentSettings.auth, invite),
+        });
+      }
       const promotedAt = new Date().toISOString();
       const updatedContact = (await repositories.forms.updateContact(site.id, contact.id, {
         notes: appendPromotionNote(contact.notes, user.id, Boolean(existingUser)),

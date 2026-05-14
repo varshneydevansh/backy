@@ -5,6 +5,7 @@ import { getAdminUserById } from '@/lib/backyStore';
 import {
   createAdminInviteToken,
 } from '@/lib/admin-auth/sessionStore';
+import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -78,7 +79,14 @@ export async function POST(
       requestedById: access.session?.user.id || null,
       origin,
       expiresInMinutes,
+      persistInMemory: !repositories,
     });
+    if (repositories) {
+      const currentSettings = await repositories.settings.get();
+      await repositories.settings.update({
+        auth: addPersistedInviteToken(currentSettings.auth, invite),
+      });
+    }
 
     await recordAdminAudit({
       repositories,

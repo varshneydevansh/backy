@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acceptAdminInviteToken } from '@/lib/admin-auth/sessionStore';
+import {
+  getPersistedInviteToken,
+  removePersistedInviteToken,
+} from '@/lib/adminAuthTokenPersistence';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -55,6 +59,13 @@ export async function POST(request: NextRequest) {
     ? {
       getUserById: (userId) => repositories.users.getById(userId),
       updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
+      getInviteToken: async (candidateToken) => getPersistedInviteToken((await repositories.settings.get()).auth, candidateToken),
+      consumeInviteToken: async (candidateToken) => {
+        const current = await repositories.settings.get();
+        await repositories.settings.update({
+          auth: removePersistedInviteToken(current.auth, candidateToken),
+        });
+      },
     }
     : undefined, authSettings);
   if (!result.accepted) {

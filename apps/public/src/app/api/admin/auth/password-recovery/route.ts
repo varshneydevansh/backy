@@ -11,6 +11,7 @@ import {
   getEmailDeliveryConfig,
   sendEmailMessage,
 } from '@/lib/formEmailDelivery';
+import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -144,7 +145,14 @@ export async function POST(request: NextRequest) {
           requestedById: null,
           origin: request.headers.get('origin') || request.nextUrl.origin,
           expiresInMinutes: 60,
+          persistInMemory: !repositories,
         });
+        if (repositories) {
+          const currentSettings = await repositories.settings.get();
+          await repositories.settings.update({
+            auth: addPersistedPasswordResetToken(currentSettings.auth, reset),
+          });
+        }
         const delivery = buildPasswordRecoveryMessage({ to: user.email, reset, requestId });
         if (delivery.config.provider !== 'local-outbox') {
           await sendEmailMessage(delivery.config, delivery.message);

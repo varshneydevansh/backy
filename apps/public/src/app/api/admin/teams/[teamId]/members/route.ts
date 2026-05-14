@@ -7,6 +7,7 @@ import {
   validateAdminInviteOnlyCreatePolicy,
 } from '@/lib/admin-auth/emailPolicy';
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
+import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -178,6 +179,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           user,
           requestedById: access.session?.user.id || null,
           origin: request.headers.get('origin') || request.nextUrl.origin,
+          persistInMemory: false,
+        });
+        const currentSettings = await repositories.settings.get();
+        await repositories.settings.update({
+          auth: addPersistedInviteToken(currentSettings.auth, invite),
         });
       }
     }

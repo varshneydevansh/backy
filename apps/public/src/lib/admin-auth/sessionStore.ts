@@ -118,6 +118,10 @@ type AdminAuthUserPersistence = {
     credential: Pick<AdminPasswordCredentialLike, 'passwordHash' | 'salt'>,
   ) => Promise<AdminPasswordCredentialLike | null | undefined>;
   updateUser?: (userId: string, input: Partial<Pick<AdminAuthUser, 'status'>>) => Promise<AdminAuthUserLike | null | undefined>;
+  getPasswordResetToken?: (token: string) => Promise<AdminPasswordResetToken | null | undefined>;
+  consumePasswordResetToken?: (token: string) => Promise<void>;
+  getInviteToken?: (token: string) => Promise<AdminInviteToken | null | undefined>;
+  consumeInviteToken?: (token: string) => Promise<void>;
 };
 
 type AdminAuthSessionSettings = {
@@ -569,6 +573,7 @@ export function createAdminPasswordResetToken(input: {
   requestedById?: string | null;
   origin?: string;
   expiresInMinutes?: number;
+  persistInMemory?: boolean;
 }): AdminPasswordResetToken {
   const createdAt = new Date();
   const expiresInMinutes = Number.isFinite(input.expiresInMinutes)
@@ -589,7 +594,9 @@ export function createAdminPasswordResetToken(input: {
     resetUrl: `${origin || '/admin'}/reset-password?token=${encodeURIComponent(token)}`,
   };
 
-  PASSWORD_RESET_TOKENS.set(token, resetToken);
+  if (input.persistInMemory !== false) {
+    PASSWORD_RESET_TOKENS.set(token, resetToken);
+  }
   return resetToken;
 }
 
@@ -602,13 +609,16 @@ export async function resetAdminPasswordToken(
   pruneExpiredSessions();
 
   const normalizedToken = token?.trim() || '';
-  const resetToken = normalizedToken ? PASSWORD_RESET_TOKENS.get(normalizedToken) : null;
+  const resetToken = normalizedToken
+    ? PASSWORD_RESET_TOKENS.get(normalizedToken) || await persistence.getPasswordResetToken?.(normalizedToken) || null
+    : null;
   if (!resetToken) {
     return { reset: false, reason: 'missing' };
   }
 
   if (Date.parse(resetToken.expiresAt) <= Date.now()) {
     PASSWORD_RESET_TOKENS.delete(normalizedToken);
+    await persistence.consumePasswordResetToken?.(normalizedToken);
     return { reset: false, reason: 'expired', resetToken };
   }
 
@@ -618,6 +628,7 @@ export async function resetAdminPasswordToken(
   );
   if (!currentUser) {
     PASSWORD_RESET_TOKENS.delete(normalizedToken);
+    await persistence.consumePasswordResetToken?.(normalizedToken);
     return { reset: false, reason: 'user-not-found', resetToken };
   }
 
@@ -654,6 +665,7 @@ export async function resetAdminPasswordToken(
     setLocalAdminPassword({ user, password });
   }
   PASSWORD_RESET_TOKENS.delete(normalizedToken);
+  await persistence.consumePasswordResetToken?.(normalizedToken);
   const session = createAdminSessionForUser(user, authSettings);
 
   return {
@@ -670,6 +682,7 @@ export function createAdminInviteToken(input: {
   requestedById?: string | null;
   origin?: string;
   expiresInMinutes?: number;
+  persistInMemory?: boolean;
 }): AdminInviteToken {
   const createdAt = new Date();
   const expiresInMinutes = Number.isFinite(input.expiresInMinutes)
@@ -690,7 +703,9 @@ export function createAdminInviteToken(input: {
     inviteUrl: `${origin || '/admin'}/accept-invite?token=${encodeURIComponent(token)}`,
   };
 
-  INVITE_TOKENS.set(token, inviteToken);
+  if (input.persistInMemory !== false) {
+    INVITE_TOKENS.set(token, inviteToken);
+  }
   return inviteToken;
 }
 
@@ -702,13 +717,16 @@ export async function acceptAdminInviteToken(
   pruneExpiredSessions();
 
   const normalizedToken = token?.trim() || '';
-  const invite = normalizedToken ? INVITE_TOKENS.get(normalizedToken) : null;
+  const invite = normalizedToken
+    ? INVITE_TOKENS.get(normalizedToken) || await persistence.getInviteToken?.(normalizedToken) || null
+    : null;
   if (!invite) {
     return { accepted: false, reason: 'missing' };
   }
 
   if (Date.parse(invite.expiresAt) <= Date.now()) {
     INVITE_TOKENS.delete(normalizedToken);
+    await persistence.consumeInviteToken?.(normalizedToken);
     return { accepted: false, reason: 'expired', invite };
   }
 
@@ -718,6 +736,7 @@ export async function acceptAdminInviteToken(
   );
   if (!currentUser) {
     INVITE_TOKENS.delete(normalizedToken);
+    await persistence.consumeInviteToken?.(normalizedToken);
     return { accepted: false, reason: 'user-not-found', invite };
   }
 
@@ -739,6 +758,7 @@ export async function acceptAdminInviteToken(
   }
 
   INVITE_TOKENS.delete(normalizedToken);
+  await persistence.consumeInviteToken?.(normalizedToken);
   const session = createAdminSessionForUser(user, authSettings);
   return {
     accepted: true,
