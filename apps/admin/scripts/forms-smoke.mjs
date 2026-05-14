@@ -329,6 +329,56 @@ const createCaptchaSmokeForm = async () => {
   return form;
 };
 
+const assertFormCreateFieldSanitization = async () => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `field-sanitization-${suffix}`,
+      title: 'Field sanitization smoke',
+      fields: [
+        {
+          key: 'Full Name!',
+          label: 'Full Name',
+          type: 'unsupported',
+          required: true,
+          options: ['A', 'A', 'B'],
+          validation: [
+            { type: 'minLength', value: 2, message: 'Use at least two characters.' },
+            { type: 'unknown', value: 9, message: 'Drop me.' },
+            'not-a-rule',
+          ],
+        },
+        {
+          key: 'Full Name!',
+          label: 'Duplicate Full Name',
+          type: 'email',
+          required: false,
+        },
+      ],
+    }),
+  });
+  const form = payload.data?.form || payload.form;
+  assert(form?.id, `Field sanitization form was not created: ${JSON.stringify(payload).slice(0, 500)}`);
+  try {
+    const [first, second] = form.fields || [];
+    assert(first?.key === 'full_name', `Create should sanitize first field key: ${JSON.stringify(form.fields)}`);
+    assert(first?.type === 'text', `Create should normalize unsupported field type to text: ${JSON.stringify(form.fields)}`);
+    assert(first?.required === true, `Create should preserve required flag: ${JSON.stringify(form.fields)}`);
+    assert(first?.options?.length === 2, `Create should dedupe field options: ${JSON.stringify(form.fields)}`);
+    assert(
+      first?.validation?.length === 1 &&
+      first.validation[0].type === 'minLength' &&
+      first.validation[0].message === 'Use at least two characters.',
+      `Create should sanitize validation rules: ${JSON.stringify(form.fields)}`,
+    );
+    assert(second?.key === 'full_name_2', `Create should make duplicate field keys unique: ${JSON.stringify(form.fields)}`);
+    assert(second?.type === 'email', `Create should preserve supported field type: ${JSON.stringify(form.fields)}`);
+  } finally {
+    await deleteForm(form.id);
+  }
+};
+
 const assertCaptchaProviderHook = async () => {
   let formId = null;
 
@@ -1738,6 +1788,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   await assertFormsPermissionOverridesAreEnforced();
+  await assertFormCreateFieldSanitization();
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
+import type { FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { deleteAdminForm, getFormById, getSiteByIdOrSlug, updateAdminForm } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { parseFormFields } from '@/lib/adminFormFieldPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -17,8 +18,6 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
 );
-
-const FIELD_TYPES = new Set(['text', 'email', 'number', 'textarea', 'select', 'checkbox', 'radio', 'date', 'tel', 'url', 'file']);
 
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
   try {
@@ -87,64 +86,6 @@ const mergeSettingsPatch = (
   };
 };
 
-const parseFieldOptions = (value: unknown): string[] | undefined => {
-  if (Array.isArray(value)) {
-    const options = value.map((option) => textValue(option)).filter(Boolean);
-    return options.length > 0 ? options : undefined;
-  }
-
-  if (typeof value === 'string') {
-    const options = value.split('\n').flatMap((part) => part.split(',')).map((option) => option.trim()).filter(Boolean);
-    return options.length > 0 ? options : undefined;
-  }
-
-  return undefined;
-};
-
-const sanitizeFieldKey = (value: unknown, fallback: string) => {
-  const base = textValue(value || fallback)
-    .toLowerCase()
-    .replace(/[^a-z0-9_ -]/g, '')
-    .replace(/[\s-]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return base || fallback;
-};
-
-const parseFields = (value: unknown): FormFieldDefinition[] | undefined => {
-  if (!Array.isArray(value)) return undefined;
-
-  return value
-    .map((item, index) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-
-      const record = item as Record<string, unknown>;
-      const key = sanitizeFieldKey(record.key, `field_${index + 1}`);
-      const type = FIELD_TYPES.has(textValue(record.type)) ? textValue(record.type) as FormFieldDefinition['type'] : 'text';
-      const label = textValue(record.label) || key.replace(/_/g, ' ');
-      const field: FormFieldDefinition = {
-        key,
-        label,
-        type,
-        required: record.required === true,
-      };
-      const placeholder = nullableTextValue(record.placeholder);
-      const helpText = nullableTextValue(record.helpText);
-      const defaultValue = nullableTextValue(record.defaultValue);
-      const options = parseFieldOptions(record.options);
-
-      if (placeholder) field.placeholder = placeholder;
-      if (helpText) field.helpText = helpText;
-      if (defaultValue) field.defaultValue = defaultValue;
-      if (options) field.options = options;
-      if (Array.isArray(record.validation)) {
-        field.validation = record.validation as FormFieldDefinition['validation'];
-      }
-
-      return field;
-    })
-    .filter((field): field is FormFieldDefinition => Boolean(field));
-};
-
 const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinition> => {
   const input: Partial<FormDefinition> = {
     updatedBy: 'admin',
@@ -160,7 +101,7 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   if ('description' in body) input.description = nullableTextValue(body.description);
   if ('audience' in body) input.audience = parseAudience(body.audience) || 'public';
   if ('isActive' in body) input.isActive = body.isActive !== false;
-  if ('fields' in body) input.fields = parseFields(body.fields) || [];
+  if ('fields' in body) input.fields = parseFormFields(body.fields) || [];
   if ('notificationEmail' in body) input.notificationEmail = nullableTextValue(body.notificationEmail);
   if ('notificationWebhook' in body) input.notificationWebhook = nullableTextValue(body.notificationWebhook);
   if ('successRedirectUrl' in body) input.successRedirectUrl = nullableTextValue(body.successRedirectUrl);

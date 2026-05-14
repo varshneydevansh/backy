@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
+import type { FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { createAdminForm, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { parseFormFields } from '@/lib/adminFormFieldPolicy';
 import { seedFormInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -41,10 +42,6 @@ const parseModerationMode = (value: unknown): FormDefinition['moderationMode'] =
   value === 'auto-approve' ? 'auto-approve' : 'manual'
 );
 
-const parseFields = (value: unknown): FormFieldDefinition[] => (
-  Array.isArray(value) ? value as FormFieldDefinition[] : []
-);
-
 const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as TRecord
@@ -79,7 +76,7 @@ const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => 
     description: textValue(body.description) || null,
     audience: parseAudience(body.audience),
     isActive: body.isActive !== false,
-    fields: parseFields(body.fields),
+    fields: parseFormFields(body.fields) || [],
     notificationEmail: textValue(body.notificationEmail) || null,
     notificationWebhook: textValue(body.notificationWebhook) || null,
     successRedirectUrl: textValue(body.successRedirectUrl) || null,

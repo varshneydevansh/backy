@@ -293,6 +293,20 @@ for (const route of [
   assertIncludes(source, 'INVALID_CONTACT_EMAIL', `${route} must use a stable invalid-contact-email error code`);
 }
 
+const adminFormFieldPolicy = read('apps/public/src/lib/adminFormFieldPolicy.ts');
+assertIncludes(adminFormFieldPolicy, 'uniqueFieldKey', 'admin form field policy must enforce unique field keys');
+assertIncludes(adminFormFieldPolicy, 'parseValidationRules', 'admin form field policy must sanitize validation rules');
+assertIncludes(adminFormFieldPolicy, 'FIELD_TYPES', 'admin form field policy must enforce known field types');
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, '@/lib/adminFormFieldPolicy', `${route} must import shared form field policy`);
+  assertIncludes(source, 'parseFormFields(', `${route} must sanitize form fields`);
+  assertExcludes(source, 'value as FormFieldDefinition[]', `${route} must not cast raw fields directly`);
+}
+
 const adminContentStatusPolicy = read('apps/public/src/lib/adminContentStatusPolicy.ts');
 for (const needle of [
   'statusRequiresPublishPermission',
