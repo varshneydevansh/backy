@@ -1943,6 +1943,14 @@ function MediaPage() {
   }, [siteId]);
 
   const loadLibraryAuditLogs = useCallback(async (offset = 0) => {
+    if (!canExportMediaActivity) {
+      setLibraryAuditLogs([]);
+      setLibraryAuditPagination({ total: 0, limit: MEDIA_AUDIT_PAGE_SIZE, offset: 0, hasMore: false });
+      setLibraryAuditError(null);
+      setIsLoadingLibraryAudit(false);
+      return;
+    }
+
     setIsLoadingLibraryAudit(true);
     setLibraryAuditError(null);
 
@@ -1963,9 +1971,16 @@ function MediaPage() {
     } finally {
       setIsLoadingLibraryAudit(false);
     }
-  }, [libraryAuditActionFilter, siteId]);
+  }, [canExportMediaActivity, libraryAuditActionFilter, siteId]);
 
   const loadAssetAuditLogs = useCallback(async (mediaId: string) => {
+    if (!canExportMediaActivity) {
+      setAssetAuditLogs([]);
+      setAssetAuditError(null);
+      setIsLoadingAssetAudit(false);
+      return;
+    }
+
     setIsLoadingAssetAudit(true);
     setAssetAuditError(null);
 
@@ -1984,7 +1999,7 @@ function MediaPage() {
     } finally {
       setIsLoadingAssetAudit(false);
     }
-  }, [assetAuditActionFilter, siteId]);
+  }, [assetAuditActionFilter, canExportMediaActivity, siteId]);
 
   useEffect(() => {
     void loadLibraryAuditLogs(0);
@@ -4528,13 +4543,23 @@ function MediaPage() {
               </div>
             </div>
 
+            {!canExportMediaActivity && (
+              <Notice tone="warning">
+                Your account needs activity.export to read or export the media audit feed. {activityPermissionTitle}
+              </Notice>
+            )}
+
             {libraryAuditError && (
               <Notice tone="warning">
                 {libraryAuditError}
               </Notice>
             )}
 
-            {isLoadingLibraryAudit ? (
+            {!canExportMediaActivity ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+                Media activity is hidden until audit export access is granted.
+              </div>
+            ) : isLoadingLibraryAudit ? (
               <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
                 Loading media activity...
               </div>
@@ -6692,13 +6717,23 @@ function MediaPage() {
                   ))}
                 </div>
 
+                {!canExportMediaActivity && (
+                  <Notice tone="warning" className="mb-3">
+                    Your account needs activity.export to read this asset audit feed. {activityPermissionTitle}
+                  </Notice>
+                )}
+
                 {assetAuditError && (
                   <Notice tone="warning" className="mb-3">
                     {assetAuditError}
                   </Notice>
                 )}
 
-                {isLoadingAssetAudit ? (
+                {!canExportMediaActivity ? (
+                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                    Asset activity is hidden until audit export access is granted.
+                  </div>
+                ) : isLoadingAssetAudit ? (
                   <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
                     Loading media activity...
                   </div>

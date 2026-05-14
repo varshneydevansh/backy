@@ -285,6 +285,21 @@ const assertMediaConfigurePermissionIsEnforced = async () => {
   }
 };
 
+const assertMediaActivityPermissionIsEnforced = async () => {
+  try {
+    await setAdminPermissionOverrides({
+      'activity.export': 'deny',
+    });
+    await expectForbiddenPermission(`/api/admin/audit-logs?siteId=${encodeURIComponent(SITE_ID)}&entity=media&limit=1`, {
+      method: 'GET',
+    }, 'Denied activity.export media audit list');
+  } finally {
+    await setAdminPermissionOverrides({
+      'activity.export': null,
+    });
+  }
+};
+
 const createFolder = async (name, input = {}) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/folders`, {
     method: 'POST',
@@ -594,6 +609,95 @@ const assertDeniedMediaViewUi = async (client, searchText, hiddenAssetName) => {
   } finally {
     await setAdminPermissionOverrides({
       'media.view': null,
+    });
+    await navigateToMedia(client, searchText);
+  }
+};
+
+const assertDeniedMediaActivityUi = async (client, searchText, assetName) => {
+  try {
+    await setAdminPermissionOverrides({
+      'activity.export': 'deny',
+    });
+    await navigateToMedia(client, searchText);
+    await waitForMediaPageAsset(client, assetName);
+
+    let libraryState = null;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      libraryState = await evaluate(client, `(() => {
+        const panel = document.querySelector('[data-testid="media-library-activity"]');
+        const filter = panel?.querySelector('select[aria-label="Filter media library activity"]');
+        const buttons = Array.from(panel?.querySelectorAll('button') || []).map((button) => ({
+          text: button.textContent || '',
+          disabled: button.disabled,
+        }));
+        const text = panel?.textContent || '';
+        return {
+          hasPanel: panel instanceof HTMLElement,
+          hasDeniedNotice: text.includes('needs activity.export'),
+          hasHiddenState: text.includes('Media activity is hidden until audit export access is granted.'),
+          filterDisabled: filter instanceof HTMLSelectElement ? filter.disabled : null,
+          refreshDisabled: buttons.some((button) => button.text.includes('Refresh') && button.disabled),
+          exportDisabled: buttons.some((button) => button.text.includes('Export audit') && button.disabled),
+          body: text.slice(0, 1800),
+        };
+      })()`);
+      if (
+        libraryState.hasPanel &&
+        libraryState.hasDeniedNotice &&
+        libraryState.hasHiddenState &&
+        libraryState.filterDisabled === true &&
+        libraryState.refreshDisabled &&
+        libraryState.exportDisabled
+      ) {
+        break;
+      }
+      if (attempt === 79) {
+        throw new Error(`Denied activity.export library UI did not hide audit feed: ${JSON.stringify(libraryState)}`);
+      }
+      await sleep(250);
+    }
+
+    await openMediaDetails(client, assetName);
+    let assetState = null;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      assetState = await evaluate(client, `(() => {
+        const filter = document.querySelector('select[aria-label="Filter media activity"]');
+        const activitySection = Array.from(document.querySelectorAll('div')).find((candidate) => (
+          (candidate.textContent || '').includes('Audit trail for this asset')
+        ));
+        const buttons = Array.from(activitySection?.querySelectorAll('button') || []).map((button) => ({
+          text: button.textContent || '',
+          disabled: button.disabled,
+        }));
+        const text = activitySection?.textContent || document.body?.innerText || '';
+        return {
+          hasDeniedNotice: text.includes('needs activity.export'),
+          hasHiddenState: text.includes('Asset activity is hidden until audit export access is granted.'),
+          filterDisabled: filter instanceof HTMLSelectElement ? filter.disabled : null,
+          refreshDisabled: buttons.some((button) => button.text.includes('Refresh') && button.disabled),
+          body: text.slice(0, 1800),
+        };
+      })()`);
+      if (
+        assetState.hasDeniedNotice &&
+        assetState.hasHiddenState &&
+        assetState.filterDisabled === true &&
+        assetState.refreshDisabled
+      ) {
+        break;
+      }
+      if (attempt === 79) {
+        throw new Error(`Denied activity.export asset UI did not hide audit feed: ${JSON.stringify(assetState)}`);
+      }
+      await sleep(250);
+    }
+    await closeMediaDetails(client);
+
+    return { library: libraryState, asset: assetState };
+  } finally {
+    await setAdminPermissionOverrides({
+      'activity.export': null,
     });
     await navigateToMedia(client, searchText);
   }
@@ -2123,6 +2227,7 @@ const main = async () => {
     await loginAdminApi();
     await assertMediaViewPermissionIsEnforced();
     await assertMediaConfigurePermissionIsEnforced();
+    await assertMediaActivityPermissionIsEnforced();
     await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
@@ -2222,6 +2327,7 @@ const main = async () => {
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
     const deniedViewUi = await assertDeniedMediaViewUi(client, marker, imageName);
+    const deniedActivityUi = await assertDeniedMediaActivityUi(client, marker, imageName);
     await waitForMediaPageAsset(client, imageName);
     await assertTagFilterShowsOnlyExactMatches(client, {
       searchText: marker,
@@ -2496,6 +2602,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
       restoredSettings,
       deniedViewUi,
+      deniedActivityUi,
       fontSmoke: fontSmokeResult ? {
         family: fontSmokeResult.uploadedFont.metadata?.fontFamily,
         weight: fontSmokeResult.uploadedFont.metadata?.fontWeight,
