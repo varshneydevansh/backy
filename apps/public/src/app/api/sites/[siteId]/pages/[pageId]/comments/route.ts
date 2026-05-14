@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { Comment } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
   createComment,
@@ -134,6 +135,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
     const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
     const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+
+    if (status !== 'approved') {
+      const access = requireAdminAccess(request, requestId, { permission: 'comments.view' });
+      if (access instanceof NextResponse) {
+        return access;
+      }
+    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

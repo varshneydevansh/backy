@@ -593,6 +593,17 @@ for (const route of [
   assertExcludes(source, 'Number.isFinite(limit) ? limit', `${route} must not pass through unbounded finite limits`);
 }
 
+for (const route of [
+  'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, '@/lib/adminAccess', `${route} must import admin access checks`);
+  assertIncludes(source, "status !== 'approved'", `${route} must distinguish public approved comments from moderation statuses`);
+  assertIncludes(source, "permission: 'comments.view'", `${route} must require comments.view for non-approved comment lists`);
+  assertIncludes(source, 'access instanceof NextResponse', `${route} must return the admin access denial response`);
+}
+
 const checkoutRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts');
 const checkoutGet = functionSource(checkoutRoute, 'GET', 'checkout route');
 for (const needle of [
