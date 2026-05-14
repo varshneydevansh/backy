@@ -379,6 +379,22 @@ const formSubmissionEmailEnabled = (notifications: Record<string, unknown>): boo
   return email.formSubmission !== false && digestFrequency !== 'off';
 };
 
+const resolveFormSubmissionEmailRecipient = (
+  form: FormDefinition,
+  notifications: Record<string, unknown>,
+): { email: string; source: 'form' | 'settings' } | null => {
+  const formRecipient = readString(form.notificationEmail);
+  if (formRecipient) {
+    return { email: formRecipient, source: 'form' };
+  }
+
+  const notificationEmail = readObject(notifications.email);
+  const settingsRecipient = readString(notificationEmail.recipient)
+    || readString(notificationEmail.to)
+    || readString(notificationEmail.adminEmail);
+  return settingsRecipient ? { email: settingsRecipient, source: 'settings' } : null;
+};
+
 async function recordEmailDeliveryEvent(params: {
   repositories?: FormRepositories | null;
   siteId: string;
@@ -417,8 +433,7 @@ async function notifyFormSubmissionEmail(params: {
   values: Record<string, unknown>;
   requestId: string;
 }) {
-  const to = readString(params.form.notificationEmail);
-  if (!to || params.submission.status === 'spam' || params.submission.status === 'rejected') {
+  if (params.submission.status === 'spam' || params.submission.status === 'rejected') {
     return;
   }
 
@@ -427,6 +442,12 @@ async function notifyFormSubmissionEmail(params: {
     return;
   }
 
+  const recipient = resolveFormSubmissionEmailRecipient(params.form, notifications);
+  if (!recipient) {
+    return;
+  }
+
+  const to = recipient.email;
   const target = `mailto:${to}`;
   const config = getEmailDeliveryConfig();
   const message = buildFormNotificationEmail({
@@ -451,6 +472,7 @@ async function notifyFormSubmissionEmail(params: {
       provider: config.provider,
       from: config.from,
       submissionStatus: params.submission.status,
+      recipientSource: recipient.source,
     },
   });
 
@@ -471,6 +493,7 @@ async function notifyFormSubmissionEmail(params: {
         subject: message.subject,
         ...(result.metadata || {}),
         submissionStatus: params.submission.status,
+        recipientSource: recipient.source,
       },
     });
     return;
@@ -494,6 +517,7 @@ async function notifyFormSubmissionEmail(params: {
         subject: message.subject,
         ...(result.metadata || {}),
         submissionStatus: params.submission.status,
+        recipientSource: recipient.source,
       },
     });
   } catch (error) {
@@ -513,6 +537,7 @@ async function notifyFormSubmissionEmail(params: {
         subject: message.subject,
         ...(error instanceof EmailDeliveryError ? error.metadata || {} : {}),
         submissionStatus: params.submission.status,
+        recipientSource: recipient.source,
       },
     });
   }

@@ -125,7 +125,7 @@ const publicIntakeRoutes = [
   },
   {
     file: 'apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts',
-    required: ['ORDER_QUEUE_NOT_PRIVATE', 'ordersCollection.permissions.publicRead', 'collections.createRecord(', 'collections.updateRecord('],
+    required: ['ORDER_QUEUE_NOT_PRIVATE', 'hasPublicOrderCollectionAccess(ordersCollection.permissions)', 'collections.createRecord(', 'collections.updateRecord('],
   },
 ];
 
@@ -362,6 +362,16 @@ assert(
 assert(
   occurrenceCount(publicFormSubmissionRoute, 'values: submissionValues') >= 4,
   'public form submission route must persist and notify with normalized submission values',
+);
+assertIncludes(
+  publicFormSubmissionRoute,
+  'resolveFormSubmissionEmailRecipient(params.form, notifications)',
+  'public form submission route must use the global settings recipient as an email fallback',
+);
+assertIncludes(
+  publicFormSubmissionRoute,
+  "recipientSource: recipient.source",
+  'public form submission route must disclose whether email delivery used form or settings recipient',
 );
 assert(
   occurrenceCount(publicFormSubmissionRoute, 'parsed.values') === occurrenceCount(publicFormSubmissionRoute, 'normalizeFormSubmissionValues(form, parsed.values)'),

@@ -4153,7 +4153,7 @@ function NotificationSettings({
               { key: 'comments' as const, label: 'Comment moderation events', live: true },
               { key: 'newUser' as const, label: 'New user registration', live: false },
               { key: 'pagePublished' as const, label: 'Page published', live: false },
-              { key: 'formSubmission' as const, label: 'New form submission', live: false },
+              { key: 'formSubmission' as const, label: 'New form submission', live: true },
               { key: 'systemUpdates' as const, label: 'System updates', live: false },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
