@@ -48,10 +48,11 @@ import {
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
+import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
-import { isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn, formatDate } from '@/lib/utils';
@@ -187,12 +188,18 @@ const COLLECTION_PERMISSION_CONTRACT = [
 ] as const;
 
 type CollectionPermissionKey = (typeof COLLECTION_PERMISSION_CONTRACT)[number]['key'];
+type CollectionMediaPermissionKey = 'media.view' | 'media.create';
 
 const COLLECTION_PERMISSION_ROLE_DEFAULTS: Record<CollectionPermissionKey, Array<'owner' | 'admin' | 'editor' | 'viewer'>> = {
   'collections.view': ['owner', 'admin', 'editor', 'viewer'],
   'collections.edit': ['owner', 'admin', 'editor'],
   'collections.export': ['owner', 'admin'],
   'collections.delete': ['owner', 'admin'],
+};
+
+const COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS: Record<CollectionMediaPermissionKey, Array<User['role']>> = {
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'media.create': ['owner', 'admin', 'editor'],
 };
 
 interface CollectionTemplate {
@@ -648,6 +655,12 @@ const createStarterField = (): CollectionField => ({
 const RELATION_FIELD_TYPES: CollectionFieldType[] = ['reference', 'multiReference'];
 const MEDIA_FIELD_TYPES: CollectionFieldType[] = ['image', 'video', 'file'];
 const TEXT_FIELD_TYPES: CollectionFieldType[] = ['text', 'richText', 'slug', 'url', 'email', 'phone', 'select', 'tags'];
+
+interface ReferenceRecordOptionsState {
+  records: CollectionRecord[];
+  loading: boolean;
+  error: string | null;
+}
 
 const findCollectionAuthoringField = (
   fields: CollectionField[],
@@ -1469,6 +1482,8 @@ function CollectionsPage() {
   const [pendingCollectionDelete, setPendingCollectionDelete] = useState<Collection | null>(null);
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [mediaPickerField, setMediaPickerField] = useState<CollectionField | null>(null);
+  const [referenceRecordsByCollection, setReferenceRecordsByCollection] = useState<Record<string, ReferenceRecordOptionsState>>({});
   const importInputRef = useRef<HTMLInputElement>(null);
   const backupImportInputRef = useRef<HTMLInputElement>(null);
   const collectionInteractionVersionRef = useRef(0);
@@ -1493,6 +1508,16 @@ function CollectionsPage() {
     () => collections.find((collection) => collection.id === selectedCollectionId) || null,
     [collections, selectedCollectionId],
   );
+  const activeReferenceCollectionIds = useMemo(() => {
+    if (!activeCollection) return [];
+    return Array.from(new Set(
+      activeCollection.fields
+        .filter((field) => RELATION_FIELD_TYPES.includes(field.type))
+        .map((field) => field.referenceCollectionId)
+        .filter((collectionId): collectionId is string => Boolean(collectionId && collectionId !== activeCollection.id)),
+    )).sort();
+  }, [activeCollection]);
+  const activeReferenceCollectionIdsKey = activeReferenceCollectionIds.join('|');
   const frontendCollectionTemplates = useMemo(
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'collection'),
     [frontendDesign?.templates],
@@ -1565,6 +1590,8 @@ function CollectionsPage() {
   const canEditCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
   const canExportCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
   const canDeleteCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
+  const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const schemaMutationDisabled = isLoading || isCollectionMutationPending || !canEditCollections;
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
@@ -1574,6 +1601,8 @@ function CollectionsPage() {
   const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
   const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
   const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete');
+  const mediaViewPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const schemaActionDisabledTitle = isPermissionMatrixPending
     ? 'Loading collection permissions...'
     : !canEditCollections
@@ -3067,6 +3096,52 @@ function CollectionsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCollectionId, activeSiteId, canViewCollections, isPermissionMatrixPending, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
+
+  useEffect(() => {
+    if (isPermissionMatrixPending || !canViewCollections || activeReferenceCollectionIds.length === 0) {
+      return;
+    }
+
+    activeReferenceCollectionIds.forEach((referenceCollectionId) => {
+      setReferenceRecordsByCollection((prev) => ({
+        ...prev,
+        [referenceCollectionId]: {
+          records: prev[referenceCollectionId]?.records || [],
+          loading: true,
+          error: null,
+        },
+      }));
+
+      void listCollectionRecords(activeSiteId, referenceCollectionId, {
+        limit: 100,
+        offset: 0,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      })
+        .then((result) => {
+          setReferenceRecordsByCollection((prev) => ({
+            ...prev,
+            [referenceCollectionId]: {
+              records: result.records,
+              loading: false,
+              error: result.pagination.hasMore
+                ? 'Showing the 100 most recently updated records. Paste an ID below for older records.'
+                : null,
+            },
+          }));
+        })
+        .catch((loadError) => {
+          setReferenceRecordsByCollection((prev) => ({
+            ...prev,
+            [referenceCollectionId]: {
+              records: prev[referenceCollectionId]?.records || [],
+              loading: false,
+              error: loadError instanceof Error ? loadError.message : 'Unable to load reference records.',
+            },
+          }));
+        });
+    });
+  }, [activeReferenceCollectionIdsKey, activeSiteId, canViewCollections, isPermissionMatrixPending]);
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
@@ -6366,6 +6441,10 @@ function CollectionsPage() {
                       collections={collections}
                       currentCollectionId={activeCollection.id}
                       records={records}
+                      referenceRecordsByCollection={referenceRecordsByCollection}
+                      onOpenMediaPicker={setMediaPickerField}
+                      canViewMedia={canViewMedia}
+                      mediaViewPermissionTitle={mediaViewPermissionTitle}
                       onChange={(value) => updateRecordFormValue(setRecordForm, field.key, value)}
                     />
                   ))}
@@ -6490,6 +6569,31 @@ function CollectionsPage() {
           </div>
         </div>
       )}
+
+      <MediaLibraryModal
+        isOpen={Boolean(mediaPickerField)}
+        onClose={() => setMediaPickerField(null)}
+        onSelect={(asset) => {
+          if (!mediaPickerField || recordMutationDisabled) return;
+          if (!canViewMedia) return;
+
+          updateRecordFormValue(setRecordForm, mediaPickerField.key, asset.id);
+          setNotice(`Attached ${asset.name} to ${mediaPickerField.label}.`);
+          setMediaPickerField(null);
+        }}
+        allowedTypes={mediaPickerField ? mediaPickerAllowedType(mediaPickerField.type) : 'any'}
+        initialUploadFilter={mediaPickerField ? mediaPickerUploadFilter(mediaPickerField.type) : 'file'}
+        mediaContext={{
+          siteId: activeSiteId,
+          scope: 'global',
+          targetLabel: `${activeSite?.name || activeSiteId} ${activeCollection?.name || 'collection'} ${mediaPickerField?.label || 'media field'}`,
+        }}
+        allowScopeSwitcher={false}
+        canView={canViewMedia}
+        canCreate={canCreateMedia}
+        viewDisabledReason={mediaViewPermissionTitle}
+        createDisabledReason={mediaCreatePermissionTitle}
+      />
     </PageShell>
   );
 }
@@ -6710,12 +6814,28 @@ function collectionRecordInputType(fieldType: CollectionFieldType) {
   return 'text';
 }
 
+const mediaPickerAllowedType = (fieldType: CollectionFieldType) => {
+  if (fieldType === 'image') return 'image';
+  if (fieldType === 'video') return 'video';
+  return 'any';
+};
+
+const mediaPickerUploadFilter = (fieldType: CollectionFieldType) => {
+  if (fieldType === 'image') return 'image';
+  if (fieldType === 'video') return 'video';
+  return 'file';
+};
+
 function CollectionRecordFieldEditor({
   field,
   value,
   collections,
   currentCollectionId,
   records,
+  referenceRecordsByCollection,
+  onOpenMediaPicker,
+  canViewMedia,
+  mediaViewPermissionTitle,
   onChange,
 }: {
   field: CollectionField;
@@ -6723,6 +6843,10 @@ function CollectionRecordFieldEditor({
   collections: Collection[];
   currentCollectionId: string;
   records: CollectionRecord[];
+  referenceRecordsByCollection: Record<string, ReferenceRecordOptionsState>;
+  onOpenMediaPicker: (field: CollectionField) => void;
+  canViewMedia: boolean;
+  mediaViewPermissionTitle?: string;
   onChange: (value: string) => void;
 }) {
   const selectedValues = value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -6730,11 +6854,17 @@ function CollectionRecordFieldEditor({
     ? collections.find((collection) => collection.id === field.referenceCollectionId) || null
     : null;
   const sameCollectionReference = targetCollection?.id === currentCollectionId;
-  const referenceOptions = sameCollectionReference ? records : [];
+  const targetReferenceState = targetCollection && !sameCollectionReference
+    ? referenceRecordsByCollection[targetCollection.id]
+    : null;
+  const referenceOptions = sameCollectionReference
+    ? records
+    : targetReferenceState?.records || [];
+  const optionIds = new Set(referenceOptions.map((record) => record.id));
   const inputClassName = 'w-full rounded-lg border bg-background px-3 py-2';
 
   return (
-    <label className="space-y-1 text-sm">
+    <div className="space-y-1 text-sm">
       <span className="flex items-center justify-between gap-2">
         <span className="font-medium">{field.label}</span>
         <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{field.type}</span>
@@ -6764,25 +6894,57 @@ function CollectionRecordFieldEditor({
             <option key={option} value={option}>{option}</option>
           ))}
         </select>
-      ) : field.type === 'reference' && sameCollectionReference ? (
-        <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} required={field.required}>
-          <option value="">Choose {targetCollection.name} record</option>
-          {referenceOptions.map((record) => (
-            <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
-          ))}
-        </select>
-      ) : field.type === 'multiReference' && sameCollectionReference ? (
-        <select
-          multiple
-          value={selectedValues}
-          onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
-          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-          required={field.required}
-        >
-          {referenceOptions.map((record) => (
-            <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
-          ))}
-        </select>
+      ) : field.type === 'reference' && targetCollection ? (
+        <div className="grid gap-2">
+          <select
+            value={optionIds.has(value) ? value : ''}
+            onChange={(event) => onChange(event.target.value)}
+            className={inputClassName}
+            required={field.required && !value}
+            data-testid={`collections-record-reference-picker-${field.key}`}
+            disabled={Boolean(targetReferenceState?.loading)}
+          >
+            <option value="">
+              {targetReferenceState?.loading ? 'Loading records...' : `Choose ${targetCollection.name} record`}
+            </option>
+            {referenceOptions.map((record) => (
+              <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className={inputClassName}
+            required={field.required}
+            placeholder={`Or paste ${targetCollection.name} record ID`}
+            data-testid={`collections-record-reference-manual-${field.key}`}
+          />
+        </div>
+      ) : field.type === 'multiReference' && targetCollection ? (
+        <div className="grid gap-2">
+          <select
+            multiple
+            value={selectedValues.filter((item) => optionIds.has(item))}
+            onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
+            className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
+            required={field.required && selectedValues.length === 0}
+            data-testid={`collections-record-reference-picker-${field.key}`}
+            disabled={Boolean(targetReferenceState?.loading)}
+          >
+            {referenceOptions.map((record) => (
+              <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
+            ))}
+          </select>
+          <textarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="min-h-20 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+            required={field.required}
+            placeholder={`${targetCollection.name} record IDs separated by commas`}
+            data-testid={`collections-record-reference-manual-${field.key}`}
+          />
+        </div>
       ) : field.type === 'richText' || field.type === 'json' || field.type === 'tags' || field.type === 'multiReference' ? (
         <textarea
           value={value}
@@ -6793,15 +6955,31 @@ function CollectionRecordFieldEditor({
         />
       ) : field.type === 'image' || field.type === 'video' || field.type === 'file' ? (
         <div className="grid gap-2">
-          <input
-            type="url"
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            className={inputClassName}
-            required={field.required}
-            placeholder="https://... or Backy media URL"
-          />
-          <span className="text-xs leading-4 text-muted-foreground">Paste a media URL from the central Media library.</span>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              className={inputClassName}
+              required={field.required}
+              placeholder="Backy media ID or external URL"
+              data-testid={`collections-record-field-${field.key}`}
+            />
+            <button
+              type="button"
+              onClick={() => onOpenMediaPicker(field)}
+              disabled={!canViewMedia}
+              title={!canViewMedia ? mediaViewPermissionTitle : undefined}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid={`collections-record-media-picker-${field.key}`}
+            >
+              <Upload className="h-4 w-4" />
+              Choose media
+            </button>
+          </div>
+          <span className="text-xs leading-4 text-muted-foreground">
+            Stores a Backy media ID from the central library; external URLs still work for custom frontends.
+          </span>
         </div>
       ) : (
         <input
@@ -6813,14 +6991,17 @@ function CollectionRecordFieldEditor({
           required={field.required}
         />
       )}
-      {RELATION_FIELD_TYPES.includes(field.type) && !sameCollectionReference ? (
-        <span className="block text-xs leading-4 text-muted-foreground">
-          {targetCollection
-            ? `Enter ${targetCollection.name} record ID${field.type === 'multiReference' ? 's separated by commas' : ''}. Cross-collection lookup is saved as IDs.`
-            : 'Map a reference collection in the schema to enable record choices.'}
+      {RELATION_FIELD_TYPES.includes(field.type) && targetReferenceState?.error ? (
+        <span className="block text-xs leading-4 text-amber-600">
+          {targetReferenceState.error}
         </span>
       ) : null}
-    </label>
+      {RELATION_FIELD_TYPES.includes(field.type) && !targetCollection ? (
+        <span className="block text-xs leading-4 text-muted-foreground">
+          Map a reference collection in the schema to enable record choices.
+        </span>
+      ) : null}
+    </div>
   );
 }
 

@@ -722,6 +722,14 @@ assert(templatePreviewCopyIndex !== -1, 'collections admin route must expose tem
 const templatePreviewCopySource = collectionsAdminRoute.slice(Math.max(0, templatePreviewCopyIndex - 800), templatePreviewCopyIndex + 600);
 assertIncludes(templatePreviewCopySource, "key: 'collections.export'", 'template preview render URL copy must require collections.export');
 assertIncludes(templatePreviewCopySource, '!canExportCollections', 'template preview render URL copy must be disabled without collections.export');
+assertIncludes(collectionsAdminRoute, 'MediaLibraryModal', 'collections record editor must use central media picker for media fields');
+assertIncludes(collectionsAdminRoute, 'collections-record-media-picker-', 'collections record editor must expose media picker controls per media field');
+assertIncludes(collectionsAdminRoute, 'referenceRecordsByCollection', 'collections record editor must preload cross-collection reference records');
+assertIncludes(collectionsAdminRoute, 'collections-record-reference-picker-', 'collections record editor must expose record picker controls for relationship fields');
+assertIncludes(collectionsAdminRoute, 'Backy media ID from the central library', 'collections media field helper text must describe central media IDs');
+assertIncludes(collectionsAdminRoute, "isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view'", 'collections media picker must respect media.view');
+assertIncludes(collectionsAdminRoute, 'canView={canViewMedia}', 'collections media picker modal must receive media.view state');
+assertIncludes(collectionsAdminRoute, 'canCreate={canCreateMedia}', 'collections media picker modal must receive media.create state');
 
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
