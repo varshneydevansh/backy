@@ -190,6 +190,14 @@ const isOrderFilter = (value: unknown): value is OrderFilter => (
   typeof value === 'string' && ORDER_FILTERS.includes(value as OrderFilter)
 );
 
+const isOrderCollectionPrivate = (collection: Collection | null) => Boolean(
+  collection &&
+  !collection.permissions.publicRead &&
+  !collection.permissions.publicCreate &&
+  !collection.permissions.publicUpdate &&
+  !collection.permissions.publicDelete,
+);
+
 const isPaymentStatusFilter = (value: unknown): value is PaymentStatusFilter => (
   typeof value === 'string' && PAYMENT_STATUS_FILTERS.includes(value as PaymentStatusFilter)
 );
@@ -485,8 +493,7 @@ function OrdersRoute() {
   ), [ordersCollection]);
   const ordersApiReady = Boolean(
     ordersCollection?.status === 'published' &&
-    !ordersCollection.permissions.publicRead &&
-    !ordersCollection.permissions.publicCreate &&
+    isOrderCollectionPrivate(ordersCollection) &&
     missingOrderFields.length === 0,
   );
   const selectedOrder = useMemo(
@@ -1852,6 +1859,12 @@ function OrdersRoute() {
                     </span>
                     <span className="rounded-md border border-border bg-background px-2 py-1">
                       publicCreate {ordersCollection.permissions.publicCreate ? 'enabled' : 'disabled'}
+                    </span>
+                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                      publicUpdate {ordersCollection.permissions.publicUpdate ? 'enabled' : 'disabled'}
+                    </span>
+                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                      publicDelete {ordersCollection.permissions.publicDelete ? 'enabled' : 'disabled'}
                     </span>
                     <span>Use /commerce/orders for public checkout intake; keep this raw collection endpoint private.</span>
                   </div>

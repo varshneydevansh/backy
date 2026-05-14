@@ -165,6 +165,14 @@ const isProductStatusFilter = (value: unknown): value is ProductStatusFilter => 
   typeof value === 'string' && PRODUCT_STATUS_FILTERS.includes(value as ProductStatusFilter)
 );
 
+const isOrderCollectionPrivate = (collection: Collection | null) => Boolean(
+  collection &&
+  !collection.permissions.publicRead &&
+  !collection.permissions.publicCreate &&
+  !collection.permissions.publicUpdate &&
+  !collection.permissions.publicDelete,
+);
+
 const isProductTypeFilter = (value: unknown): value is ProductTypeFilter => (
   typeof value === 'string' && PRODUCT_TYPE_FILTERS.includes(value as ProductTypeFilter)
 );
@@ -623,8 +631,7 @@ function ProductsRoute() {
   const orderIntakeReady = Boolean(
     productApiReady &&
     ordersCollection?.status === 'published' &&
-    !ordersCollection.permissions.publicRead &&
-    !ordersCollection.permissions.publicCreate,
+    isOrderCollectionPrivate(ordersCollection),
   );
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
@@ -2133,7 +2140,7 @@ function ProductsRoute() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">Order privacy</span>
                         <span className={cn('rounded-md px-2 py-1 text-xs font-medium', orderIntakeReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
-                          {ordersCollection && !ordersCollection.permissions.publicRead && !ordersCollection.permissions.publicCreate ? 'Private' : 'Review'}
+                          {isOrderCollectionPrivate(ordersCollection) ? 'Private' : 'Review'}
                         </span>
                       </div>
                     </div>

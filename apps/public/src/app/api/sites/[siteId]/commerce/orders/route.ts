@@ -87,6 +87,18 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const hasPublicOrderCollectionAccess = (permissions: {
+  publicRead?: boolean;
+  publicCreate?: boolean;
+  publicUpdate?: boolean;
+  publicDelete?: boolean;
+}) => (
+  permissions.publicRead === true ||
+  permissions.publicCreate === true ||
+  permissions.publicUpdate === true ||
+  permissions.publicDelete === true
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   publicContractJson(
     { success: false, requestId, error: { code, message, details } },
@@ -1074,7 +1086,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
       }
 
-      if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+      if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
         return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
       }
 
@@ -1119,7 +1131,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!ordersCollection || ordersCollection.status !== 'published') {
       return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
     }
-    if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+    if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
       return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
     }
     const commerce = buildCommerceStorefrontContract({
@@ -1189,7 +1201,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
       }
 
-      if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+      if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
         return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
       }
       const commerce = buildCommerceStorefrontContract({
@@ -1389,7 +1401,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!ordersCollection || ordersCollection.status !== 'published') {
       return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
     }
-    if (ordersCollection.permissions.publicRead || ordersCollection.permissions.publicCreate) {
+    if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
       return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
     }
     const commerce = buildCommerceStorefrontContract({
