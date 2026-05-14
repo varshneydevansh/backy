@@ -2480,6 +2480,32 @@ function CollectionsPage() {
     setRecordForm({ slug: '', status: 'published', values: {} });
   };
 
+  const updateCollectionNameInput = (value: string) => {
+    setCollectionForm((prev) => ({
+      ...prev,
+      name: value,
+      slug: prev.slug || normalizeSlug(value, 'collection'),
+    }));
+  };
+
+  const updateCollectionSlugInput = (value: string) => {
+    setCollectionForm((prev) => {
+      const nextSlug = normalizeSlug(value, 'collection');
+      const previousDefault = defaultCollectionRoutePattern(prev.slug);
+      const previousListDefault = defaultCollectionListRoutePattern(prev.slug);
+      return {
+        ...prev,
+        slug: nextSlug,
+        listRoutePattern: !prev.listRoutePattern || prev.listRoutePattern === previousListDefault
+          ? defaultCollectionListRoutePattern(nextSlug)
+          : prev.listRoutePattern,
+        routePattern: !prev.routePattern || prev.routePattern === previousDefault
+          ? defaultCollectionRoutePattern(nextSlug)
+          : prev.routePattern,
+      };
+    });
+  };
+
   const beginNewCollection = () => {
     if (schemaMutationDisabled) {
       if (!canEditCollections) {
@@ -3652,6 +3678,77 @@ function CollectionsPage() {
         </div>
       )}
 
+      {isNewCollectionDraftOpen && canEditCollections && (
+        <section
+          className="mb-5 rounded-lg border border-primary/30 bg-card p-4 shadow-sm ring-1 ring-primary/10"
+          data-testid="collections-draft-starter"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                  Create mode
+                </span>
+                <h2 className="text-base font-semibold text-foreground">Start the collection schema</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Name the dataset here, then add fields and advanced permissions in the schema builder.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm" htmlFor="collections-draft-name">
+                  <span className="font-medium">Collection name</span>
+                  <input
+                    id="collections-draft-name"
+                    form="collections-schema"
+                    value={collectionForm.name}
+                    onChange={(event) => updateCollectionNameInput(event.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    placeholder="Blog posts, Products, Team members..."
+                    required
+                    data-testid="collections-draft-name-input"
+                  />
+                </label>
+                <label className="space-y-1 text-sm" htmlFor="collections-draft-slug">
+                  <span className="font-medium">API slug</span>
+                  <input
+                    id="collections-draft-slug"
+                    form="collections-schema"
+                    value={collectionForm.slug}
+                    onChange={(event) => updateCollectionSlugInput(event.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2 font-mono"
+                    placeholder="products"
+                    required
+                    data-testid="collections-draft-slug-input"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={scrollToCollectionSchema}
+                className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-background px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+                data-testid="collections-draft-edit-fields"
+              >
+                <Database className="h-4 w-4" />
+                Add fields
+              </button>
+              <button
+                type="submit"
+                form="collections-schema"
+                disabled={schemaMutationDisabled}
+                title={schemaActionDisabledTitle}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="collections-draft-save-schema"
+              >
+                <Save className="h-4 w-4" />
+                {isSavingCollection ? 'Saving...' : 'Save schema'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {!canViewCollections && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {viewPermissionTitle}
@@ -4682,11 +4779,7 @@ function CollectionsPage() {
                 <input
                   id="collections-schema-name"
                   value={collectionForm.name}
-                  onChange={(event) => setCollectionForm((prev) => ({
-                    ...prev,
-                    name: event.target.value,
-                    slug: prev.slug || normalizeSlug(event.target.value, 'collection'),
-                  }))}
+                  onChange={(event) => updateCollectionNameInput(event.target.value)}
                   className="w-full rounded-lg border bg-background px-3 py-2"
                   required
                 />
@@ -4695,21 +4788,7 @@ function CollectionsPage() {
                 <span className="font-medium">Slug</span>
                 <input
                   value={collectionForm.slug}
-                  onChange={(event) => setCollectionForm((prev) => {
-                    const nextSlug = normalizeSlug(event.target.value, 'collection');
-                    const previousDefault = defaultCollectionRoutePattern(prev.slug);
-                    const previousListDefault = defaultCollectionListRoutePattern(prev.slug);
-                    return {
-                      ...prev,
-                      slug: nextSlug,
-                      listRoutePattern: !prev.listRoutePattern || prev.listRoutePattern === previousListDefault
-                        ? defaultCollectionListRoutePattern(nextSlug)
-                        : prev.listRoutePattern,
-                      routePattern: !prev.routePattern || prev.routePattern === previousDefault
-                        ? defaultCollectionRoutePattern(nextSlug)
-                        : prev.routePattern,
-                    };
-                  })}
+                  onChange={(event) => updateCollectionSlugInput(event.target.value)}
                   className="w-full rounded-lg border bg-background px-3 py-2"
                   required
                 />

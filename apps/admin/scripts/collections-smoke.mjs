@@ -818,7 +818,17 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
         hasDraftBanner: Boolean(document.querySelector('[data-testid="collections-draft-banner"]')) &&
           body.includes('New collection draft is open') &&
           body.includes('Edit schema'),
+        hasDraftStarter: Boolean(document.querySelector('[data-testid="collections-draft-starter"]')) &&
+          body.includes('Start the collection schema') &&
+          body.includes('Add fields'),
         hasDraftState: Boolean(document.querySelector('[data-testid="collections-new-draft-state"]')),
+        draftNameValue: document.querySelector('[data-testid="collections-draft-name-input"]') instanceof HTMLInputElement
+          ? document.querySelector('[data-testid="collections-draft-name-input"]').value
+          : null,
+        draftSlugValue: document.querySelector('[data-testid="collections-draft-slug-input"]') instanceof HTMLInputElement
+          ? document.querySelector('[data-testid="collections-draft-slug-input"]').value
+          : null,
+        hasStarterSave: Boolean(document.querySelector('[data-testid="collections-draft-save-schema"]')),
         nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
         activeElementId: document.activeElement?.id || '',
         formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
@@ -832,7 +842,11 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       state.hasNotice &&
       state.hasActionState &&
       state.hasDraftBanner &&
+      state.hasDraftStarter &&
       state.hasDraftState &&
+      state.hasStarterSave &&
+      state.draftNameValue === '' &&
+      state.draftSlugValue === '' &&
       state.nameValue === '' &&
       state.collectionId === null &&
       state.recordId === null &&
