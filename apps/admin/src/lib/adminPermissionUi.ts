@@ -10,14 +10,14 @@ export const adminPermissionRule = (
 
 export const isAdminPermissionAllowed = <PermissionKey extends string>(
   permissionMatrix: AdminUserPermissionMatrix | null,
-  currentAdmin: Pick<User, 'role'> | null | undefined,
+  _currentAdmin: Pick<User, 'role'> | null | undefined,
   key: PermissionKey,
-  roleDefaults: Record<PermissionKey, Array<User['role']>>,
+  _roleDefaults: Record<PermissionKey, Array<User['role']>>,
 ) => {
   const matrixRule = adminPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
 
-  return Boolean(currentAdmin && roleDefaults[key].includes(currentAdmin.role));
+  return false;
 };
 
 export const adminPermissionReason = <PermissionKey extends string>(
@@ -29,10 +29,11 @@ export const adminPermissionReason = <PermissionKey extends string>(
   const matrixRule = adminPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.reason;
   if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+  if (!permissionMatrix) return 'Permission matrix unavailable. Reload permissions before using this capability.';
 
   return roleDefaults[key].includes(currentAdmin.role)
-    ? `Allowed by ${currentAdmin.role} role defaults.`
-    : `Blocked by ${currentAdmin.role} role defaults.`;
+    ? `Blocked until backend permissions include ${key}; ${currentAdmin.role} role defaults are not enough.`
+    : `Blocked by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
 export const isAdminPermissionDeniedError = (error: unknown) => {

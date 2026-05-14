@@ -160,13 +160,13 @@ const dashboardPermissionRule = (
 
 const isDashboardPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  currentAdmin: Pick<User, 'role'> | null | undefined,
+  _currentAdmin: Pick<User, 'role'> | null | undefined,
   key: DashboardPermissionKey,
 ) => {
   const matrixRule = dashboardPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
 
-  return Boolean(currentAdmin && DASHBOARD_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+  return false;
 };
 
 const dashboardPermissionReason = (
@@ -177,10 +177,11 @@ const dashboardPermissionReason = (
   const matrixRule = dashboardPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.reason;
   if (!currentAdmin) return 'Sign in to load dashboard permissions.';
+  if (!permissionMatrix) return 'Permission matrix unavailable. Reload permissions before using this capability.';
 
   return DASHBOARD_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
-    ? `Allowed by ${currentAdmin.role} role defaults.`
-    : `Hidden by ${currentAdmin.role} role defaults.`;
+    ? `Hidden until backend permissions include ${key}; ${currentAdmin.role} role defaults are not enough.`
+    : `Hidden by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
 const emptyCommerceMetrics = (): DashboardCommerceMetrics => ({
@@ -1019,7 +1020,7 @@ function Index() {
     role: permissionMatrix?.role || user?.role || 'unknown',
     allowed: permissionMatrix?.summary.allowed ?? null,
     total: permissionMatrix?.summary.total ?? null,
-    source: permissionMatrix ? 'permission matrix' : 'role defaults',
+    source: permissionMatrix ? 'permission matrix' : 'unavailable',
   };
   const activeSite = dashboard.sites.find((site) => (
     site.id === selectedSiteId || site.publicSiteId === selectedSiteId
@@ -1815,7 +1816,7 @@ function Index() {
               <div className="rounded-md border border-border bg-card px-3 py-2">
                 <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Permissions</div>
                 <div className="mt-1 text-sm font-medium">
-                  {rbacSummary.allowed === null ? 'Role defaults' : `${rbacSummary.allowed}/${rbacSummary.total} allowed`}
+                  {rbacSummary.allowed === null ? 'Unavailable' : `${rbacSummary.allowed}/${rbacSummary.total} allowed`}
                 </div>
               </div>
               <div className="rounded-md border border-border bg-card px-3 py-2">
@@ -1839,7 +1840,7 @@ function Index() {
             </div>
             {permissionError && (
               <p className="mt-3 text-xs text-muted-foreground">
-                Permission matrix unavailable; using role defaults. {permissionError}
+                Permission matrix unavailable; privileged dashboard shortcuts are disabled. {permissionError}
               </p>
             )}
           </div>

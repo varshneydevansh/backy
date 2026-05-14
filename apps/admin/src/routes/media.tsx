@@ -8101,16 +8101,14 @@ const mediaPermissionRule = (
 
 const isMediaPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  currentAdmin: { role: string } | null,
+  _currentAdmin: { role: string } | null,
   key: MediaPermissionKey,
 ): boolean => {
   const matrixRule = mediaPermissionRule(permissionMatrix, key);
   if (matrixRule) {
     return matrixRule.allowed;
   }
-  return Boolean(currentAdmin && MEDIA_ACCESS_RULES
-    .find((rule) => rule.permission === key)
-    ?.roles.includes(currentAdmin.role as MediaAdminRole));
+  return false;
 };
 
 const mediaPermissionReason = (
@@ -8128,9 +8126,12 @@ const mediaPermissionReason = (
   const defaultAllowed = MEDIA_ACCESS_RULES
     .find((rule) => rule.permission === key)
     ?.roles.includes(currentAdmin.role as MediaAdminRole);
+  if (!permissionMatrix) {
+    return 'Permission matrix unavailable. Reload permissions before using this capability.';
+  }
   return defaultAllowed
-    ? `Allowed by ${currentAdmin.role} role defaults.`
-    : `Blocked by ${currentAdmin.role} role defaults.`;
+    ? `Blocked until backend permissions include ${key}; ${currentAdmin.role} role defaults are not enough.`
+    : `Blocked by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
 const getMediaAccessRows = (

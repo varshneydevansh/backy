@@ -1379,14 +1379,14 @@ const collectionPermissionRule = (
 
 const isCollectionPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  currentAdmin: User | null,
+  _currentAdmin: User | null,
   key: CollectionPermissionKey,
 ): boolean => {
   const matrixRule = collectionPermissionRule(permissionMatrix, key);
   if (matrixRule) {
     return matrixRule.allowed;
   }
-  return Boolean(currentAdmin && COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+  return false;
 };
 
 const collectionPermissionReason = (
@@ -1401,9 +1401,12 @@ const collectionPermissionReason = (
   if (!currentAdmin) {
     return 'Sign in with an admin account to use this capability.';
   }
+  if (!permissionMatrix) {
+    return 'Permission matrix unavailable. Reload permissions before using this capability.';
+  }
   return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
-    ? `Allowed by ${currentAdmin.role} role defaults.`
-    : `Blocked by ${currentAdmin.role} role defaults.`;
+    ? `Blocked until backend permissions include ${key}; ${currentAdmin.role} role defaults are not enough.`
+    : `Blocked by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
 function CollectionsPage() {

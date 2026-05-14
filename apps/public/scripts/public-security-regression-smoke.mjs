@@ -494,6 +494,23 @@ const adminUsersUiRoute = read('apps/admin/src/routes/users.tsx');
 assertIncludes(adminUsersUiRoute, 'notice: normalizedUsersSearchString(search.notice)', 'admin users list route must accept redirect success notices');
 assertIncludes(adminUsersUiRoute, 'const routeNotice = routeSearch.notice ||', 'admin users list route must render one-time redirect notices');
 assertIncludes(adminUsersUiRoute, 'const pendingRouteNotice = routeNoticeRef.current', 'admin users list load must not clear redirect success notices');
+const adminPermissionUi = read('apps/admin/src/lib/adminPermissionUi.ts');
+assertIncludes(adminPermissionUi, 'return false;', 'admin permission helper must fail closed when backend permission rules are unavailable');
+assertIncludes(adminPermissionUi, 'Permission matrix unavailable. Reload permissions before using this capability.', 'admin permission helper must explain fail-closed permission matrix state');
+assertExcludes(adminPermissionUi, '? `Allowed by ${currentAdmin.role} role defaults.`', 'admin permission helper must not allow actions from role defaults without backend matrix rules');
+for (const route of [
+  'apps/admin/src/routes/collections.tsx',
+  'apps/admin/src/routes/media.tsx',
+  'apps/admin/src/routes/sites.tsx',
+  'apps/admin/src/routes/sites.new.tsx',
+  'apps/admin/src/routes/sites.$siteId.tsx',
+  'apps/admin/src/routes/pages.$pageId.edit.tsx',
+  'apps/admin/src/routes/index.tsx',
+]) {
+  const source = read(route);
+  assertIncludes(source, 'Permission matrix unavailable. Reload permissions before using this capability.', `${route} must explain fail-closed permission matrix state`);
+  assertExcludes(source, '? `Allowed by ${currentAdmin.role} role defaults.`', `${route} must not allow actions from role defaults without backend matrix rules`);
+}
 const adminUsersNewUiRoute = read('apps/admin/src/routes/users.new.tsx');
 assertIncludes(adminUsersNewUiRoute, 'notice: `${created.user.fullName} was created.`', 'admin user create page must carry a success notice back to the users list');
 const adminUserDetailUiRoute = read('apps/admin/src/routes/users.$userId.tsx');

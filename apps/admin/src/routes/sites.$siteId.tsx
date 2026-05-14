@@ -142,13 +142,13 @@ const siteDetailPermissionRule = (
 
 const isSiteDetailPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  currentAdmin: User | null,
+  _currentAdmin: User | null,
   key: SiteDetailPermissionKey,
 ): boolean => {
   const matrixRule = siteDetailPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
 
-  return Boolean(currentAdmin && SITE_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role));
+  return false;
 };
 
 const siteDetailPermissionReason = (
@@ -159,10 +159,11 @@ const siteDetailPermissionReason = (
   const matrixRule = siteDetailPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.reason;
   if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+  if (!permissionMatrix) return 'Permission matrix unavailable. Reload permissions before using this capability.';
 
   return SITE_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
-    ? `Allowed by ${currentAdmin.role} role defaults.`
-    : `Blocked by ${currentAdmin.role} role defaults.`;
+    ? `Blocked until backend permissions include ${key}; ${currentAdmin.role} role defaults are not enough.`
+    : `Blocked by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
 const SITE_WORKSPACE_AREAS = [
