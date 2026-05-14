@@ -852,6 +852,7 @@ function MediaPage() {
   const deniedCreateMessage = `Your account needs media.create to upload or create folders. ${createPermissionTitle}`;
   const deniedEditMessage = `Your account needs media.edit to change media metadata. ${editPermissionTitle}`;
   const deniedDeleteMessage = `Your account needs media.delete to delete media assets. ${deletePermissionTitle}`;
+  const deniedExportMessage = `Your account needs activity.export to export media manifests and audit feeds. ${activityPermissionTitle}`;
   const isMediaMutationBusy = isUploading ||
     isSavingMetadata ||
     isCreatingSignedUrl ||
@@ -3050,7 +3051,21 @@ function MediaPage() {
       setError(value);
     }
   };
+  const copyMediaHandoffManifest = async () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
+    await copyMediaApiText(mediaHandoffText, 'Media handoff manifest');
+  };
   const downloadMediaHandoff = () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
+
     const blob = new Blob([mediaHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -3064,6 +3079,11 @@ function MediaPage() {
     setBulkNotice('Media handoff manifest downloaded.');
   };
   const exportMediaCsv = () => {
+    if (!canExportMediaActivity) {
+      setBulkNotice(null);
+      setError(deniedExportMessage);
+      return;
+    }
     if (displayedFiles.length === 0) return;
 
     const rows = displayedFiles.map((asset) => {
@@ -3218,8 +3238,10 @@ function MediaPage() {
             </select>
             <button
               type="button"
-              onClick={() => void copyMediaApiText(mediaHandoffText, 'Media handoff manifest')}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              onClick={() => void copyMediaHandoffManifest()}
+              disabled={isMediaLibraryBusy || !canExportMediaActivity}
+              title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
               Copy manifest
@@ -3227,7 +3249,9 @@ function MediaPage() {
             <button
               type="button"
               onClick={downloadMediaHandoff}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              disabled={isMediaLibraryBusy || !canExportMediaActivity}
+              title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
               Download JSON
@@ -3593,7 +3617,9 @@ function MediaPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void copyMediaApiText(mediaHandoffText, 'Media handoff manifest')}
+                onClick={() => void copyMediaHandoffManifest()}
+                disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                title={!canExportMediaActivity ? activityPermissionTitle : undefined}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy manifest

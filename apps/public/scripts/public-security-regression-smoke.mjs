@@ -867,6 +867,17 @@ assertIncludes(collectionsAdminRoute, "setNotice(`Collection record ${selectedRe
 const mediaAdminRoute = read('apps/admin/src/routes/media.tsx');
 assertIncludes(mediaAdminRoute, 'setBulkNotice(`Deleted ${file.name}.`);', 'single media delete must show a success notice');
 assertIncludes(mediaAdminRoute, 'setBulkNotice(`${updated.name} details saved.`);', 'media metadata save must show a success notice');
+assertIncludes(mediaAdminRoute, 'const deniedExportMessage = `Your account needs activity.export to export media manifests and audit feeds. ${activityPermissionTitle}`;', 'media manifest export must explain activity.export permission failures');
+assertIncludes(mediaAdminRoute, 'const copyMediaHandoffManifest = async () => {', 'media manifest copy must use a dedicated permission-checked handler');
+assertIncludes(mediaAdminRoute, 'setError(deniedExportMessage);', 'media manifest export handlers must fail closed without activity.export');
+assert(
+  occurrenceCount(mediaAdminRoute, 'onClick={() => void copyMediaHandoffManifest()}') >= 2,
+  'media manifest copy controls must route through the permission-checked handler',
+);
+assert(
+  occurrenceCount(mediaAdminRoute, 'disabled={isMediaLibraryBusy || !canExportMediaActivity}') >= 3,
+  'media manifest copy/download controls must be disabled without activity.export',
+);
 
 const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 for (const needle of [
