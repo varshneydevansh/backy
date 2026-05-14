@@ -96,7 +96,7 @@ const slugify = (value: string) => (
 );
 
 const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
-  page.isHomepage || page.slug === 'home' || page.slug === ''
+  page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === ''
     ? '/'
     : `/${slugify(page.slug)}`
 );
@@ -594,7 +594,7 @@ function PageEditorRoute() {
         : 'Load backend page routes before confirming availability.'
     : null;
   const getPublicPathForSettings = (settings: PageSettings) => (
-    page.isHomepage || settings.slug === 'home' || settings.slug.trim() === ''
+    page.isHomepage || settings.slug === 'index' || settings.slug === 'home' || settings.slug.trim() === ''
       ? '/'
       : `/${slugify(settings.slug || settings.title || 'page')}`
   );

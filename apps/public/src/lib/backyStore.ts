@@ -5501,12 +5501,18 @@ export function getPageByPath(
 ): StorePage | undefined {
   ensurePersistedAdminContentLoaded();
 
+  const { includeUnpublished = false } = options;
   const normalizedPath = normalizeIdentifier((path || 'index').replace(/^\/+|\/+$/g, ''));
-  const canonicalPath = normalizedPath === '' || normalizedPath === 'index' || normalizedPath === 'home'
-    ? 'index'
-    : normalizedPath;
+  const isHomepagePath = normalizedPath === '' || normalizedPath === 'index' || normalizedPath === 'home';
+  if (isHomepagePath) {
+    const homepage = PAGE_LIST.find((page) => page.siteId === siteId && page.isHomepage);
+    if (homepage && (includeUnpublished || isPublished(homepage.status, homepage.scheduledAt))) {
+      return clone(homepage);
+    }
+  }
 
-  return getPageBySlug(siteId, canonicalPath, options);
+  return getPageBySlug(siteId, isHomepagePath ? 'index' : normalizedPath, options)
+    || (isHomepagePath ? getPageBySlug(siteId, 'home', options) : undefined);
 }
 
 export function getAdminPageById(siteId: string, pageId: string): StorePage | undefined {

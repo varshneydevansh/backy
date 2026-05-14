@@ -95,7 +95,7 @@ const BLUEPRINT_OPTIONS: Array<{
     name: 'Business site',
     detail: 'Home, About, Contact, and starter lead capture.',
     pages: [
-      { title: 'Home', slug: 'home', template: 'landing', description: 'Introduce the offer and guide visitors to the next step.', isHomepage: true },
+      { title: 'Home', slug: 'index', template: 'landing', description: 'Introduce the offer and guide visitors to the next step.', isHomepage: true },
       { title: 'About', slug: 'about', template: 'about', description: 'Explain the story, values, and proof behind the brand.' },
       { title: 'Contact', slug: 'contact', template: 'contact', description: 'Invite visitors to ask a question or request a quote.' },
     ],
@@ -105,7 +105,7 @@ const BLUEPRINT_OPTIONS: Array<{
     name: 'Storefront',
     detail: 'Home, Shop, Contact, and commerce-ready copy.',
     pages: [
-      { title: 'Home', slug: 'home', template: 'landing', description: 'Feature the flagship offer and route visitors to products.', isHomepage: true },
+      { title: 'Home', slug: 'index', template: 'landing', description: 'Feature the flagship offer and route visitors to products.', isHomepage: true },
       { title: 'Shop', slug: 'shop', template: 'store', description: 'A flexible storefront page ready to bind to Backy products.' },
       { title: 'Contact', slug: 'contact', template: 'contact', description: 'Collect support, wholesale, or product questions.' },
     ],
@@ -115,7 +115,7 @@ const BLUEPRINT_OPTIONS: Array<{
     name: 'Publication',
     detail: 'Home, Blog, About, and editorial setup.',
     pages: [
-      { title: 'Home', slug: 'home', template: 'landing', description: 'Introduce the publication and highlight recent stories.', isHomepage: true },
+      { title: 'Home', slug: 'index', template: 'landing', description: 'Introduce the publication and highlight recent stories.', isHomepage: true },
       { title: 'Blog', slug: 'blog', template: 'blog', description: 'A public index page for articles and editorial content.' },
       { title: 'About', slug: 'about', template: 'about', description: 'Explain the editorial mission and contributors.' },
     ],

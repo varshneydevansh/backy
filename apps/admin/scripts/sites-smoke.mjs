@@ -431,8 +431,8 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => 
 
   const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
   const siteId = created.publicSiteId || created.id;
-  const pages = await waitForSeededPages(siteId, ['home', 'shop', 'contact']);
-  const homepage = pages.find((page) => page.slug === 'home');
+  const pages = await waitForSeededPages(siteId, ['index', 'shop', 'contact']);
+  const homepage = pages.find((page) => page.slug === 'index');
   assert(homepage?.isHomepage === true, `Storefront blueprint did not create a homepage: ${JSON.stringify(pages).slice(0, 700)}`);
   assert(pages.every((page) => page.status === 'published'), `Storefront blueprint pages did not inherit published status: ${JSON.stringify(pages).slice(0, 700)}`);
 
