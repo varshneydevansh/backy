@@ -480,6 +480,17 @@ assert(createOrderIndex !== -1, 'checkout route missing order create');
 assert(updateInventoryIndex !== -1, 'checkout route missing inventory update');
 assert(createOrderIndex < updateInventoryIndex, 'checkout route must create the order before updating inventory');
 
+const catalogRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/catalog/route.ts');
+for (const needle of [
+  'CATALOG_RECORD_PAGE_SIZE',
+  'listAllRepositoryCatalogRecords',
+  'listAllDemoCatalogRecords',
+  'page.pagination.hasMore',
+]) {
+  assertIncludes(catalogRoute, needle, 'commerce catalog route must page through all records before filtering/faceting');
+}
+assertExcludes(catalogRoute, 'limit: 100,', 'commerce catalog route must not cap catalog reads before filtering');
+
 const mediaSafety = read('apps/public/src/lib/mediaSafety.ts');
 for (const needle of [
   'deliveryPolicy',

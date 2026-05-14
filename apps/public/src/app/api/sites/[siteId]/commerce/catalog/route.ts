@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import type { BackyCollectionRecord } from '@backy-cms/core';
 import {
   PRODUCT_COLLECTION_SLUG,
   buildCommerceFacets,
@@ -46,6 +47,81 @@ const paginationFor = (total: number, limit: number, offset: number) => ({
   offset,
   hasMore: offset + limit < total,
 });
+
+const CATALOG_RECORD_PAGE_SIZE = 100;
+const CATALOG_RECORD_MAX_PAGES = 1000;
+
+type CatalogRecordListOptions = {
+  search?: string;
+  sortBy: string;
+  sortDirection: 'asc' | 'desc';
+};
+type CommerceRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+
+const listAllRepositoryCatalogRecords = async (
+  repositories: CommerceRepositories,
+  siteId: string,
+  collectionId: string,
+  options: CatalogRecordListOptions,
+): Promise<BackyCollectionRecord[]> => {
+  const records: BackyCollectionRecord[] = [];
+  let offset = 0;
+
+  for (let pageIndex = 0; pageIndex < CATALOG_RECORD_MAX_PAGES; pageIndex += 1) {
+    const page = await repositories.collections.listRecords({
+      siteId,
+      collectionId,
+      includeUnpublished: true,
+      status: 'all',
+      search: options.search,
+      sortBy: options.sortBy,
+      sortDirection: options.sortDirection,
+      limit: CATALOG_RECORD_PAGE_SIZE,
+      offset,
+    });
+
+    records.push(...page.items);
+
+    const nextOffset = page.pagination.offset + page.pagination.limit;
+    if (!page.pagination.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return records;
+};
+
+const listAllDemoCatalogRecords = (
+  siteId: string,
+  collectionId: string,
+  options: CatalogRecordListOptions,
+) => {
+  const records: ReturnType<typeof listCollectionRecords>['records'] = [];
+  let offset = 0;
+
+  for (let pageIndex = 0; pageIndex < CATALOG_RECORD_MAX_PAGES; pageIndex += 1) {
+    const page = listCollectionRecords(siteId, collectionId, {
+      search: options.search,
+      sortBy: options.sortBy,
+      sortDirection: options.sortDirection,
+      limit: CATALOG_RECORD_PAGE_SIZE,
+      offset,
+    });
+
+    records.push(...page.records);
+
+    const nextOffset = page.pagination.offset + page.pagination.limit;
+    if (!page.pagination.hasMore || nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return records;
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -101,17 +177,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               await repositories.collections.getRecordBySlug(site.id, collection.id, slug),
             ].filter(Boolean),
           }
-        : await repositories.collections.listRecords({
-            siteId: site.id,
-            collectionId: collection.id,
-            includeUnpublished: false,
-            status: 'all',
+        : {
+          items: await listAllRepositoryCatalogRecords(repositories, site.id, collection.id, {
             search: filters.search,
             sortBy,
             sortDirection,
-            limit: 100,
-            offset: 0,
-          });
+          }),
+        };
       const allProducts = recordsPayload.items.flatMap((record) => (
         isCommerceSourceRecord(record) ? [productRecordToCommerceProduct(record)] : []
       ));
@@ -176,14 +248,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ),
     });
 
-    const recordsPayload = listCollectionRecords(site.id, collection.id, {
-      slug,
-      search: filters.search,
-      sortBy,
-      sortDirection,
-      limit: 100,
-      offset: 0,
-    });
+    const recordsPayload = slug
+      ? listCollectionRecords(site.id, collection.id, {
+        slug,
+        sortBy,
+        sortDirection,
+        limit: 1,
+        offset: 0,
+      })
+      : {
+        records: listAllDemoCatalogRecords(site.id, collection.id, {
+          search: filters.search,
+          sortBy,
+          sortDirection,
+        }),
+      };
     const allProducts = recordsPayload.records.map((record) => productRecordToCommerceProduct(record));
     const filteredProducts = filterCommerceProducts(allProducts, filters);
     const products = slug ? filteredProducts : filteredProducts.slice(offset, offset + limit);
