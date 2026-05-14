@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -779,6 +779,20 @@ const formatValue = (value: unknown): string => {
   }
 };
 
+const formatRecordFormValue = (field: CollectionField, value: unknown): string => {
+  if (field.type === 'json') {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return formatValue(value);
+    }
+  }
+
+  return formatValue(value);
+};
+
 const parseRecordValue = (field: CollectionField, value: string): unknown => {
   if (field.type === 'number') {
     return value.trim().length > 0 ? Number(value) : null;
@@ -794,6 +808,21 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
     return JSON.parse(value);
   }
   return value;
+};
+
+const updateRecordFormValue = (
+  setRecordForm: Dispatch<SetStateAction<{
+    slug: string;
+    status: CollectionRecord['status'];
+    values: Record<string, string>;
+  }>>,
+  fieldKey: string,
+  value: string,
+) => {
+  setRecordForm((prev) => ({
+    ...prev,
+    values: { ...prev.values, [fieldKey]: value },
+  }));
 };
 
 const formatFieldOptions = (options: string[] | undefined) => (options || []).join('\n');
@@ -2993,7 +3022,7 @@ function CollectionsPage() {
       slug: selectedRecord.slug,
       status: selectedRecord.status,
       values: Object.fromEntries(
-        activeCollection.fields.map((field) => [field.key, formatValue(selectedRecord.values[field.key])]),
+        activeCollection.fields.map((field) => [field.key, formatRecordFormValue(field, selectedRecord.values[field.key])]),
       ),
     });
   }, [activeCollection, selectedRecord]);
@@ -6234,76 +6263,15 @@ function CollectionsPage() {
                   </label>
 
                   {activeCollection.fields.map((field) => (
-                    <label key={field.key} className="space-y-1 text-sm">
-                      <span className="font-medium">{field.label}</span>
-                      {field.type === 'boolean' ? (
-                        <select
-                          value={recordForm.values[field.key] || 'false'}
-                          onChange={(event) => setRecordForm((prev) => ({
-                            ...prev,
-                            values: { ...prev.values, [field.key]: event.target.value },
-                          }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
-                        >
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      ) : field.type === 'select' && field.options?.length ? (
-                        <select
-                          value={recordForm.values[field.key] || ''}
-                          onChange={(event) => setRecordForm((prev) => ({
-                            ...prev,
-                            values: { ...prev.values, [field.key]: event.target.value },
-                          }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
-                          required={field.required}
-                        >
-                          <option value="">Choose {field.label}</option>
-                          {field.options.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      ) : field.type === 'tags' && field.options?.length ? (
-                        <select
-                          multiple
-                          value={(recordForm.values[field.key] || '').split(',').map((item) => item.trim()).filter(Boolean)}
-                          onChange={(event) => setRecordForm((prev) => ({
-                            ...prev,
-                            values: {
-                              ...prev.values,
-                              [field.key]: Array.from(event.target.selectedOptions).map((option) => option.value).join(', '),
-                            },
-                          }))}
-                          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-                          required={field.required}
-                        >
-                          {field.options.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      ) : field.type === 'richText' || field.type === 'json' ? (
-                        <textarea
-                          value={recordForm.values[field.key] || ''}
-                          onChange={(event) => setRecordForm((prev) => ({
-                            ...prev,
-                            values: { ...prev.values, [field.key]: event.target.value },
-                          }))}
-                          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-                          required={field.required}
-                        />
-                      ) : (
-                        <input
-                          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                          value={recordForm.values[field.key] || ''}
-                          onChange={(event) => setRecordForm((prev) => ({
-                            ...prev,
-                            values: { ...prev.values, [field.key]: event.target.value },
-                          }))}
-                          className="w-full rounded-lg border bg-background px-3 py-2"
-                          required={field.required}
-                        />
-                      )}
-                    </label>
+                    <CollectionRecordFieldEditor
+                      key={field.key}
+                      field={field}
+                      value={recordForm.values[field.key] || ''}
+                      collections={collections}
+                      currentCollectionId={activeCollection.id}
+                      records={records}
+                      onChange={(value) => updateRecordFormValue(setRecordForm, field.key, value)}
+                    />
                   ))}
                   </fieldset>
                 </form>
@@ -6634,6 +6602,119 @@ function CollectionPreviewLink({ label, value }: { label: string; value: string 
         <code className="mt-1 block truncate font-mono text-xs text-indigo-900/60">Select a record</code>
       )}
     </div>
+  );
+}
+
+function CollectionRecordFieldEditor({
+  field,
+  value,
+  collections,
+  currentCollectionId,
+  records,
+  onChange,
+}: {
+  field: CollectionField;
+  value: string;
+  collections: Collection[];
+  currentCollectionId: string;
+  records: CollectionRecord[];
+  onChange: (value: string) => void;
+}) {
+  const selectedValues = value.split(',').map((item) => item.trim()).filter(Boolean);
+  const targetCollection = field.referenceCollectionId
+    ? collections.find((collection) => collection.id === field.referenceCollectionId) || null
+    : null;
+  const sameCollectionReference = targetCollection?.id === currentCollectionId;
+  const referenceOptions = sameCollectionReference ? records : [];
+  const inputClassName = 'w-full rounded-lg border bg-background px-3 py-2';
+
+  return (
+    <label className="space-y-1 text-sm">
+      <span className="flex items-center justify-between gap-2">
+        <span className="font-medium">{field.label}</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{field.type}</span>
+      </span>
+      {field.helpText ? <span className="block text-xs leading-4 text-muted-foreground">{field.helpText}</span> : null}
+      {field.type === 'boolean' ? (
+        <select value={value || 'false'} onChange={(event) => onChange(event.target.value)} className={inputClassName}>
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      ) : field.type === 'select' && field.options?.length ? (
+        <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} required={field.required}>
+          <option value="">Choose {field.label}</option>
+          {field.options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      ) : field.type === 'tags' && field.options?.length ? (
+        <select
+          multiple
+          value={selectedValues}
+          onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
+          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
+          required={field.required}
+        >
+          {field.options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      ) : field.type === 'reference' && sameCollectionReference ? (
+        <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} required={field.required}>
+          <option value="">Choose {targetCollection.name} record</option>
+          {referenceOptions.map((record) => (
+            <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
+          ))}
+        </select>
+      ) : field.type === 'multiReference' && sameCollectionReference ? (
+        <select
+          multiple
+          value={selectedValues}
+          onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
+          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
+          required={field.required}
+        >
+          {referenceOptions.map((record) => (
+            <option key={record.id} value={record.id}>{record.slug} ({record.status})</option>
+          ))}
+        </select>
+      ) : field.type === 'richText' || field.type === 'json' || field.type === 'tags' || field.type === 'multiReference' ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+          required={field.required}
+          placeholder={field.type === 'json' ? '{"key":"value"}' : field.type === 'multiReference' ? 'record-id-1, record-id-2' : undefined}
+        />
+      ) : field.type === 'image' || field.type === 'video' || field.type === 'file' ? (
+        <div className="grid gap-2">
+          <input
+            type="url"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className={inputClassName}
+            required={field.required}
+            placeholder="https://... or Backy media URL"
+          />
+          <span className="text-xs leading-4 text-muted-foreground">Paste a media URL from the central Media library.</span>
+        </div>
+      ) : (
+        <input
+          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={inputClassName}
+          required={field.required}
+        />
+      )}
+      {RELATION_FIELD_TYPES.includes(field.type) && !sameCollectionReference ? (
+        <span className="block text-xs leading-4 text-muted-foreground">
+          {targetCollection
+            ? `Enter ${targetCollection.name} record ID${field.type === 'multiReference' ? 's separated by commas' : ''}. Cross-collection lookup is saved as IDs.`
+            : 'Map a reference collection in the schema to enable record choices.'}
+        </span>
+      ) : null}
+    </label>
   );
 }
 
