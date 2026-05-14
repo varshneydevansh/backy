@@ -51,6 +51,12 @@ const normalizeSiteStatus = (value: unknown): 'draft' | 'published' | 'archived'
   value === 'published' || value === 'draft' || value === 'archived' ? value : undefined
 );
 
+const normalizeSettingsInput = (value: unknown): Partial<Site['settings']> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Site['settings']>
+    : {}
+);
+
 const statusForRepositorySite = (site: Site) => (
   normalizeSiteStatus((site.settings as Site['settings'] & { siteStatus?: unknown }).siteStatus)
     || (site.isPublished ? 'published' : 'draft')
@@ -190,6 +196,7 @@ export async function POST(request: NextRequest) {
       }
 
       const status = normalizeSiteStatus(body.status) || 'draft';
+      const settingsInput = normalizeSettingsInput(body.settings);
       const created = await repositories.sites.create({
         teamId,
         name,
@@ -197,8 +204,12 @@ export async function POST(request: NextRequest) {
         description: typeof body.description === 'string' ? body.description : null,
         customDomain: typeof body.customDomain === 'string' ? body.customDomain : null,
         status: status === 'published' ? 'published' : 'draft',
-        settings: { siteStatus: status } as Site['settings'],
+        settings: {
+          ...settingsInput,
+          siteStatus: status,
+        } as Site['settings'],
       });
+      const createdSettings = created.item.settings || {};
       await recordAdminAudit({
         repositories,
         siteId: created.item.id,
@@ -212,6 +223,10 @@ export async function POST(request: NextRequest) {
           slug,
           status,
           source: 'admin-sites-create',
+          domainVerificationStatus: createdSettings.domainVerification?.status || null,
+          vercelDeploymentStatus: createdSettings.vercelDeployment?.status || null,
+          billingPlan: createdSettings.billingQuota?.plan || null,
+          frontendDesignStatus: createdSettings.frontendDesign?.status || null,
         },
         requestId,
       });
@@ -248,6 +263,10 @@ export async function POST(request: NextRequest) {
         slug: site.slug,
         status: site.status,
         source: 'admin-sites-create',
+        domainVerificationStatus: site.settings?.domainVerification?.status || null,
+        vercelDeploymentStatus: site.settings?.vercelDeployment?.status || null,
+        billingPlan: site.settings?.billingQuota?.plan || null,
+        frontendDesignStatus: site.settings?.frontendDesign?.status || null,
       },
       requestId,
     });

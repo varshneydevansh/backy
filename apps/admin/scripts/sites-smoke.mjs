@@ -425,11 +425,42 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => 
   await setCreateSiteControl(client, 'Custom domain', customDomain);
   await setCreateSiteControl(client, 'Database team ID', `team-${slug}`);
   await setCreateSiteControl(client, 'Description', 'Temporary storefront workspace created through the Backy admin UI smoke.');
+  await setCreateSiteControl(client, 'Vercel project ID', `prj_${slug}`);
+  await setCreateSiteControl(client, 'Vercel team slug', `team-${slug}`);
+  await setCreateSiteControl(client, 'Production domain', customDomain);
+  await setCreateSiteControl(client, 'Billing plan', 'business');
+  await setCreateSiteControl(client, 'Billing email', `billing-${slug}@example.com`);
+  await setCreateSiteControl(client, 'Template source', 'starter-marketplace');
+  await setCreateSiteControl(client, 'Marketplace template ID', `marketplace-${slug}`);
   await setCreateSiteControl(client, 'Status', 'published');
   await setCreateSiteBlueprint(client, 'storefront');
   await submitCreateSiteForm(client);
 
   const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
+  assert(
+    created.settings?.domainVerification?.status === 'pending' &&
+      created.settings.domainVerification.domain === customDomain &&
+      Boolean(created.settings.domainVerification.txtValue),
+    `Create-site form did not persist domain verification setup: ${JSON.stringify(created.settings?.domainVerification)}`,
+  );
+  assert(
+    created.settings?.vercelDeployment?.status === 'preview_queued' &&
+      created.settings.vercelDeployment.projectId === `prj_${slug}` &&
+      created.settings.vercelDeployment.productionDomain === customDomain &&
+      (created.settings.vercelDeployment.history || []).length >= 1,
+    `Create-site form did not persist Vercel deployment setup: ${JSON.stringify(created.settings?.vercelDeployment)}`,
+  );
+  assert(
+    created.settings?.billingQuota?.plan === 'business' &&
+      created.settings.billingQuota.billingEmail === `billing-${slug}@example.com` &&
+      created.settings.billingQuota.limits.pages >= 250,
+    `Create-site form did not persist billing quota setup: ${JSON.stringify(created.settings?.billingQuota)}`,
+  );
+  assert(
+    created.settings?.frontendDesign?.status === 'captured' &&
+      created.settings.frontendDesign.templates?.some((template) => template.id === `marketplace-${slug}-shop`),
+    `Create-site form did not persist template marketplace setup: ${JSON.stringify(created.settings?.frontendDesign).slice(0, 900)}`,
+  );
   const siteId = created.publicSiteId || created.id;
   const pages = await waitForSeededPages(siteId, ['index', 'shop', 'contact']);
   const homepage = pages.find((page) => page.slug === 'index');

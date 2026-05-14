@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, CreditCard, Download, FileText, Globe, Layers3, Link2, Rocket, Save, ShieldCheck } from 'lucide-react';
 import { AdminContentApiError, createPage, createSite, getAdminApiBase, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type Site } from '@/stores/mockStore';
@@ -31,6 +31,64 @@ const STATUS_OPTIONS: Array<{ value: Site['status']; label: string; detail: stri
 
 type SiteBlueprint = 'blank' | 'business' | 'storefront' | 'publication';
 type SiteCreatePermissionKey = 'sites.create' | 'pages.edit' | 'pages.publish';
+type SiteCreateBillingPlan = NonNullable<NonNullable<Site['settings']>['billingQuota']>['plan'];
+type SiteCreateTemplateSource = 'starter-marketplace' | 'import-url' | 'custom-frontend';
+
+const BILLING_PLAN_OPTIONS: Array<{ value: SiteCreateBillingPlan; label: string; detail: string }> = [
+  { value: 'free', label: 'Free', detail: 'Small personal workspace limits.' },
+  { value: 'pro', label: 'Pro', detail: 'Higher page, media, and domain limits.' },
+  { value: 'business', label: 'Business', detail: 'Team workspace with commerce-ready limits.' },
+  { value: 'enterprise', label: 'Enterprise', detail: 'Large catalog, media, and team limits.' },
+];
+
+const CREATE_BILLING_PLAN_LIMITS: Record<SiteCreateBillingPlan, NonNullable<NonNullable<Site['settings']>['billingQuota']>['limits']> = {
+  free: {
+    pages: 10,
+    mediaGb: 1,
+    bandwidthGb: 10,
+    forms: 3,
+    products: 25,
+    collections: 3,
+    teamMembers: 2,
+    customDomains: 1,
+  },
+  pro: {
+    pages: 75,
+    mediaGb: 25,
+    bandwidthGb: 250,
+    forms: 20,
+    products: 500,
+    collections: 25,
+    teamMembers: 8,
+    customDomains: 5,
+  },
+  business: {
+    pages: 250,
+    mediaGb: 100,
+    bandwidthGb: 1000,
+    forms: 75,
+    products: 5000,
+    collections: 100,
+    teamMembers: 25,
+    customDomains: 20,
+  },
+  enterprise: {
+    pages: 1000,
+    mediaGb: 1000,
+    bandwidthGb: 10000,
+    forms: 500,
+    products: 50000,
+    collections: 500,
+    teamMembers: 250,
+    customDomains: 100,
+  },
+};
+
+const TEMPLATE_SOURCE_OPTIONS: Array<{ value: SiteCreateTemplateSource; label: string; detail: string }> = [
+  { value: 'starter-marketplace', label: 'Starter marketplace', detail: 'Use the selected Backy blueprint as the first reusable design source.' },
+  { value: 'import-url', label: 'Import URL', detail: 'Record an external design/import URL for follow-up capture.' },
+  { value: 'custom-frontend', label: 'Custom frontend', detail: 'Record a custom frontend contract source for handoff.' },
+];
 
 const SITE_CREATE_PERMISSION_ROLE_DEFAULTS: Record<SiteCreatePermissionKey, Array<User['role']>> = {
   'sites.create': ['owner', 'admin'],
@@ -135,6 +193,11 @@ const SITE_CREATION_AREAS = [
     href: '#site-blueprint',
   },
   {
+    title: 'Launch setup',
+    detail: 'DNS verification, deploy target, plan limits, and template source.',
+    href: '#site-launch',
+  },
+  {
     title: 'Public address',
     detail: 'Managed Backy subdomain or normalized custom domain.',
     href: '#site-preview',
@@ -165,6 +228,9 @@ const normalizeDomain = (value: string) => value
 
 const isValidSlug = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 const isValidDomain = (value: string) => !value || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value);
+const normalizeOptionalUrl = (value: string) => value.trim();
+const createDnsToken = (slug: string) => `backy-${slug || 'new-site'}-${Math.random().toString(36).slice(2, 10)}`;
+const createSetupEventId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 function NewSitePage() {
   const navigate = useNavigate();
@@ -186,6 +252,14 @@ function NewSitePage() {
     description: '',
     status: 'draft' as Site['status'],
     blueprint: 'business' as SiteBlueprint,
+    vercelProjectId: '',
+    vercelTeamSlug: '',
+    vercelProductionDomain: '',
+    billingPlan: 'free' as SiteCreateBillingPlan,
+    billingEmail: '',
+    templateSource: 'starter-marketplace' as SiteCreateTemplateSource,
+    templateImportUrl: '',
+    marketplaceTemplateId: 'backy-starter-business',
   });
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
   const canCreateSites = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
@@ -208,6 +282,18 @@ function NewSitePage() {
     () => BLUEPRINT_OPTIONS.find((blueprint) => blueprint.id === formData.blueprint) || BLUEPRINT_OPTIONS[0],
     [formData.blueprint],
   );
+  const selectedBillingPlan = useMemo(
+    () => BILLING_PLAN_OPTIONS.find((plan) => plan.value === formData.billingPlan) || BILLING_PLAN_OPTIONS[0],
+    [formData.billingPlan],
+  );
+  const selectedTemplateSource = useMemo(
+    () => TEMPLATE_SOURCE_OPTIONS.find((source) => source.value === formData.templateSource) || TEMPLATE_SOURCE_OPTIONS[0],
+    [formData.templateSource],
+  );
+  const templateImportUrl = normalizeOptionalUrl(formData.templateImportUrl);
+  const vercelProjectId = formData.vercelProjectId.trim();
+  const vercelTeamSlug = formData.vercelTeamSlug.trim();
+  const vercelProductionDomain = normalizeDomain(formData.vercelProductionDomain) || normalizedDomain || `${displaySlug || 'new-site'}.backy.app`;
   const starterPagesSelected = selectedBlueprint.pages.length > 0;
   const statusSeedsPublishedPages = formData.status === 'published';
   const canSeedStarterPages = !starterPagesSelected || (canEditPages && (!statusSeedsPublishedPages || canPublishPages));
@@ -224,6 +310,7 @@ function NewSitePage() {
   const canSubmit = formData.name.trim().length > 1
     && isValidSlug(displaySlug)
     && isValidDomain(normalizedDomain)
+    && (formData.templateSource !== 'import-url' || templateImportUrl.length > 0)
     && canCreateSites
     && canSeedStarterPages;
   const adminSitesUrl = useMemo(() => `${getAdminApiBase()}/sites`, []);
@@ -248,6 +335,28 @@ function NewSitePage() {
         label: 'Domain input',
         detail: normalizedDomain ? normalizedDomain : 'Managed Backy subdomain will be used.',
         ready: hasValidDomain,
+      },
+      {
+        label: 'DNS verification',
+        detail: normalizedDomain ? 'Custom domain will start with pending TXT/CNAME verification.' : 'Managed Backy subdomain will be marked verified.',
+        ready: hasValidDomain,
+      },
+      {
+        label: 'Vercel target',
+        detail: vercelProjectId
+          ? `Preview deploy handoff will target ${vercelProjectId}.`
+          : 'Deploy metadata can be added later from site controls.',
+        ready: true,
+      },
+      {
+        label: 'Plan limits',
+        detail: `${selectedBillingPlan.label} limits will be stored with the site.`,
+        ready: true,
+      },
+      {
+        label: 'Template source',
+        detail: selectedTemplateSource.detail,
+        ready: formData.templateSource !== 'import-url' || templateImportUrl.length > 0,
       },
       {
         label: 'Backend team',
@@ -300,14 +409,19 @@ function NewSitePage() {
     formData.name,
     formData.status,
     formData.teamId,
+    formData.templateSource,
     normalizedDomain,
+    selectedBillingPlan.label,
     canCreateSites,
     canSeedStarterPages,
     createPermissionTitle,
     selectedBlueprint.id,
     selectedBlueprint.pages,
+    selectedTemplateSource.detail,
     selectedStatus.detail,
     statusSeedsPublishedPages,
+    templateImportUrl.length,
+    vercelProjectId,
   ]);
   const createPayloadPreview = useMemo(() => ({
     name: formData.name.trim() || 'Untitled site',
@@ -317,6 +431,15 @@ function NewSitePage() {
     description: formData.description.trim(),
     status: formData.status,
     blueprint: formData.blueprint,
+    launchSetup: {
+      dns: normalizedDomain ? 'pending dns-txt verification' : 'managed domain verified',
+      vercelProjectId: vercelProjectId || null,
+      vercelProductionDomain,
+      billingPlan: formData.billingPlan,
+      templateSource: formData.templateSource,
+      templateImportUrl: templateImportUrl || null,
+      marketplaceTemplateId: formData.marketplaceTemplateId.trim() || null,
+    },
     starterPages: selectedBlueprint.pages.map((page) => ({
       title: page.title,
       slug: page.slug,
@@ -329,11 +452,17 @@ function NewSitePage() {
     displaySlug,
     formData.blueprint,
     formData.description,
+    formData.billingPlan,
     formData.name,
+    formData.marketplaceTemplateId,
     formData.status,
     formData.teamId,
+    formData.templateSource,
     normalizedDomain,
     selectedBlueprint.pages,
+    templateImportUrl,
+    vercelProductionDomain,
+    vercelProjectId,
   ]);
   const creationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -354,6 +483,34 @@ function NewSitePage() {
       name: selectedBlueprint.name,
       detail: selectedBlueprint.detail,
       seedsPages: selectedBlueprint.pages.length > 0,
+    },
+    launchSetup: {
+      domainVerification: normalizedDomain ? {
+        status: 'pending',
+        method: 'dns-txt',
+        domain: normalizedDomain,
+        txtHost: `_backy.${normalizedDomain}`,
+      } : {
+        status: 'verified',
+        method: 'dns-txt',
+        domain: publicAddress,
+      },
+      vercelDeployment: {
+        status: vercelProjectId ? 'preview_queued' : 'not_started',
+        projectId: vercelProjectId || null,
+        teamSlug: vercelTeamSlug || null,
+        productionDomain: vercelProductionDomain,
+      },
+      billingQuota: {
+        plan: formData.billingPlan,
+        status: 'active',
+        limits: CREATE_BILLING_PLAN_LIMITS[formData.billingPlan],
+      },
+      frontendDesign: {
+        source: formData.templateSource,
+        marketplaceTemplateId: formData.marketplaceTemplateId.trim() || null,
+        importUrl: templateImportUrl || null,
+      },
     },
     seededPages: selectedBlueprint.pages.map((page) => ({
       title: page.title,
@@ -387,8 +544,11 @@ function NewSitePage() {
     createPayloadPreview,
     displaySlug,
     formData.name,
+    formData.billingPlan,
+    formData.marketplaceTemplateId,
     formData.status,
     formData.teamId,
+    formData.templateSource,
     normalizedDomain,
     publicAddress,
     publicApiBase,
@@ -397,6 +557,10 @@ function NewSitePage() {
     selectedBlueprint.name,
     selectedBlueprint.pages,
     siteCreationReadiness,
+    templateImportUrl,
+    vercelProductionDomain,
+    vercelProjectId,
+    vercelTeamSlug,
   ]);
   const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
@@ -475,6 +639,126 @@ function NewSitePage() {
 
     void navigate({ to: '/pages', search: { siteId: createdSiteRecovery.publicSiteId || createdSiteRecovery.id } });
   };
+  const buildCreationSettings = (createdAt: string): Partial<NonNullable<Site['settings']>> => {
+    const domain = normalizedDomain || `${displaySlug}.backy.app`;
+    const token = createDnsToken(displaySlug);
+    const pageUsage = selectedBlueprint.pages.length;
+    const limits = CREATE_BILLING_PLAN_LIMITS[formData.billingPlan];
+    const deploymentStatus = vercelProjectId ? 'preview_queued' : 'not_started';
+    const templateId = formData.marketplaceTemplateId.trim() || `backy-${formData.blueprint}-starter`;
+
+    return {
+      siteStatus: formData.status,
+      domainVerification: {
+        status: normalizedDomain ? 'pending' : 'verified',
+        method: 'dns-txt',
+        domain,
+        token,
+        txtHost: `_backy.${domain}`,
+        txtValue: `backy-site-verification=${token}`,
+        cnameTarget: `${displaySlug}.backy.app`,
+        requestedAt: createdAt,
+        checkedAt: normalizedDomain ? null : createdAt,
+        verifiedAt: normalizedDomain ? null : createdAt,
+        lastError: null,
+      },
+      vercelDeployment: {
+        status: deploymentStatus,
+        projectId: vercelProjectId,
+        teamSlug: vercelTeamSlug,
+        productionDomain: vercelProductionDomain,
+        previewUrl: '',
+        productionUrl: `https://${vercelProductionDomain}`,
+        environment: 'preview',
+        lastAction: vercelProjectId ? 'prepare-preview' : null,
+        requestedAt: vercelProjectId ? createdAt : null,
+        completedAt: null,
+        promotedAt: null,
+        rolledBackAt: null,
+        command: 'vercel pull --yes --environment=preview && vercel build && vercel deploy --prebuilt',
+        missing: vercelProjectId ? ['Server-side Vercel token'] : ['Vercel project metadata', 'Server-side Vercel token'],
+        history: vercelProjectId ? [{
+          id: createSetupEventId('deploy'),
+          action: 'prepare-preview',
+          status: deploymentStatus,
+          environment: 'preview',
+          targetUrl: vercelProductionDomain,
+          command: 'vercel pull --yes --environment=preview && vercel build && vercel deploy --prebuilt',
+          requestedAt: createdAt,
+          completedAt: null,
+          missing: ['Server-side Vercel token'],
+        }] : [],
+      },
+      billingQuota: {
+        plan: formData.billingPlan,
+        status: 'active',
+        billingOwnerId: currentAdmin?.id || null,
+        billingEmail: formData.billingEmail.trim(),
+        renewalAt: null,
+        limits,
+        usage: {
+          pages: pageUsage,
+          mediaGb: 0,
+          bandwidthGb: 0,
+          forms: 0,
+          products: formData.blueprint === 'storefront' ? 0 : 0,
+          collections: 0,
+          teamMembers: 1,
+          customDomains: normalizedDomain ? 1 : 0,
+          updatedAt: createdAt,
+        },
+        lastAction: `set-${formData.billingPlan}`,
+        notes: `Initialized from /sites/new with ${selectedBlueprint.name}.`,
+        history: [{
+          id: createSetupEventId('billing'),
+          action: `set-${formData.billingPlan}`,
+          plan: formData.billingPlan,
+          status: 'active',
+          requestedAt: createdAt,
+          usage: {
+            pages: pageUsage,
+            mediaGb: 0,
+            bandwidthGb: 0,
+            forms: 0,
+            products: 0,
+            collections: 0,
+            teamMembers: 1,
+            customDomains: normalizedDomain ? 1 : 0,
+            updatedAt: createdAt,
+          },
+          limits,
+        }],
+      },
+      frontendDesign: {
+        schemaVersion: 'backy.frontend-design.v1',
+        status: formData.templateSource === 'starter-marketplace' ? 'captured' : 'unconfigured',
+        source: {
+          type: formData.templateSource === 'custom-frontend' ? 'custom-frontend' : 'manual',
+          label: selectedTemplateSource.label,
+          url: templateImportUrl || undefined,
+          capturedAt: createdAt,
+        },
+        tokens: {},
+        chrome: {
+          header: { source: 'site-create-blueprint', editable: true },
+          navigation: { source: 'site-create-blueprint', editable: true },
+          footer: { source: 'site-create-blueprint', editable: true },
+        },
+        templates: selectedBlueprint.pages.map((page) => ({
+          id: `${templateId}-${page.slug}`,
+          type: 'page',
+          name: `${selectedBlueprint.name} ${page.title}`,
+          routePattern: page.isHomepage ? '/' : `/${page.slug}`,
+          description: page.description,
+          canvasSize: DEFAULT_CANVAS_SIZE,
+          bindingHints: [],
+        })),
+        editableMap: [],
+        notes: `Created from ${selectedBlueprint.name}; template source: ${selectedTemplateSource.label}.`,
+        updatedAt: createdAt,
+      },
+    };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -497,7 +781,7 @@ function NewSitePage() {
     }
 
     if (!canSubmit) {
-      setError('Add a site name, use a valid URL slug, and check the custom domain format.');
+      setError('Add a site name, use a valid URL slug, check the custom domain format, and complete the selected template source.');
       setNotice(null);
       return;
     }
@@ -508,6 +792,7 @@ function NewSitePage() {
     setCreatedSiteRecovery(null);
 
     try {
+      const createdAt = new Date().toISOString();
       const created = await createSite({
         name: formData.name.trim(),
         slug: displaySlug,
@@ -515,6 +800,7 @@ function NewSitePage() {
         customDomain: normalizedDomain || null,
         description: formData.description.trim(),
         status: formData.status,
+        settings: buildCreationSettings(createdAt),
       });
       let createdPages: Awaited<ReturnType<typeof seedStarterPages>> = [];
       let seedError: unknown = null;
@@ -682,7 +968,7 @@ function NewSitePage() {
               Jump through the decisions that make this site ready for pages, APIs, design work, and publishing.
             </p>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {SITE_CREATION_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -899,6 +1185,172 @@ function NewSitePage() {
             />
           </label>
 
+          <div id="site-launch" className="mt-6 scroll-mt-24">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <ShieldCheck className="h-4 w-4 text-teal-700" />
+              Launch setup
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Store the initial DNS, deployment, billing, and design-source contract with the site record.
+            </p>
+            <div className="mt-4 grid gap-5 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium">Vercel project ID</span>
+                <input
+                  type="text"
+                  value={formData.vercelProjectId}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, vercelProjectId: e.target.value.trim() });
+                  }}
+                  placeholder="prj_..."
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Vercel team slug</span>
+                <input
+                  type="text"
+                  value={formData.vercelTeamSlug}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, vercelTeamSlug: e.target.value.trim() });
+                  }}
+                  placeholder="team-slug"
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Production domain</span>
+                <input
+                  type="text"
+                  value={formData.vercelProductionDomain}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, vercelProductionDomain: e.target.value });
+                  }}
+                  onBlur={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, vercelProductionDomain: normalizeDomain(e.target.value) });
+                  }}
+                  placeholder={normalizedDomain || `${displaySlug || 'new-site'}.backy.app`}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Billing plan</span>
+                <select
+                  value={formData.billingPlan}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, billingPlan: e.target.value as SiteCreateBillingPlan });
+                  }}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {BILLING_PLAN_OPTIONS.map((plan) => (
+                    <option key={plan.value} value={plan.value}>{plan.label}</option>
+                  ))}
+                </select>
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">{selectedBillingPlan.detail}</span>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Billing email</span>
+                <input
+                  type="email"
+                  value={formData.billingEmail}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, billingEmail: e.target.value.trim() });
+                  }}
+                  placeholder="billing@example.com"
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Template source</span>
+                <select
+                  value={formData.templateSource}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, templateSource: e.target.value as SiteCreateTemplateSource });
+                  }}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {TEMPLATE_SOURCE_OPTIONS.map((source) => (
+                    <option key={source.value} value={source.value}>{source.label}</option>
+                  ))}
+                </select>
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">{selectedTemplateSource.detail}</span>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Template import URL</span>
+                <input
+                  type="url"
+                  value={formData.templateImportUrl}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, templateImportUrl: e.target.value.trim() });
+                  }}
+                  placeholder="https://example.com/design-contract.json"
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                {formData.templateSource === 'import-url' && templateImportUrl.length === 0 && (
+                  <span className="mt-2 block text-xs text-red-600">Add the import URL or choose another template source.</span>
+                )}
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Marketplace template ID</span>
+                <input
+                  type="text"
+                  value={formData.marketplaceTemplateId}
+                  disabled={creationFormDisabled}
+                  title={creationDisabledTitle}
+                  onChange={(e) => {
+                    if (creationFormDisabled) return;
+
+                    setFormData({ ...formData, marketplaceTemplateId: e.target.value.trim() });
+                  }}
+                  placeholder="backy-starter-business"
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <SiteLaunchSummary icon="dns" label="DNS" value={normalizedDomain ? 'Pending TXT/CNAME' : 'Managed verified'} />
+              <SiteLaunchSummary icon="deploy" label="Deploy" value={vercelProjectId ? 'Preview queued' : 'Add project later'} />
+              <SiteLaunchSummary icon="billing" label="Plan" value={selectedBillingPlan.label} />
+            </div>
+          </div>
+
           <div id="site-blueprint" className="mt-6 scroll-mt-24">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <FileText className="h-4 w-4 text-teal-700" />
@@ -1085,6 +1537,30 @@ function SiteCreationWorkflowStep({ index, label, detail }: { index: number; lab
       <div className="min-w-0">
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function SiteLaunchSummary({
+  icon,
+  label,
+  value,
+}: {
+  icon: 'dns' | 'deploy' | 'billing';
+  label: string;
+  value: string;
+}) {
+  const Icon = icon === 'dns' ? ShieldCheck : icon === 'deploy' ? Rocket : CreditCard;
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2">
+      <span className="rounded-md bg-teal-50 p-1.5 text-teal-700">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
+        <div className="truncate text-sm font-medium text-foreground">{value}</div>
       </div>
     </div>
   );
