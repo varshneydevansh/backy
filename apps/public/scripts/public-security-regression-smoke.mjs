@@ -606,6 +606,10 @@ for (const route of [
   );
   assertExcludes(source, 'Number.isFinite(parsed) && parsed > 0 ? parsed', `${route} must not return unbounded positive limits`);
 }
+const publicOpenApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
+assertIncludes(publicOpenApiRoute, 'maximum: 100', 'public OpenAPI route must document capped list limits');
+assertExcludes(publicOpenApiRoute, "queryParameter('limit', { type: 'integer', minimum: 1 })", 'public OpenAPI route must not advertise unbounded list limits');
+assertExcludes(publicOpenApiRoute, "schema: { type: 'integer', minimum: 1 }", 'public OpenAPI route must not advertise direct unbounded limit parameters');
 
 for (const route of [
   'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',

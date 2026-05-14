@@ -753,7 +753,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               { name: 'fieldValue', in: 'query', schema: { type: 'string' } },
               { name: 'sortBy', in: 'query', schema: { type: 'string' } },
               { name: 'sortDirection', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
-              { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1 } },
+              { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
               { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 } },
             ],
             responses: {
@@ -1000,7 +1000,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               pathParameter('formId', 'Form id', formIds),
               queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] }),
               queryParameter('requestId'),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1120,7 +1120,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               pathParameter('formId', 'Form id', formIds),
               queryParameter('status', { type: 'string', enum: ['new', 'contacted', 'qualified', 'archived'] }),
               queryParameter('requestId'),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1202,7 +1202,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               queryParameter('parentOnly', { type: 'boolean' }, 'Return only top-level comments when true.'),
               queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
               queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1302,7 +1302,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               queryParameter('parentOnly', { type: 'boolean' }, 'Return only top-level comments when true.'),
               queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
               queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1404,7 +1404,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
               queryParameter('q', { type: 'string' }, 'Search comment content and author fields.'),
               queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1450,7 +1450,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             parameters: [
               queryParameter('type', { type: 'string', enum: ['email', 'ip', 'all'] }),
               queryParameter('q', { type: 'string' }, 'Search blocked value, reason, or actor.'),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
@@ -1609,7 +1609,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               queryParameter('formId'),
               queryParameter('commentId'),
               queryParameter('contactId'),
-              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
             responses: {
