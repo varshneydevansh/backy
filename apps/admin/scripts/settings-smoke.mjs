@@ -426,6 +426,29 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
   return result;
 };
 
+const assertTwoFactorUnavailable = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+    const label = Array.from(document.querySelectorAll('label')).find((candidate) => (
+      normalized(candidate.textContent).includes('Require two-factor authentication')
+    ));
+    const control = label?.querySelector('input[type="checkbox"]');
+    return {
+      found: Boolean(label),
+      disabled: control instanceof HTMLInputElement ? control.disabled : false,
+      checked: control instanceof HTMLInputElement ? control.checked : null,
+      text: normalized(label?.textContent),
+      title: control instanceof HTMLInputElement ? control.title : '',
+    };
+  })()`);
+
+  assert(
+    state.found && state.disabled && state.checked === false && /not available/i.test(state.text),
+    `Require 2FA should be visibly unavailable until login enforcement exists: ${JSON.stringify(state)}`,
+  );
+  return state;
+};
+
 const setDeliveryMode = async (client, mode) => {
   const result = await evaluate(client, `(() => {
     const radio = document.querySelector('input[name="delivery-mode"][value="${mode}"]');
@@ -633,7 +656,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
     securityKeyState.hiddenAdminKey && !securityKeyState.leakedStaleAdminKey,
     `Admin API key should stay hidden from non-key managers even with stale local storage: ${JSON.stringify(securityKeyState)}`,
   );
-  await setLabeledControl(client, 'Require two-factor authentication', true);
+  await assertTwoFactorUnavailable(client);
   await setLabeledControl(client, 'Invite-only workspace access', true);
   await setLabeledControl(client, 'Minimum password length', '12');
   await setLabeledControl(client, 'Session timeout', '120');
@@ -694,7 +717,7 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.notifications?.email?.newUser === true, 'Notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.inApp?.comments === true, 'Notification in-app toggle was not persisted');
   assert(settings.integrations?.notifications?.webhookUrl === `https://hooks.example.com/${suffix}`, 'Notification webhook was not persisted');
-  assert(settings.auth?.requireTwoFactor === true, 'Require 2FA toggle was not persisted');
+  assert(settings.auth?.requireTwoFactor !== true, 'Require 2FA should not persist as enabled without login enforcement');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
   assert(settings.auth?.minPasswordLength === 12, 'Password length was not persisted');
 };

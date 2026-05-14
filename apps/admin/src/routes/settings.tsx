@@ -581,10 +581,21 @@ function cloneSettingsDraftSnapshot(snapshot: SettingsDraftSnapshot): SettingsDr
   return JSON.parse(JSON.stringify(snapshot)) as SettingsDraftSnapshot;
 }
 
+function normalizeAuthSettings(settings?: SiteSettingsInput['auth']): SiteSettingsInput['auth'] {
+  if (!settings) {
+    return settings;
+  }
+
+  return {
+    ...settings,
+    requireTwoFactor: false,
+  };
+}
+
 function createSettingsDraftSnapshot(settings: Pick<SiteSettingsInput, 'deliveryMode' | 'auth' | 'integrations'>): SettingsDraftSnapshot {
   return {
     deliveryMode: settings.deliveryMode,
-    auth: settings.auth,
+    auth: normalizeAuthSettings(settings.auth),
     integrations: settings.integrations || {},
   };
 }
@@ -774,7 +785,11 @@ function SettingsPage() {
     setNotice(null);
 
     try {
-      const backendSettings = await updateBackendSettings({ deliveryMode, auth: authSettings, integrations });
+      const backendSettings = await updateBackendSettings({
+        deliveryMode,
+        auth: normalizeAuthSettings(authSettings),
+        integrations,
+      });
       applyBackendSettings(backendSettings);
       window.dispatchEvent(new CustomEvent('backy:settings-saved'));
       setSaved(true);
@@ -1070,7 +1085,7 @@ function SettingsPage() {
     security: {
       hasPublicApiKey: Boolean(publicApiKey),
       hasAdminApiKey: Boolean(adminApiKey),
-      auth: authSettings || null,
+      auth: normalizeAuthSettings(authSettings) || null,
     },
     readiness: platformReadiness,
     guardrails: [
@@ -4272,6 +4287,7 @@ function SecuritySettings({
   const policy: Required<AuthSettingsConfig> = {
     ...DEFAULT_AUTH_SETTINGS,
     ...(authSettings || {}),
+    requireTwoFactor: false,
   };
 
   const updatePolicy = (next: Partial<AuthSettingsConfig>) => {
@@ -4280,6 +4296,7 @@ function SecuritySettings({
       ...DEFAULT_AUTH_SETTINGS,
       ...(current || {}),
       ...next,
+      requireTwoFactor: false,
     }));
   };
 
@@ -4312,18 +4329,23 @@ function SecuritySettings({
       <Panel>
         <PanelHeader
           title="Workspace security policy"
-          description="Persist auth policy for admin sessions and future Supabase auth enforcement."
+          description="Persist enforced admin auth policy for sessions, invitations, and password rules."
         />
         <PanelContent>
           <div className="grid gap-4 xl:grid-cols-2">
             <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
-              <span>Require two-factor authentication</span>
+              <span className="flex flex-col gap-1">
+                <span>Require two-factor authentication</span>
+                <span className="text-xs leading-4 text-muted-foreground">
+                  Not available until Backy adds a second-factor login challenge.
+                </span>
+              </span>
               <input
                 type="checkbox"
-                checked={policy.requireTwoFactor}
-                disabled={!canConfigureSettings}
-                title={configurePermissionTitle}
-                onChange={(event) => updatePolicy({ requireTwoFactor: event.target.checked })}
+                checked={false}
+                disabled
+                readOnly
+                title="Two-factor enforcement is not available yet."
                 className="size-4 rounded border-input"
               />
             </label>

@@ -249,7 +249,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
   },
   storage: 'storage' in settings ? settings.storage || {} : {},
   runtimeStorage: getMediaStorageConfigSummary(),
-  auth: settings.auth || {},
+  auth: normalizeAdminAuthSettings(settings.auth) || {},
   integrations: settings.integrations || {},
   runtimeDatabase: getDatabaseRuntimeSummary(),
   runtimeSupabase: getSupabaseRuntimeSummary(),
@@ -262,6 +262,18 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
 const parseJsonObject = (value: unknown): BackyJsonObject | undefined => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
 );
+
+const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
+  const input = parseJsonObject(value);
+  if (!input) {
+    return undefined;
+  }
+
+  return {
+    ...input,
+    requireTwoFactor: false,
+  };
+};
 
 const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
@@ -806,7 +818,7 @@ export async function PATCH(request: NextRequest) {
         ? body.apiKeys as Record<string, unknown>
         : {};
       const storage = parseJsonObject(body.storage);
-      const auth = parseJsonObject(body.auth);
+      const auth = normalizeAdminAuthSettings(body.auth);
       const integrations = mediaStoragePatch
         ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
         : normalizeInfrastructureIntegrations(body.integrations) || parseJsonObject(body.integrations);
@@ -844,11 +856,19 @@ export async function PATCH(request: NextRequest) {
     }
 
     const beforeSettings = getAdminSettings();
+    const auth = normalizeAdminAuthSettings(body.auth);
+    const sanitizedBody = {
+      ...body,
+      ...(body.auth !== undefined && auth ? { auth } : {}),
+    };
+    if (body.auth !== undefined && !auth) {
+      delete sanitizedBody.auth;
+    }
     const integrations = mediaStoragePatch
       ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
       : normalizeInfrastructureIntegrations(body.integrations);
     const settings = updateAdminSettings({
-      ...body,
+      ...sanitizedBody,
       ...(deliveryMode ? { deliveryMode } : {}),
       ...(integrations ? { integrations } : {}),
     });
