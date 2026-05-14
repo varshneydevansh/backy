@@ -811,10 +811,25 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
   return value;
 };
 
+const formatDateTimeLocalValue = (value: string | null | undefined): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const toScheduledAtPayload = (value: string): string | null => {
+  if (!value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+};
+
 const updateRecordFormValue = (
   setRecordForm: Dispatch<SetStateAction<{
     slug: string;
     status: CollectionRecord['status'];
+    scheduledAt: string;
     values: Record<string, string>;
   }>>,
   fieldKey: string,
@@ -1410,6 +1425,7 @@ function CollectionsPage() {
   const [recordForm, setRecordForm] = useState({
     slug: '',
     status: 'published' as CollectionRecord['status'],
+    scheduledAt: '',
     values: {} as Record<string, string>,
   });
   const [recordFilters, setRecordFilters] = useState({
@@ -2190,7 +2206,7 @@ function CollectionsPage() {
     recordInteractionVersionRef.current += 1;
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
-    setRecordForm({ slug: '', status: 'published', values: {} });
+    setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
     updateCollectionsRouteSearch({ recordId: undefined });
     setError(null);
     setValidationDetails([]);
@@ -2527,7 +2543,7 @@ function CollectionsPage() {
       visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: [createStarterField()],
     });
-    setRecordForm({ slug: '', status: 'published', values: {} });
+    setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
   };
 
   const updateCollectionNameInput = (value: string) => {
@@ -2767,7 +2783,7 @@ function CollectionsPage() {
       visitorWritePolicy: defaultVisitorWritePolicy(),
       fields: cloneTemplateFields(template.fields),
     });
-    setRecordForm({ slug: '', status: 'published', values: {} });
+    setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
     setError(null);
     setValidationDetails([]);
     setNotice(`${template.name} template loaded. Review fields, then save the schema.`);
@@ -2849,7 +2865,7 @@ function CollectionsPage() {
       visitorWritePolicy: normalizeVisitorWritePolicy(collection.metadata, collection.fields),
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
-    setRecordForm({ slug: '', status: 'published', values: {} });
+    setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
     updateCollectionsRouteSearch({
       collectionId: collection.id,
       recordId: preserveRouteState ? routeSearch.recordId : undefined,
@@ -3036,13 +3052,14 @@ function CollectionsPage() {
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
-      setRecordForm({ slug: '', status: 'published', values: {} });
+      setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
       return;
     }
 
     setRecordForm({
       slug: selectedRecord.slug,
       status: selectedRecord.status,
+      scheduledAt: formatDateTimeLocalValue(selectedRecord.scheduledAt),
       values: Object.fromEntries(
         activeCollection.fields.map((field) => [field.key, formatRecordFormValue(field, selectedRecord.values[field.key])]),
       ),
@@ -3438,6 +3455,7 @@ function CollectionsPage() {
       const payload = {
         slug: normalizeSlug(recordForm.slug || formatValue(values.title || values.name), 'record'),
         status: recordForm.status,
+        scheduledAt: recordForm.status === 'scheduled' ? toScheduledAtPayload(recordForm.scheduledAt) : null,
         values,
       };
       const saved = selectedRecordId
@@ -6284,6 +6302,21 @@ function CollectionsPage() {
                       <option value="archived">Archived</option>
                     </select>
                   </label>
+                  {recordForm.status === 'scheduled' && (
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">Scheduled time</span>
+                      <input
+                        type="datetime-local"
+                        value={recordForm.scheduledAt}
+                        onChange={(event) => setRecordForm((prev) => ({
+                          ...prev,
+                          scheduledAt: event.target.value,
+                        }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2"
+                        data-testid="collections-record-scheduled-at"
+                      />
+                    </label>
+                  )}
 
                   {activeCollection.fields.map((field) => (
                     <CollectionRecordFieldEditor
