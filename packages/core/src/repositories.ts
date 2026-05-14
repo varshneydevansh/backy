@@ -673,6 +673,19 @@ export interface BackyUser {
   updatedAt: string;
 }
 
+export interface BackyUserPasswordCredential {
+  userId: string;
+  email: string;
+  passwordHash: string;
+  salt: string;
+  updatedAt: string;
+}
+
+export interface BackyUserPasswordCredentialInput {
+  passwordHash: string;
+  salt: string;
+}
+
 export interface BackyUserCreateInput {
   email: string;
   fullName: string;
@@ -911,6 +924,8 @@ export interface BackyUserRepository {
   list(input: BackyUserListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyUser>>;
   getById(userId: string, context?: BackyRepositoryContext): Promise<BackyUser | null>;
   getByEmail(email: string, context?: BackyRepositoryContext): Promise<BackyUser | null>;
+  getPasswordCredentialByEmail(email: string, context?: BackyRepositoryContext): Promise<BackyUserPasswordCredential | null>;
+  setPasswordCredential(userId: string, input: BackyUserPasswordCredentialInput, context?: BackyRepositoryContext): Promise<BackyUserPasswordCredential>;
   create(input: BackyUserCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyUser>>;
   update(userId: string, input: BackyUserUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyUser>>;
   delete(userId: string, context?: BackyRepositoryContext): Promise<boolean>;

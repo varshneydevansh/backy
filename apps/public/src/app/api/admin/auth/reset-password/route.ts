@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
   const result = await resetAdminPasswordToken(token, password, repositories
     ? {
       getUserById: (userId) => repositories.users.getById(userId),
+      setPasswordCredential: (userId, credential) => repositories.users.setPasswordCredential(userId, credential),
       updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
     }
     : undefined);
@@ -137,7 +138,8 @@ export async function POST(request: NextRequest) {
       role: result.user.role,
       resetTokenId: result.resetToken.id,
       requestedById: result.resetToken.requestedById || null,
-      localCredentialUpdated: true,
+      credentialUpdated: true,
+      credentialMode: repositories ? 'database' : 'local-demo',
     },
     requestId,
   });

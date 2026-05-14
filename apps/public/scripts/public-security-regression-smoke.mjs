@@ -363,6 +363,8 @@ assertIncludes(resetPasswordRoute, '@/lib/admin-auth/passwordPolicy', 'reset pas
 assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password)', 'reset password route must enforce persisted password policy');
 assertIncludes(resetPasswordRoute, 'getRequiredDatabaseRepositories', 'reset password route must support database-backed users');
 assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, password, repositories', 'reset password route must await repository-aware invite-only reset policy checks');
+assertIncludes(resetPasswordRoute, 'repositories.users.setPasswordCredential(userId, credential)', 'reset password route must persist database-backed password credentials');
+assertIncludes(resetPasswordRoute, "credentialMode: repositories ? 'database' : 'local-demo'", 'reset password route audit must disclose credential persistence mode');
 assertIncludes(resetPasswordRoute, "'INVITE_ONLY_REQUIRED'", 'reset password route must return stable invite-only policy code');
 assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route');
 
@@ -401,6 +403,7 @@ const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts'
 assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route must not lock out existing admins when domains change');
 assertIncludes(adminLoginRoute, 'authenticateAdminCredentialsWithPersistence', 'login route must use repository-backed user lookup outside demo mode');
 assertIncludes(adminLoginRoute, 'repositories.users.getByEmail', 'login route must resolve database users by email outside demo mode');
+assertIncludes(adminLoginRoute, 'repositories.users.getPasswordCredentialByEmail', 'login route must verify database-backed password credentials outside demo mode');
 
 const adminUsersRoute = read('apps/public/src/app/api/admin/users/route.ts');
 assertIncludes(adminUsersRoute, 'createAdminInviteToken', 'admin user create route must create invite tokens for invited users');
@@ -420,6 +423,8 @@ assertIncludes(adminSessionStore, "reason: 'invite-only'", 'admin password reset
 assertIncludes(adminSessionStore, 'authenticateAdminCredentialsWithPersistence', 'admin session store must support repository-backed credential lookup');
 assertIncludes(adminSessionStore, 'getAdminSessionWithPersistence', 'admin session store must refresh sessions from repository-backed users');
 assertIncludes(adminSessionStore, 'persistence.getUserByEmail', 'admin session store must support repository-backed login user lookup');
+assertIncludes(adminSessionStore, 'persistence.getPasswordCredentialByEmail', 'admin session store must support repository-backed password verification');
+assertIncludes(adminSessionStore, 'persistence.setPasswordCredential', 'admin session store must persist reset passwords through repository-backed credentials');
 assertIncludes(adminSessionStore, 'persistence.getUserById', 'admin session store must support repository-backed invite/reset user lookup');
 assertIncludes(adminSessionStore, 'persistence.updateUser', 'admin session store must support repository-backed invite/reset user updates');
 

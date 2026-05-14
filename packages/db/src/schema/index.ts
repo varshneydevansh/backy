@@ -77,6 +77,23 @@ export const profiles = pgTable('profiles', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/**
+ * Local admin password credentials.
+ *
+ * Stored separately from profiles so user metadata can be read without exposing
+ * password hashes through ordinary profile queries.
+ */
+export const adminUserCredentials = pgTable('admin_user_credentials', {
+    userId: uuid('user_id')
+        .references(() => profiles.id, { onDelete: 'cascade' })
+        .primaryKey(),
+    passwordHash: text('password_hash').notNull(),
+    salt: text('salt').notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userUpdatedAtIdx: index('admin_user_credentials_updated_at_idx').on(table.updatedAt),
+}));
+
 // ==========================================================================
 // TEAMS - Multi-tenancy support
 // ==========================================================================

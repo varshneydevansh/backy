@@ -203,33 +203,48 @@ const normalizeFrontendDesign = (value: unknown): SiteSettings['frontendDesign']
     };
 };
 
-const normalizeSettings = (value: unknown): SiteSettings => ({
-    ...DEFAULT_SITE_SETTINGS,
-    ...(isRecord(value) ? value : {}),
-    seo: {
-        ...DEFAULT_SITE_SETTINGS.seo,
-        ...(isRecord(value) && isRecord(value.seo) ? value.seo : {}),
-    },
-    analytics: {
-        ...DEFAULT_SITE_SETTINGS.analytics,
-        ...(isRecord(value) && isRecord(value.analytics) ? value.analytics : {}),
-    },
-    social: {
-        ...DEFAULT_SITE_SETTINGS.social,
-        ...(isRecord(value) && isRecord(value.social) ? value.social : {}),
-    },
-    redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
-    navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
-    frontendDesign: normalizeFrontendDesign(isRecord(value) ? value.frontendDesign : undefined),
-    contacts: isRecord(value) && isRecord(value.contacts)
-        ? {
-            ...value.contacts,
-            savedLists: Array.isArray(value.contacts.savedLists)
-                ? value.contacts.savedLists as NonNullable<SiteSettings['contacts']>['savedLists']
-                : [],
+const normalizeSocialSettings = (value: unknown): SiteSettings['social'] => {
+    const source = isRecord(value) ? value : {};
+    const social: SiteSettings['social'] = {};
+    for (const [key, socialValue] of Object.entries(source)) {
+        if (typeof socialValue === 'string') {
+            social[key] = socialValue;
         }
-        : { savedLists: [] },
-});
+    }
+    return social;
+};
+
+const normalizeSettings = (value: unknown): SiteSettings => {
+    const defaultSettings = DEFAULT_SITE_SETTINGS as unknown as SiteSettings;
+
+    return {
+        ...defaultSettings,
+        ...(isRecord(value) ? value : {}),
+        seo: {
+            ...defaultSettings.seo,
+            ...(isRecord(value) && isRecord(value.seo) ? value.seo : {}),
+        },
+        analytics: {
+            ...defaultSettings.analytics,
+            ...(isRecord(value) && isRecord(value.analytics) ? value.analytics : {}),
+        },
+        social: {
+            ...defaultSettings.social,
+            ...(isRecord(value) ? normalizeSocialSettings(value.social) : {}),
+        },
+        redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
+        navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
+        frontendDesign: normalizeFrontendDesign(isRecord(value) ? value.frontendDesign : undefined),
+        contacts: isRecord(value) && isRecord(value.contacts)
+            ? {
+                ...value.contacts,
+                savedLists: Array.isArray(value.contacts.savedLists)
+                    ? value.contacts.savedLists as NonNullable<SiteSettings['contacts']>['savedLists']
+                    : [],
+            }
+            : { savedLists: [] },
+    };
+};
 
 const normalizeMeta = (value: unknown): PageMeta => (
     isRecord(value) ? value as PageMeta : {}

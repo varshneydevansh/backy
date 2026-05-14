@@ -100,9 +100,21 @@ type AdminAuthUserLike = {
   status: AdminAuthUser['status'];
 };
 
+type AdminPasswordCredentialLike = {
+  userId: string;
+  email: string;
+  passwordHash: string;
+  salt: string;
+};
+
 type AdminAuthUserPersistence = {
   getUserById?: (userId: string) => Promise<AdminAuthUserLike | null | undefined>;
   getUserByEmail?: (email: string) => Promise<AdminAuthUserLike | null | undefined>;
+  getPasswordCredentialByEmail?: (email: string) => Promise<AdminPasswordCredentialLike | null | undefined>;
+  setPasswordCredential?: (
+    userId: string,
+    credential: Pick<AdminPasswordCredentialLike, 'passwordHash' | 'salt'>,
+  ) => Promise<AdminPasswordCredentialLike | null | undefined>;
   updateUser?: (userId: string, input: Partial<Pick<AdminAuthUser, 'status'>>) => Promise<AdminAuthUserLike | null | undefined>;
 };
 
@@ -171,7 +183,15 @@ const hashPassword = (password: string, salt: string) => (
   scryptSync(password, salt, 64).toString('hex')
 );
 
-const verifyPassword = (password: string, credential: LocalCredential) => {
+const createPasswordCredential = (password: string): Pick<AdminPasswordCredentialLike, 'passwordHash' | 'salt'> => {
+  const salt = randomUUID().replace(/-/g, '');
+  return {
+    passwordHash: hashPassword(password, salt),
+    salt,
+  };
+};
+
+const verifyPassword = (password: string, credential: Pick<AdminPasswordCredentialLike, 'passwordHash' | 'salt'>) => {
   const expected = Buffer.from(credential.passwordHash, 'hex');
   const actual = Buffer.from(hashPassword(password, credential.salt), 'hex');
 
@@ -301,11 +321,29 @@ export function authenticateAdminCredentials(email: string, password: string): A
 export async function authenticateAdminCredentialsWithPersistence(
   email: string,
   password: string,
-  persistence: Pick<AdminAuthUserPersistence, 'getUserByEmail'> = {},
+  persistence: Pick<AdminAuthUserPersistence, 'getPasswordCredentialByEmail' | 'getUserByEmail'> = {},
 ): Promise<AdminSession | null> {
   pruneExpiredSessions();
 
   const normalizedEmail = normalizeEmail(email);
+  if (persistence.getPasswordCredentialByEmail) {
+    const credential = await persistence.getPasswordCredentialByEmail(normalizedEmail);
+    if (!credential || !verifyPassword(password, credential)) {
+      return null;
+    }
+
+    const user = toAuthUser(
+      persistence.getUserByEmail
+        ? await persistence.getUserByEmail(credential.email)
+        : getAdminUserByEmail(credential.email),
+    );
+    if (!user || user.id !== credential.userId || user.status !== 'active') {
+      return null;
+    }
+
+    return createAdminSessionForUser(user);
+  }
+
   const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
   if (localCredential && verifyPassword(password, localCredential)) {
     const user = toAuthUser(
@@ -333,14 +371,13 @@ export function setLocalAdminPassword(input: {
   password: string;
 }) {
   const email = normalizeEmail(input.user.email);
-  const salt = randomUUID().replace(/-/g, '');
+  const credential = createPasswordCredential(input.password);
   const user = toAuthUser(input.user.id && input.user.role && input.user.status
     ? input.user as AdminAuthUserLike
     : null);
 
   LOCAL_CREDENTIALS.set(email, {
-    passwordHash: hashPassword(input.password, salt),
-    salt,
+    ...credential,
     userEmail: email,
     label: input.user.fullName || email,
     ...(user ? { user } : {}),
@@ -559,7 +596,12 @@ export async function resetAdminPasswordToken(
     return { reset: false, reason: 'user-not-found', resetToken };
   }
 
-  setLocalAdminPassword({ user, password });
+  const credential = createPasswordCredential(password);
+  if (persistence.setPasswordCredential) {
+    await persistence.setPasswordCredential(user.id, credential);
+  } else {
+    setLocalAdminPassword({ user, password });
+  }
   PASSWORD_RESET_TOKENS.delete(normalizedToken);
   const session = createAdminSessionForUser(user);
 

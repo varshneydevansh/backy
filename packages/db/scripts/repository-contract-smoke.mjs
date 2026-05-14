@@ -40,6 +40,7 @@ import {
   platformSettings,
   previewTokens,
   profiles,
+  adminUserCredentials,
   reusableSections,
   sites,
 } from '../dist/schema/index.js';
@@ -58,6 +59,7 @@ const tableName = (table) => {
   if (table === platformSettings) return 'platformSettings';
   if (table === previewTokens) return 'previewTokens';
   if (table === profiles) return 'profiles';
+  if (table === adminUserCredentials) return 'adminUserCredentials';
   if (table === reusableSections) return 'reusableSections';
   if (table === blogPosts) return 'blogPosts';
   if (table === blogCategories) return 'blogCategories';
@@ -85,6 +87,7 @@ const createFakeDb = () => {
     platformSettings: [],
     previewTokens: [],
     profiles: [],
+    adminUserCredentials: [],
     reusableSections: [],
     blogPosts: [],
     blogCategories: [],
@@ -110,6 +113,7 @@ const createFakeDb = () => {
     platformSettings: 0,
     previewTokens: 0,
     profiles: 0,
+    adminUserCredentials: 0,
     reusableSections: 0,
     blogPosts: 0,
     blogCategories: 0,
@@ -185,6 +189,15 @@ const createFakeDb = () => {
         isActive: true,
         status: 'active',
         createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'adminUserCredentials') {
+      return {
+        userId: 'profiles_1',
+        passwordHash: 'hash',
+        salt: 'salt',
         updatedAt: timestamp,
         ...values,
       };
@@ -1675,6 +1688,17 @@ const activeUser = (await userRepository.update(user.id, {
   avatarUrl: 'https://example.com/avatar.png',
 })).item;
 assert(activeUser.status === 'active' && activeUser.role === 'admin', 'Expected user update');
+const credential = await userRepository.setPasswordCredential(activeUser.id, {
+  passwordHash: 'hash_one',
+  salt: 'salt_one',
+});
+assert(credential.userId === activeUser.id && credential.email === activeUser.email, 'Expected user credential owner metadata');
+assert((await userRepository.getPasswordCredentialByEmail(activeUser.email))?.passwordHash === 'hash_one', 'Expected user credential getByEmail');
+const updatedCredential = await userRepository.setPasswordCredential(activeUser.id, {
+  passwordHash: 'hash_two',
+  salt: 'salt_two',
+});
+assert(updatedCredential.passwordHash === 'hash_two' && db.state.adminUserCredentials.length === 1, 'Expected user credential update to replace existing hash');
 assert(await userRepository.delete(activeUser.id), 'Expected user delete');
 
 const settings = await settingsRepository.get();

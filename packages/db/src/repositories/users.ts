@@ -4,13 +4,15 @@ import {
     type BackyUser,
     type BackyUserCreateInput,
     type BackyUserListInput,
+    type BackyUserPasswordCredential,
+    type BackyUserPasswordCredentialInput,
     type BackyUserRepository,
     type BackyUserRole,
     type BackyUserStatus,
     type BackyUserUpdateInput,
 } from '@backy-cms/core';
 import { desc, eq } from 'drizzle-orm';
-import { profiles } from '../schema';
+import { adminUserCredentials, profiles } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
 type QueryDatabase = {
@@ -43,6 +45,7 @@ type ReturningQuery = {
 };
 
 type UserRow = typeof profiles.$inferSelect;
+type UserCredentialRow = typeof adminUserCredentials.$inferSelect;
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -119,6 +122,14 @@ const toUser = (row: UserRow): BackyUser => ({
     updatedAt: toIso(row.updatedAt),
 });
 
+const toCredential = (row: UserCredentialRow, user: Pick<BackyUser, 'email'>): BackyUserPasswordCredential => ({
+    userId: row.userId,
+    email: user.email,
+    passwordHash: row.passwordHash,
+    salt: row.salt,
+    updatedAt: toIso(row.updatedAt),
+});
+
 export function createUserRepository(db: DatabaseInstance): BackyUserRepository {
     const database = asDb(db);
 
@@ -145,6 +156,42 @@ export function createUserRepository(db: DatabaseInstance): BackyUserRepository 
             const rows = await database.select().from(profiles).where(eq(profiles.email, normalizedEmail)).limit(1) as UserRow[];
             const row = rows.find((item) => item.email.toLowerCase() === normalizedEmail) || rows[0] || null;
             return row ? toUser(row) : null;
+        },
+
+        async getPasswordCredentialByEmail(email: string): Promise<BackyUserPasswordCredential | null> {
+            const user = await this.getByEmail(email);
+            if (!user) {
+                return null;
+            }
+
+            const row = await firstOrNull<UserCredentialRow>(
+                database.select().from(adminUserCredentials).where(eq(adminUserCredentials.userId, user.id)).limit(1),
+            );
+            return row ? toCredential(row, user) : null;
+        },
+
+        async setPasswordCredential(userId: string, input: BackyUserPasswordCredentialInput): Promise<BackyUserPasswordCredential> {
+            const user = await this.getById(userId);
+            if (!user) {
+                throw new Error(`User ${userId} was not found`);
+            }
+
+            const existing = await firstOrNull<UserCredentialRow>(
+                database.select().from(adminUserCredentials).where(eq(adminUserCredentials.userId, userId)).limit(1),
+            );
+            const updates = {
+                passwordHash: input.passwordHash,
+                salt: input.salt,
+                updatedAt: new Date(),
+            };
+            const [row] = existing
+                ? await database.update(adminUserCredentials).set(updates).where(eq(adminUserCredentials.userId, userId)).returning() as UserCredentialRow[]
+                : await database.insert(adminUserCredentials).values({
+                    userId,
+                    ...updates,
+                }).returning() as UserCredentialRow[];
+
+            return toCredential(row, user);
         },
 
         async create(input: BackyUserCreateInput): Promise<BackyRepositoryMutationResult<BackyUser>> {

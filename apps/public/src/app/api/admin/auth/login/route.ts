@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     : null;
   const session = repositories
     ? await authenticateAdminCredentialsWithPersistence(email, password, {
+      getPasswordCredentialByEmail: (userEmail) => repositories.users.getPasswordCredentialByEmail(userEmail),
       getUserByEmail: (userEmail) => repositories.users.getByEmail(userEmail),
     })
     : authenticateAdminCredentials(email, password);
