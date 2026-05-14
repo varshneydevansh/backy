@@ -1214,6 +1214,7 @@ interface ApiListCollectionsResponse {
   success: boolean;
   data?: {
     collections: ApiCollection[];
+    pagination?: ApiPagination;
   };
   error?: {
     message?: string;
@@ -5172,15 +5173,54 @@ export async function deleteCommentBlocklistEntries(
   };
 }
 
-export async function listCollections(siteId: string): Promise<Collection[]> {
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections`);
+const COLLECTION_LIST_PAGE_SIZE = 100;
+const COLLECTION_LIST_MAX_PAGES = 100;
+
+async function listCollectionsPage(siteId: string, offset: number): Promise<{
+  collections: Collection[];
+  pagination?: ApiPagination;
+}> {
+  const query = new URLSearchParams({
+    limit: String(COLLECTION_LIST_PAGE_SIZE),
+    offset: String(offset),
+  });
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections?${query.toString()}`);
   const payload = await readJson<ApiListCollectionsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load collections');
   }
 
-  return payload.data.collections.map(toCollection);
+  return {
+    collections: payload.data.collections.map(toCollection),
+    pagination: payload.data.pagination,
+  };
+}
+
+export async function listCollections(siteId: string): Promise<Collection[]> {
+  const collections: Collection[] = [];
+  let offset = 0;
+  let hasMore = false;
+
+  for (let page = 0; page < COLLECTION_LIST_MAX_PAGES; page += 1) {
+    const result = await listCollectionsPage(siteId, offset);
+    collections.push(...result.collections);
+    hasMore = result.pagination?.hasMore === true;
+
+    if (!hasMore) {
+      break;
+    }
+
+    offset = result.pagination
+      ? result.pagination.offset + result.pagination.limit
+      : offset + result.collections.length;
+  }
+
+  if (hasMore) {
+    throw new Error('Unable to load all collections because the collection list exceeded the supported page limit.');
+  }
+
+  return collections;
 }
 
 export async function createCollection(siteId: string, input: CollectionInput): Promise<Collection> {

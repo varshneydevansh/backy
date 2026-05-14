@@ -89,6 +89,14 @@ const parseStatus = (value: unknown): PublishStatus | undefined => (
     : undefined
 );
 
+const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+};
+
 const parseRoutePattern = (value: unknown, slug: string): string | undefined | null => {
   if (value === undefined) {
     return undefined;
@@ -134,6 +142,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    const limit = parseBoundedInteger(request.nextUrl.searchParams.get('limit'), 100, 1, 200);
+    const offset = parseBoundedInteger(request.nextUrl.searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -146,8 +157,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         includeUnpublished: true,
         status: 'all',
-        limit: 100,
-        offset: 0,
+        limit,
+        offset,
       });
 
       return NextResponse.json({
@@ -166,11 +177,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const collections = listCollections(site.id, { includeUnpublished: true });
+
     return NextResponse.json({
       success: true,
       requestId,
       data: {
-        collections: listCollections(site.id, { includeUnpublished: true }),
+        collections: collections.slice(offset, offset + limit),
+        pagination: {
+          total: collections.length,
+          limit,
+          offset,
+          hasMore: offset + limit < collections.length,
+        },
       },
     });
   } catch (error) {
