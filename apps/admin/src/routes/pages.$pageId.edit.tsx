@@ -47,6 +47,7 @@ import {
 interface PageEditorSearch {
   siteId?: string;
   focus?: 'canvas';
+  navWarning?: string;
 }
 
 const normalizedSearchString = (value: unknown): string | undefined => {
@@ -59,6 +60,7 @@ export const Route = createFileRoute('/pages/$pageId/edit')({
   validateSearch: (search: Record<string, unknown>): PageEditorSearch => ({
     siteId: normalizedSearchString(search.siteId),
     focus: search.focus === 'canvas' ? 'canvas' : undefined,
+    navWarning: normalizedSearchString(search.navWarning),
   }),
   component: PageEditorRoute,
 });
@@ -218,7 +220,7 @@ function PageEditorRoute() {
   const [siteId, setSiteId] = useState(storePageSite?.publicSiteId || storePageSite?.id || storePage?.siteId || fallbackSiteId);
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [saveWarning, setSaveWarning] = useState<string | null>(routeSearch.navWarning || null);
   const [saveConflict, setSaveConflict] = useState<PageSaveConflict | null>(null);
   const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
   const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);

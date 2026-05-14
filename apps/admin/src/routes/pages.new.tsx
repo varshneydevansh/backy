@@ -1738,6 +1738,7 @@ function NewPageRoute() {
 
         try {
             const created = await createPage(formData.siteId, input);
+            let navigationWarning: string | null = null;
             try {
                 await applyPageNavigationPlacement({
                     siteId: formData.siteId,
@@ -1748,10 +1749,20 @@ function NewPageRoute() {
                 });
             } catch (navigationError) {
                 console.warn('Page was created, but navigation placement failed.', navigationError);
+                navigationWarning = navigationError instanceof Error
+                    ? `Page was created, but navigation placement failed: ${navigationError.message}`
+                    : 'Page was created, but navigation placement failed. Update navigation manually from site settings.';
             }
             clearAutosavedDraft();
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
-            navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id }, search: { siteId: formData.siteId } });
+            navigate({
+                to: '/pages/$pageId/edit',
+                params: { pageId: created.id },
+                search: {
+                    siteId: formData.siteId,
+                    ...(navigationWarning ? { navWarning: navigationWarning } : {}),
+                },
+            });
         } catch (createError) {
             setError(createError instanceof Error
                 ? `${createError.message}. The page was not created because the backend did not persist it.`
