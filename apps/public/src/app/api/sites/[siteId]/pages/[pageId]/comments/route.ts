@@ -44,6 +44,12 @@ function parseSort(raw: string | null) {
   return raw === 'oldest' ? 'oldest' : 'newest';
 }
 
+function parseBoundedInteger(raw: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
 function parseTextInput(raw: unknown) {
   return typeof raw === 'string' ? raw.trim() : '';
 }
@@ -126,8 +132,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const parentOnly = searchParams.get('parentOnly') === 'true' || Boolean(parentId);
     const sort = parseSort(searchParams.get('sort'));
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const offset = parseInt(searchParams.get('offset') || '0', 10);
+    const limit = parseBoundedInteger(searchParams.get('limit'), 20, 1, 100);
+    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -150,8 +156,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         parentOnly,
         parentId: parentId || null,
         sort,
-        limit: Number.isFinite(limit) ? limit : 20,
-        offset: Number.isFinite(offset) ? offset : 0,
+        limit,
+        offset,
       });
 
       return privateResponse({
@@ -184,8 +190,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       targetId: pageId,
       commentThreadId: commentThreadId || undefined,
       status,
-      limit: Number.isFinite(limit) ? limit : 20,
-      offset: Number.isFinite(offset) ? offset : 0,
+      limit,
+      offset,
     });
 
     const filtered = parentOnly

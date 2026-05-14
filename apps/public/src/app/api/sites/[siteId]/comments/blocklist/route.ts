@@ -43,6 +43,12 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 const parseType = (raw: string | null) => (raw === 'email' || raw === 'ip' ? raw : 'all');
 
+const parseBoundedInteger = (raw: string | null, fallback: number, min: number, max: number) => {
+  const parsed = Number.parseInt(raw || '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+};
+
 const parseIds = (raw: unknown): string[] => {
   if (Array.isArray(raw)) {
     return raw
@@ -76,20 +82,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = Number.parseInt(searchParams.get('limit') || '50', 10);
-    const offset = Number.parseInt(searchParams.get('offset') || '0', 10);
+    const limit = parseBoundedInteger(searchParams.get('limit'), 50, 1, 100);
+    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
     const type = parseType(searchParams.get('type'));
     const result = repositories ? await repositories.comments.listBlocklist({
       siteId: site.id,
       type,
       q: searchParams.get('q') || undefined,
-      limit: Number.isFinite(limit) ? limit : 50,
-      offset: Number.isFinite(offset) ? offset : 0,
+      limit,
+      offset,
     }) : listCommentBlocklist(site.id, {
       type,
       q: searchParams.get('q') || undefined,
-      limit: Number.isFinite(limit) ? limit : 50,
-      offset: Number.isFinite(offset) ? offset : 0,
+      limit,
+      offset,
     });
     const blocklist = 'items' in result ? result.items : result.blocklist;
     const count = 'items' in result ? result.pagination.total : result.count;

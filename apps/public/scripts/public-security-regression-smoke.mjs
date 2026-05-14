@@ -581,6 +581,18 @@ for (const file of [
   assertExcludes(read(file), 'rateLimitBypass', file);
 }
 
+for (const route of [
+  'apps/public/src/app/api/sites/[siteId]/pages/[pageId]/comments/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/blog/[postId]/comments/route.ts',
+  'apps/public/src/app/api/sites/[siteId]/comments/blocklist/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, 'parseBoundedInteger', `${route} must parse bounded pagination parameters`);
+  assertIncludes(source, "parseBoundedInteger(searchParams.get('limit')", `${route} must clamp requested limits`);
+  assertIncludes(source, 'Number.MAX_SAFE_INTEGER', `${route} must normalize non-negative offsets`);
+  assertExcludes(source, 'Number.isFinite(limit) ? limit', `${route} must not pass through unbounded finite limits`);
+}
+
 const checkoutRoute = read('apps/public/src/app/api/sites/[siteId]/commerce/orders/route.ts');
 const checkoutGet = functionSource(checkoutRoute, 'GET', 'checkout route');
 for (const needle of [
