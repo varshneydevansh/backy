@@ -42,6 +42,15 @@ const normalizeRole = (value: unknown): TeamRole | null => (
   value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
 );
 
+const requireOwnerRoleAccess = (
+  access: { session: { user: { role: TeamRole } } | null },
+  requestId: string,
+) => (
+  access.session?.user.role === 'owner'
+    ? null
+    : errorResponse(403, 'OWNER_ROLE_RESTRICTED', 'Only workspace owners can change owner team roles.', requestId)
+);
+
 const getMember = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   teamId: string,
@@ -92,6 +101,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const role = normalizeRole(body.role);
     if (!role) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Role must be owner, admin, editor, or viewer.', requestId);
+    }
+    if (role === 'owner' || before.role === 'owner') {
+      const ownerAccessError = requireOwnerRoleAccess(access, requestId);
+      if (ownerAccessError) {
+        return ownerAccessError;
+      }
     }
 
     const member = (await repositories.teams.updateMember(teamId, memberId, { role })).item;
