@@ -831,7 +831,12 @@ function EditBlogPostPage() {
                 }
 
                 const readiness = await loadPostReadiness();
-                if (readiness?.statusLabel === 'blocked') {
+                if (!readiness) {
+                    setSaveWarning('Backy could not verify post readiness. Retry the readiness check before publishing.');
+                    return;
+                }
+
+                if (readiness.statusLabel === 'blocked') {
                     setSaveWarning('Resolve post readiness errors before publishing.');
                     return;
                 }

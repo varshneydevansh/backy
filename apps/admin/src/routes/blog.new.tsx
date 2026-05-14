@@ -1093,6 +1093,8 @@ function NewBlogPostPage() {
         && canEditBlog
         && canPublishBlog
         && slugValue.trim().length > 0
+        && !isCheckingPosts
+        && !routeCheckError
         && !routeConflict
         && canonicalValid;
     const canSubmit = canCreateDraft
@@ -1648,7 +1650,6 @@ function NewBlogPostPage() {
         setIsPreviewAfterCreateBusy(true);
         setError(null);
         setNotice(null);
-        setRouteCheckError(null);
 
         let created: BlogPost | null = null;
 
