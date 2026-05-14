@@ -220,6 +220,14 @@ interface ProductVariant {
   inventory: number | null;
 }
 
+interface ProductOptionMatrixDraft {
+  options: string;
+  skuPrefix: string;
+  price: string;
+  inventory: string;
+  replaceExisting: boolean;
+}
+
 interface FrontendProductTemplateBlueprint {
   title: string;
   slug: string;
@@ -564,6 +572,13 @@ function ProductsRoute() {
     option: '',
     price: '',
     inventory: '',
+  });
+  const [optionMatrixDraft, setOptionMatrixDraft] = useState<ProductOptionMatrixDraft>({
+    options: '',
+    skuPrefix: '',
+    price: '',
+    inventory: '',
+    replaceExisting: false,
   });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -1253,6 +1268,13 @@ function ProductsRoute() {
       price: '',
       inventory: '',
     });
+    setOptionMatrixDraft({
+      options: '',
+      skuPrefix: '',
+      price: '',
+      inventory: '',
+      replaceExisting: false,
+    });
   };
 
   const resetForm = () => {
@@ -1357,6 +1379,33 @@ function ProductsRoute() {
     if (!canEditProducts) return;
 
     setProductVariants(productVariants.filter((variant) => variant.id !== variantId));
+  };
+
+  const generateVariantMatrix = () => {
+    if (isProductsBusy) return;
+    if (!canEditProducts) return;
+
+    const generated = buildProductVariantMatrix({
+      optionInput: optionMatrixDraft.options,
+      skuPrefix: optionMatrixDraft.skuPrefix || formState.sku || formState.slug || formState.title,
+      price: optionMatrixDraft.price,
+      inventory: optionMatrixDraft.inventory,
+    });
+    if (generated.length === 0) {
+      setError('Add option groups like "Size: S, M" before generating variants.');
+      setNotice(null);
+      return;
+    }
+
+    const existing = optionMatrixDraft.replaceExisting ? [] : productVariants;
+    const nextVariants = dedupeProductVariants([...existing, ...generated]).slice(0, 50);
+    if (nextVariants.length < existing.length + generated.length) {
+      setNotice('Variant matrix generated; duplicate or over-limit variants were skipped.');
+    } else {
+      setNotice(`Generated ${generated.length} product variant${generated.length === 1 ? '' : 's'} from option matrix.`);
+    }
+    setError(null);
+    setProductVariants(nextVariants);
   };
 
   const createProductsCollection = async () => {
@@ -2663,6 +2712,76 @@ function ProductsRoute() {
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     placeholder="Optional variant SKU"
                   />
+                  <div className="rounded-lg border border-border bg-background p-3" data-testid="products-variant-matrix">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">Option matrix</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Generate sellable combinations from groups like Size and Color.
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={optionMatrixDraft.replaceExisting}
+                          onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, replaceExisting: event.target.checked }))}
+                          disabled={isProductsAccessBusy || !canEditProducts}
+                        />
+                        Replace current variants
+                      </label>
+                    </div>
+                    <textarea
+                      data-testid="products-variant-matrix-options"
+                      aria-label="Variant option matrix"
+                      value={optionMatrixDraft.options}
+                      onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, options: event.target.value }))}
+                      className="mt-3 min-h-20 w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm"
+                      placeholder={'Size: S, M, L\nColor: Black, White'}
+                      disabled={isProductsAccessBusy || !canEditProducts}
+                    />
+                    <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_120px_120px_auto]">
+                      <input
+                        data-testid="products-variant-matrix-sku-prefix"
+                        aria-label="Variant matrix SKU prefix"
+                        value={optionMatrixDraft.skuPrefix}
+                        onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, skuPrefix: event.target.value }))}
+                        className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="SKU prefix"
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                      />
+                      <input
+                        data-testid="products-variant-matrix-price"
+                        aria-label="Variant matrix price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={optionMatrixDraft.price}
+                        onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, price: event.target.value }))}
+                        className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="Price"
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                      />
+                      <input
+                        data-testid="products-variant-matrix-stock"
+                        aria-label="Variant matrix stock"
+                        type="number"
+                        min="0"
+                        value={optionMatrixDraft.inventory}
+                        onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, inventory: event.target.value }))}
+                        className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="Stock"
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={generateVariantMatrix}
+                        disabled={!optionMatrixDraft.options.trim() || productVariants.length >= 50 || isProductsAccessBusy || !canEditProducts}
+                        data-testid="products-variant-matrix-generate"
+                      >
+                        Generate
+                      </Button>
+                    </div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Stock">
@@ -3367,6 +3486,96 @@ const slugify = (value: string): string => (
     .replace(/(^-|-$)/g, '')
 );
 
+const parseProductOptionGroups = (value: string): Array<{ name: string; values: string[] }> => (
+  value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [rawName, ...rawValues] = line.split(':');
+      const hasNamedGroup = rawValues.length > 0;
+      const name = (hasNamedGroup ? rawName : `Option ${index + 1}`).trim();
+      const valuesText = (hasNamedGroup ? rawValues.join(':') : rawName).trim();
+      const values = Array.from(new Set(valuesText
+        .split(/[,|]/)
+        .map((item) => item.trim())
+        .filter(Boolean)));
+
+      return {
+        name: name || `Option ${index + 1}`,
+        values,
+      };
+    })
+    .filter((group) => group.values.length > 0)
+    .slice(0, 4)
+);
+
+const combineProductOptionValues = (groups: Array<{ name: string; values: string[] }>): Array<Array<{ name: string; value: string }>> => (
+  groups.reduce<Array<Array<{ name: string; value: string }>>>(
+    (combinations, group) => combinations.flatMap((combination) => (
+      group.values.map((value) => [...combination, { name: group.name, value }])
+    )),
+    [[]],
+  )
+);
+
+const buildProductVariantMatrix = ({
+  optionInput,
+  skuPrefix,
+  price,
+  inventory,
+}: {
+  optionInput: string;
+  skuPrefix: string;
+  price: string;
+  inventory: string;
+}): ProductVariant[] => {
+  const groups = parseProductOptionGroups(optionInput);
+  if (groups.length === 0) {
+    return [];
+  }
+
+  const normalizedSkuPrefix = (slugify(skuPrefix || 'variant') || 'variant').toUpperCase();
+  const priceValue = price.trim() ? Number(price) : null;
+  const inventoryValue = inventory.trim() ? Number(inventory) : null;
+
+  return combineProductOptionValues(groups)
+    .slice(0, 50)
+    .map((combination, index) => {
+      const option = combination.map((item) => `${item.name}: ${item.value}`).join(' / ');
+      const optionSlug = combination.map((item) => slugify(item.value)).filter(Boolean).join('-');
+      return {
+        id: `variant-matrix-${Date.now()}-${index}`,
+        title: combination.map((item) => item.value).join(' / '),
+        sku: `${normalizedSkuPrefix}-${(optionSlug || `OPTION-${index + 1}`).toUpperCase()}`,
+        option,
+        price: Number.isFinite(priceValue) ? priceValue : null,
+        inventory: Number.isFinite(inventoryValue) ? inventoryValue : null,
+      };
+    });
+};
+
+const dedupeProductVariants = (variants: ProductVariant[]): ProductVariant[] => {
+  const seen = new Set<string>();
+  const deduped: ProductVariant[] = [];
+
+  for (const variant of formatProductVariants(variants)) {
+    const key = [
+      variant.sku.trim().toLowerCase(),
+      variant.title.trim().toLowerCase(),
+      variant.option.trim().toLowerCase(),
+    ].join('|');
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(variant);
+  }
+
+  return deduped;
+};
+
 const toDateTimeLocalValue = (value?: string | null): string => {
   if (!value) return '';
   const date = new Date(value);
@@ -3669,15 +3878,21 @@ const getMissingProductFieldKeys = (collection: Collection): string[] => {
 
 const mergeProductFields = (currentFields: CollectionField[]): CollectionField[] => {
   const fieldsByKey = new Map(currentFields.map((field) => [normalizeProductSchemaKey(field.key), field]));
-  const merged = PRODUCT_FIELDS.map((requiredField) => ({
-    ...requiredField,
+  const merged = PRODUCT_FIELDS.map((requiredField) => sanitizeProductSchemaField({
     ...fieldsByKey.get(normalizeProductSchemaKey(requiredField.key)),
+    ...requiredField,
     key: requiredField.key,
     sortOrder: requiredField.sortOrder,
   }));
   const requiredKeys = new Set(PRODUCT_FIELDS.map((field) => normalizeProductSchemaKey(field.key)));
   const customFields = currentFields.filter((field) => !requiredKeys.has(normalizeProductSchemaKey(field.key)));
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const sanitizeProductSchemaField = (field: CollectionField): CollectionField => {
+  if (field.type === 'select' || field.type === 'tags') return field;
+  const { options: _options, ...fieldWithoutOptions } = field;
+  return fieldWithoutOptions;
 };
 
 type ProductExportColumn = typeof PRODUCT_EXPORT_COLUMNS[number];

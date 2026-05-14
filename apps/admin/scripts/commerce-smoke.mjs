@@ -348,7 +348,7 @@ const smokeFrontendDesignContract = () => ({
 });
 
 const listCollections = async () => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?limit=200`);
   return payload.data?.collections || [];
 };
 
@@ -365,7 +365,7 @@ const snapshotCollection = (collection) => (
         slug: collection.slug,
         description: collection.description,
         status: collection.status,
-        fields: collection.fields || [],
+        fields: (collection.fields || []).map(sanitizeSchemaField),
         permissions: collection.permissions || {},
         routePattern: collection.routePattern || null,
         listRoutePattern: collection.listRoutePattern || null,
@@ -382,7 +382,7 @@ const restoreCollection = async (snapshot, currentCollection) => {
         slug: snapshot.slug,
         description: snapshot.description,
         status: snapshot.status,
-        fields: snapshot.fields,
+        fields: (snapshot.fields || []).map(sanitizeSchemaField),
         permissions: snapshot.permissions,
         routePattern: snapshot.routePattern,
         listRoutePattern: snapshot.listRoutePattern,
@@ -434,7 +434,13 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection)
     assert(catalogCommerce.capabilities.orderIntake === false, `Catalog advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(catalogCommerce)}`);
 
     const manifestPayload = await requestApi(`/api/sites/${SITE_ID}/manifest`);
-    const manifestCommerce = manifestPayload.data?.commerce || manifestPayload.commerce;
+    const manifestCommerce = manifestPayload.data?.site?.commerce ||
+      manifestPayload.site?.commerce ||
+      manifestPayload.data?.commerce ||
+      manifestPayload.commerce ||
+      (typeof manifestPayload.data?.capabilities?.commerceOrderIntake === 'boolean'
+        ? { capabilities: { orderIntake: manifestPayload.data.capabilities.commerceOrderIntake } }
+        : undefined);
     assert(manifestCommerce?.capabilities?.orderIntake === false, `Manifest advertised order intake while orders.publicUpdate was enabled: ${JSON.stringify(manifestCommerce)}`);
 
     const orderContractResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`);
@@ -460,13 +466,21 @@ const assertOrderIntakeReadinessRequiresPrivateOrders = async (ordersCollection)
 const mergeSchemaFields = (currentFields = [], requiredFields = []) => {
   const currentByKey = new Map(currentFields.map((field) => [field.key, field]));
   const requiredKeys = new Set(requiredFields.map((field) => field.key));
-  const mergedRequired = requiredFields.map((field) => ({
-    ...field,
+  const mergedRequired = requiredFields.map((field) => sanitizeSchemaField({
     ...(currentByKey.get(field.key) || {}),
+    ...field,
     sortOrder: field.sortOrder,
   }));
   const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
   return [...mergedRequired, ...customFields].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+};
+
+const sanitizeSchemaField = (field) => {
+  const nextField = { ...field };
+  if (!['select', 'tags'].includes(nextField.type)) {
+    delete nextField.options;
+  }
+  return nextField;
 };
 
 const upsertCollectionSchema = async ({
@@ -975,6 +989,55 @@ const fillProductEditor = async (client, suffix) => {
   await setLabeledControl(client, 'Featured', true);
   await setLabeledControl(client, 'Taxable', true);
   await setLabeledControl(client, 'Ships', true);
+  const generatedVariantMatrix = await evaluate(client, `(() => {
+    const setNativeValue = (element, value) => {
+      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
+      descriptor?.set?.call(element, value);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const options = document.querySelector('[data-testid="products-variant-matrix-options"]');
+    const prefix = document.querySelector('[data-testid="products-variant-matrix-sku-prefix"]');
+    const price = document.querySelector('[data-testid="products-variant-matrix-price"]');
+    const stock = document.querySelector('[data-testid="products-variant-matrix-stock"]');
+    const button = document.querySelector('[data-testid="products-variant-matrix-generate"]');
+    if (!(options instanceof HTMLTextAreaElement) || !(prefix instanceof HTMLInputElement) || !(price instanceof HTMLInputElement) || !(stock instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-matrix-controls',
+        hasOptions: Boolean(options),
+        hasPrefix: Boolean(prefix),
+        hasPrice: Boolean(price),
+        hasStock: Boolean(stock),
+        hasButton: Boolean(button),
+        body: document.body?.innerText?.slice(0, 800) || '',
+      };
+    }
+
+    setNativeValue(options, 'Size: S, M\\nColor: Black, White');
+    setNativeValue(prefix, 'SMOKE-${suffix.toUpperCase()}');
+    setNativeValue(price, '59');
+    setNativeValue(stock, '4');
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(generatedVariantMatrix.ok, `Unable to generate product variant matrix: ${JSON.stringify(generatedVariantMatrix)}`);
+  await sleep(500);
+  const generatedVariantState = await evaluate(client, `(() => {
+    const text = document.querySelector('[data-testid="products-variant-matrix"]')?.parentElement?.textContent || document.body?.innerText || '';
+    return {
+      hasSmallBlack: text.includes('S / Black') && text.includes('Size: S / Color: Black'),
+      hasMediumWhite: text.includes('M / White') && text.includes('Size: M / Color: White'),
+      countText: text.match(/\\d+\\/50/)?.[0] || '',
+      text: text.slice(0, 1400),
+    };
+  })()`);
+  assert(
+    generatedVariantState.hasSmallBlack &&
+      generatedVariantState.hasMediumWhite &&
+      generatedVariantState.countText === '4/50',
+    `Product variant matrix did not render generated combinations: ${JSON.stringify(generatedVariantState)}`,
+  );
 
   await sleep(500);
   await clickByText(client, 'Create Product', { exact: true });
@@ -1093,6 +1156,12 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(productRecord, `Created product record was not found by slug ${slug}`);
   assert(productRecord.status === 'published', `Created product was not published: ${productRecord.status}`);
   assert(productRecord.values?.inventory === 7, `Created product inventory was unexpected: ${productRecord.values?.inventory}`);
+  assert(
+    Array.isArray(productRecord.values?.variants) &&
+      productRecord.values.variants.length === 4 &&
+      productRecord.values.variants.some((variant) => variant?.title === 'S / Black' && variant?.option === 'Size: S / Color: Black' && variant?.price === 59 && variant?.inventory === 4),
+    `Created product variant matrix did not persist: ${JSON.stringify(productRecord.values?.variants)}`,
+  );
 
   const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(slug)}`);
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
@@ -1101,6 +1170,8 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(product.compareAtPrice === 79, `Public compare-at price was unexpected: ${product.compareAtPrice}`);
   assert(product.productType === 'physical', `Public product type was unexpected: ${product.productType}`);
   assert(product.imageUrl === 'https://images.unsplash.com/photo-1498050108023-c5249f4df085', `Public image URL was unexpected: ${product.imageUrl}`);
+  assert(product.variants?.length === 4, `Public product variants were not generated from matrix: ${JSON.stringify(product.variants)}`);
+  assert(product.variants.some((variant) => variant.sku === `SMOKE-${slug.split('-').at(-1)?.toUpperCase()}-S-BLACK` || (variant.title === 'S / Black' && variant.option === 'Size: S / Color: Black')), `Public product variant matrix missing S / Black: ${JSON.stringify(product.variants)}`);
   assert(product.inventory?.quantity === 7, `Public product inventory was unexpected: ${JSON.stringify(product.inventory)}`);
   assert(product.inventory?.lowStockThreshold === 2, `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`);
   assert(product.inventory?.policy === 'deny', `Public inventory policy was unexpected: ${JSON.stringify(product.inventory)}`);
@@ -1288,8 +1359,8 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     'digital-standard',
     'CSV10',
     'CSV imports can be refunded within 7 days.',
-    'https://images.example.com/imported-product.png',
-    JSON.stringify(['https://images.example.com/imported-product.png']),
+    'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E',
+    JSON.stringify(['data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%230f766e%22/%3E%3Ctext x=%2232%22 y=%2238%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22%3ECSV%3C/text%3E%3C/svg%3E']),
     'Templates',
     'csv,imported',
     'Backy',
@@ -1357,7 +1428,7 @@ const assertDigitalStockFilters = async (client, productTitle) => {
     url.searchParams.set('siteId', SITE_ID);
     url.searchParams.set('type', 'digital');
     url.searchParams.set('stock', stock);
-    url.searchParams.set('search', productTitle);
+    url.searchParams.set('q', productTitle);
     await client.send('Page.navigate', { url: url.toString() });
 
     for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -1373,7 +1444,7 @@ const assertDigitalStockFilters = async (client, productTitle) => {
           searchValue: search instanceof HTMLInputElement ? search.value : null,
           hasProduct: body.includes(${JSON.stringify(productTitle)}),
           hasAvailableStock: body.includes('Available') && body.includes('No physical stock limit'),
-          hasEmptyState: body.includes('No products found'),
+          hasEmptyState: body.includes('No products match this view') || body.includes('No products found'),
           body: body.slice(0, 1200),
         };
       })()`);
@@ -1382,7 +1453,8 @@ const assertDigitalStockFilters = async (client, productTitle) => {
         state.ready &&
         state.stockValue === stock &&
         state.typeValue === 'digital' &&
-        state.searchValue === productTitle
+        state.searchValue === productTitle &&
+        (state.hasProduct || state.hasEmptyState)
       ) {
         return state;
       }
@@ -1402,7 +1474,7 @@ const assertDigitalStockFilters = async (client, productTitle) => {
   const outOfStockState = await navigateToProductFilter('out-of-stock');
   assert(!outOfStockState.hasProduct && outOfStockState.hasEmptyState, `Zero-inventory digital product should not appear out of stock: ${JSON.stringify(outOfStockState)}`);
 
-  await navigateToRoute(client, '/products', 'products-command-center', 'Products command center');
+  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
   return { inStockState, outOfStockState };
 };
 
