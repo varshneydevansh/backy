@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import {
+  getAdminAuthPolicySettings,
+  validateAdminInviteOnlyActivationPolicy,
+} from '@/lib/admin-auth/emailPolicy';
 import { deleteAdminUser, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -75,6 +79,25 @@ const wouldRemoveLastAdminAuthority = (
   });
 
   return remainingActiveAdmins.length === 0;
+};
+
+const validateBulkInviteOnlyStatusPolicy = async (
+  users: AdminUserForSafeguard[],
+  nextStatus: AdminUserStatus,
+) => {
+  const authPolicySettings = await getAdminAuthPolicySettings();
+
+  for (const user of users) {
+    const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(user.status, nextStatus, authPolicySettings);
+    if (!inviteOnlyPolicy.ok) {
+      return inviteOnlyPolicy;
+    }
+  }
+
+  return {
+    ok: true as const,
+    inviteOnly: authPolicySettings.inviteOnly === true,
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -163,6 +186,11 @@ export async function POST(request: NextRequest) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Status must be active, inactive, invited, or suspended.', requestId);
       }
 
+      const inviteOnlyPolicy = await validateBulkInviteOnlyStatusPolicy(existingUsers, status);
+      if (!inviteOnlyPolicy.ok) {
+        return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
+      }
+
       const updatedUsers = [];
       for (const user of existingUsers) {
         updatedUsers.push((await repositories.users.update(user.id, { status })).item);
@@ -244,6 +272,11 @@ export async function POST(request: NextRequest) {
     const status = nextStatus;
     if (!status) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Status must be active, inactive, invited, or suspended.', requestId);
+    }
+
+    const inviteOnlyPolicy = await validateBulkInviteOnlyStatusPolicy(existingUsers, status);
+    if (!inviteOnlyPolicy.ok) {
+      return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
     }
 
     const updatedUsers = existingUsers

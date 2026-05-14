@@ -1514,11 +1514,20 @@ try {
       },
       body: JSON.stringify({ status: 'scheduled', scheduledAt: pastPageSchedule }),
     });
-    assert(pastScheduledPage.response.status === 200, `${pastScheduledPage.url} expected 200, got ${pastScheduledPage.response.status}`);
-    assert(pastScheduledPage.json?.data?.page?.scheduledAt === pastPageSchedule, `${pastScheduledPage.url} expected past schedule`);
+    assert(pastScheduledPage.response.status === 400, `${pastScheduledPage.url} expected past schedule 400, got ${pastScheduledPage.response.status}`);
+    assert(pastScheduledPage.json?.error?.code === 'SCHEDULED_AT_NOT_FUTURE', `${pastScheduledPage.url} expected past schedule error`);
+
+    const publishedPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'published', scheduledAt: null }),
+    });
+    assert(publishedPage.response.status === 200, `${publishedPage.url} expected publish 200, got ${publishedPage.response.status}`);
 
     const visibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
-    assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected past scheduled page to be visible`);
+    assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected published page to be visible`);
     assert(visibleScheduledPage.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPage.url} missing discovery cache scope`);
     assert(visibleScheduledPage.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPage.url} missing contract version header`);
     assert(visibleScheduledPage.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPage.url} missing site id header`);
@@ -1624,7 +1633,7 @@ try {
     )), `${pageFrontendManifest.url} missing page frontend design manifest`);
 
     const visibleScheduledPageResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
-    assert(visibleScheduledPageResolve.response.status === 200, `${visibleScheduledPageResolve.url} expected past scheduled page route to be visible`);
+    assert(visibleScheduledPageResolve.response.status === 200, `${visibleScheduledPageResolve.url} expected published page route to be visible`);
     assert(visibleScheduledPageResolve.json?.data?.route?.type === 'page', `${visibleScheduledPageResolve.url} expected page route type`);
     assert(visibleScheduledPageResolve.json?.data?.route?.resource?.id === createdPageId, `${visibleScheduledPageResolve.url} returned wrong resolved page`);
 
@@ -3069,11 +3078,20 @@ try {
       },
       body: JSON.stringify({ status: 'scheduled', scheduledAt: pastPostSchedule }),
     });
-    assert(pastScheduledPost.response.status === 200, `${pastScheduledPost.url} expected 200, got ${pastScheduledPost.response.status}`);
-    assert(pastScheduledPost.json?.data?.post?.scheduledAt === pastPostSchedule, `${pastScheduledPost.url} expected past schedule`);
+    assert(pastScheduledPost.response.status === 400, `${pastScheduledPost.url} expected past post schedule 400, got ${pastScheduledPost.response.status}`);
+    assert(pastScheduledPost.json?.error?.code === 'SCHEDULED_AT_NOT_FUTURE', `${pastScheduledPost.url} expected past post schedule error`);
+
+    const publishedPost = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'published', scheduledAt: null }),
+    });
+    assert(publishedPost.response.status === 200, `${publishedPost.url} expected publish 200, got ${publishedPost.response.status}`);
 
     const visibleScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`);
-    assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected past scheduled post to be visible`);
+    assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected published post to be visible`);
     assert(visibleScheduledPost.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPost.url} missing discovery cache scope`);
     assert(visibleScheduledPost.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPost.url} missing contract version header`);
     assert(visibleScheduledPost.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPost.url} missing site id header`);
@@ -3189,13 +3207,13 @@ try {
     assert(blogFrontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-blog-template' && template.type === 'blogPost'), `${blogFrontendManifest.url} missing captured blog frontend template`);
 
     const visibleScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
-    assert(visibleScheduledPostResolve.response.status === 200, `${visibleScheduledPostResolve.url} expected past scheduled post route to be visible`);
+    assert(visibleScheduledPostResolve.response.status === 200, `${visibleScheduledPostResolve.url} expected published post route to be visible`);
     assert(visibleScheduledPostResolve.json?.data?.route?.type === 'post', `${visibleScheduledPostResolve.url} expected post route type`);
     assert(visibleScheduledPostResolve.json?.data?.route?.resource?.id === createdPostId, `${visibleScheduledPostResolve.url} returned wrong resolved post`);
 
     const visibleScheduledPostRender = await request(`/api/sites/${createdSiteId}/render?path=/blog/${postSlug}`);
-    assert(visibleScheduledPostRender.response.status === 200, `${visibleScheduledPostRender.url} expected past scheduled post render to be visible`);
-    validateAiRenderPayload(visibleScheduledPostRender.json, 'scheduled post render payload');
+    assert(visibleScheduledPostRender.response.status === 200, `${visibleScheduledPostRender.url} expected published post render to be visible`);
+    validateAiRenderPayload(visibleScheduledPostRender.json, 'published post render payload');
     assert(visibleScheduledPostRender.json?.data?.content?.kind === 'post', `${visibleScheduledPostRender.url} expected post render content`);
     assert(visibleScheduledPostRender.json?.data?.content?.id === createdPostId, `${visibleScheduledPostRender.url} returned wrong rendered post`);
     assert(visibleScheduledPostRender.json?.data?.frontendDesign?.content?.templateId === 'contract-blog-template', `${visibleScheduledPostRender.url} missing render blog frontend design provenance`);

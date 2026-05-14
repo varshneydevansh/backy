@@ -1529,6 +1529,9 @@ function CollectionsPage() {
   const newCollectionButtonTitle = isNewCollectionDraftOpen
     ? 'A new collection draft is open below. Add a schema name and fields, then save it.'
     : schemaActionDisabledTitle;
+  const newCollectionDisabledReason = schemaMutationDisabled
+    ? schemaActionDisabledTitle || 'New collection is temporarily unavailable.'
+    : undefined;
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -3611,29 +3614,44 @@ function CollectionsPage() {
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={beginNewCollection}
-            disabled={schemaMutationDisabled}
-            title={newCollectionButtonTitle}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Create new collection"
-            data-testid="collections-new-collection-button"
-          >
-            <Plus className="h-4 w-4" />
-            {newCollectionButtonLabel}
-          </button>
-          {isNewCollectionDraftOpen && canEditCollections && (
-            <button
-              type="button"
-              onClick={scrollToCollectionSchema}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
-              data-testid="collections-new-draft-action-state"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Draft ready below
-            </button>
-          )}
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={beginNewCollection}
+                disabled={schemaMutationDisabled}
+                title={newCollectionButtonTitle}
+                aria-describedby={newCollectionDisabledReason ? 'collections-new-collection-disabled-reason' : undefined}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Create new collection"
+                data-testid="collections-new-collection-button"
+              >
+                <Plus className="h-4 w-4" />
+                {newCollectionButtonLabel}
+              </button>
+              {isNewCollectionDraftOpen && canEditCollections && (
+                <button
+                  type="button"
+                  onClick={scrollToCollectionSchema}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                  data-testid="collections-new-draft-action-state"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Draft ready below
+                </button>
+              )}
+            </div>
+            {newCollectionDisabledReason && (
+              <p
+                id="collections-new-collection-disabled-reason"
+                className="flex items-center gap-1.5 text-xs font-medium text-amber-700"
+                data-testid="collections-new-collection-disabled-reason"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {newCollectionDisabledReason}
+              </p>
+            )}
+          </div>
         </div>
       }
     >
@@ -3845,17 +3863,30 @@ function CollectionsPage() {
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <button
-              type="button"
-              onClick={beginNewCollection}
-              disabled={schemaMutationDisabled}
-              title={newCollectionButtonTitle}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              data-testid="collections-library-new-collection-button"
-            >
-              <Plus className="h-4 w-4" />
-              {newCollectionButtonLabel}
-            </button>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={beginNewCollection}
+                disabled={schemaMutationDisabled}
+                title={newCollectionButtonTitle}
+                aria-describedby={newCollectionDisabledReason ? 'collections-library-new-collection-disabled-reason' : undefined}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="collections-library-new-collection-button"
+              >
+                <Plus className="h-4 w-4" />
+                {newCollectionButtonLabel}
+              </button>
+              {newCollectionDisabledReason && (
+                <p
+                  id="collections-library-new-collection-disabled-reason"
+                  className="flex items-center gap-1.5 text-xs font-medium text-amber-700"
+                  data-testid="collections-library-new-collection-disabled-reason"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {newCollectionDisabledReason}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

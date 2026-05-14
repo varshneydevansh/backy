@@ -1020,6 +1020,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       const lineItems = [];
+      const reservationsEnabled = commerce.inventory.reservations;
       const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
       for (const item of input.items || []) {
         const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
@@ -1036,7 +1037,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ? { ...record, values: reservedRecord.values }
           : record;
         const product = productRecordToCommerceProduct(workingRecord);
-        if (!product.inventory.inStock) {
+        if (reservationsEnabled && !product.inventory.inStock) {
           return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
         }
 
@@ -1044,16 +1045,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if ((item.variantId || item.variantSku) && !variant) {
           return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
         }
-        if (variant && !variant.inStock) {
+        if (reservationsEnabled && variant && !variant.inStock) {
           return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
         }
 
-        const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
-        if (reservation.error) {
-          return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
-        }
-        if (reservation.values) {
-          inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+        if (reservationsEnabled) {
+          const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
+          if (reservation.error) {
+            return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
+          }
+          if (reservation.values) {
+            inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+          }
         }
 
         lineItems.push(lineItemFromProduct(product, quantity, item));
@@ -1210,6 +1213,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     const lineItems = [];
+    const reservationsEnabled = commerce.inventory.reservations;
     const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
     for (const item of input.items || []) {
       const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
@@ -1228,7 +1232,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? { ...record, values: reservedRecord.values }
         : record;
       const product = productRecordToCommerceProduct(workingRecord);
-      if (!product.inventory.inStock) {
+      if (reservationsEnabled && !product.inventory.inStock) {
         return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
       }
 
@@ -1236,16 +1240,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if ((item.variantId || item.variantSku) && !variant) {
         return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
       }
-      if (variant && !variant.inStock) {
+      if (reservationsEnabled && variant && !variant.inStock) {
         return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
       }
 
-      const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
-      if (reservation.error) {
-        return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
-      }
-      if (reservation.values) {
-        inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+      if (reservationsEnabled) {
+        const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
+        if (reservation.error) {
+          return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
+        }
+        if (reservation.values) {
+          inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+        }
       }
 
       lineItems.push(lineItemFromProduct(product, quantity, item));

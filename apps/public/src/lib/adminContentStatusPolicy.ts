@@ -29,11 +29,20 @@ export const validateScheduledContentStatus = (
     };
   }
 
-  if (Number.isNaN(Date.parse(scheduledAt))) {
+  const scheduledAtMs = Date.parse(scheduledAt);
+  if (Number.isNaN(scheduledAtMs)) {
     return {
       ok: false as const,
       code: 'SCHEDULED_AT_INVALID',
       message: 'scheduledAt must be a valid date-time string.',
+    };
+  }
+
+  if (scheduledAtMs <= Date.now()) {
+    return {
+      ok: false as const,
+      code: 'SCHEDULED_AT_NOT_FUTURE',
+      message: 'scheduledAt must be in the future when status is scheduled.',
     };
   }
 

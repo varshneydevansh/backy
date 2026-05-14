@@ -3440,10 +3440,37 @@ function isEmptySubmissionValue(field: FormFieldDefinition, value: unknown): boo
   return sanitizeString(value).length === 0;
 }
 
+function validateIntrinsicSubmissionField(
+  field: FormFieldDefinition,
+  fieldLabel: string,
+  value: unknown,
+): SubmissionValidationDetail | null {
+  const sanitized = sanitizeString(value);
+
+  if (field.type === 'email' && sanitized.length > 0) {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(sanitized)) {
+      return submissionValidationDetail(field, 'invalid_email', `${fieldLabel} must be a valid email`);
+    }
+  }
+
+  if (field.type === 'url' && sanitized.length > 0) {
+    try {
+      const parsedUrl = new URL(sanitized);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
+      }
+    } catch {
+      return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
+    }
+  }
+
+  return null;
+}
+
 function evaluateValidationRule(
   field: FormFieldDefinition,
   fieldLabel: string,
-  fieldType: string,
   rule: { type: string; value?: string | number; message?: string },
   value: unknown,
 ): SubmissionValidationDetail | null {
@@ -3518,24 +3545,6 @@ function evaluateValidationRule(
     return null;
   }
 
-  if (fieldType === 'email' && trimmed.length > 0) {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(trimmed)) {
-      return submissionValidationDetail(field, 'invalid_email', `${fieldLabel} must be a valid email`);
-    }
-  }
-
-  if (fieldType === 'url' && trimmed.length > 0) {
-    try {
-      const parsedUrl = new URL(trimmed);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
-      }
-    } catch {
-      return submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`);
-    }
-  }
-
   return null;
 }
 
@@ -3552,7 +3561,6 @@ function validateSubmissionValues(
   form.fields.forEach((field) => {
     const fieldLabel = field.label || field.key;
     const fieldValue = values[field.key];
-    const sanitized = sanitizeString(fieldValue);
     const normalizedAllowedOptions = normalizeFieldOptions(field.options);
     const submittedValues = parseSubmissionValues(fieldValue).map(sanitizeString);
     const normalizedSubmittedValues = submittedValues.map((value) => value.toLowerCase());
@@ -3587,23 +3595,12 @@ function validateSubmissionValues(
       return;
     }
 
+    const intrinsicViolation = validateIntrinsicSubmissionField(field, fieldLabel, fieldValue);
+    if (intrinsicViolation) {
+      details.push(intrinsicViolation);
+    }
+
     if (!field.validation || field.validation.length === 0) {
-      if (field.type === 'email' && sanitized.length > 0) {
-        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailPattern.test(sanitized)) {
-          details.push(submissionValidationDetail(field, 'invalid_email', `${fieldLabel} must be a valid email`));
-        }
-      }
-      if (field.type === 'url' && sanitized.length > 0) {
-        try {
-          const parsedUrl = new URL(sanitized);
-          if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-            details.push(submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`));
-          }
-        } catch {
-          details.push(submissionValidationDetail(field, 'invalid_url', `${fieldLabel} must be a valid URL`));
-        }
-      }
       return;
     }
 
@@ -3611,7 +3608,6 @@ function validateSubmissionValues(
       const violation = evaluateValidationRule(
         field,
         fieldLabel,
-        field.type || 'text',
         validation,
         fieldValue,
       );

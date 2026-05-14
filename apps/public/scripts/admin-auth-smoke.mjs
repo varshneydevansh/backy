@@ -471,6 +471,22 @@ await record('admin invite-only setting blocks direct activation', async () => {
     assert(blockedActivation.response.status === 400, `${blockedActivation.url} expected direct activation 400, got ${blockedActivation.response.status}`);
     assert(blockedActivation.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedActivation.url} expected INVITE_ONLY_REQUIRED on activation`);
 
+    const blockedBulkActivation = await request('/api/admin/users/bulk', {
+      method: 'POST',
+      headers: {
+        origin: adminDevOrigin,
+        'content-type': 'application/json',
+        'x-backy-admin-key': adminApiKey,
+      },
+      body: JSON.stringify({
+        action: 'updateStatus',
+        userIds: [invitedUserId],
+        status: 'active',
+      }),
+    });
+    assert(blockedBulkActivation.response.status === 400, `${blockedBulkActivation.url} expected bulk activation 400, got ${blockedBulkActivation.response.status}`);
+    assert(blockedBulkActivation.json?.error?.code === 'INVITE_ONLY_REQUIRED', `${blockedBulkActivation.url} expected INVITE_ONLY_REQUIRED on bulk activation`);
+
     const csv = [
       'full_name,email,role,status',
       `Invite Only CSV ${unique},invite-only-csv-${unique}@example.test,viewer,active`,

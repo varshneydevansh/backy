@@ -307,6 +307,19 @@ for (const route of [
   assertExcludes(source, 'value as FormFieldDefinition[]', `${route} must not cast raw fields directly`);
 }
 
+const backyStore = read('apps/public/src/lib/backyStore.ts');
+const submissionValidationStart = backyStore.indexOf('function validateSubmissionValues(');
+const submissionValidationEnd = backyStore.indexOf('\nfunction makeSubmissionSignature', submissionValidationStart);
+assert(submissionValidationStart !== -1 && submissionValidationEnd !== -1, 'backyStore missing submission validation function');
+const submissionValidationSource = backyStore.slice(submissionValidationStart, submissionValidationEnd);
+assertIncludes(backyStore, 'function validateIntrinsicSubmissionField(', 'backyStore must have intrinsic form field validation');
+assertIncludes(submissionValidationSource, 'const intrinsicViolation = validateIntrinsicSubmissionField(field, fieldLabel, fieldValue);', 'submission validation must call intrinsic email/url validation');
+assert(
+  submissionValidationSource.indexOf('validateIntrinsicSubmissionField(field, fieldLabel, fieldValue)') <
+    submissionValidationSource.indexOf('if (!field.validation || field.validation.length === 0)'),
+  'submission validation must enforce intrinsic email/url checks even when custom validation rules are present',
+);
+
 const adminContentStatusPolicy = read('apps/public/src/lib/adminContentStatusPolicy.ts');
 for (const needle of [
   'statusRequiresPublishPermission',
@@ -314,6 +327,9 @@ for (const needle of [
   'validateScheduledContentStatus',
   'SCHEDULED_AT_REQUIRED',
   'SCHEDULED_AT_INVALID',
+  'SCHEDULED_AT_NOT_FUTURE',
+  'scheduledAtMs <= Date.now()',
+  'scheduledAt must be in the future when status is scheduled.',
 ]) {
   assertIncludes(adminContentStatusPolicy, needle, 'admin content status policy');
 }
@@ -381,6 +397,12 @@ for (const needle of [
 ]) {
   assertIncludes(adminSettingsRoute, needle, 'admin settings route');
 }
+const mediaStorageSettingsPatchStart = adminSettingsRoute.indexOf('const isMediaStorageSettingsPatch');
+const mediaStorageSettingsPatchEnd = adminSettingsRoute.indexOf('const isMediaStorageInfrastructureCheck');
+assert(mediaStorageSettingsPatchStart !== -1 && mediaStorageSettingsPatchEnd !== -1, 'admin settings route missing media storage patch classifier');
+const mediaStorageSettingsPatchSource = adminSettingsRoute.slice(mediaStorageSettingsPatchStart, mediaStorageSettingsPatchEnd);
+assertIncludes(mediaStorageSettingsPatchSource, "key !== 'integrations'", 'media.configure settings patch must be scoped to storage integrations only');
+assertExcludes(mediaStorageSettingsPatchSource, "key !== 'deliveryMode' && key !== 'integrations'", 'media.configure settings patch must not include deliveryMode');
 
 const mediaFileRoute = read('apps/public/src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
 for (const needle of [

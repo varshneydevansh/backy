@@ -339,7 +339,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
 
 const isMediaStorageSettingsPatch = (body: Record<string, unknown>): boolean => {
   const bodyKeys = Object.keys(body);
-  if (bodyKeys.length === 0 || bodyKeys.some((key) => key !== 'deliveryMode' && key !== 'integrations')) {
+  if (bodyKeys.length === 0 || bodyKeys.some((key) => key !== 'integrations')) {
     return false;
   }
 
@@ -363,7 +363,6 @@ const isMediaStorageInfrastructureCheck = (body: Record<string, unknown>): boole
   }
 
   return isMediaStorageSettingsPatch({
-    ...(body.deliveryMode !== undefined ? { deliveryMode: body.deliveryMode } : {}),
     integrations: body.integrations,
   });
 };
