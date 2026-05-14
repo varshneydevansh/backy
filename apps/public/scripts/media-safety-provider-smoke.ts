@@ -8,6 +8,8 @@ import {
 } from '../src/lib/mediaSafety';
 
 const envKeys = [
+  'NODE_ENV',
+  'BACKY_ALLOW_PRODUCTION_MEDIA_SCAN_DISABLED',
   'BACKY_MEDIA_SCAN_PROVIDER',
   'BACKY_MEDIA_SCANNER_PROVIDER',
   'BACKY_MEDIA_SCAN_ENDPOINT',
@@ -29,21 +31,22 @@ const envKeys = [
 ] as const;
 
 const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+const mutableEnv = process.env as Record<string, string | undefined>;
 
 const restoreEnv = () => {
   for (const key of envKeys) {
     const value = originalEnv[key];
     if (typeof value === 'undefined') {
-      delete process.env[key];
+      delete mutableEnv[key];
     } else {
-      process.env[key] = value;
+      mutableEnv[key] = value;
     }
   }
 };
 
 const resetScanEnv = () => {
   for (const key of envKeys) {
-    delete process.env[key];
+    delete mutableEnv[key];
   }
 };
 
@@ -136,6 +139,18 @@ const main = async () => {
     assert(!defaultScan.checks.includes('provider-http-scan'));
 
     resetScanEnv();
+    mutableEnv.NODE_ENV = 'production';
+    await assertMediaSafetyError(
+      () => scanMediaUploadWithProviders(cleanPngInput()),
+      'Production uploads should fail closed when media scanner provider is not configured',
+    );
+    mutableEnv.BACKY_ALLOW_PRODUCTION_MEDIA_SCAN_DISABLED = 'true';
+    const allowedProductionDisabledScan = await scanMediaUploadWithProviders(cleanPngInput());
+    assert.equal(allowedProductionDisabledScan.providerScans, undefined);
+    assert.equal(allowedProductionDisabledScan.scanner, 'backy-static-media-safety-v1');
+    resetScanEnv();
+
+    resetScanEnv();
     process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
     process.env.BACKY_MEDIA_SCAN_ENDPOINT = `${baseUrl}/scan`;
     process.env.BACKY_MEDIA_SCAN_API_KEY = 'smoke-secret';
@@ -211,7 +226,7 @@ const main = async () => {
 
     console.log(JSON.stringify({
       ok: true,
-      cases: 11,
+      cases: 12,
     }));
   } finally {
     restoreEnv();

@@ -64,6 +64,11 @@ const envBoolean = (value: string | undefined, fallback: boolean): boolean => {
   return fallback;
 };
 
+const productionDisabledScannerAllowed = (): boolean => (
+  process.env.NODE_ENV !== 'production' ||
+  envBoolean(envValue(['BACKY_ALLOW_PRODUCTION_MEDIA_SCAN_DISABLED']), false)
+);
+
 const envPositiveInteger = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value || '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -75,6 +80,13 @@ export const resolveMediaScannerConfig = (): MediaScannerConfig => {
   const timeoutMs = envPositiveInteger(envValue(['BACKY_MEDIA_SCAN_TIMEOUT_MS', 'BACKY_MEDIA_SCANNER_TIMEOUT_MS']), 5000);
 
   if (provider === 'none' || provider === 'off' || provider === 'disabled') {
+    if (!productionDisabledScannerAllowed()) {
+      throw new MediaSafetyError('Production media scanner provider is not configured.', {
+        provider,
+        reason: 'production-media-scanner-required',
+        allowEnv: 'BACKY_ALLOW_PRODUCTION_MEDIA_SCAN_DISABLED',
+      });
+    }
     return { provider: 'none', timeoutMs, failOpen };
   }
 
