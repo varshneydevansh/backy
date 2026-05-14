@@ -258,6 +258,80 @@ const routeSlugFromPattern = (value?: string) => {
     return slugify(value.replace(/^\/+|\/+$/g, ''));
 };
 
+const normalizeRoutePathForCreate = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === '/') return '/';
+    const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+};
+
+const normalizeCollectionPatternForPageCreate = (
+    value: string | null | undefined,
+    collectionSlug: string,
+    fallback: string,
+) => normalizeRoutePathForCreate(value?.trim() || fallback)
+    .split('/')
+    .map((segment) => (segment === ':collectionSlug' ? collectionSlug : segment))
+    .join('/') || '/';
+
+const routePathMatchesPatternForPageCreate = (path: string, pattern: string) => {
+    const pathSegments = normalizeRoutePathForCreate(path).replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+    const patternSegments = normalizeRoutePathForCreate(pattern).replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+    if (pathSegments.length !== patternSegments.length) return false;
+
+    return patternSegments.every((segment, index) => segment.startsWith(':') || segment === decodeURIComponent(pathSegments[index] || ''));
+};
+
+type PageCreateCollectionRouteConflict = {
+    kind: 'reserved' | 'collectionList' | 'collectionItem';
+    path: string;
+    title: string;
+    message: string;
+    collection?: Collection;
+};
+
+const findCollectionRouteConflictForPageCreate = (
+    path: string,
+    collections: Collection[],
+): PageCreateCollectionRouteConflict | null => {
+    const normalizedPath = normalizeRoutePathForCreate(path);
+    const firstSegment = normalizedPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)[0] || '';
+    if (firstSegment === 'api' || firstSegment === 'sites' || firstSegment === 'blog') {
+        return {
+            kind: 'reserved',
+            path: normalizedPath,
+            title: 'reserved Backy route',
+            message: `The ${normalizedPath} route uses a reserved Backy route prefix.`,
+        };
+    }
+
+    for (const collection of collections) {
+        const listPattern = normalizeCollectionPatternForPageCreate(collection.listRoutePattern, collection.slug, `/${collection.slug}`);
+        if (routePathMatchesPatternForPageCreate(normalizedPath, listPattern)) {
+            return {
+                kind: 'collectionList',
+                path: normalizedPath,
+                title: `${collection.name} collection list route`,
+                message: `The ${normalizedPath} route is already reserved by the "${collection.name}" collection list route.`,
+                collection,
+            };
+        }
+
+        const itemPattern = normalizeCollectionPatternForPageCreate(collection.routePattern, collection.slug, `/${collection.slug}/:recordSlug`);
+        if (itemPattern.split('/').includes(':recordSlug') && routePathMatchesPatternForPageCreate(normalizedPath, itemPattern)) {
+            return {
+                kind: 'collectionItem',
+                path: normalizedPath,
+                title: `${collection.name} collection item route`,
+                message: `The ${normalizedPath} route is already reserved by the "${collection.name}" collection item route.`,
+                collection,
+            };
+        }
+    }
+
+    return null;
+};
+
 const normalizeCanonicalPath = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return '/';
@@ -1074,10 +1148,24 @@ function NewPageRoute() {
         ? jsonLdResult.value
         : defaultJsonLd;
     const jsonLdValid = jsonLdResult.ok;
-    const routeConflict = useMemo(
+    const pageRouteConflict = useMemo(
         () => selectedSitePages.find((page) => getPagePublicPath(page) === routePreview) || null,
         [routePreview, selectedSitePages],
     );
+    const collectionRouteConflict = useMemo(
+        () => findCollectionRouteConflictForPageCreate(routePreview, collections),
+        [collections, routePreview],
+    );
+    const routeConflict = pageRouteConflict
+        ? {
+            kind: 'page' as const,
+            title: pageRouteConflict.title,
+            message: `The ${routePreview} route is already used by "${pageRouteConflict.title}".`,
+            page: pageRouteConflict,
+        }
+        : collectionRouteConflict;
+    const isCollectionRouteCheckPending = canViewCollections && collectionsLoading;
+    const collectionRouteCheckError = canViewCollections ? collectionsError : null;
     const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
     const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const hasValidParentPage = !formData.parentPageId || Boolean(selectedParentPage);
@@ -1099,6 +1187,8 @@ function NewPageRoute() {
         && hasSchedule
         && !routeConflict
         && !routeCheckError
+        && !isCollectionRouteCheckPending
+        && !collectionRouteCheckError
         && hasNavigationLabel
         && hasValidParentPage
         && canonicalValid
@@ -1115,9 +1205,11 @@ function NewPageRoute() {
             : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
         if (isCheckingPages) return 'Checking existing routes for this site before creating the page.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the page.';
+        if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the page.';
+        if (collectionRouteCheckError) return 'Backy could not verify collection routes for this site. Refresh or choose the site again before creating the page.';
         if (!selectedSite) return 'Select a target site before creating this page.';
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
-        if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
+        if (routeConflict) return routeConflict.message;
         if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
         if (!jsonLdValid) return jsonLdResult.message;
         if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the dataset page.';
@@ -1126,7 +1218,7 @@ function NewPageRoute() {
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, routePreview, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -1151,10 +1243,14 @@ function NewPageRoute() {
                 label: 'Route availability',
                 detail: routeCheckError
                     ? 'Backy could not verify existing routes for this site.'
+                    : collectionRouteCheckError
+                    ? 'Backy could not verify collection routes for this site.'
+                    : isCollectionRouteCheckPending
+                    ? 'Checking collection route reservations for this site.'
                     : routeConflict
-                    ? `${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page.`
+                    ? routeConflict.message
                     : `${routePreview} is available in the current ${selectedSite?.name || 'site'} page library.`,
-                ready: !routeConflict && !routeCheckError,
+                ready: !routeConflict && !routeCheckError && !collectionRouteCheckError && !isCollectionRouteCheckPending,
             },
             {
                 label: 'SEO summary',
@@ -1255,6 +1351,7 @@ function NewPageRoute() {
         formData.designTemplateId,
         formData.collectionId,
         canonicalValid,
+        collectionRouteCheckError,
         collectionsError,
         collectionsLoading,
         effectiveSeoDescription,
@@ -1262,6 +1359,7 @@ function NewPageRoute() {
         effectiveKeywords.length,
         effectiveJsonLd.length,
         hasSchedule,
+        isCollectionRouteCheckPending,
         jsonLdResult,
         jsonLdValid,
         routeCheckError,
@@ -1287,8 +1385,10 @@ function NewPageRoute() {
         description: formData.description,
         isHomepage: formData.isHomepage,
         routeAvailability: routeConflict
-            ? { status: 'conflict', pageId: routeConflict.id, title: routeConflict.title, path: getPagePublicPath(routeConflict) }
-            : { status: 'available', checkedPages: selectedSitePages.length },
+            ? routeConflict.kind === 'page'
+                ? { status: 'conflict', kind: 'page', pageId: routeConflict.page.id, title: routeConflict.title, path: getPagePublicPath(routeConflict.page) }
+                : { status: 'conflict', kind: routeConflict.kind, title: routeConflict.title, path: routeConflict.path, collectionId: routeConflict.collection?.id }
+            : { status: 'available', checkedPages: selectedSitePages.length, checkedCollections: collections.length },
         content: selectedFrontendTemplate
             ? `${selectedFrontendTemplate.name} frontend contract seed`
             : `${selectedTemplate.sections.length + (formData.template === 'blank' ? 0 : 2)} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
@@ -1360,6 +1460,7 @@ function NewPageRoute() {
         normalizedCanonicalPath,
         routeConflict,
         resolvedSlug,
+        collections.length,
         selectedSitePages.length,
         selectedParentPage,
         selectedFrontendTemplate,
@@ -1381,15 +1482,25 @@ function NewPageRoute() {
             path: routePreview,
             isHomepage: formData.isHomepage,
             availability: routeConflict
-                ? {
-                    status: 'conflict',
-                    pageId: routeConflict.id,
-                    title: routeConflict.title,
-                    path: getPagePublicPath(routeConflict),
-                }
+                ? routeConflict.kind === 'page'
+                    ? {
+                        status: 'conflict',
+                        kind: 'page',
+                        pageId: routeConflict.page.id,
+                        title: routeConflict.title,
+                        path: getPagePublicPath(routeConflict.page),
+                    }
+                    : {
+                        status: 'conflict',
+                        kind: routeConflict.kind,
+                        title: routeConflict.title,
+                        path: routeConflict.path,
+                        collectionId: routeConflict.collection?.id,
+                    }
                 : {
                     status: 'available',
                     checkedPages: selectedSitePages.length,
+                    checkedCollections: collections.length,
                 },
         },
         readiness: {
@@ -1496,6 +1607,7 @@ function NewPageRoute() {
         resolvedSlug,
         routeConflict,
         routePreview,
+        collections.length,
         selectedSitePages.length,
         selectedSite?.name,
         selectedSite?.slug,
@@ -1698,7 +1810,7 @@ function NewPageRoute() {
 
         if (!canSubmit) {
             if (routeConflict) {
-                setError(`Route ${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page first`);
+                setError(routeConflict.message);
             } else if (!hasSchedule) {
                 setError('Choose a publish date before creating a scheduled page');
             } else if (!hasNavigationLabel) {
@@ -2190,27 +2302,29 @@ function NewPageRoute() {
                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="page-route-conflict">
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <div className="font-semibold">Route already exists</div>
+                                        <div className="font-semibold">Route is unavailable</div>
                                         <p className="mt-1">
-                                            {routePreview} is already used by {routeConflict.title}. Choose a different slug, unset homepage, or edit the existing page.
+                                            {routeConflict.message} Choose a different slug, unset homepage, or adjust the conflicting route.
                                         </p>
                                     </div>
-                                    <button
-                                        type="button"
-	                                        onClick={() => {
-	                                            if (isPageCreateBusy || !canEditPages) return;
-	                                            navigate({
-                                                to: '/pages/$pageId/edit',
-                                                params: { pageId: routeConflict.id },
-                                                search: { siteId: formData.siteId },
-                                            });
-                                        }}
-	                                        disabled={isPageCreateBusy || !canEditPages}
-	                                        title={!canEditPages ? editPermissionTitle : undefined}
-                                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        Open existing page
-                                    </button>
+                                    {routeConflict.kind === 'page' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (isPageCreateBusy || !canEditPages) return;
+                                                navigate({
+                                                    to: '/pages/$pageId/edit',
+                                                    params: { pageId: routeConflict.page.id },
+                                                    search: { siteId: formData.siteId },
+                                                });
+                                            }}
+                                            disabled={isPageCreateBusy || !canEditPages}
+                                            title={!canEditPages ? editPermissionTitle : undefined}
+                                            className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            Open existing page
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -2756,7 +2870,7 @@ function NewPageRoute() {
                         </div>
                         {routeConflict && (
                             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                                Conflicts with {routeConflict.title}. This create action is blocked until the route is available.
+                                {routeConflict.message}
                             </div>
                         )}
                         <dl className="mt-4 space-y-3 text-sm">
@@ -2775,7 +2889,7 @@ function NewPageRoute() {
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Availability</dt>
                                 <dd className={cn('mt-1 font-medium', routeConflict ? 'text-amber-700' : 'text-emerald-700')}>
-                                    {routeConflict ? 'Route conflict' : `${selectedSitePages.length} existing page${selectedSitePages.length === 1 ? '' : 's'} checked`}
+                                    {routeConflict ? 'Route conflict' : `${selectedSitePages.length} page${selectedSitePages.length === 1 ? '' : 's'} and ${collections.length} collection${collections.length === 1 ? '' : 's'} checked`}
                                 </dd>
                             </div>
                         </dl>

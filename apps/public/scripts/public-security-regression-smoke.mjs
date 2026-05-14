@@ -689,6 +689,10 @@ assertIncludes(pageCreateRoute, 'page-dataset-collection-select', 'page creation
 assertIncludes(pageCreateRoute, "(['list', 'item'] as PageDatasetMode[]).map", 'page creation must expose list and item dataset modes');
 assertIncludes(pageCreateRoute, 'page-dataset-mode-${mode}', 'page creation must test dataset mode controls');
 assertExcludes(pageCreateRoute, 'if (!siteId || !formData.collectionId)', 'page creation must load collections for selector use, not only URL-param dataset imports');
+assertIncludes(pageCreateRoute, 'findCollectionRouteConflictForPageCreate', 'page creation must preflight collection route conflicts before submit');
+assertIncludes(pageCreateRoute, 'routePathMatchesPatternForPageCreate', 'page creation must match dynamic collection item route patterns before submit');
+assertIncludes(pageCreateRoute, '&& !collectionRouteCheckError', 'page creation must block submit when collection route verification fails');
+assertIncludes(pageCreateRoute, 'checkedCollections: collections.length', 'page creation route handoff must report collection route checks');
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',
