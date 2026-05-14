@@ -68,6 +68,7 @@ import type {
 } from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
+import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import type {
   Comment,
   CommentReportReason,
@@ -668,7 +669,8 @@ function EditSitePage() {
   const { sites, updateSite, deleteSite } = useStore();
   const currentAdmin = useAuthStore((store) => store.user);
 
-  const site = sites.find((s) => s.id === siteId);
+  const site = sites.find((s) => siteMatchesIdentifier(s, siteId));
+  const storeSiteId = site?.id || siteId;
   const siteApiId = site?.publicSiteId || site?.slug || site?.id;
 
   const [formData, setFormData] = useState<{
@@ -1298,7 +1300,7 @@ function EditSitePage() {
           commentPolicy: commentPolicyDraft,
         },
       });
-      updateSite(siteId, savedSite);
+      updateSite(storeSiteId, savedSite);
       const siteDetail = await getAdminSite(siteApiId);
       const normalized = normalizeSiteCommentPolicyDraft(siteDetail.settings?.commentPolicy);
       setCommentPolicyDraft(normalized);
@@ -2396,7 +2398,7 @@ function EditSitePage() {
 
     try {
       const savedSite = await updateSiteFromApi(siteApiId || siteId, nextSite);
-      updateSite(siteId, savedSite);
+      updateSite(storeSiteId, savedSite);
       if (siteApiId) {
         void loadReadiness();
       }
@@ -2429,7 +2431,7 @@ function EditSitePage() {
       return;
     }
 
-    deleteSite(siteId);
+    deleteSite(storeSiteId);
     navigate({ to: '/sites' });
   };
 
