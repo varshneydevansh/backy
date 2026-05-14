@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdminCredentials } from '@/lib/admin-auth/sessionStore';
+import {
+  authenticateAdminCredentials,
+  authenticateAdminCredentialsWithPersistence,
+} from '@/lib/admin-auth/sessionStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -40,7 +44,14 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
   }
 
-  const session = authenticateAdminCredentials(email, password);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const session = repositories
+    ? await authenticateAdminCredentialsWithPersistence(email, password, {
+      getUserByEmail: (userEmail) => repositories.users.getByEmail(userEmail),
+    })
+    : authenticateAdminCredentials(email, password);
   if (!session) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }

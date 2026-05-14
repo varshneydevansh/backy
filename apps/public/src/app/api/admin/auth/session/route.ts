@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSession } from '@/lib/admin-auth/sessionStore';
+import { getAdminSession, getAdminSessionWithPersistence } from '@/lib/admin-auth/sessionStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +14,15 @@ const getBearerToken = (request: NextRequest) => {
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const session = getAdminSession(getBearerToken(request));
+  const token = getBearerToken(request);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const session = repositories
+    ? await getAdminSessionWithPersistence(token, {
+      getUserById: (userId) => repositories.users.getById(userId),
+    })
+    : getAdminSession(token);
 
   if (!session) {
     return NextResponse.json(

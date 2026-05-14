@@ -102,6 +102,7 @@ type AdminAuthUserLike = {
 
 type AdminAuthUserPersistence = {
   getUserById?: (userId: string) => Promise<AdminAuthUserLike | null | undefined>;
+  getUserByEmail?: (email: string) => Promise<AdminAuthUserLike | null | undefined>;
   updateUser?: (userId: string, input: Partial<Pick<AdminAuthUser, 'status'>>) => Promise<AdminAuthUserLike | null | undefined>;
 };
 
@@ -297,6 +298,36 @@ export function authenticateAdminCredentials(email: string, password: string): A
   return createAdminSessionForUser(user);
 }
 
+export async function authenticateAdminCredentialsWithPersistence(
+  email: string,
+  password: string,
+  persistence: Pick<AdminAuthUserPersistence, 'getUserByEmail'> = {},
+): Promise<AdminSession | null> {
+  pruneExpiredSessions();
+
+  const normalizedEmail = normalizeEmail(email);
+  const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
+  if (localCredential && verifyPassword(password, localCredential)) {
+    const user = toAuthUser(
+      persistence.getUserByEmail
+        ? await persistence.getUserByEmail(localCredential.userEmail)
+        : getAdminUserByEmail(localCredential.userEmail),
+    ) || (!persistence.getUserByEmail ? localCredential.user || null : null);
+
+    if (!user || user.status !== 'active') {
+      return null;
+    }
+
+    return createAdminSessionForUser(user);
+  }
+
+  if (persistence.getUserByEmail) {
+    return null;
+  }
+
+  return authenticateAdminCredentials(email, password);
+}
+
 export function setLocalAdminPassword(input: {
   user: Pick<AdminAuthUser, 'email' | 'fullName'> & Partial<AdminAuthUser>;
   password: string;
@@ -324,6 +355,41 @@ export function getAdminSession(token: string | null | undefined): AdminSession 
   if (!session) return null;
 
   const user = toAuthUser(getAdminUserById(session.user.id)) || session.user;
+  if (!user || user.status !== 'active') {
+    ADMIN_SESSIONS.delete(session.token);
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  session.user = user;
+  session.lastSeenAt = now;
+  ADMIN_SESSIONS.set(session.token, session);
+
+  return {
+    token: session.token,
+    user: session.user,
+    issuedAt: session.issuedAt,
+    expiresAt: session.expiresAt,
+    authMode: session.authMode,
+  };
+}
+
+export async function getAdminSessionWithPersistence(
+  token: string | null | undefined,
+  persistence: Pick<AdminAuthUserPersistence, 'getUserById'> = {},
+): Promise<AdminSession | null> {
+  pruneExpiredSessions();
+  if (!token) return null;
+
+  const session = ADMIN_SESSIONS.get(token.trim());
+  if (!session) return null;
+
+  const user = toAuthUser(
+    persistence.getUserById
+      ? await persistence.getUserById(session.user.id)
+      : getAdminUserById(session.user.id),
+  ) || (!persistence.getUserById ? session.user : null);
+
   if (!user || user.status !== 'active') {
     ADMIN_SESSIONS.delete(session.token);
     return null;
