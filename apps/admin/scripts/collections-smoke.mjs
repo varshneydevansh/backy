@@ -1397,8 +1397,7 @@ const attachFrontendTemplateThroughUi = async (client, collectionId) => {
   assert(clicked.ok, `Unable to save captured collection template selection: ${JSON.stringify(clicked)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const collections = await fetchCollections();
-    const collection = collections.find((candidate) => candidate.id === collectionId);
+    const collection = await fetchCollection(collectionId);
     if (
       collection?.metadata?.frontendDesignTemplateId === FRONTEND_COLLECTION_TEMPLATE_ID &&
       collection?.metadata?.frontendDesignTemplateName === FRONTEND_COLLECTION_TEMPLATE_NAME &&
@@ -1488,8 +1487,7 @@ const captureAuthoredTemplatesThroughUi = async (client, collectionId, { listPag
   assert(clicked.ok, `Unable to save authored template selection: ${JSON.stringify(clicked)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const collections = await fetchCollections();
-    const collection = collections.find((candidate) => candidate.id === collectionId);
+    const collection = await fetchCollection(collectionId);
     const dynamicTemplates = collection?.metadata?.dynamicTemplates;
     if (
       dynamicTemplates?.list?.authoredCanvas?.pageId === listPageId &&
