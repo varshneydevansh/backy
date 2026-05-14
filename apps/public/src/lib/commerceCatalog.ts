@@ -162,6 +162,49 @@ export interface CommerceStorefrontContract {
 
 export const PRODUCT_COLLECTION_SLUG = 'products';
 
+const COMMERCE_PRODUCT_VALUE_KEYS = {
+  title: 'title',
+  sku: 'sku',
+  variants: 'variants',
+  price: 'price',
+  compareAtPrice: 'compareatprice',
+  currency: 'currency',
+  inventory: 'inventory',
+  lowStockThreshold: 'lowstockthreshold',
+  inventoryPolicy: 'inventorypolicy',
+  productType: 'producttype',
+  downloadUrl: 'downloadurl',
+  checkoutUrl: 'checkouturl',
+  shippingRequired: 'shippingrequired',
+  shippingProfile: 'shippingprofile',
+  weight: 'weight',
+  taxClass: 'taxclass',
+  discountCode: 'discountcode',
+  returnPolicy: 'returnpolicy',
+  imageUrl: 'imageurl',
+  galleryImages: 'galleryimages',
+  category: 'category',
+  tags: 'tags',
+  vendor: 'vendor',
+  description: 'description',
+  seoTitle: 'seotitle',
+  featured: 'featured',
+  taxable: 'taxable',
+} as const;
+
+type CommerceProductValueKey = keyof typeof COMMERCE_PRODUCT_VALUE_KEYS;
+
+const readProductValue = (
+  values: Record<string, unknown>,
+  key: CommerceProductValueKey,
+  fallback?: unknown,
+): unknown => {
+  const normalizedKey = COMMERCE_PRODUCT_VALUE_KEYS[key];
+  if (Object.prototype.hasOwnProperty.call(values, normalizedKey)) return values[normalizedKey];
+  if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
+  return fallback;
+};
+
 const normalizeText = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
@@ -465,31 +508,33 @@ export const isCommerceSourceRecord = (record: unknown): record is CommerceSourc
 
 export const productRecordToCommerceProduct = (record: CommerceSourceRecord): CommerceProduct => {
   const values = record.values;
-  const productType = normalizeProductType(values.productType);
-  const quantity = Math.max(0, normalizeNumber(values.inventory));
-  const lowStockThreshold = Math.max(0, normalizeNumber(values.lowStockThreshold, 5));
-  const inventoryPolicy = normalizeInventoryPolicy(values.inventoryPolicy);
-  const checkoutUrl = normalizeText(values.checkoutUrl);
-  const hasDigitalDelivery = productType === 'digital' && normalizeText(values.downloadUrl).length > 0;
+  const productType = normalizeProductType(readProductValue(values, 'productType'));
+  const quantity = Math.max(0, normalizeNumber(readProductValue(values, 'inventory')));
+  const lowStockThreshold = Math.max(0, normalizeNumber(readProductValue(values, 'lowStockThreshold'), 5));
+  const inventoryPolicy = normalizeInventoryPolicy(readProductValue(values, 'inventoryPolicy'));
+  const checkoutUrl = normalizeText(readProductValue(values, 'checkoutUrl'));
+  const hasDigitalDelivery = productType === 'digital' && normalizeText(readProductValue(values, 'downloadUrl')).length > 0;
+  const shippingRequiredValue = readProductValue(values, 'shippingRequired');
+  const taxableValue = readProductValue(values, 'taxable');
 
   return {
     id: record.id,
     slug: record.slug,
     status: record.status,
-    title: normalizeText(values.title) || record.slug,
-    sku: normalizeText(values.sku),
-    description: normalizeText(values.description),
-    seoTitle: normalizeText(values.seoTitle),
-    price: Math.max(0, normalizeNumber(values.price)),
-    compareAtPrice: maybeNumber(values.compareAtPrice),
-    currency: normalizeCurrency(values.currency),
-    imageUrl: normalizeText(values.imageUrl),
-    galleryImages: normalizeUrlList(values.galleryImages),
-    variants: normalizeVariants(values.variants),
-    category: normalizeText(values.category),
-    tags: normalizeTags(values.tags),
-    vendor: normalizeText(values.vendor),
-    featured: Boolean(values.featured),
+    title: normalizeText(readProductValue(values, 'title')) || record.slug,
+    sku: normalizeText(readProductValue(values, 'sku')),
+    description: normalizeText(readProductValue(values, 'description')),
+    seoTitle: normalizeText(readProductValue(values, 'seoTitle')),
+    price: Math.max(0, normalizeNumber(readProductValue(values, 'price'))),
+    compareAtPrice: maybeNumber(readProductValue(values, 'compareAtPrice')),
+    currency: normalizeCurrency(readProductValue(values, 'currency')),
+    imageUrl: normalizeText(readProductValue(values, 'imageUrl')),
+    galleryImages: normalizeUrlList(readProductValue(values, 'galleryImages')),
+    variants: normalizeVariants(readProductValue(values, 'variants')),
+    category: normalizeText(readProductValue(values, 'category')),
+    tags: normalizeTags(readProductValue(values, 'tags')),
+    vendor: normalizeText(readProductValue(values, 'vendor')),
+    featured: Boolean(readProductValue(values, 'featured')),
     productType,
     inventory: {
       quantity,
@@ -499,19 +544,19 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
       lowStock: productType === 'physical' && quantity > 0 && quantity <= lowStockThreshold,
     },
     delivery: {
-      shippingRequired: values.shippingRequired !== false && productType === 'physical',
-      taxable: values.taxable !== false,
-      weight: maybeNumber(values.weight),
-      shippingProfile: normalizeText(values.shippingProfile),
-      taxClass: normalizeText(values.taxClass),
-      returnPolicy: normalizeText(values.returnPolicy),
+      shippingRequired: shippingRequiredValue !== false && productType === 'physical',
+      taxable: taxableValue !== false,
+      weight: maybeNumber(readProductValue(values, 'weight')),
+      shippingProfile: normalizeText(readProductValue(values, 'shippingProfile')),
+      taxClass: normalizeText(readProductValue(values, 'taxClass')),
+      returnPolicy: normalizeText(readProductValue(values, 'returnPolicy')),
       hasDigitalDelivery,
     },
     checkout: {
       mode: checkoutUrl ? 'external-url' : 'not-configured',
       url: checkoutUrl || null,
       enabled: checkoutUrl.length > 0,
-      discountCode: normalizeText(values.discountCode),
+      discountCode: normalizeText(readProductValue(values, 'discountCode')),
     },
     design: buildProductDesignContract(values),
     links: {

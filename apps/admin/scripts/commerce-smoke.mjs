@@ -23,32 +23,69 @@ const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 let apiAdminSessionToken = '';
 
+const PRODUCT_VALUE_KEYS = {
+  title: 'title',
+  sku: 'sku',
+  variants: 'variants',
+  price: 'price',
+  compareAtPrice: 'compareatprice',
+  currency: 'currency',
+  inventory: 'inventory',
+  lowStockThreshold: 'lowstockthreshold',
+  inventoryPolicy: 'inventorypolicy',
+  productType: 'producttype',
+  downloadUrl: 'downloadurl',
+  checkoutUrl: 'checkouturl',
+  shippingRequired: 'shippingrequired',
+  shippingProfile: 'shippingprofile',
+  weight: 'weight',
+  taxClass: 'taxclass',
+  discountCode: 'discountcode',
+  returnPolicy: 'returnpolicy',
+  imageUrl: 'imageurl',
+  galleryImages: 'galleryimages',
+  category: 'category',
+  tags: 'tags',
+  vendor: 'vendor',
+  description: 'description',
+  seoTitle: 'seotitle',
+  featured: 'featured',
+  taxable: 'taxable',
+};
+
+const productFieldKey = (key) => PRODUCT_VALUE_KEYS[key] || key;
+const readProductValue = (values, key) => (
+  Object.prototype.hasOwnProperty.call(values || {}, productFieldKey(key))
+    ? values[productFieldKey(key)]
+    : values?.[key]
+);
+
 const PRODUCT_SCHEMA_FIELDS = [
   { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
   { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
   { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
-  { key: 'compareAtPrice', label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
+  { key: productFieldKey('compareAtPrice'), label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
   { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
   { key: 'variants', label: 'Variants', type: 'json', required: false, unique: false, sortOrder: 60, defaultValue: [] },
   { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 0 },
-  { key: 'lowStockThreshold', label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
-  { key: 'inventoryPolicy', label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
-  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
-  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
-  { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
-  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
-  { key: 'shippingProfile', label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
+  { key: productFieldKey('lowStockThreshold'), label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
+  { key: productFieldKey('inventoryPolicy'), label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
+  { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+  { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
+  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
+  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
   { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
-  { key: 'taxClass', label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
-  { key: 'discountCode', label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: 'returnPolicy', label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
-  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
+  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
+  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
+  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
   { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
   { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
   { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
   { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
+  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
   { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
   { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
 ];
@@ -934,12 +971,12 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
   assert(record.values.frontendDesignChrome?.header?.component === 'SmokeCommerceHeader', `Frontend chrome snapshot missing: ${JSON.stringify(record.values)}`);
   assert(record.values.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(record.values)}`);
   assert(Array.isArray(record.values.frontendDesignBindingHints) && record.values.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(record.values)}`);
-  assert(record.values.price === 39, `Frontend product price mismatch: ${record.values.price}`);
-  assert(record.values.inventory === 11, `Frontend product inventory mismatch: ${record.values.inventory}`);
-  assert(record.values.shippingProfile === 'standard-box', `Frontend product shipping profile mismatch: ${record.values.shippingProfile}`);
-  assert(record.values.taxClass === 'standard', `Frontend product tax class mismatch: ${record.values.taxClass}`);
-  assert(record.values.discountCode === 'FRONTEND10', `Frontend product discount code mismatch: ${record.values.discountCode}`);
-  assert(record.values.returnPolicy === 'Frontend template products allow returns within 30 days.', `Frontend product return policy mismatch: ${record.values.returnPolicy}`);
+  assert(readProductValue(record.values, 'price') === 39, `Frontend product price mismatch: ${readProductValue(record.values, 'price')}`);
+  assert(readProductValue(record.values, 'inventory') === 11, `Frontend product inventory mismatch: ${readProductValue(record.values, 'inventory')}`);
+  assert(readProductValue(record.values, 'shippingProfile') === 'standard-box', `Frontend product shipping profile mismatch: ${readProductValue(record.values, 'shippingProfile')}`);
+  assert(readProductValue(record.values, 'taxClass') === 'standard', `Frontend product tax class mismatch: ${readProductValue(record.values, 'taxClass')}`);
+  assert(readProductValue(record.values, 'discountCode') === 'FRONTEND10', `Frontend product discount code mismatch: ${readProductValue(record.values, 'discountCode')}`);
+  assert(readProductValue(record.values, 'returnPolicy') === 'Frontend template products allow returns within 30 days.', `Frontend product return policy mismatch: ${readProductValue(record.values, 'returnPolicy')}`);
 
   await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/${record.id}`, {
     method: 'PATCH',
@@ -969,7 +1006,12 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
   assert(product, `Public catalog did not return ${slug}`);
   assert(product.price === 49, `Public product price was unexpected: ${product.price}`);
+  assert(product.compareAtPrice === 79, `Public compare-at price was unexpected: ${product.compareAtPrice}`);
+  assert(product.productType === 'physical', `Public product type was unexpected: ${product.productType}`);
+  assert(product.imageUrl === 'https://images.unsplash.com/photo-1498050108023-c5249f4df085', `Public image URL was unexpected: ${product.imageUrl}`);
   assert(product.inventory?.quantity === 7, `Public product inventory was unexpected: ${JSON.stringify(product.inventory)}`);
+  assert(product.inventory?.lowStockThreshold === 2, `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`);
+  assert(product.inventory?.policy === 'deny', `Public inventory policy was unexpected: ${JSON.stringify(product.inventory)}`);
   assert(product.featured === true, 'Public product featured flag was not true');
   assert(product.checkout?.url === `https://checkout.example.com/${slug}`, `Public checkout URL was unexpected: ${JSON.stringify(product.checkout)}`);
   assert(product.checkout?.discountCode === 'SMOKE10', `Public discount code was unexpected: ${JSON.stringify(product.checkout)}`);
@@ -1107,28 +1149,28 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     'title',
     'sku',
     'price',
-    'compareAtPrice',
+    productFieldKey('compareAtPrice'),
     'currency',
     'variants',
     'inventory',
-    'lowStockThreshold',
-    'inventoryPolicy',
-    'productType',
-    'downloadUrl',
-    'checkoutUrl',
-    'shippingRequired',
-    'shippingProfile',
+    productFieldKey('lowStockThreshold'),
+    productFieldKey('inventoryPolicy'),
+    productFieldKey('productType'),
+    productFieldKey('downloadUrl'),
+    productFieldKey('checkoutUrl'),
+    productFieldKey('shippingRequired'),
+    productFieldKey('shippingProfile'),
     'weight',
-    'taxClass',
-    'discountCode',
-    'returnPolicy',
-    'imageUrl',
-    'galleryImages',
+    productFieldKey('taxClass'),
+    productFieldKey('discountCode'),
+    productFieldKey('returnPolicy'),
+    productFieldKey('imageUrl'),
+    productFieldKey('galleryImages'),
     'category',
     'tags',
     'vendor',
     'description',
-    'seoTitle',
+    productFieldKey('seoTitle'),
     'featured',
     'taxable',
   ];
@@ -1179,11 +1221,11 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   assert(record?.id, `Imported product was not found by slug ${slug}`);
   assert(record.values?.price === 99, `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`);
   assert(record.values?.inventory === 12, `Imported inventory did not stay numeric: ${JSON.stringify(record.values?.inventory)}`);
-  assert(record.values?.shippingRequired === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(record.values?.shippingRequired)}`);
-  assert(record.values?.shippingProfile === 'digital-delivery', `Imported shipping profile did not persist: ${JSON.stringify(record.values?.shippingProfile)}`);
-  assert(record.values?.taxClass === 'digital-standard', `Imported tax class did not persist: ${JSON.stringify(record.values?.taxClass)}`);
-  assert(record.values?.discountCode === 'CSV10', `Imported discount code did not persist: ${JSON.stringify(record.values?.discountCode)}`);
-  assert(record.values?.returnPolicy === 'CSV imports can be refunded within 7 days.', `Imported return policy did not persist: ${JSON.stringify(record.values?.returnPolicy)}`);
+  assert(readProductValue(record.values, 'shippingRequired') === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(readProductValue(record.values, 'shippingRequired'))}`);
+  assert(readProductValue(record.values, 'shippingProfile') === 'digital-delivery', `Imported shipping profile did not persist: ${JSON.stringify(readProductValue(record.values, 'shippingProfile'))}`);
+  assert(readProductValue(record.values, 'taxClass') === 'digital-standard', `Imported tax class did not persist: ${JSON.stringify(readProductValue(record.values, 'taxClass'))}`);
+  assert(readProductValue(record.values, 'discountCode') === 'CSV10', `Imported discount code did not persist: ${JSON.stringify(readProductValue(record.values, 'discountCode'))}`);
+  assert(readProductValue(record.values, 'returnPolicy') === 'CSV imports can be refunded within 7 days.', `Imported return policy did not persist: ${JSON.stringify(readProductValue(record.values, 'returnPolicy'))}`);
   assert(record.values?.taxable === false, `Imported taxable flag did not stay boolean false: ${JSON.stringify(record.values?.taxable)}`);
   assert(record.values?.featured === true, `Imported featured flag did not stay boolean true: ${JSON.stringify(record.values?.featured)}`);
   assert(Array.isArray(record.values?.tags) && record.values.tags.includes('imported'), `Imported tags did not parse as an array: ${JSON.stringify(record.values?.tags)}`);
