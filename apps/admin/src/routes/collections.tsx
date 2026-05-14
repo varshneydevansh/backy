@@ -2163,9 +2163,13 @@ function CollectionsPage() {
 
   const showApiError = (apiError: unknown, fallback: string) => {
     setError(apiError instanceof Error ? apiError.message : fallback);
-    setValidationDetails(apiError instanceof AdminContentApiError
-      ? formatValidationDetails(apiError.details)
-      : []);
+    if (apiError instanceof AdminContentApiError) {
+      const details = formatValidationDetails(apiError.details);
+      setValidationDetails(apiError.code ? [`Error code: ${apiError.code}`, ...details] : details);
+      return;
+    }
+
+    setValidationDetails([]);
   };
 
   const showPermissionDenied = (key: CollectionPermissionKey, action: string) => {
