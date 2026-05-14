@@ -23,6 +23,13 @@ function assertExcludes(source, needle, label) {
   assert(!source.includes(needle), `${label} unexpectedly includes ${needle}`);
 }
 
+function functionSource(source, functionName, label) {
+  const start = source.indexOf(`export async function ${functionName}`);
+  assert(start !== -1, `${label} missing ${functionName} handler`);
+  const next = source.indexOf('\nexport async function ', start + 1);
+  return source.slice(start, next === -1 ? source.length : next);
+}
+
 const protectedRoutes = [
   {
     file: 'apps/public/src/app/api/sites/[siteId]/comments/route.ts',
@@ -104,6 +111,92 @@ for (const route of publicIntakeRoutes) {
     assertIncludes(source, needle, route.file);
   }
 }
+
+const commerceCollectionAdminRoutes = [
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/route.ts',
+    handlers: [
+      { name: 'POST', collectionPermission: "'collections.edit'", commerceOperations: ["'configure'"] },
+    ],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/route.ts',
+    handlers: [
+      { name: 'GET', collectionPermission: "'collections.view'", commerceOperations: ["'view'"] },
+      { name: 'PATCH', collectionPermission: "'collections.edit'", commerceOperations: ["'configure'"] },
+      { name: 'DELETE', collectionPermission: "'collections.delete'", commerceOperations: ["'delete'"] },
+    ],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts',
+    handlers: [
+      { name: 'GET', collectionPermission: "'collections.view'", commerceOperations: ["'view'"] },
+      { name: 'POST', collectionPermission: "'collections.edit'", commerceOperations: ["'edit'"] },
+    ],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts',
+    handlers: [
+      { name: 'GET', collectionPermission: "'collections.view'", commerceOperations: ["'view'"] },
+      { name: 'PATCH', collectionPermission: "'collections.edit'", commerceOperations: ["'edit'"] },
+      { name: 'DELETE', collectionPermission: "'collections.delete'", commerceOperations: ["'delete'"] },
+    ],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/bulk/route.ts',
+    handlers: [
+      { name: 'POST', collectionPermission: "'collections.", commerceOperations: ["'edit'", "'delete'"] },
+    ],
+  },
+  {
+    file: 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/import/route.ts',
+    handlers: [
+      { name: 'POST', collectionPermission: "'collections.edit'", commerceOperations: ["'edit'"] },
+    ],
+  },
+];
+
+const commerceCollectionAccess = read('apps/public/src/lib/adminCommerceCollectionAccess.ts');
+for (const needle of [
+  "'products'",
+  "'orders'",
+  "view: 'commerce.view'",
+  "edit: 'commerce.edit'",
+  "delete: 'commerce.delete'",
+  "configure: 'commerce.configure'",
+  'requireAdminAccess(',
+]) {
+  assertIncludes(commerceCollectionAccess, needle, 'commerce collection access helper');
+}
+
+for (const route of commerceCollectionAdminRoutes) {
+  const source = read(route.file);
+  assertIncludes(source, "from '@/lib/adminAccess'", route.file);
+  assertIncludes(source, 'requireAdminAccess(', route.file);
+  assertIncludes(source, '@/lib/adminCommerceCollectionAccess', route.file);
+  for (const handler of route.handlers) {
+    const handlerSource = functionSource(source, handler.name, route.file);
+    assertIncludes(handlerSource, handler.collectionPermission, `${route.file} ${handler.name}`);
+    assert(
+      /requireCommerceCollection(?:Slug)?Access\(/.test(handlerSource),
+      `${route.file} ${handler.name} must call commerce collection access after resolving products/orders`,
+    );
+    for (const operation of handler.commerceOperations) {
+      assert(
+        handlerSource.includes(operation),
+        `${route.file} ${handler.name} must require commerce ${operation} for products/orders in addition to ${handler.collectionPermission}`,
+      );
+    }
+  }
+}
+
+const commerceReconcileRoute = read('apps/public/src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts');
+const commerceReconcilePost = functionSource(commerceReconcileRoute, 'POST', 'commerce reconcile route');
+assertIncludes(
+  commerceReconcilePost,
+  "permission: 'commerce.configure'",
+  'commerce reconcile route must match configure-only admin UI policy',
+);
 
 for (const file of [
   'apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts',

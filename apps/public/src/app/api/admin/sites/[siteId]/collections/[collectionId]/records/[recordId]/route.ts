@@ -18,6 +18,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -137,6 +138,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
         || await repositories.collections.getRecordBySlug(site.id, collection.id, recordId);
@@ -156,6 +161,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });
@@ -191,6 +200,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getBySlug(site.id, collectionId);
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      if (commerceAccess) {
+        return commerceAccess;
       }
 
       const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
@@ -263,6 +276,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });
@@ -342,6 +359,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       const record = await repositories.collections.getRecordById(site.id, collection.id, recordId)
         || await repositories.collections.getRecordBySlug(site.id, collection.id, recordId);
@@ -392,6 +413,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordId, { includeUnpublished: true });

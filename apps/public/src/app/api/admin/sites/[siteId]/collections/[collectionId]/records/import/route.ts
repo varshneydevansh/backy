@@ -17,6 +17,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -265,6 +266,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       const csv = await request.text();
       const rows = parseCsvRows(csv);
@@ -341,6 +346,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const csv = await request.text();

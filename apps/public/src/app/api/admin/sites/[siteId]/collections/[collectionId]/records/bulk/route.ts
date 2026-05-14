@@ -14,6 +14,7 @@ import {
   updateAdminCollectionRecord,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -139,6 +140,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getBySlug(site.id, collectionId);
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+      const commerceAccess = requireCommerceCollectionAccess(
+        request,
+        requestId,
+        collection.slug,
+        action === 'delete' ? 'delete' : 'edit',
+      );
+      if (commerceAccess) {
+        return commerceAccess;
       }
 
       const recordIds = parseRecordIds(body.recordIds);
@@ -294,6 +304,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(
+      request,
+      requestId,
+      collection.slug,
+      action === 'delete' ? 'delete' : 'edit',
+    );
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const recordIds = parseRecordIds(body.recordIds);

@@ -16,6 +16,10 @@ import {
   updateAdminCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import {
+  requireCommerceCollectionAccess,
+  requireCommerceCollectionSlugAccess,
+} from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -178,6 +182,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       return NextResponse.json({ success: true, requestId, data: { collection } });
     }
@@ -191,6 +199,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     return NextResponse.json({ success: true, requestId, data: { collection } });
@@ -225,6 +237,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const body = await parseJsonBody(request);
       const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+      const commerceAccess = requireCommerceCollectionSlugAccess(
+        request,
+        requestId,
+        [collection.slug, nextSlug].filter(Boolean),
+        'configure',
+      );
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       if (body.slug !== undefined && !nextSlug) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
@@ -312,6 +333,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await parseJsonBody(request);
     const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+    const commerceAccess = requireCommerceCollectionSlugAccess(
+      request,
+      requestId,
+      [collection.slug, nextSlug].filter(Boolean),
+      'configure',
+    );
+    if (commerceAccess) {
+      return commerceAccess;
+    }
 
     if (body.slug !== undefined && !nextSlug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
@@ -394,6 +424,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       const deleted = await repositories.collections.delete(site.id, collection.id);
       if (!deleted) {
@@ -438,6 +472,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'delete');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const deleted = deleteAdminCollection(site.id, collection.id);

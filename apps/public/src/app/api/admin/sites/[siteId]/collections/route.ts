@@ -15,6 +15,7 @@ import {
   listCollections,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireCommerceCollectionSlugAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -235,6 +236,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
       }
 
+      const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
+
       if (await repositories.collections.getBySlug(site.id, slug)) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
       }
@@ -323,6 +329,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+    }
+
+    const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     if (getCollectionByIdOrSlug(site.id, slug, { includeUnpublished: true })) {

@@ -19,6 +19,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireCommerceCollectionAccess } from '@/lib/adminCommerceCollectionAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { seedCollectionRecordInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
@@ -191,6 +192,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      if (commerceAccess) {
+        return commerceAccess;
+      }
 
       const csvRequested = searchParams.get('format') === 'csv' || searchParams.get('export') === 'csv';
       const defaultLimit = csvRequested ? 1000 : 50;
@@ -262,6 +267,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    if (commerceAccess) {
+      return commerceAccess;
+    }
 
     const csvRequested = searchParams.get('format') === 'csv' || searchParams.get('export') === 'csv';
     const defaultLimit = csvRequested ? 1000 : 50;
@@ -330,6 +339,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getBySlug(site.id, collectionId);
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      if (commerceAccess) {
+        return commerceAccess;
       }
 
       const rawBody = await parseJsonBody(request);
@@ -400,6 +413,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const collection = getCollectionByIdOrSlug(site.id, collectionId, { includeUnpublished: true });
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+    }
+    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    if (commerceAccess) {
+      return commerceAccess;
     }
 
     const rawBody = await parseJsonBody(request);
