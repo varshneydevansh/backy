@@ -338,6 +338,7 @@ const navigateToSiteDetail = (client, siteId, siteName) => navigate(
       ready: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) &&
       Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-theme-publish-panel"]')) &&
+      Boolean(document.querySelector('[data-testid="site-webhooks-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) &&
       Boolean(document.querySelector('[data-testid="site-seo-panel"]')) &&
@@ -477,6 +478,10 @@ const assertSiteDetailLayout = async (client, siteName) => {
         body.includes('Brand colors') &&
         body.includes('Custom CSS') &&
         body.includes('Save theme & publish'),
+      hasWebhooks: Boolean(document.querySelector('[data-testid="site-webhooks-panel"]')) &&
+        body.includes('Webhooks') &&
+        body.includes('Add endpoint') &&
+        body.includes('Save webhooks'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
       hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) && body.includes('Frontend design contract') && body.includes('Capture current design') && body.includes('Save contract'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
@@ -497,6 +502,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasReadiness &&
       layout.hasDomainVerification &&
       layout.hasThemePublish &&
+      layout.hasWebhooks &&
       layout.hasNavigation &&
       layout.hasFrontendDesign &&
       layout.hasRedirects &&
@@ -605,6 +611,62 @@ const configureThemePublishThroughUi = async (client, expected) => {
     'Theme publish save notice',
   );
   await waitForText(client, '[data-testid="site-theme-publish-panel"]', 'published', 'Published theme state');
+};
+
+const configureWebhooksThroughUi = async (client, expected) => {
+  await waitForText(client, '[data-testid="site-webhooks-panel"]', 'Webhooks', 'Webhooks panel');
+  await clickButtonByText(client, '[data-testid="site-webhooks-panel"]', 'Add endpoint');
+  const result = await evaluate(client, `(() => {
+    ${setInputValue}
+    const section = document.querySelector('[data-testid="site-webhooks-panel"]');
+    if (!section) return { ok: false, reason: 'section-missing' };
+    const delivery = section.querySelector('input[aria-label="Enable site webhooks"]');
+    const endpointEnabled = section.querySelector('input[aria-label="Enable site webhook endpoint"]');
+    const name = section.querySelector('input[aria-label="Site webhook endpoint name"]');
+    const url = section.querySelector('input[aria-label="Site webhook endpoint URL"]');
+    const secret = section.querySelector('input[aria-label="Site webhook signing secret reference"]');
+    const headers = section.querySelector('textarea[aria-label="Site webhook headers JSON"]');
+    if (
+      !(delivery instanceof HTMLInputElement) ||
+      !(endpointEnabled instanceof HTMLInputElement) ||
+      !(name instanceof HTMLInputElement) ||
+      !(url instanceof HTMLInputElement) ||
+      !(secret instanceof HTMLInputElement) ||
+      !(headers instanceof HTMLTextAreaElement)
+    ) {
+      return {
+        ok: false,
+        reason: 'controls-missing',
+        labels: Array.from(section.querySelectorAll('input, textarea')).map((control) => control.getAttribute('aria-label')).filter(Boolean),
+        text: section.textContent?.slice(0, 1200) || '',
+      };
+    }
+    if (!delivery.checked) delivery.click();
+    if (!endpointEnabled.checked) endpointEnabled.click();
+    setNativeValue(name, ${JSON.stringify(expected.webhookName)});
+    setNativeValue(url, ${JSON.stringify(expected.webhookUrl)});
+    setNativeValue(secret, ${JSON.stringify(expected.webhookSecretId)});
+    setNativeValue(headers, ${JSON.stringify(expected.webhookHeadersText)});
+    for (const eventKind of ${JSON.stringify(['form-submission', 'contact-shared', 'comment-submitted', 'comment-reported'])}) {
+      const control = section.querySelector(\`input[aria-label="Site webhook event \${eventKind}"]\`);
+      if (control instanceof HTMLInputElement && !control.checked) {
+        control.click();
+      }
+    }
+    return {
+      ok: true,
+      delivery: delivery.checked,
+      endpointEnabled: endpointEnabled.checked,
+      name: name.value,
+      url: url.value,
+      secret: secret.value,
+      headers: headers.value,
+    };
+  })()`);
+  assert(result.ok, `Unable to configure webhooks through UI: ${JSON.stringify(result)}`);
+
+  await clickButtonByText(client, '[data-testid="site-webhooks-panel"]', 'Save webhooks');
+  await waitForText(client, '[data-testid="site-workspace-command-center"]', 'Site webhook configuration saved.', 'Webhook save notice');
 };
 
 const configureNavigationThroughUi = async (client, { routeLabel, routePath, footerLabel, footerHref }) => {
@@ -998,6 +1060,8 @@ const assertApiReadback = async (siteId, expected) => {
   const site = await getSite(siteId);
   const auditLogs = await getSiteAuditLogs(siteId);
   const domainVerification = site?.settings?.domainVerification;
+  const webhooks = site?.settings?.webhooks;
+  const webhookEndpoint = webhooks?.endpoints?.find((endpoint) => endpoint.url === expected.webhookUrl);
 
   assert(
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
@@ -1061,6 +1125,18 @@ const assertApiReadback = async (siteId, expected) => {
     `Site API did not include saved comment policy: ${JSON.stringify(site?.settings?.commentPolicy).slice(0, 1000)}`,
   );
   assert(
+    webhooks?.enabled === true &&
+      webhookEndpoint?.name === expected.webhookName &&
+      webhookEndpoint?.enabled === true &&
+      webhookEndpoint?.secretId === expected.webhookSecretId &&
+      webhookEndpoint?.headers?.['X-Backy-Smoke'] === expected.webhookHeaderValue &&
+      webhookEndpoint?.eventKinds?.includes('form-submission') &&
+      webhookEndpoint?.eventKinds?.includes('contact-shared') &&
+      webhookEndpoint?.eventKinds?.includes('comment-submitted') &&
+      webhookEndpoint?.eventKinds?.includes('comment-reported'),
+    `Site API did not include saved webhooks: ${JSON.stringify(webhooks).slice(0, 1500)}`,
+  );
+  assert(
     frontendDesign?.status === 'synced' &&
       frontendDesign?.source?.type === 'custom-frontend' &&
       frontendDesign?.source?.label === expected.frontendLabel &&
@@ -1081,6 +1157,7 @@ const assertApiReadback = async (siteId, expected) => {
     'site.seo.updated',
     'site.domainVerification.updated',
     'site.themePublish.updated',
+    'site.webhooks.updated',
     'commentPolicy.update',
     'frontendDesign.capture',
     'frontendDesign.update',
@@ -1187,6 +1264,11 @@ const main = async () => {
     themeSpacingUnit: 6,
     themeSpacingScale: 1.2,
     themeCustomCss: `.site-${slug} { scroll-behavior: smooth; }`,
+    webhookName: `Smoke Webhook ${suffix}`,
+    webhookUrl: `https://hooks.example.com/site-${suffix}`,
+    webhookSecretId: `env:BACKY_SITE_WEBHOOK_SECRET_${suffix.toUpperCase()}`,
+    webhookHeaderValue: `smoke-${suffix}`,
+    webhookHeadersText: JSON.stringify({ 'X-Backy-Smoke': `smoke-${suffix}` }, null, 2),
   };
 
   try {
@@ -1230,6 +1312,7 @@ const main = async () => {
 
     await configureDomainVerificationThroughUi(client);
     await configureThemePublishThroughUi(client, expected);
+    await configureWebhooksThroughUi(client, expected);
     await configureNavigationThroughUi(client, expected);
     await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {
@@ -1244,6 +1327,7 @@ const main = async () => {
     await assertApiReadback(site.id, expected);
     await clickButtonByText(client, '[data-testid="site-audit-panel"]', 'Refresh activity');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.navigation.updated', 'Site activity audit row');
+    await waitForText(client, '[data-testid="site-audit-panel"]', 'site.webhooks.updated', 'Site webhooks audit row');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.seo.updated', 'Site SEO audit row');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {

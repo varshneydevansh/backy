@@ -310,6 +310,9 @@ export interface SiteSettings {
   /** Custom-domain DNS verification state for managed and custom frontend delivery */
   domainVerification?: SiteDomainVerificationSettings;
 
+  /** Site-level webhook endpoints used by custom automations and integration handoff */
+  webhooks?: SiteWebhookSettings;
+
   /** Per-site Vercel deployment workflow state and non-secret deploy handoff history */
   vercelDeployment?: SiteVercelDeploymentSettings;
 
@@ -338,6 +341,31 @@ export interface SiteDomainVerificationSettings {
   checkedAt?: string | null;
   verifiedAt?: string | null;
   lastError?: string | null;
+}
+
+export type SiteWebhookEventKind =
+  | 'form-submission'
+  | 'contact-shared'
+  | 'contact-sync'
+  | 'contact-status'
+  | 'commerce-webhook'
+  | 'comment-submitted'
+  | 'comment-status'
+  | 'comment-reported';
+
+export interface SiteWebhookEndpointSettings {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  eventKinds: SiteWebhookEventKind[];
+  secretId?: string;
+  headers?: Record<string, string>;
+}
+
+export interface SiteWebhookSettings {
+  enabled: boolean;
+  endpoints: SiteWebhookEndpointSettings[];
 }
 
 export interface SiteVercelDeploymentSettings {

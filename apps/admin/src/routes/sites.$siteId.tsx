@@ -80,6 +80,7 @@ import type {
   SiteNavigationLayoutConfig,
   SiteCommentPolicy,
   SiteSettings,
+  SiteWebhookEventKind,
   SiteRedirectRule,
   ThemeConfig,
 } from '@backy-cms/core';
@@ -226,6 +227,11 @@ const SITE_WORKSPACE_AREAS = [
     href: '#site-seo',
   },
   {
+    title: 'Webhooks',
+    detail: 'Site-level integration endpoints, event subscriptions, secrets, headers, and delivery toggles.',
+    href: '#site-webhooks',
+  },
+  {
     title: 'Site settings',
     detail: 'Name, slug, custom domain, description, visibility, and destructive workspace actions.',
     href: '#site-settings',
@@ -237,7 +243,7 @@ const SITE_WORKSPACE_AREAS = [
   },
   {
     title: 'Activity',
-    detail: 'Request-id audit trail for site settings, navigation, redirects, SEO, and frontend contracts.',
+    detail: 'Request-id audit trail for site settings, navigation, redirects, SEO, webhooks, and frontend contracts.',
     href: '#site-activity',
   },
   {
@@ -270,6 +276,25 @@ interface SiteSeoEditorState {
   seo: AdminSiteSeoSettings;
   jsonLdText: string;
   preview: AdminSiteSeoPreview;
+  loading: boolean;
+  saving: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+}
+
+type SiteWebhookEndpointDraft = {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  eventKinds: SiteWebhookEventKind[];
+  secretId: string;
+  headersText: string;
+};
+
+interface SiteWebhookEditorState {
+  enabled: boolean;
+  endpoints: SiteWebhookEndpointDraft[];
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -546,6 +571,24 @@ const EMPTY_SEO_PREVIEW: AdminSiteSeoPreview = {
   routes: [],
 };
 
+const SITE_WEBHOOK_EVENT_OPTIONS: Array<{ value: SiteWebhookEventKind; label: string }> = [
+  { value: 'form-submission', label: 'Form submitted' },
+  { value: 'contact-shared', label: 'Lead shared' },
+  { value: 'contact-sync', label: 'Contact synced' },
+  { value: 'contact-status', label: 'Contact status changed' },
+  { value: 'commerce-webhook', label: 'Commerce webhook received' },
+  { value: 'comment-submitted', label: 'Comment submitted' },
+  { value: 'comment-status', label: 'Comment status changed' },
+  { value: 'comment-reported', label: 'Comment reported' },
+];
+
+const DEFAULT_SITE_WEBHOOK_EVENTS: SiteWebhookEventKind[] = [
+  'form-submission',
+  'contact-shared',
+  'comment-submitted',
+  'comment-reported',
+];
+
 const EMPTY_FRONTEND_DESIGN: SiteFrontendDesignContract = {
   schemaVersion: 'backy.frontend-design.v1',
   status: 'unconfigured',
@@ -568,6 +611,23 @@ const parseObjectJson = (value: string, label: string): Record<string, unknown> 
     throw new Error(`${label} must be a JSON object.`);
   }
   return parsed as Record<string, unknown>;
+};
+
+const formatHeadersJson = (value: Record<string, string> | undefined): string => (
+  value && Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : '{}'
+);
+
+const parseStringRecordJson = (value: string, label: string): Record<string, string> => {
+  const parsed = parseObjectJson(value || '{}', label);
+  return Object.entries(parsed).reduce<Record<string, string>>((acc, [key, entry]) => {
+    if (typeof entry !== 'string') {
+      throw new Error(`${label} value for ${key} must be a string.`);
+    }
+    if (key.trim() && entry.trim()) {
+      acc[key.trim()] = entry.trim();
+    }
+    return acc;
+  }, {});
 };
 
 const parseArrayJson = (value: string, label: string): Array<Record<string, unknown>> => {
@@ -624,6 +684,59 @@ function makeRedirectRule(): SiteRedirectRule {
     to: '/new-path',
     statusCode: 301,
     enabled: true,
+  };
+}
+
+function makeSiteWebhookEndpoint(): SiteWebhookEndpointDraft {
+  return {
+    id: `webhook_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    name: 'Site automation webhook',
+    url: '',
+    enabled: true,
+    eventKinds: [...DEFAULT_SITE_WEBHOOK_EVENTS],
+    secretId: '',
+    headersText: '{}',
+  };
+}
+
+function createWebhookEditorState(settings?: SiteSettings['webhooks']): SiteWebhookEditorState {
+  const endpoints = (settings?.endpoints || []).map<SiteWebhookEndpointDraft>((endpoint) => ({
+    id: endpoint.id || `webhook_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    name: endpoint.name || 'Site automation webhook',
+    url: endpoint.url || '',
+    enabled: endpoint.enabled !== false,
+    eventKinds: endpoint.eventKinds?.length ? endpoint.eventKinds : [...DEFAULT_SITE_WEBHOOK_EVENTS],
+    secretId: endpoint.secretId || '',
+    headersText: formatHeadersJson(endpoint.headers),
+  }));
+
+  return {
+    enabled: settings?.enabled === true || endpoints.some((endpoint) => endpoint.enabled),
+    endpoints,
+    loading: false,
+    saving: false,
+    errorMessage: null,
+    notice: null,
+  };
+}
+
+function siteWebhookDraftToSettings(state: SiteWebhookEditorState): NonNullable<SiteSettings['webhooks']> {
+  return {
+    enabled: state.enabled,
+    endpoints: state.endpoints
+      .map((endpoint) => {
+        const headers = parseStringRecordJson(endpoint.headersText, 'Webhook headers');
+        return {
+          id: endpoint.id,
+          name: endpoint.name.trim() || 'Site automation webhook',
+          url: endpoint.url.trim(),
+          enabled: endpoint.enabled,
+          eventKinds: endpoint.eventKinds,
+          secretId: endpoint.secretId.trim(),
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+        };
+      })
+      .filter((endpoint) => endpoint.url),
   };
 }
 
@@ -928,6 +1041,7 @@ function EditSitePage() {
     errorMessage: null,
     notice: null,
   });
+  const [webhookState, setWebhookState] = useState<SiteWebhookEditorState>(() => createWebhookEditorState());
   const [frontendDesignState, setFrontendDesignState] = useState<SiteFrontendDesignEditorState>(
     () => createFrontendDesignState(),
   );
@@ -983,6 +1097,7 @@ function EditSitePage() {
   const commentsConfigureDeniedMessage = `Your account needs comments.configure to change comment policy. ${commentsConfigurePermissionTitle}`;
   const isSiteSettingsBusy = isLoading || commentPolicySaving || isPermissionMatrixPending;
   const isSiteConfigurationDisabled = isSiteSettingsBusy || !canConfigureSite;
+  const isWebhookConfigurationDisabled = webhookState.loading || webhookState.saving || !canConfigureSite;
   const isSiteDeletionDisabled = isSiteSettingsBusy || !canDeleteSite;
   const areRedirectEditsDisabled = redirectState.loading || redirectState.saving || redirectState.previewing || !canConfigureSite;
   const areSeoEditsDisabled = seoState.loading || seoState.saving || !canConfigureSite;
@@ -1535,6 +1650,117 @@ function EditSitePage() {
       setSiteSettingsError(error instanceof Error ? error.message : 'Unable to load site comment policy.');
     } finally {
       setCommentPolicyLoading(false);
+    }
+  };
+
+  const loadWebhookEditor = async () => {
+    if (!siteApiId) return;
+    if (!canViewSite) {
+      setWebhookState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: viewSitePermissionTitle || 'Your account needs sites.view to load site webhooks.',
+      }));
+      return;
+    }
+
+    setWebhookState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const siteDetail = await getAdminSite(siteApiId);
+      setWebhookState({
+        ...createWebhookEditorState(siteDetail.settings?.webhooks),
+        loading: false,
+      });
+    } catch (error) {
+      setWebhookState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load site webhooks.',
+      }));
+    }
+  };
+
+  const patchWebhookEndpoint = (endpointId: string, updates: Partial<SiteWebhookEndpointDraft>) => {
+    if (!canConfigureSite) return;
+    setWebhookState((prev) => ({
+      ...prev,
+      notice: null,
+      endpoints: prev.endpoints.map((endpoint) => (
+        endpoint.id === endpointId ? { ...endpoint, ...updates } : endpoint
+      )),
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const toggleWebhookEvent = (endpointId: string, eventKind: SiteWebhookEventKind, checked: boolean) => {
+    setWebhookState((prev) => ({
+      ...prev,
+      notice: null,
+      endpoints: prev.endpoints.map((endpoint) => {
+        if (endpoint.id !== endpointId) return endpoint;
+        const nextEvents = checked
+          ? Array.from(new Set([...endpoint.eventKinds, eventKind]))
+          : endpoint.eventKinds.filter((item) => item !== eventKind);
+        return { ...endpoint, eventKinds: nextEvents };
+      }),
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const addWebhookEndpoint = () => {
+    if (!canConfigureSite) return;
+    setWebhookState((prev) => ({
+      ...prev,
+      enabled: true,
+      notice: null,
+      endpoints: [...prev.endpoints, makeSiteWebhookEndpoint()],
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const removeWebhookEndpoint = (endpointId: string) => {
+    if (!canConfigureSite) return;
+    setWebhookState((prev) => ({
+      ...prev,
+      notice: null,
+      endpoints: prev.endpoints.filter((endpoint) => endpoint.id !== endpointId),
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const saveSiteWebhooks = async () => {
+    if (!siteApiId || webhookState.saving) return;
+    if (!canConfigureSite) {
+      setWebhookState((prev) => ({ ...prev, errorMessage: siteConfigureDeniedMessage }));
+      return;
+    }
+
+    setWebhookState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const webhooks = siteWebhookDraftToSettings(webhookState);
+      const savedSite = await updateSiteFromApi(siteApiId, {
+        settings: {
+          webhooks,
+        },
+      });
+      updateSite(storeSiteId, savedSite);
+      setFetchedSite(savedSite);
+      setWebhookState({
+        ...createWebhookEditorState(savedSite.settings?.webhooks),
+        saving: false,
+        notice: 'Webhook configuration saved.',
+      });
+      setSiteWorkspaceNotice('Site webhook configuration saved.');
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setWebhookState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to save site webhooks.',
+      }));
     }
   };
 
@@ -2417,6 +2643,7 @@ function EditSitePage() {
       void loadFrontendDesignEditor();
       void loadRedirectEditor();
       void loadSeoEditor();
+      void loadWebhookEditor();
       void loadSiteCommentPolicy();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2504,6 +2731,7 @@ function EditSitePage() {
       seoState.seo.favicon ||
       seoState.seo.jsonLd?.length,
     );
+    const enabledWebhookEndpoints = webhookState.endpoints.filter((endpoint) => endpoint.enabled && endpoint.url.trim());
     const hasFrontendDesign = frontendDesignState.frontendDesign.status !== 'unconfigured';
     const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0 || commentPolicyDraft.enabled;
     const hasDomain = Boolean(formData.customDomain || site?.customDomain || site?.slug);
@@ -2552,6 +2780,13 @@ function EditSitePage() {
           ? 'Site SEO defaults are available to hosted and custom frontend routes.'
           : 'Add default SEO metadata before relying on public discovery.',
         ready: hasSeoDefaults,
+      },
+      {
+        label: 'Integration webhooks',
+        detail: webhookState.enabled
+          ? `${enabledWebhookEndpoints.length} enabled endpoint${enabledWebhookEndpoints.length === 1 ? '' : 's'} configured for site events.`
+          : 'Site webhook delivery is disabled until an integration endpoint is added.',
+        ready: !webhookState.enabled || enabledWebhookEndpoints.length > 0,
       },
       {
         label: 'Frontend design contract',
@@ -2626,6 +2861,8 @@ function EditSitePage() {
     themeDraft.fonts.body,
     themeDraft.fonts.heading,
     themeDraft.spacing.unit,
+    webhookState.enabled,
+    webhookState.endpoints,
   ]);
 
   const publicSiteUrl = `https://${formData.customDomain || site?.customDomain || `${formData.slug || site?.slug || siteId}.backy.app`}`;
@@ -2660,6 +2897,7 @@ function EditSitePage() {
       navigation: `${adminSiteUrl}/navigation`,
       redirects: `${adminSiteUrl}/redirects`,
       seo: `${adminSiteUrl}/seo`,
+      webhooks: adminSiteUrl,
       pages: `${adminSiteUrl}/pages`,
       forms: `${publicSiteApiUrl}/forms`,
       comments: `${publicSiteApiUrl}/comments`,
@@ -2705,6 +2943,18 @@ function EditSitePage() {
       sitemap: seoState.seo.sitemap,
       robots: seoState.seo.robots,
       jsonLdCount: seoState.seo.jsonLd?.length || 0,
+    },
+    webhooks: {
+      enabled: webhookState.enabled,
+      endpointCount: webhookState.endpoints.length,
+      endpoints: webhookState.endpoints.map((endpoint) => ({
+        id: endpoint.id,
+        name: endpoint.name,
+        url: endpoint.url,
+        enabled: endpoint.enabled,
+        eventKinds: endpoint.eventKinds,
+        hasSecretReference: Boolean(endpoint.secretId),
+      })),
     },
     readiness: {
       score: siteWorkspaceReadiness.score,
@@ -2787,6 +3037,8 @@ function EditSitePage() {
     state.submissionCount,
     submissionStatus,
     themeDraft,
+    webhookState.enabled,
+    webhookState.endpoints,
   ]);
   const siteWorkspaceHandoffText = useMemo(() => JSON.stringify(siteWorkspaceHandoff, null, 2), [siteWorkspaceHandoff]);
 
@@ -3462,6 +3714,202 @@ function EditSitePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="site-webhooks" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-webhooks-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Send className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">Webhooks</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  webhookState.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground',
+                )}
+                >
+                  {webhookState.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Configure site-level integration endpoints for forms, contacts, commerce, and comments without exposing signing secrets in the UI.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={addWebhookEndpoint}
+                disabled={isWebhookConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add endpoint
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveSiteWebhooks()}
+                disabled={isWebhookConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {webhookState.saving ? 'Saving...' : 'Save webhooks'}
+              </button>
+            </div>
+          </div>
+
+          {webhookState.errorMessage ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {webhookState.errorMessage}
+            </div>
+          ) : null}
+          {webhookState.notice ? (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {webhookState.notice}
+            </div>
+          ) : null}
+
+          <div className="mt-5 rounded-lg border border-border bg-background p-4">
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={webhookState.enabled}
+                onChange={(event) => {
+                  if (!canConfigureSite) return;
+                  setWebhookState((prev) => ({ ...prev, enabled: event.target.checked, notice: null }));
+                  setSiteWorkspaceNotice(null);
+                }}
+                disabled={isWebhookConfigurationDisabled}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="mt-1 h-4 w-4 rounded border-border"
+                aria-label="Enable site webhooks"
+              />
+              <span>
+                <span className="font-semibold">Enable webhook delivery</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                  Backy stores endpoint URLs, event allowlists, header templates, and secret references. Secret values stay in the deployment environment.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {webhookState.loading ? (
+              <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                Loading webhooks...
+              </div>
+            ) : webhookState.endpoints.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
+                No webhook endpoints configured.
+              </div>
+            ) : webhookState.endpoints.map((endpoint, index) => (
+              <div key={endpoint.id} className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Endpoint {index + 1}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Subscribe this endpoint to the exact site events a downstream integration expects.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={endpoint.enabled}
+                        onChange={(event) => patchWebhookEndpoint(endpoint.id, { enabled: event.target.checked })}
+                        disabled={isWebhookConfigurationDisabled}
+                        title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                        className="h-4 w-4 rounded border-border"
+                        aria-label="Enable site webhook endpoint"
+                      />
+                      Enabled
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeWebhookEndpoint(endpoint.id)}
+                      disabled={isWebhookConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Name</span>
+                    <input
+                      value={endpoint.name}
+                      onChange={(event) => patchWebhookEndpoint(endpoint.id, { name: event.target.value })}
+                      disabled={isWebhookConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Site webhook endpoint name"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Endpoint URL</span>
+                    <input
+                      value={endpoint.url}
+                      onChange={(event) => patchWebhookEndpoint(endpoint.id, { url: event.target.value })}
+                      disabled={isWebhookConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      placeholder="https://hooks.example.com/backy"
+                      aria-label="Site webhook endpoint URL"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Signing secret reference</span>
+                    <input
+                      value={endpoint.secretId}
+                      onChange={(event) => patchWebhookEndpoint(endpoint.id, { secretId: event.target.value })}
+                      disabled={isWebhookConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                      placeholder="env:BACKY_WEBHOOK_SECRET"
+                      aria-label="Site webhook signing secret reference"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">Headers JSON</span>
+                    <textarea
+                      value={endpoint.headersText}
+                      onChange={(event) => patchWebhookEndpoint(endpoint.id, { headersText: event.target.value })}
+                      disabled={isWebhookConfigurationDisabled}
+                      title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                      rows={3}
+                      spellCheck={false}
+                      className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs leading-5 disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Site webhook headers JSON"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-4">
+                  <div className="text-sm font-medium">Events</div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    {SITE_WEBHOOK_EVENT_OPTIONS.map((eventOption) => (
+                      <label key={eventOption.value} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={endpoint.eventKinds.includes(eventOption.value)}
+                          onChange={(event) => toggleWebhookEvent(endpoint.id, eventOption.value, event.target.checked)}
+                          disabled={isWebhookConfigurationDisabled}
+                          title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                          className="h-4 w-4 rounded border-border"
+                          aria-label={`Site webhook event ${eventOption.value}`}
+                        />
+                        <span>{eventOption.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 

@@ -25,6 +25,7 @@ import type {
   CommentStatus,
   SiteCommentPolicy,
   SiteSettings,
+  SiteWebhookEventKind,
 } from '@backy-cms/core';
 import {
   defaultCollectionListRoutePattern,
@@ -437,15 +438,17 @@ const normalizeCommentPolicy = (value: unknown, current?: SiteCommentPolicy): Si
 
 const AUDIT_EVENT_STATUSES = ['queued', 'succeeded', 'failed', 'received'] as const;
 type AuditEventStatus = (typeof AUDIT_EVENT_STATUSES)[number];
-type WebhookEventKind =
-  | 'form-submission'
-  | 'contact-shared'
-  | 'contact-sync'
-  | 'contact-status'
-  | 'commerce-webhook'
-  | 'comment-submitted'
-  | 'comment-status'
-  | 'comment-reported';
+const SITE_WEBHOOK_EVENT_KINDS: SiteWebhookEventKind[] = [
+  'form-submission',
+  'contact-shared',
+  'contact-sync',
+  'contact-status',
+  'commerce-webhook',
+  'comment-submitted',
+  'comment-status',
+  'comment-reported',
+];
+type WebhookEventKind = SiteWebhookEventKind;
 
 interface AuditEvent {
   id: string;
@@ -504,6 +507,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     footer: [],
   },
   domainVerification: { ...DEFAULT_SITE_SETTINGS.domainVerification },
+  webhooks: { ...DEFAULT_SITE_SETTINGS.webhooks, endpoints: [] },
   vercelDeployment: { ...DEFAULT_SITE_SETTINGS.vercelDeployment, missing: [], history: [] },
   billingQuota: {
     ...DEFAULT_SITE_SETTINGS.billingQuota,
@@ -4122,6 +4126,56 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
   return found ? clone(found) : undefined;
 }
 
+const normalizeSiteWebhookEventKinds = (value: unknown, fallback: SiteWebhookEventKind[] = []): SiteWebhookEventKind[] => {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const allowed = new Set(SITE_WEBHOOK_EVENT_KINDS);
+  return Array.from(new Set(value.filter((item): item is SiteWebhookEventKind => (
+    typeof item === 'string' && allowed.has(item as SiteWebhookEventKind)
+  ))));
+};
+
+const normalizeSiteWebhooksInput = (
+  input: unknown,
+  current?: SiteSettings['webhooks'],
+): NonNullable<SiteSettings['webhooks']> => {
+  const webhookInput = toRecord(input);
+  const base: NonNullable<SiteSettings['webhooks']> = {
+    ...DEFAULT_SITE_SETTINGS.webhooks,
+    ...(current || {}),
+    endpoints: [...(current?.endpoints || [])],
+  };
+  const endpointInputs = webhookInput.endpoints === undefined
+    ? base.endpoints
+    : Array.isArray(webhookInput.endpoints)
+      ? webhookInput.endpoints
+      : [];
+
+  return {
+    enabled: webhookInput.enabled === undefined
+      ? base.enabled === true
+      : parseBooleanInput(webhookInput.enabled, false),
+    endpoints: endpointInputs
+      .filter((endpoint): endpoint is Record<string, unknown> => isObjectRecord(endpoint))
+      .map((endpoint) => {
+        const headers = toStringRecord(endpoint.headers);
+        return {
+          id: sanitizeString(endpoint.id) || createRuntimeId('webhook'),
+          name: sanitizeString(endpoint.name) || 'Site webhook',
+          url: sanitizeString(endpoint.url),
+          enabled: endpoint.enabled === undefined ? true : parseBooleanInput(endpoint.enabled, true),
+          eventKinds: normalizeSiteWebhookEventKinds(endpoint.eventKinds, []),
+          secretId: sanitizeString(endpoint.secretId),
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+        };
+      })
+      .filter((endpoint) => endpoint.url)
+      .slice(0, 20),
+  };
+};
+
 function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): SiteSettings {
   const settingsInput = toRecord(input);
   const base = current || createDefaultSiteSettings();
@@ -4231,6 +4285,9 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
           verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
           lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
         },
+    webhooks: settingsInput.webhooks === undefined
+      ? normalizeSiteWebhooksInput(base.webhooks, base.webhooks)
+      : normalizeSiteWebhooksInput(settingsInput.webhooks, base.webhooks),
     vercelDeployment: settingsInput.vercelDeployment === undefined
       ? { ...baseVercelDeployment, missing: [...(baseVercelDeployment.missing || [])], history: [...(baseVercelDeployment.history || [])] }
       : {

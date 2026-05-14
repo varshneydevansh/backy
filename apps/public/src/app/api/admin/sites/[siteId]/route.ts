@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Site, SiteSettings, ThemeConfig } from '@backy-cms/core';
+import type { Site, SiteSettings, SiteWebhookEventKind, ThemeConfig } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
@@ -104,6 +104,66 @@ const sanitizeString = (value: unknown): string => (
 const numberValue = (value: unknown, fallback: number): number => (
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback
 );
+
+const siteWebhookEventKinds: SiteWebhookEventKind[] = [
+  'form-submission',
+  'contact-shared',
+  'contact-sync',
+  'contact-status',
+  'commerce-webhook',
+  'comment-submitted',
+  'comment-status',
+  'comment-reported',
+];
+
+const normalizeSiteWebhookEventKinds = (value: unknown, fallback: SiteWebhookEventKind[] = []): SiteWebhookEventKind[] => {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const allowed = new Set(siteWebhookEventKinds);
+  return Array.from(new Set(value.filter((item): item is SiteWebhookEventKind => (
+    typeof item === 'string' && allowed.has(item as SiteWebhookEventKind)
+  ))));
+};
+
+const normalizeSiteWebhooksInput = (
+  input: unknown,
+  current?: SiteSettings['webhooks'],
+): NonNullable<SiteSettings['webhooks']> => {
+  const webhookInput = isRecord(input) ? input : {};
+  const currentWebhooks: NonNullable<SiteSettings['webhooks']> = {
+    enabled: current?.enabled === true,
+    endpoints: [...(current?.endpoints || [])],
+  };
+  const endpointInputs = webhookInput.endpoints === undefined
+    ? currentWebhooks.endpoints
+    : Array.isArray(webhookInput.endpoints)
+      ? webhookInput.endpoints
+      : [];
+
+  return {
+    enabled: webhookInput.enabled === undefined
+      ? currentWebhooks.enabled
+      : webhookInput.enabled === true,
+    endpoints: endpointInputs
+      .filter((endpoint): endpoint is Record<string, unknown> => isRecord(endpoint))
+      .map((endpoint) => {
+        const headers = toStringRecord(endpoint.headers);
+        return {
+          id: sanitizeString(endpoint.id) || `webhook_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          name: sanitizeString(endpoint.name) || 'Site webhook',
+          url: sanitizeString(endpoint.url),
+          enabled: endpoint.enabled === undefined ? true : endpoint.enabled === true,
+          eventKinds: normalizeSiteWebhookEventKinds(endpoint.eventKinds, []),
+          secretId: sanitizeString(endpoint.secretId),
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+        };
+      })
+      .filter((endpoint) => endpoint.url)
+      .slice(0, 20),
+  };
+};
 
 const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings | undefined => {
   if (!isRecord(input)) {
@@ -242,6 +302,9 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
           verifiedAt: sanitizeString(domainVerificationInput.verifiedAt) || null,
           lastError: domainVerificationInput.lastError === null ? null : sanitizeString(domainVerificationInput.lastError) || null,
         },
+    webhooks: input.webhooks === undefined
+      ? normalizeSiteWebhooksInput(current.webhooks, current.webhooks)
+      : normalizeSiteWebhooksInput(input.webhooks, current.webhooks),
     vercelDeployment: input.vercelDeployment === undefined || !vercelDeploymentInput
       ? currentVercelDeployment
       : {
@@ -338,13 +401,20 @@ const isDomainVerificationPatch = (body: Record<string, unknown>): boolean => {
   return isRecord(settings) && isRecord(settings.domainVerification);
 };
 
+const isWebhooksPatch = (body: Record<string, unknown>): boolean => {
+  const settings = body.settings;
+  return isRecord(settings) && isRecord(settings.webhooks);
+};
+
 const isThemePublishPatch = (body: Record<string, unknown>): boolean => isRecord(body.theme);
 
 const auditActionForSitePatch = (
   domainVerificationPatch: boolean,
+  webhooksPatch: boolean,
   themePublishPatch: boolean,
 ): string => {
   if (domainVerificationPatch) return 'site.domainVerification.updated';
+  if (webhooksPatch) return 'site.webhooks.updated';
   if (themePublishPatch) return 'site.themePublish.updated';
   return 'site.updated';
 };
@@ -399,6 +469,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const body = await parseJsonBody(request);
   const commentPolicyOnlyPatch = isCommentPolicyOnlyPatch(body);
   const domainVerificationPatch = isDomainVerificationPatch(body);
+  const webhooksPatch = isWebhooksPatch(body);
   const themePublishPatch = isThemePublishPatch(body);
   const access = await requireAdminAccess(request, requestId, {
     permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
@@ -450,6 +521,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
       } else {
         const domainVerification = updated.item.settings?.domainVerification;
+        const webhooks = updated.item.settings?.webhooks;
+        const webhookEndpoints = webhooks?.endpoints || [];
         await recordAdminAudit({
           repositories,
           siteId: site.id,
@@ -457,7 +530,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           actorId: access.session?.user.id,
           entity: 'site',
           entityId: site.id,
-          action: auditActionForSitePatch(domainVerificationPatch, themePublishPatch),
+          action: auditActionForSitePatch(domainVerificationPatch, webhooksPatch, themePublishPatch),
           before: adminSiteFromRepositorySite(site) || {},
           after: adminSiteFromRepositorySite(updated.item) || {},
           metadata: {
@@ -475,6 +548,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                   themeColors: Object.keys(updated.item.theme?.colors || {}).length,
                   themeFonts: Object.keys(updated.item.theme?.fonts || {}).length,
                   isPublished: updated.item.isPublished,
+                }
+              : {}),
+            ...(webhooksPatch
+              ? {
+                  webhooksEnabled: webhooks?.enabled === true,
+                  webhookEndpointCount: webhookEndpoints.length,
+                  webhookEventKinds: Array.from(new Set(webhookEndpoints.flatMap((endpoint) => endpoint.eventKinds || []))),
                 }
               : {}),
           },
@@ -518,12 +598,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     } else {
       const domainVerification = updated.settings?.domainVerification;
+      const webhooks = updated.settings?.webhooks;
+      const webhookEndpoints = webhooks?.endpoints || [];
       await recordAdminAudit({
         siteId: site.id,
         actorId: access.session?.user.id,
         entity: 'site',
         entityId: site.id,
-        action: auditActionForSitePatch(domainVerificationPatch, themePublishPatch),
+        action: auditActionForSitePatch(domainVerificationPatch, webhooksPatch, themePublishPatch),
         before: site,
         after: updated,
         metadata: {
@@ -541,6 +623,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                 themeColors: Object.keys(updated.theme?.colors || {}).length,
                 themeFonts: Object.keys(updated.theme?.fonts || {}).length,
                 isPublished: updated.isPublished,
+              }
+            : {}),
+          ...(webhooksPatch
+            ? {
+                webhooksEnabled: webhooks?.enabled === true,
+                webhookEndpointCount: webhookEndpoints.length,
+                webhookEventKinds: Array.from(new Set(webhookEndpoints.flatMap((endpoint) => endpoint.eventKinds || []))),
               }
             : {}),
         },

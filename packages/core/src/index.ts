@@ -125,6 +125,10 @@ export const DEFAULT_SITE_SETTINGS = {
     verifiedAt: null,
     lastError: null,
   },
+  webhooks: {
+    enabled: false,
+    endpoints: [],
+  },
   vercelDeployment: {
     status: 'not_started',
     projectId: '',
