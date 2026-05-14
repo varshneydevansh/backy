@@ -726,7 +726,7 @@ const buildRulerTicks = (length: number, scale: number) => {
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
   initialSettings: PageSettings;
-  mode?: 'page' | 'blog';
+  mode?: 'page' | 'blog' | 'section';
   onSave: (
     elements: CanvasElement[],
     settings: PageSettings,
@@ -986,7 +986,10 @@ export function CanvasEditor({
   const [pendingChangeCount, setPendingChangeCount] = useState(0);
   const [autosaveDueAt, setAutosaveDueAt] = useState<Date | null>(null);
   const isParentPersistence = savePersistence === 'parent';
-  const normalizedSaveOwnerLabel = saveOwnerLabel || (mode === 'blog' ? 'post form' : 'parent form');
+  const normalizedSaveOwnerLabel = saveOwnerLabel || (
+    mode === 'blog' ? 'post form' : mode === 'section' ? 'section editor' : 'parent form'
+  );
+  const editorEntityLabel = mode === 'blog' ? 'Post' : mode === 'section' ? 'Section' : 'Page';
   const saveOwnerVersionRef = useRef<string | number | null | undefined>(saveOwnerVersion);
   const isCanvasMutationDisabled = isSaving || isPreview || !canEdit;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
@@ -1072,7 +1075,7 @@ export function CanvasEditor({
       }
 
       return {
-        label: mode === 'blog' ? 'Post save' : 'Parent save',
+        label: mode === 'blog' ? 'Post save' : mode === 'section' ? 'Section save' : 'Parent save',
         detail: `Canvas persistence is handled by the ${normalizedSaveOwnerLabel}.`,
         className: 'border-slate-200 bg-slate-50 text-slate-700',
       };
@@ -4176,7 +4179,7 @@ export function CanvasEditor({
               </button>
 
               <div>
-                <h1 className="font-semibold">{mode === 'blog' ? 'Edit Post' : 'Edit Page'}</h1>
+                <h1 className="font-semibold">Edit {editorEntityLabel}</h1>
                 <p className="text-xs text-slate-500">{pageSettings.title || 'Untitled'}</p>
               </div>
 
@@ -4728,8 +4731,8 @@ export function CanvasEditor({
                   onClick={() => void handleSaveWrapper()}
                   disabled={isSaving || !canEdit}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
-                  title={canEdit ? 'Save Page (Ctrl+S)' : editDisabledReason}
-                  aria-label="Save page"
+                  title={canEdit ? `Save ${editorEntityLabel} (Ctrl+S)` : editDisabledReason}
+                  aria-label={`Save ${editorEntityLabel.toLowerCase()}`}
                   data-testid="editor-save-page"
                 >
                   <Save className="w-4 h-4" />

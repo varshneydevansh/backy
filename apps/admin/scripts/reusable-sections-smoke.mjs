@@ -421,6 +421,10 @@ const assertReusableSectionsLayout = async (client) => {
       hasLibrary: Boolean(document.querySelector('[data-testid="reusable-sections-library"]')) &&
         body.includes('Section library'),
       hasEditor: body.includes('Create section') && body.includes('Content JSON'),
+      hasVisualEditor: Boolean(document.querySelector('[data-testid="reusable-sections-visual-editor"]')) &&
+        Boolean(document.querySelector('[data-testid="reusable-section-canvas-editor"]')) &&
+        Boolean(document.querySelector('[data-testid="editor-save-status"]')) &&
+        body.includes('Visual section editor'),
       hasWorkflowPanel: Boolean(document.querySelector('[data-testid="reusable-sections-workflows"]')) &&
         Boolean(document.querySelector('[data-testid="reusable-sections-export-visible"]')) &&
         Boolean(document.querySelector('[data-testid="reusable-sections-import"]')) &&
@@ -431,7 +435,7 @@ const assertReusableSectionsLayout = async (client) => {
 
   assert(layout.scrollWidth <= layout.width + 8, `Reusable sections page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasWorkflowPanel,
+    layout.hasCommandCenter && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;

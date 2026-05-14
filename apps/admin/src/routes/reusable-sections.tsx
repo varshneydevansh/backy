@@ -48,6 +48,8 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import type { PageSettings } from '@/components/editor/PageSettingsModal';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
@@ -123,6 +125,8 @@ const EMPTY_CONTENT: ReusableSectionContent = {
   customCSS: '',
   customJS: '',
 };
+
+const DEFAULT_SECTION_CANVAS_SIZE: CanvasSize = { width: 1200, height: 520 };
 
 const makeElementId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -389,6 +393,8 @@ function ReusableSectionsRoute() {
   const [isSaving, setIsSaving] = useState(false);
   const [isWorkflowLoading, setIsWorkflowLoading] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [visualEditorResetVersion, setVisualEditorResetVersion] = useState(0);
+  const [visualEditorHasUnsavedChanges, setVisualEditorHasUnsavedChanges] = useState(false);
   const [sectionVersions, setSectionVersions] = useState<ReusableSectionVersions | null>(null);
   const [sectionInstances, setSectionInstances] = useState<ReusableSectionInstancesReport | null>(null);
   const [sectionMetadata, setSectionMetadata] = useState<ReusableSectionMetadata | null>(null);
@@ -456,6 +462,23 @@ function ReusableSectionsRoute() {
       { label: 'Templates', value: frontendSectionTemplates.length, detail: 'Connected frontend sections' },
     ];
   }, [frontendSectionTemplates.length, sections]);
+  const visualEditorContent = useMemo(() => {
+    try {
+      return parseReusableSectionContent(contentJson);
+    } catch {
+      return formState.content || EMPTY_CONTENT;
+    }
+  }, [contentJson, formState.content]);
+  const visualEditorSettings = useMemo<PageSettings>(() => ({
+    title: formState.name || activeSection?.name || 'Reusable section',
+    slug: formState.slug || activeSection?.slug || 'reusable-section',
+    status: formState.status === 'archived' ? 'archived' : 'draft',
+    scheduledAt: null,
+    meta: {
+      title: formState.name || activeSection?.name || 'Reusable section',
+      description: formState.description || activeSection?.description || '',
+    },
+  }), [activeSection?.description, activeSection?.name, activeSection?.slug, formState.description, formState.name, formState.slug, formState.status]);
   const handoffManifest = useMemo(() => ({
     schemaVersion: 'backy.reusable-sections.handoff.v1',
     site: { id: activeSiteId, slug: activeSiteSlug, name: activeSite?.name || activeSiteId },
@@ -520,6 +543,8 @@ function ReusableSectionsRoute() {
       setSectionInstances(null);
       setSectionMetadata(null);
       setMetadataDraft(metadataDraftFromLibrary(null));
+      setVisualEditorHasUnsavedChanges(false);
+      setVisualEditorResetVersion((current) => current + 1);
       return;
     }
 
@@ -538,6 +563,8 @@ function ReusableSectionsRoute() {
     setContentJson(JSON.stringify(section.content, null, 2));
     setTagsText(section.tags.join(', '));
     setContentValidationMessage(null);
+    setVisualEditorHasUnsavedChanges(false);
+    setVisualEditorResetVersion((current) => current + 1);
   };
 
   const normalizeContentJsonForEditing = () => {
@@ -549,8 +576,10 @@ function ReusableSectionsRoute() {
     try {
       const content = parseReusableSectionContent(contentJson);
       setContentJson(JSON.stringify(content, null, 2));
+      setFormState((prev) => ({ ...prev, content }));
       setContentValidationMessage(`${content.elements.length} reusable root${content.elements.length === 1 ? '' : 's'} ready.`);
       setError(null);
+      setVisualEditorResetVersion((current) => current + 1);
     } catch (validationError) {
       setContentValidationMessage(null);
       setError(validationError instanceof Error ? validationError.message : 'Unable to validate content JSON');
@@ -569,8 +598,10 @@ function ReusableSectionsRoute() {
       frontendDesign,
     );
     setContentJson(JSON.stringify(content, null, 2));
+    setFormState((prev) => ({ ...prev, content }));
     setContentValidationMessage('Starter section content inserted.');
     setError(null);
+    setVisualEditorResetVersion((current) => current + 1);
   };
 
   const selectSection = (section: ReusableSection | null) => {
@@ -979,6 +1010,74 @@ function ReusableSectionsRoute() {
         : saveError instanceof Error ? saveError.message : 'Unable to save reusable section');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveVisualEditorSection = async (
+    elements: CanvasElement[],
+    settings: PageSettings,
+    canvasSize: CanvasSize = visualEditorContent.canvasSize || DEFAULT_SECTION_CANVAS_SIZE,
+  ) => {
+    if (isBusy) {
+      throw new Error('Wait for reusable section workflows to finish before saving the visual editor.');
+    }
+    if (!canEditSections) {
+      const message = editPermissionTitle || 'Your account cannot save reusable sections.';
+      showPermissionDenied('pages.edit', 'save reusable sections from the visual editor');
+      throw new Error(message);
+    }
+
+    const nextName = settings.title.trim() || formState.name.trim() || activeSection?.name || 'Reusable section';
+    const nextSlug = normalizeSlug(settings.slug || formState.slug || nextName, 'section');
+    const nextContent: ReusableSectionContent = {
+      ...visualEditorContent,
+      elements,
+      canvasSize,
+    };
+    const payload: ReusableSectionInput = {
+      ...formState,
+      name: nextName,
+      slug: nextSlug,
+      description: formState.description || settings.meta.description || null,
+      category: formState.category || 'general',
+      status: formState.status || 'active',
+      tags: tagsText.split(',').map((tag) => tag.trim()).filter(Boolean),
+      content: nextContent,
+      metadata: formState.metadata || {},
+      updatedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+      createdBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+    };
+
+    try {
+      const saved = selectedSectionId
+        ? await updateReusableSection(activeSiteId, selectedSectionId, payload)
+        : await createReusableSection(activeSiteId, payload);
+      setSections((current) => [saved, ...current.filter((section) => section.id !== saved.id)]);
+      setSelectedSectionId(saved.id);
+      setFormState({
+        name: saved.name,
+        slug: saved.slug,
+        description: saved.description || '',
+        category: saved.category,
+        status: saved.status,
+        tags: saved.tags,
+        content: saved.content,
+        metadata: saved.metadata || {},
+        sourceElementId: saved.sourceElementId,
+        updatedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+      });
+      setContentJson(JSON.stringify(saved.content, null, 2));
+      setTagsText(saved.tags.join(', '));
+      setVisualEditorHasUnsavedChanges(false);
+      setContentValidationMessage(`${saved.content.elements.length} reusable root${saved.content.elements.length === 1 ? '' : 's'} saved from visual editor.`);
+      updateRouteSearch({ sectionId: saved.id });
+      setNotice(`${saved.name} saved from the visual editor.`);
+      void loadReusableSectionWorkflow(saved.id);
+    } catch (saveError) {
+      setError(isAdminPermissionDeniedError(saveError)
+        ? editPermissionTitle || 'Your account cannot save reusable sections.'
+        : saveError instanceof Error ? saveError.message : 'Unable to save reusable section from visual editor');
+      throw saveError;
     }
   };
 
@@ -1427,6 +1526,62 @@ function ReusableSectionsRoute() {
               </div>
             </div>
           ) : null}
+        </PanelContent>
+      </Panel>
+
+      <Panel className="mb-5" data-testid="reusable-sections-visual-editor">
+        <PanelHeader
+          title="Visual section editor"
+          description="Edit the selected section with the same drag, nest, group, layer, media, and property controls used by the page canvas."
+          icon={<Layers3 className="size-4" />}
+          action={
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {visualEditorHasUnsavedChanges ? 'Unsaved canvas' : `${visualEditorContent.elements.length} root${visualEditorContent.elements.length === 1 ? '' : 's'}`}
+            </span>
+          }
+        />
+        <PanelContent>
+          <div className="h-[780px] min-h-[680px] overflow-hidden rounded-lg border border-border bg-background" data-testid="reusable-section-canvas-editor">
+            <CanvasEditor
+              key={`${selectedSectionId || 'new'}:${visualEditorResetVersion}`}
+              mode="section"
+              initialElements={visualEditorContent.elements}
+              initialSize={visualEditorContent.canvasSize || DEFAULT_SECTION_CANVAS_SIZE}
+              initialSettings={visualEditorSettings}
+              onSave={saveVisualEditorSection}
+              hideNavigation
+              hideSettings
+              saveOwnerLabel="section editor"
+              saveOwnerVersion={activeSection?.updatedAt || selectedSectionId || visualEditorResetVersion}
+              mediaContext={{
+                siteId: activeSiteId,
+                scope: 'global',
+                targetId: selectedSectionId || 'new-section',
+                targetLabel: formState.name || activeSection?.name || 'Reusable section',
+              }}
+              validateSettings={(settings) => {
+                if (!settings.title.trim()) return 'Section name is required before saving.';
+                if (!normalizeSlug(settings.slug || settings.title, '')) return 'Section slug is required before saving.';
+                return null;
+              }}
+              canView={canViewSections}
+              canEdit={canEditSections}
+              canPublish={false}
+              canViewMedia={canViewSections}
+              canCreateMedia={canEditSections}
+              canViewCollections={canViewSections}
+              canDeleteReusableSections={canDeleteSections}
+              editDisabledReason={editPermissionTitle}
+              publishDisabled
+              publishDisabledReason="Reusable sections are activated from section status, not published from the canvas."
+              mediaViewDisabledReason={viewPermissionTitle}
+              mediaCreateDisabledReason={editPermissionTitle}
+              collectionsViewDisabledReason={viewPermissionTitle}
+              reusableDeleteDisabledReason={deletePermissionTitle}
+              onUnsavedChangesChange={setVisualEditorHasUnsavedChanges}
+              className="h-full w-full"
+            />
+          </div>
         </PanelContent>
       </Panel>
 
