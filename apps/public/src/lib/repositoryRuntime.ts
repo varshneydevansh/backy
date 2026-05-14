@@ -1,19 +1,28 @@
-import {
-  createDatabaseRepositories,
-} from '@backy/db/repositories';
 import type { DatabaseAdapter, DatabaseConfig } from '@backy/db/adapters';
 import {
   resolveBackyDataRuntimeConfig,
   type BackyDataRuntimeConfig,
 } from '@backy/db/runtime-config';
+import {
+  assertProductionDemoModeAllowed,
+  shouldUseDemoStoreFallback,
+} from './repositoryRuntimePolicy';
+export { shouldUseDemoStoreFallback } from './repositoryRuntimePolicy';
 
-type DatabaseRepositories = ReturnType<typeof createDatabaseRepositories>;
+type DatabaseRepositories = ReturnType<typeof import('@backy/db/repositories').createDatabaseRepositories>;
 type DatabaseAdapterModule = {
   createDatabaseAdapter: (config: DatabaseConfig) => Promise<DatabaseAdapter>;
+};
+type DatabaseRepositoryModule = {
+  createDatabaseRepositories: (input: { adapter: DatabaseAdapter }) => DatabaseRepositories;
 };
 const importDatabaseAdapters = async (): Promise<DatabaseAdapterModule> => {
   const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseAdapterModule>;
   return dynamicImport('@backy/db/adapters');
+};
+const importDatabaseRepositories = async (): Promise<DatabaseRepositoryModule> => {
+  const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseRepositoryModule>;
+  return dynamicImport('@backy/db/repositories');
 };
 
 export type PublicRepositoryRuntime =
@@ -32,7 +41,10 @@ let cachedRuntime: Promise<PublicRepositoryRuntime> | null = null;
 export function resolvePublicRepositoryRuntimeConfig(
   env: Record<string, string | undefined> = process.env,
 ): BackyDataRuntimeConfig {
-  return resolveBackyDataRuntimeConfig(env);
+  const config = resolveBackyDataRuntimeConfig(env);
+  assertProductionDemoModeAllowed(config.mode, env);
+
+  return config;
 }
 
 export async function createPublicRepositoryRuntime(
@@ -50,7 +62,10 @@ export async function createPublicRepositoryRuntime(
     throw new Error('Database runtime mode requires a database configuration.');
   }
 
-  const { createDatabaseAdapter } = await importDatabaseAdapters();
+  const [{ createDatabaseAdapter }, { createDatabaseRepositories }] = await Promise.all([
+    importDatabaseAdapters(),
+    importDatabaseRepositories(),
+  ]);
   const adapter = await createDatabaseAdapter(config.database);
 
   return {
@@ -76,23 +91,4 @@ export async function getRequiredDatabaseRepositories(): Promise<DatabaseReposit
 
 export function resetPublicRepositoryRuntimeForTests(): void {
   cachedRuntime = null;
-}
-
-export function shouldUseDemoStoreFallback(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  const explicitMode = env.BACKY_DATA_MODE;
-  if (explicitMode === 'demo') {
-    return true;
-  }
-  if (explicitMode === 'database') {
-    return false;
-  }
-  if (env.BACKY_DEMO_MODE === 'true') {
-    return true;
-  }
-  if (env.BACKY_DATABASE_URL || env.DATABASE_URL || env.BACKY_DATABASE_TYPE) {
-    return false;
-  }
-  return env.NODE_ENV !== 'production';
 }
