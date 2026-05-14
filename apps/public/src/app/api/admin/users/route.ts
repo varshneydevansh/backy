@@ -59,6 +59,14 @@ const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 's
   value === 'active' || value === 'inactive' || value === 'invited' || value === 'suspended' ? value : null
 );
 
+const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
+  const parsed = Number.parseInt(value || '', 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+};
+
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'users.view' });
@@ -68,14 +76,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const limit = parseBoundedInteger(searchParams.get('limit'), 100, 1, 200);
+    const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const result = await repositories.users.list({
         search: searchParams.get('search') || undefined,
         role: normalizeRole(searchParams.get('role') || undefined) || undefined,
         status: normalizeStatus(searchParams.get('status') || undefined) || undefined,
-        limit: 100,
-        offset: 0,
+        limit,
+        offset,
       });
 
       return NextResponse.json({
@@ -93,17 +103,18 @@ export async function GET(request: NextRequest) {
       role: searchParams.get('role') || undefined,
       status: searchParams.get('status') || undefined,
     });
+    const pagedUsers = users.slice(offset, offset + limit);
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
-        users,
+        users: pagedUsers,
         pagination: {
           total: users.length,
-          limit: users.length,
-          offset: 0,
-          hasMore: false,
+          limit,
+          offset,
+          hasMore: offset + limit < users.length,
         },
       },
     });

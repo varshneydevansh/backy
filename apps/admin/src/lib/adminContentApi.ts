@@ -410,6 +410,7 @@ interface ApiListUsersResponse {
   success: boolean;
   data?: {
     users: ApiUser[];
+    pagination?: ApiPagination;
   };
   error?: {
     message?: string;
@@ -3515,15 +3516,50 @@ export async function getBlogPostReadiness(siteId: string, postId: string): Prom
   return payload.data.readiness;
 }
 
-export async function listUsers(): Promise<User[]> {
-  const response = await adminFetch(`${getAdminApiBase()}/users`);
+const USER_LIST_PAGE_SIZE = 100;
+const USER_LIST_MAX_PAGES = 100;
+
+async function listUsersPage(offset: number): Promise<{
+  users: User[];
+  pagination?: ApiPagination;
+}> {
+  const query = new URLSearchParams({
+    limit: String(USER_LIST_PAGE_SIZE),
+    offset: String(offset),
+  });
+  const response = await adminFetch(`${getAdminApiBase()}/users?${query.toString()}`);
   const payload = await readJson<ApiListUsersResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load users');
   }
 
-  return payload.data.users.map(toStoreUser);
+  return {
+    users: payload.data.users.map(toStoreUser),
+    pagination: payload.data.pagination,
+  };
+}
+
+export async function listUsers(): Promise<User[]> {
+  const users: User[] = [];
+  let offset = 0;
+
+  for (let pageIndex = 0; pageIndex < USER_LIST_MAX_PAGES; pageIndex += 1) {
+    const result = await listUsersPage(offset);
+    users.push(...result.users);
+
+    if (!result.pagination?.hasMore) {
+      return users;
+    }
+
+    const nextOffset = result.pagination.offset + result.pagination.limit;
+    if (nextOffset <= offset) {
+      break;
+    }
+    offset = nextOffset;
+  }
+
+  throw new Error('Unable to load all users because the user list exceeded the supported page limit.');
 }
 
 export async function getUser(userId: string): Promise<User> {
