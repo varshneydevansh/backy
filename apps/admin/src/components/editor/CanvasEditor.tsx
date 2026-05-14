@@ -2119,6 +2119,8 @@ export function CanvasEditor({
   ]);
 
   const handleDuplicate = useCallback(() => {
+    if (isCanvasMutationDisabled) return;
+
     const currentElements = elementsRef.current;
     const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
     if (entries.length === 0) return;
@@ -2139,9 +2141,11 @@ export function CanvasEditor({
     setSelectedIds(duplicatedIds);
     setSelectedId(duplicatedIds[0] ?? null);
     updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
-  }, [cloneElementTreeWithFreshIds, getSelectedSiblingEntries, updateElementsWithHistory]);
+  }, [cloneElementTreeWithFreshIds, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   const handleZOrderChange = useCallback((action: CanvasZOrderAction) => {
+    if (isCanvasMutationDisabled) return;
+
     const currentElements = elementsRef.current;
     const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
     if (entries.length === 0) {
@@ -2193,7 +2197,7 @@ export function CanvasEditor({
     setSelectedId(nextSelectedId);
     setSelectedIds(selectedSnapshot);
     updateElementsWithHistory(nextElements, nextSelectedId, selectedSnapshot);
-  }, [getSelectedSiblingEntries, selectedId, updateElementsWithHistory]);
+  }, [getSelectedSiblingEntries, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
@@ -3603,6 +3607,8 @@ export function CanvasEditor({
    * Delete selected element
    */
   const deleteElement = useCallback(() => {
+    if (isCanvasMutationDisabled) return;
+
     const currentElements = elementsRef.current;
     const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
     if (entries.length === 0) return;
@@ -3624,9 +3630,11 @@ export function CanvasEditor({
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
     updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
-  }, [getSelectedSiblingEntries, updateElementsWithHistory]);
+  }, [getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   const handleCut = useCallback(() => {
+    if (isCanvasMutationDisabled) return;
+
     const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
     if (entries.length === 0) return;
 
@@ -3649,7 +3657,7 @@ export function CanvasEditor({
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
     updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
-  }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
+  }, [elements, getSelectedSiblingEntries, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   /**
    * Handle save
@@ -3667,7 +3675,6 @@ export function CanvasEditor({
       return false;
     }
     if (!canEdit) {
-      setHasUnsavedChanges(true);
       setSaveStatus('error');
       setLastSaveError(editDisabledReason);
       setAutosaveDueAt(null);
@@ -3845,7 +3852,11 @@ export function CanvasEditor({
       if (isPreview) {
         if ((e.ctrlKey || e.metaKey) && key === 's') {
           e.preventDefault();
-          handleSaveWrapper();
+          if (!canEdit) {
+            setEditorNotice(editDisabledReason);
+            return;
+          }
+          void handleSaveWrapper();
         }
         return;
       }
@@ -3908,7 +3919,11 @@ export function CanvasEditor({
       // Ctrl+S / Cmd+S (Save)
       if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
-        handleSaveWrapper();
+        if (!canEdit) {
+          setEditorNotice(editDisabledReason);
+          return;
+        }
+        void handleSaveWrapper();
         return;
       }
 

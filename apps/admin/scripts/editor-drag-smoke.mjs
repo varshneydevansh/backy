@@ -21,6 +21,7 @@ const RESPONSIVE_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
+const VIEW_ONLY_SMOKE = process.env.BACKY_EDITOR_VIEW_ONLY_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const NESTED_GROUP_SMOKE = process.env.BACKY_EDITOR_NESTED_GROUP_SMOKE === '1';
 const ANIMATION_SMOKE = process.env.BACKY_EDITOR_ANIMATION_SMOKE === '1';
@@ -239,6 +240,13 @@ const loginAdminApi = async () => {
 
   apiAdminSessionToken = payload.data.session.token;
   return payload.data;
+};
+
+const setAdminPermissionOverrides = async (overrides) => {
+  return requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({ overrides }),
+  });
 };
 
 const createSmokePage = async () => {
@@ -6303,6 +6311,65 @@ const testSaveEditingControls = async (client, pageId, editorPath) => {
   };
 };
 
+const testViewOnlyEditorShortcuts = async (client) => {
+  const elementId = EDITOR_PATH ? 'home-heading' : 'smoke-heading';
+
+  await waitForElementPresence(client, elementId, true, 'before view-only shortcut smoke');
+  await waitForEditorSaveStatus(
+    client,
+    (status) => status.saveState === 'saved' && status.pendingChanges === 0,
+    'initial saved status before view-only shortcut smoke',
+  );
+
+  const initialUiState = await evaluate(client, `(() => {
+    const status = document.querySelector('[data-testid="editor-save-status"]');
+    const saveButton = document.querySelector('[data-testid="editor-save-page"]');
+    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+    return {
+      saveDisabled: saveButton instanceof HTMLButtonElement ? saveButton.disabled : null,
+      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+      saveState: status?.getAttribute('data-save-state') || '',
+      pendingChanges: Number(status?.getAttribute('data-pending-changes') || 0),
+      lastError: status?.getAttribute('data-last-error') || '',
+    };
+  })()`);
+  assert(
+    initialUiState.saveDisabled === true,
+    `View-only editor did not disable Save: ${JSON.stringify(initialUiState)}`,
+  );
+  assert(
+    initialUiState.groupDisabled === true,
+    `View-only editor did not disable group controls: ${JSON.stringify(initialUiState)}`,
+  );
+
+  await selectElement(client, elementId);
+  const before = await readEditorElementState(client, [elementId]);
+  await blurActiveElement(client);
+  await pressKey(client, 's', { ctrlKey: true });
+  await pressKey(client, 'ArrowRight');
+  await pressKey(client, 'd', { ctrlKey: true });
+  await sleep(500);
+
+  const after = await readEditorElementState(client, [elementId]);
+  assertElementState(after, before, 'view-only keyboard shortcut guard');
+
+  const finalStatus = await readEditorSaveStatus(client);
+  assert(
+    finalStatus.saveState === 'saved' &&
+      finalStatus.pendingChanges === 0 &&
+      finalStatus.lastError === '',
+    `View-only shortcuts dirtied the editor or exposed a save error: ${JSON.stringify(finalStatus)}`,
+  );
+
+  return {
+    elementId,
+    before,
+    after,
+    initialUiState,
+    finalStatus,
+  };
+};
+
 const testKeyboardShortcutControls = async (client, pageId) => {
   const shiftNudge = await testKeyboardNudge(client, 'smoke-image');
   const undoRedo = await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge');
@@ -12139,14 +12206,20 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
   const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
+  let resetPageEditPermission = false;
 
   try {
+    if (VIEW_ONLY_SMOKE) {
+      await setAdminPermissionOverrides({ 'pages.edit': 'deny' });
+      resetPageEditPermission = true;
+    }
+
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -12222,6 +12295,18 @@ const main = async () => {
         mode: 'save',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         saveEditing,
+      }, null, 2));
+      return;
+    }
+
+    if (VIEW_ONLY_SMOKE) {
+      const viewOnlyShortcuts = await testViewOnlyEditorShortcuts(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'view-only',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        viewOnlyShortcuts,
       }, null, 2));
       return;
     }
@@ -13276,6 +13361,13 @@ const main = async () => {
   } catch (error) {
     throw error;
   } finally {
+    if (resetPageEditPermission) {
+      try {
+        await setAdminPermissionOverrides({ 'pages.edit': null });
+      } catch (error) {
+        console.warn('Unable to reset editor smoke page edit permission override:', error instanceof Error ? error.message : error);
+      }
+    }
     await cleanup({ client, childProcess, userDataDir });
     await deleteSmokePage(tempPageId);
     await deleteSmokeReusableSection(tempReusableSectionId);

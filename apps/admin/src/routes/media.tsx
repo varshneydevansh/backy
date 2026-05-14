@@ -65,6 +65,13 @@ type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quaranti
 type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.provider-analytics.ingest' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaUploadMode = 'all' | 'image' | 'font' | 'file';
+type MediaUsageMetric = {
+  label: string;
+  value: number;
+  detail: string;
+  filter: MediaUsageFilter;
+  visibility?: MediaVisibilityFilter;
+};
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
 type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
@@ -1491,6 +1498,21 @@ function MediaPage() {
   );
 
   const loadLibrary = useCallback(async (options: MediaLibraryLoadOptions = {}) => {
+    if (!canViewMedia) {
+      filesRef.current = [];
+      setMedia([]);
+      setMediaQuota(undefined);
+      mediaPaginationRef.current = { total: 0, limit: MEDIA_LIBRARY_PAGE_SIZE, offset: 0, hasMore: false };
+      setMediaPagination({ total: 0, limit: MEDIA_LIBRARY_PAGE_SIZE, offset: 0, hasMore: false });
+      setSelectedMediaIds([]);
+      setSelectedAsset(null);
+      setIsLoading(false);
+      if (!isPermissionMatrixPending) {
+        setError(`Your account needs media.view to load the media library. ${viewPermissionTitle}`);
+      }
+      return;
+    }
+
     const mode = options.mode || 'replace';
     const startOffset = options.offset ?? (mode === 'append'
       ? mediaPaginationRef.current.offset + mediaPaginationRef.current.limit
@@ -1554,7 +1576,7 @@ function MediaPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, selectedFolderId, setMedia, siteId, tagFilter, typeFilter, visibilityFilter]);
+  }, [canViewMedia, isPermissionMatrixPending, searchQuery, selectedFolderId, setMedia, siteId, tagFilter, typeFilter, viewPermissionTitle, visibilityFilter]);
 
   useEffect(() => {
     void loadLibrary();
@@ -1766,6 +1788,12 @@ function MediaPage() {
     let cancelled = false;
 
     const loadReferenceTargets = async () => {
+      if (!canViewMedia) {
+        setPages([]);
+        setPosts([]);
+        return;
+      }
+
       try {
         const [backendPages, backendPosts] = await Promise.all([
           listPages(siteId),
@@ -1786,12 +1814,17 @@ function MediaPage() {
     return () => {
       cancelled = true;
     };
-  }, [setPages, setPosts, siteId]);
+  }, [canViewMedia, setPages, setPosts, siteId]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadFolders = async () => {
+      if (!canViewMedia) {
+        setFolders([]);
+        return;
+      }
+
       try {
         const backendFolders = await listMediaFolders(siteId);
         if (!cancelled) {
@@ -1809,7 +1842,7 @@ function MediaPage() {
     return () => {
       cancelled = true;
     };
-  }, [siteId]);
+  }, [canViewMedia, siteId]);
 
   const openMetadataEditor = (asset: MediaAsset) => {
     suppressedRouteAssetIdRef.current = null;
@@ -4128,30 +4161,31 @@ function MediaPage() {
         />
         <PanelContent>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {[
+            {([
               {
                 label: 'Assets',
                 value: mediaAnalytics.totalAssets,
                 detail: `${mediaAnalytics.folderedAssets} foldered · ${mediaAnalytics.rootAssets} root`,
-                filter: 'all' as const,
+                filter: 'all',
               },
               {
                 label: 'Referenced',
                 value: mediaAnalytics.referencedAssets,
                 detail: `${mediaAnalytics.unusedAssets} unused assets need review`,
-                filter: 'referenced' as const,
+                filter: 'referenced',
               },
               {
                 label: 'Private',
                 value: mediaAnalytics.privateAssets,
                 detail: `${mediaAnalytics.publicAssets} public assets available to frontends`,
-                filter: 'all' as const,
+                filter: 'all',
+                visibility: 'private',
               },
               {
                 label: 'Replaced',
                 value: mediaAnalytics.replacedAssets,
                 detail: `${mediaAnalytics.replacementVersions} retained versions · ${formatBytes(mediaAnalytics.replacementBytes)}`,
-                filter: 'replaced' as const,
+                filter: 'replaced',
               },
               {
                 label: 'Quarantined',
@@ -4159,16 +4193,22 @@ function MediaPage() {
                 detail: mediaAnalytics.quarantinedAssets > 0
                   ? 'Review before public delivery'
                   : 'No blocked assets',
-                filter: 'quarantined' as const,
+                filter: 'quarantined',
               },
-            ].map((metric) => (
+            ] satisfies MediaUsageMetric[]).map((metric) => (
               <button
                 key={metric.label}
                 type="button"
                 onClick={() => {
                   if (isMediaLibraryBusy) return;
                   setUsageFilter(metric.filter);
-                  updateMediaRouteSearch({ usage: metric.filter });
+                  if (metric.visibility) {
+                    setVisibilityFilter(metric.visibility);
+                  }
+                  updateMediaRouteSearch({
+                    usage: metric.filter,
+                    visibility: metric.visibility,
+                  });
                 }}
                 disabled={isMediaLibraryBusy}
                 className="rounded-lg border border-border bg-muted/30 p-4 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
@@ -6612,8 +6652,10 @@ function MediaPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={assetAuditActionFilter}
+                      disabled={isLoadingAssetAudit || !canExportMediaActivity}
+                      title={canExportMediaActivity ? undefined : activityPermissionTitle}
                       onChange={(event) => setAssetAuditActionFilter(event.target.value as MediaAuditActionFilter)}
-                      className="rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      className="rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       aria-label="Filter media activity"
                     >
                       {MEDIA_AUDIT_ACTION_FILTERS.map((filter) => (
@@ -6624,7 +6666,8 @@ function MediaPage() {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      disabled={isLoadingAssetAudit}
+                      disabled={isLoadingAssetAudit || !canExportMediaActivity}
+                      title={canExportMediaActivity ? undefined : activityPermissionTitle}
                       onClick={() => void loadAssetAuditLogs(selectedAsset.id)}
                     >
                       Refresh
