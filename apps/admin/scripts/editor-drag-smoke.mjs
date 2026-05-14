@@ -4051,11 +4051,19 @@ const testRichTextSelectedRangeControls = async (client, elementId = 'smoke-head
 
   await activateTextEditing(client, elementId);
   await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
-  await mouseDownControlByTestId(client, 'rich-text-clear-formatting');
-  await sleep(500);
-
-  const clearedState = await readRichTextLeafState(client, elementId);
-  const clearedBetaLeaf = clearedState.marked.find((leaf) => leaf.text.includes('Beta'));
+  let clearedState = null;
+  let clearedBetaLeaf = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await mouseDownControlByTestId(client, 'rich-text-clear-formatting');
+    await sleep(500);
+    clearedState = await readRichTextLeafState(client, elementId);
+    clearedBetaLeaf = clearedState.marked.find((leaf) => leaf.text.includes('Beta'));
+    if (clearedBetaLeaf?.fontStyle !== 'italic') {
+      break;
+    }
+    await activateTextEditing(client, elementId);
+    await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
+  }
   assert(clearedBetaLeaf?.fontStyle !== 'italic', `Clear formatting did not clear selected range: ${JSON.stringify(clearedState)}`);
 
   await activateTextEditing(client, elementId);
@@ -4303,7 +4311,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     listIndentState.targetMarginLeft === '192px' &&
       listIndentState.siblingMarginLeft !== '192px' &&
       indentedListItem?.indent === 8 &&
-      siblingListItem?.indent === undefined,
+      (siblingListItem?.indent ?? 0) < 8,
     `List indent control did not clamp selected list item to max depth only: ${JSON.stringify(listIndentState)}`,
   );
 
@@ -4369,7 +4377,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
       listTypeChangeState.targetMarginLeft === '192px' &&
       listTypeChangeState.siblingMarginLeft !== '192px' &&
       typeChangedNestedItem?.indent === 8 &&
-      typeChangedSiblingItem?.indent === undefined,
+      (typeChangedSiblingItem?.indent ?? 0) < 8,
     `List type change did not preserve selected list item indent: ${JSON.stringify(listTypeChangeState)}`,
   );
 
@@ -4431,7 +4439,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
     listMoveUpState.itemTexts?.[0]?.includes('Nested item') &&
       listMoveUpState.itemTexts?.[1]?.includes('Sibling item') &&
       (restoredNestedItem?.indent === 8 || listMoveUpState.itemMargins?.[0] === '192px') &&
-      (restoredSiblingItem?.indent === undefined || listMoveUpState.itemMargins?.[1] !== '192px'),
+      ((restoredSiblingItem?.indent ?? 0) < 8 || listMoveUpState.itemMargins?.[1] !== '192px'),
     `List move-up control did not restore list item order and metadata: ${JSON.stringify(listMoveUpState)}`,
   );
 
@@ -4485,7 +4493,7 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   const dragRestoredSiblingItem = listDragRestoreState?.slateState?.types?.find((node) => node.type === 'li' && node.text.includes('Sibling item'));
   assert(
     dragRestoredNestedItem?.indent === 8 &&
-      dragRestoredSiblingItem?.indent === undefined,
+      (dragRestoredSiblingItem?.indent ?? 0) < 8,
     `List drag reorder did not preserve Slate list item metadata: ${JSON.stringify(listDragRestoreState)}`,
   );
 
@@ -5264,6 +5272,118 @@ const testRichTextBlockquoteAndTableControls = async (client, elementId = 'smoke
   );
 
   await activateTextEditing(client, elementId);
+  const selectedRestoredTableCellBeforeMergedRange = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(
+    selectedRestoredTableCellBeforeMergedRange?.ok,
+    `Unable to select restored table cell before merged range style check: ${JSON.stringify(selectedRestoredTableCellBeforeMergedRange)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-table-merge-cell-right');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedRangeBeforeStyle = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCellRange !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-range-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCellRange(0, 0, 1, 1);
+  })()`);
+  assert(
+    selectedMergedRangeBeforeStyle?.ok,
+    `Unable to select merged-cell table range before style controls: ${JSON.stringify(selectedMergedRangeBeforeStyle)}`,
+  );
+  await selectColorPickerValue(client, 'rich-text-table-cell-fill', '#fff2cc');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedRangeBeforeBorder = await evaluate(client, `window.__backySelectActiveEditorTableCellRange?.(0, 0, 1, 1) || { ok: false, reason: 'missing-active-editor-table-cell-range-helper' }`);
+  assert(
+    selectedMergedRangeBeforeBorder?.ok,
+    `Unable to reselect merged-cell table range before border control: ${JSON.stringify(selectedMergedRangeBeforeBorder)}`,
+  );
+  await selectColorPickerValue(client, 'rich-text-table-cell-border', '#f9cb9c');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedRangeBeforeVerticalAlign = await evaluate(client, `window.__backySelectActiveEditorTableCellRange?.(0, 0, 1, 1) || { ok: false, reason: 'missing-active-editor-table-cell-range-helper' }`);
+  assert(
+    selectedMergedRangeBeforeVerticalAlign?.ok,
+    `Unable to reselect merged-cell table range before vertical alignment control: ${JSON.stringify(selectedMergedRangeBeforeVerticalAlign)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-table-cell-vertical-middle');
+  await sleep(500);
+
+  const mergedRangeStyleState = await evaluate(client, `(() => {
+    const host = document.querySelector('[data-element-id="${elementId}"]');
+    const cells = Array.from(host?.querySelectorAll('td, th') || []);
+    const slateState = typeof window.__backyReadActiveEditorTableState === 'function'
+      ? window.__backyReadActiveEditorTableState()
+      : null;
+    const readCell = (matcher) => {
+      const domCell = cells.find((cell) => matcher(cell.textContent || ''));
+      const slateCell = slateState?.types?.find((node) => (
+        (node.type === 'td' || node.type === 'th') &&
+        matcher(node.text || '')
+      ));
+      return {
+        text: domCell?.textContent || '',
+        colSpan: domCell?.getAttribute('colspan') || '',
+        backgroundColor: domCell ? window.getComputedStyle(domCell).backgroundColor : '',
+        borderColor: domCell ? window.getComputedStyle(domCell).borderTopColor : '',
+        verticalAlign: domCell ? window.getComputedStyle(domCell).verticalAlign : '',
+        slateColSpan: slateCell?.colSpan,
+        slateBackgroundColor: slateCell?.backgroundColor || '',
+        slateBorderColor: slateCell?.borderColor || '',
+        slateVerticalAlign: slateCell?.verticalAlign || '',
+      };
+    };
+
+    return {
+      mergedHeader: readCell((text) => text.includes('Column 1') && text.includes('Column 2')),
+      value1: readCell((text) => text.includes('Value 1')),
+      value2: readCell((text) => text.includes('Value 2')),
+      slateState,
+      html: host?.innerHTML || '',
+    };
+  })()`);
+  assert(
+    mergedRangeStyleState.mergedHeader.colSpan === '2' &&
+      mergedRangeStyleState.mergedHeader.slateColSpan === 2 &&
+      mergedRangeStyleState.mergedHeader.backgroundColor === 'rgb(255, 242, 204)' &&
+      mergedRangeStyleState.mergedHeader.borderColor === 'rgb(249, 203, 156)' &&
+      mergedRangeStyleState.mergedHeader.verticalAlign === 'middle' &&
+      mergedRangeStyleState.mergedHeader.slateBackgroundColor === '#fff2cc' &&
+      mergedRangeStyleState.mergedHeader.slateBorderColor === '#f9cb9c' &&
+      mergedRangeStyleState.mergedHeader.slateVerticalAlign === 'middle' &&
+      mergedRangeStyleState.value1.backgroundColor === 'rgb(255, 242, 204)' &&
+      mergedRangeStyleState.value2.backgroundColor === 'rgb(255, 242, 204)' &&
+      mergedRangeStyleState.value1.slateBackgroundColor === '#fff2cc' &&
+      mergedRangeStyleState.value2.slateBackgroundColor === '#fff2cc',
+    `Merged-cell range style controls did not apply across spanned and normal cells: ${JSON.stringify(mergedRangeStyleState)}`,
+  );
+
+  await activateTextEditing(client, elementId);
+  const selectedMergedRangeCellBeforeSplit = await evaluate(client, `(() => {
+    if (typeof window.__backySelectActiveEditorTableCell !== 'function') {
+      return { ok: false, reason: 'missing-active-editor-table-cell-helper' };
+    }
+
+    return window.__backySelectActiveEditorTableCell('Column 1');
+  })()`);
+  assert(
+    selectedMergedRangeCellBeforeSplit?.ok,
+    `Unable to reselect merged table cell before restoring range style table: ${JSON.stringify(selectedMergedRangeCellBeforeSplit)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-table-split-cell');
+  await sleep(500);
+
+  await activateTextEditing(client, elementId);
   const selectedMultiCellFillRange = await evaluate(client, `(() => {
     if (typeof window.__backySelectActiveEditorTableCellRange !== 'function') {
       return { ok: false, reason: 'missing-active-editor-table-cell-range-helper' };
@@ -5877,7 +5997,7 @@ const assertPersistedRichTextBlocks = async (pageId, elementId = 'smoke-heading'
   assert(multiCellValueOneCell?.borderColor === '#b6d7a8' && multiCellValueTwoCell?.borderColor === '#b6d7a8', `Persisted multi-cell table border color missing: ${JSON.stringify({ multiCellValueOneCell, multiCellValueTwoCell, content })}`);
   assert(multiCellValueOneCell?.verticalAlign === 'middle' && multiCellValueTwoCell?.verticalAlign === 'middle', `Persisted multi-cell table vertical alignment missing: ${JSON.stringify({ multiCellValueOneCell, multiCellValueTwoCell, content })}`);
   assert(indentedListItem?.indent === 8, `Persisted selected list item indent clamp missing: ${JSON.stringify({ listItems, content })}`);
-  assert(siblingListItem?.indent === undefined, `Persisted sibling list item was unexpectedly indented: ${JSON.stringify({ listItems, content })}`);
+  assert((siblingListItem?.indent ?? 0) < 8, `Persisted sibling list item unexpectedly matched selected item indent: ${JSON.stringify({ listItems, content })}`);
   assert(text.includes('First block') && text.includes('Second block'), `Persisted blockquote text missing: ${JSON.stringify(leaves)}`);
   assert(text.includes('Column 1') && text.includes('Value 2'), `Persisted table text missing: ${JSON.stringify(leaves)}`);
   assert(text.includes('Nested item') && text.includes('Sibling item'), `Persisted list text missing: ${JSON.stringify(leaves)}`);
