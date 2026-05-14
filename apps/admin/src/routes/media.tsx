@@ -681,6 +681,9 @@ function MediaPage() {
   const [libraryAuditError, setLibraryAuditError] = useState<string | null>(null);
   const [libraryAuditActionFilter, setLibraryAuditActionFilter] = useState<MediaAuditActionFilter>('all');
   const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
+  const [fontPreviewUrl, setFontPreviewUrl] = useState('');
+  const [fontPreviewError, setFontPreviewError] = useState<string | null>(null);
+  const [isLoadingFontPreview, setIsLoadingFontPreview] = useState(false);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [mediaPagination, setMediaPagination] = useState<MediaPagination>({
     total: 0,
@@ -1024,6 +1027,11 @@ function MediaPage() {
       : undefined,
     [selectedAsset, siteId],
   );
+  const selectedFontPreviewUrl = selectedAsset?.type === 'font'
+    ? selectedAsset.visibility === 'private'
+      ? fontPreviewUrl
+      : selectedAsset.url
+    : '';
   const metadataReplacementVersions = useMemo(
     () => getReplacementVersions(selectedAsset?.metadata),
     [selectedAsset?.metadata],
@@ -1912,8 +1920,74 @@ function MediaPage() {
     setPendingDeleteVersionId(null);
     setComparisonVersionId(null);
     setSignedUrl(null);
+    setFontPreviewUrl('');
+    setFontPreviewError(null);
+    setIsLoadingFontPreview(false);
     setBindingTargetId('');
   }, [selectedAsset?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPrivateFontPreview = async () => {
+      if (!selectedAsset || selectedAsset.type !== 'font') {
+        setFontPreviewUrl('');
+        setFontPreviewError(null);
+        setIsLoadingFontPreview(false);
+        return;
+      }
+
+      if (selectedAsset.visibility !== 'private') {
+        setFontPreviewUrl(selectedAsset.url);
+        setFontPreviewError(null);
+        setIsLoadingFontPreview(false);
+        return;
+      }
+
+      if (selectedMediaSecurity.status === 'quarantined') {
+        setFontPreviewUrl('');
+        setFontPreviewError('Quarantined fonts cannot be previewed.');
+        setIsLoadingFontPreview(false);
+        return;
+      }
+
+      if (!canViewMedia) {
+        setFontPreviewUrl('');
+        setFontPreviewError(`Your account needs media.view to preview private fonts. ${viewPermissionTitle}`);
+        setIsLoadingFontPreview(false);
+        return;
+      }
+
+      setIsLoadingFontPreview(true);
+      setFontPreviewError(null);
+
+      try {
+        const preview = await createSignedMediaUrl(selectedAsset.id, {
+          expiresInSeconds: 900,
+          disposition: 'inline',
+        }, siteId);
+        if (!cancelled) {
+          setFontPreviewUrl(preview.signedUrl);
+          setFontPreviewError(null);
+        }
+      } catch (previewError) {
+        if (!cancelled) {
+          setFontPreviewUrl('');
+          setFontPreviewError(previewError instanceof Error ? previewError.message : 'Unable to create a private font preview URL.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingFontPreview(false);
+        }
+      }
+    };
+
+    void loadPrivateFontPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewMedia, selectedAsset, selectedMediaSecurity.status, siteId, viewPermissionTitle]);
 
   useEffect(() => {
     const providerAnalytics = getMediaProviderDeliveryAnalytics(selectedAsset?.metadata);
@@ -5332,11 +5406,11 @@ function MediaPage() {
 
       {selectedAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          {selectedAsset.type === 'font' && selectedAsset.url && (
+          {selectedAsset.type === 'font' && selectedFontPreviewUrl && (
             <style>
               {`@font-face {
                 font-family: "${(metadataForm.fontFamily || selectedAsset.name.replace(/\.[a-z0-9]+$/i, '')).replace(/["\\]/g, '')}";
-                src: url("${selectedAsset.url}");
+                src: url("${selectedFontPreviewUrl.replace(/["\\]/g, '')}");
                 font-style: ${metadataForm.fontStyle};
                 font-weight: ${metadataForm.fontWeight || '400'};
                 font-display: ${metadataForm.fontDisplay};
@@ -5625,6 +5699,9 @@ function MediaPage() {
                     </div>
                     <div
                       className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-lg"
+                      data-testid="media-font-preview"
+                      data-preview-source={selectedAsset.visibility === 'private' ? 'signed' : 'public'}
+                      data-preview-ready={selectedFontPreviewUrl ? 'true' : 'false'}
                       style={{
                         fontFamily: metadataForm.fontFamily
                           ? `"${metadataForm.fontFamily}", ${metadataForm.fontFallback || 'system-ui, sans-serif'}`
@@ -5633,6 +5710,25 @@ function MediaPage() {
                     >
                       {metadataForm.fontFamily || 'Uploaded font preview'}
                     </div>
+                    {(isLoadingFontPreview || fontPreviewError || (selectedAsset.visibility === 'private' && selectedFontPreviewUrl)) && (
+                      <div
+                        className={cn(
+                          'mt-2 rounded-lg border px-3 py-2 text-xs',
+                          fontPreviewError
+                            ? 'border-warning/40 bg-warning/10 text-warning'
+                            : 'border-border bg-background text-muted-foreground',
+                        )}
+                        data-testid="media-font-preview-status"
+                      >
+                        {fontPreviewError
+                          ? fontPreviewError
+                          : isLoadingFontPreview
+                            ? 'Preparing private font preview...'
+                            : selectedAsset.visibility === 'private'
+                              ? 'Private font preview uses a temporary signed URL.'
+                              : 'Public font preview uses the public file endpoint.'}
+                      </div>
+                    )}
                   </div>
                 )}
 

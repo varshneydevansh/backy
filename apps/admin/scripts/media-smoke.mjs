@@ -329,7 +329,21 @@ const deleteFolder = async (folderId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/media/folders/${folderId}`, { method: 'DELETE' });
 };
 
-const uploadMedia = async ({ filename, mimeType, bytes, visibility = 'public', folderId = null, tags = [], altText, caption }) => {
+const uploadMedia = async ({
+  filename,
+  mimeType,
+  bytes,
+  visibility = 'public',
+  folderId = null,
+  tags = [],
+  altText,
+  caption,
+  fontFamily,
+  fontWeight,
+  fontStyle,
+  fontFallback,
+  fontDisplay,
+}) => {
   const formData = new FormData();
   formData.append('file', new Blob([bytes], { type: mimeType }), filename);
   formData.set('visibility', visibility);
@@ -338,6 +352,11 @@ const uploadMedia = async ({ filename, mimeType, bytes, visibility = 'public', f
   if (tags.length > 0) formData.set('tags', tags.join(','));
   if (altText) formData.set('altText', altText);
   if (caption) formData.set('caption', caption);
+  if (fontFamily) formData.set('fontFamily', fontFamily);
+  if (fontWeight) formData.set('fontWeight', fontWeight);
+  if (fontStyle) formData.set('fontStyle', fontStyle);
+  if (fontFallback) formData.set('fontFallback', fontFallback);
+  if (fontDisplay) formData.set('fontDisplay', fontDisplay);
 
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media`, {
     method: 'POST',
@@ -2089,6 +2108,61 @@ const uploadFontThroughUiAndAssert = async (client, {
   return { uploadedFont: updatedFont, panel, manifest };
 };
 
+const assertPrivateFontPreview = async (client, { fontId, fontName, family }) => {
+  const privateFont = await waitForMedia(fontName, (item) => (
+    item.id === fontId &&
+    item.type === 'font' &&
+    item.visibility === 'private'
+  ));
+  await navigateToMedia(client, fontName);
+  await waitForMediaPageAsset(client, fontName);
+  await openMediaDetails(client, fontName);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const preview = document.querySelector('[data-testid="media-font-preview"]');
+      const status = document.querySelector('[data-testid="media-font-preview-status"]');
+      const styleText = Array.from(document.querySelectorAll('style'))
+        .map((style) => style.textContent || '')
+        .join('\\n');
+      return {
+        hasPreview: preview instanceof HTMLElement,
+        previewSource: preview?.getAttribute('data-preview-source') || '',
+        previewReady: preview?.getAttribute('data-preview-ready') || '',
+        hasStatus: status instanceof HTMLElement,
+        statusText: status?.textContent || '',
+        hasSignedFontFace: styleText.includes(${JSON.stringify(`/api/sites/${SITE_ID}/media/${fontId}/file`)}) &&
+          styleText.includes('token=') &&
+          styleText.includes('expiresAt=') &&
+          styleText.includes(${JSON.stringify(`font-family: "${family}";`)}),
+        leakedRawAssetUrl: styleText.includes(${JSON.stringify(privateFont.url)}) && !styleText.includes('token='),
+        styleText: styleText.slice(0, 1400),
+      };
+    })()`);
+
+    if (
+      state.hasPreview &&
+      state.previewSource === 'signed' &&
+      state.previewReady === 'true' &&
+      state.hasStatus &&
+      state.statusText.includes('Private font preview uses a temporary signed URL') &&
+      state.hasSignedFontFace &&
+      !state.leakedRawAssetUrl
+    ) {
+      await closeMediaDetails(client);
+      return { privateFont, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Private font preview did not use signed delivery: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return { privateFont, state: null };
+};
+
 const deleteAssetThroughUi = async (client, assetName) => {
   await waitForMediaPageAsset(client, assetName);
   const openResult = await evaluate(client, `(() => {
@@ -2399,6 +2473,13 @@ const main = async () => {
     });
     fontUploadedFile = fontSmokeResult.uploadedFont;
     mediaIds.push(fontUploadedFile.id);
+    fontUploadedFile = await updateMedia(fontUploadedFile.id, { visibility: 'private' });
+    const privateFontPreview = await assertPrivateFontPreview(client, {
+      fontId: fontUploadedFile.id,
+      fontName: fontUploadName,
+      family: fontFamily,
+    });
+    assert(privateFontPreview.privateFont.visibility === 'private', 'Font preview smoke did not keep the font private.');
     await saveMediaStorageSettingsFromUi(client, suffix);
     const savedStorageSettings = await readSettings();
     assert(savedStorageSettings.integrations?.storage?.provider === 'supabase', 'Media storage provider was not persisted through the Media page.');
