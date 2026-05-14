@@ -646,6 +646,20 @@ for (const route of [
 ]) {
   assertIncludes(read(route), 'Array.isArray(rawContent.elements)', `${route} PATCH content normalization must extract elements arrays`);
 }
+for (const route of [
+  'apps/public/src/app/api/admin/sites/[siteId]/pages/[pageId]/publish/route.ts',
+  'apps/public/src/app/api/admin/sites/[siteId]/pages/[pageId]/archive/route.ts',
+]) {
+  const source = read(route);
+  assertIncludes(source, 'const body = await parseJsonBody(request);', `${route} must parse status mutation bodies`);
+  assertIncludes(source, 'expectedUpdatedAt', `${route} must read optimistic concurrency tokens`);
+  assertIncludes(source, 'PAGE_VERSION_CONFLICT', `${route} must reject stale page status mutations`);
+  assertIncludes(source, 'currentUpdatedAt', `${route} must return current version details on conflicts`);
+  assert(
+    occurrenceCount(source, 'expectedUpdatedAt && expectedUpdatedAt !== currentPage.updatedAt') >= 2,
+    `${route} must enforce optimistic concurrency in repository and demo-store paths`,
+  );
+}
 const canvasEditorSource = read('apps/admin/src/components/editor/CanvasEditor.tsx');
 assertIncludes(canvasEditorSource, 'publicationStateChanging', 'canvas editor settings save must guard publication status changes');
 assertIncludes(canvasEditorSource, "disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && publishDisabled)}", 'canvas editor publish/unpublish button must require pages.publish in both directions');

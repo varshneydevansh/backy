@@ -36,6 +36,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return isRecord(body) ? body : {};
+  } catch {
+    return {};
+  }
+};
+
 const adminPageFromRepositoryPage = (page: BackyPage) => {
   const canvasSize = isRecord(page.content.metadata?.canvasSize)
     ? page.content.metadata.canvasSize
@@ -60,6 +69,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, pageId } = await params;
+    const body = await parseJsonBody(request);
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt.trim() : '';
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -72,6 +83,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!currentPage) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+      }
+
+      if (expectedUpdatedAt && expectedUpdatedAt !== currentPage.updatedAt) {
+        return errorResponse(409, 'PAGE_VERSION_CONFLICT', 'Page has changed since the editor loaded it', requestId, {
+          pageId: currentPage.id,
+          expectedUpdatedAt,
+          currentUpdatedAt: currentPage.updatedAt,
+          currentPage: adminPageFromRepositoryPage(currentPage),
+        });
       }
 
       const readiness = (await buildRepositorySiteReadiness(repositories, site)).pages.find((item) => item.id === currentPage.id);
@@ -130,6 +150,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!currentPage) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+    }
+
+    if (expectedUpdatedAt && expectedUpdatedAt !== currentPage.updatedAt) {
+      return errorResponse(409, 'PAGE_VERSION_CONFLICT', 'Page has changed since the editor loaded it', requestId, {
+        pageId: currentPage.id,
+        expectedUpdatedAt,
+        currentUpdatedAt: currentPage.updatedAt,
+        currentPage,
+      });
     }
 
     const readiness = buildSiteReadiness(site).pages.find((item) => item.id === currentPage.id);
