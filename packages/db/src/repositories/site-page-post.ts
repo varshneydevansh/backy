@@ -394,10 +394,17 @@ const searchText = (value: string | null | undefined, search: string): boolean =
     (value || '').toLowerCase().includes(search.toLowerCase())
 );
 
+const normalizeSiteStatus = (site: Site): PublishStatus => {
+    const rawStatus = (site.settings as SiteSettings & { siteStatus?: unknown }).siteStatus;
+    if (rawStatus === 'published' || rawStatus === 'draft' || rawStatus === 'archived') {
+        return rawStatus;
+    }
+    return site.isPublished ? 'published' : 'draft';
+};
+
 const siteMatchesStatus = (site: Site, status?: PublishStatus | 'all'): boolean => {
     if (!status || status === 'all') return true;
-    if (status === 'published') return site.isPublished;
-    return !site.isPublished;
+    return normalizeSiteStatus(site) === status;
 };
 
 const contentPayload = (content: BackyContentDocument): Record<string, unknown> => ({

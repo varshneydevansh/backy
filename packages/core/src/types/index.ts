@@ -241,6 +241,9 @@ export interface ThemeConfig {
  * Global settings for a site
  */
 export interface SiteSettings {
+  /** Admin lifecycle status for the site workspace. Public rendering still uses isPublished as the delivery gate. */
+  siteStatus?: 'draft' | 'published' | 'archived';
+
   /** SEO defaults */
   seo: {
     /** Default page title suffix */

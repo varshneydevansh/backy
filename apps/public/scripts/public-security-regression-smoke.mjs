@@ -781,6 +781,15 @@ assertIncludes(settingsRoute, 'Existing integrations using', 'settings UI must w
 assertIncludes(settingsRoute, 'const statusLabel = !canShowValue', 'settings UI must show redacted admin API keys as hidden, not unconfigured');
 assertIncludes(settingsRoute, 'Hidden without settings.manageKeys', 'settings UI must explain hidden admin API key values');
 
+const adminSiteDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/route.ts');
+assertIncludes(adminSiteDetailRoute, 'siteStatus: nextStatus', 'admin site detail route must persist archived site lifecycle state in settings');
+assertIncludes(adminSiteDetailRoute, 'persistedSiteStatus(site)', 'admin site detail route must return persisted archived site status');
+assertIncludes(adminSiteDetailRoute, "nextStatus === 'draft' || nextStatus === 'archived' ? 'draft'", 'admin site detail route must keep archived sites unpublished in repository mode');
+const adminSitesLifecycleRoute = read('apps/public/src/app/api/admin/sites/route.ts');
+assertIncludes(adminSitesLifecycleRoute, 'settings: { siteStatus: status }', 'admin sites route must persist site lifecycle status on create');
+const siteRepository = read('packages/db/src/repositories/site-page-post.ts');
+assertIncludes(siteRepository, 'normalizeSiteStatus(site) === status', 'site repository status filters must distinguish archived from draft');
+
 const adminContractSmoke = read('apps/public/scripts/admin-contract-smoke.mjs');
 assertIncludes(adminContractSmoke, 'providerWebhookSecretId: `env:', 'admin contract smoke must use webhook secret references');
 assertExcludes(adminContractSmoke, 'providerWebhookSecretId: `stripe_whsec_', 'admin contract smoke must not persist raw webhook secrets');

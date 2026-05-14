@@ -47,8 +47,13 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
-const statusForRepositorySite = (site: { isPublished: boolean }) => (
-  site.isPublished ? 'published' : 'draft'
+const normalizeSiteStatus = (value: unknown): 'draft' | 'published' | 'archived' | undefined => (
+  value === 'published' || value === 'draft' || value === 'archived' ? value : undefined
+);
+
+const statusForRepositorySite = (site: Site) => (
+  normalizeSiteStatus((site.settings as Site['settings'] & { siteStatus?: unknown }).siteStatus)
+    || (site.isPublished ? 'published' : 'draft')
 );
 
 const configuredDefaultTeamId = () => (
@@ -184,13 +189,15 @@ export async function POST(request: NextRequest) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
       }
 
+      const status = normalizeSiteStatus(body.status) || 'draft';
       const created = await repositories.sites.create({
         teamId,
         name,
         slug,
         description: typeof body.description === 'string' ? body.description : null,
         customDomain: typeof body.customDomain === 'string' ? body.customDomain : null,
-        status: body.status === 'published' ? 'published' : 'draft',
+        status: status === 'published' ? 'published' : 'draft',
+        settings: { siteStatus: status } as Site['settings'],
       });
       await recordAdminAudit({
         repositories,
@@ -203,7 +210,7 @@ export async function POST(request: NextRequest) {
         after: adminSiteFromRepositorySite(created.item) || {},
         metadata: {
           slug,
-          status: body.status === 'published' ? 'published' : 'draft',
+          status,
           source: 'admin-sites-create',
         },
         requestId,

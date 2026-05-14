@@ -58,16 +58,26 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const normalizeSiteStatus = (value: unknown): 'draft' | 'published' | 'archived' | undefined => (
+  value === 'published' || value === 'draft' || value === 'archived' ? value : undefined
+);
+
+const persistedSiteStatus = (site: Site): 'draft' | 'published' | 'archived' => {
+  const settingsStatus = normalizeSiteStatus((site.settings as SiteSettings & { siteStatus?: unknown }).siteStatus);
+  if (settingsStatus) return settingsStatus;
+  return site.isPublished ? 'published' : 'draft';
+};
+
 const adminSiteFromRepositorySite = (site: Site | null) => {
   if (!site) return null;
   return {
     ...site,
-    status: site.isPublished ? 'published' : 'draft',
+    status: persistedSiteStatus(site),
   };
 };
 
 const statusForRepositorySite = (site: Site) => (
-  site.isPublished ? 'published' : 'draft'
+  persistedSiteStatus(site)
 );
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -390,14 +400,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const settings = mergeSiteSettings(site.settings, body.settings);
+      const nextStatus = normalizeSiteStatus(body.status);
+      const nextSettings = nextStatus
+        ? { ...settings, siteStatus: nextStatus } as SiteSettings
+        : settings;
       const updated = await repositories.sites.update(site.id, {
         name: typeof body.name === 'string' ? body.name : undefined,
         slug: typeof body.slug === 'string' ? body.slug : undefined,
         description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
         customDomain: typeof body.customDomain === 'string' || body.customDomain === null ? body.customDomain : undefined,
-        status: body.status === 'published' ? 'published' : body.status === 'draft' ? 'draft' : undefined,
+        status: nextStatus === 'published' ? 'published' : nextStatus === 'draft' || nextStatus === 'archived' ? 'draft' : undefined,
         isPublished: typeof body.isPublished === 'boolean' ? body.isPublished : undefined,
-        settings,
+        settings: nextSettings,
       });
       if (commentPolicyOnlyPatch) {
         await recordAdminAudit({
