@@ -1248,13 +1248,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ? { ...record, values: reservedRecord.values }
           : record;
         const product = productRecordToCommerceProduct(workingRecord);
-        if (reservationsEnabled && !product.inventory.inStock) {
-          return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
-        }
-
         const variant = selectProductVariant(product, item);
         if ((item.variantId || item.variantSku) && !variant) {
           return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
+        }
+        if (reservationsEnabled && !variant && !product.inventory.inStock) {
+          return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
         }
         if (reservationsEnabled && variant && !variant.inStock) {
           return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
@@ -1452,13 +1451,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? { ...record, values: reservedRecord.values }
         : record;
       const product = productRecordToCommerceProduct(workingRecord);
-      if (reservationsEnabled && !product.inventory.inStock) {
-        return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
-      }
-
       const variant = selectProductVariant(product, item);
       if ((item.variantId || item.variantSku) && !variant) {
         return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
+      }
+      if (reservationsEnabled && !variant && !product.inventory.inStock) {
+        return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
       }
       if (reservationsEnabled && variant && !variant.inStock) {
         return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });

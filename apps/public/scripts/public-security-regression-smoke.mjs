@@ -739,6 +739,8 @@ assertIncludes(checkoutRoute, 'GUEST_CHECKOUT_DISABLED', 'checkout POST must rej
 assertIncludes(checkoutRoute, '!commerce.checkout.guestCheckout', 'checkout POST must read the guest checkout setting before creating orders');
 const guestCheckoutGuards = checkoutRoute.match(/requireGuestCheckoutAllowed\(commerce, requestId\)/g) || [];
 assert(guestCheckoutGuards.length >= 2, 'checkout POST must enforce guest checkout policy in both repository and demo-store paths');
+const variantAwareProductStockGuards = checkoutRoute.match(/reservationsEnabled && !variant && !product\.inventory\.inStock/g) || [];
+assert(variantAwareProductStockGuards.length >= 2, 'checkout POST must not reject variant carts on parent product stock before variant stock validation');
 const orderCreateAnchor = 'let order: Awaited<ReturnType<typeof repositories.collections.createRecord>>[\'item\'];';
 const orderCreateAnchorIndex = checkoutRoute.indexOf(orderCreateAnchor);
 const applyRepositoryReservationsIndex = checkoutRoute.indexOf('const rollbackInventoryReservations = await applyRepositoryInventoryReservations({');
