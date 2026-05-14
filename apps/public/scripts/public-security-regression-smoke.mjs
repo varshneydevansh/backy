@@ -27,6 +27,20 @@ function occurrenceCount(source, needle) {
   return source.split(needle).length - 1;
 }
 
+const sdkClientSource = read('packages/sdk-js/src/index.ts');
+assertIncludes(sdkClientSource, 'export const BACKY_MAX_LIST_LIMIT = 100', 'JS SDK must expose the public list limit cap');
+assertIncludes(sdkClientSource, 'function normalizeListLimit', 'JS SDK must normalize public list limits');
+assertIncludes(sdkClientSource, 'function normalizeListQuery', 'JS SDK must normalize public list query objects');
+assert(
+  occurrenceCount(sdkClientSource, 'normalizeListQuery(queryOptions') >= 15,
+  'JS SDK public list methods must clamp limit/offset query options before requests',
+);
+assertIncludes(
+  sdkClientSource,
+  'query: { limit: normalizeListLimit(options.limit) }',
+  'JS SDK RSS fetch helper must clamp limit before request',
+);
+
 function functionSource(source, functionName, label) {
   const start = source.indexOf(`export async function ${functionName}`);
   assert(start !== -1, `${label} missing ${functionName} handler`);

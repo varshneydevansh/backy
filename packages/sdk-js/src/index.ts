@@ -68,9 +68,52 @@ export interface BackyConditionalRequestOptions {
 export type BackyConditionalOptions = BackyConditionalRequestOptions;
 
 export interface BackyListOptions {
+  /**
+   * Public list endpoints cap limits at 100. Finite SDK inputs are clamped to 1..100.
+   */
   limit?: number;
+  /**
+   * Public list endpoints treat negative offsets as 0. Finite SDK inputs are clamped to 0+.
+   */
   offset?: number;
   requestId?: string;
+}
+
+export const BACKY_MAX_LIST_LIMIT = 100;
+
+type BackyQueryValue = string | number | boolean | undefined;
+
+function normalizeListNumber(value: string | number | undefined): number | undefined {
+  if (typeof value === 'string' && value.trim() !== '') {
+    return Number(value);
+  }
+  return typeof value === 'number' ? value : undefined;
+}
+
+function normalizeListLimit(limit: string | number | undefined): number | undefined {
+  const normalizedLimit = normalizeListNumber(limit);
+  if (normalizedLimit === undefined || !Number.isFinite(normalizedLimit)) {
+    return undefined;
+  }
+  return Math.min(BACKY_MAX_LIST_LIMIT, Math.max(1, Math.trunc(normalizedLimit)));
+}
+
+function normalizeListOffset(offset: string | number | undefined): number | undefined {
+  const normalizedOffset = normalizeListNumber(offset);
+  if (normalizedOffset === undefined || !Number.isFinite(normalizedOffset)) {
+    return undefined;
+  }
+  return Math.max(0, Math.trunc(normalizedOffset));
+}
+
+function normalizeListQuery<TOptions extends BackyListOptions>(
+  options: Omit<TOptions, 'requestId'>,
+): Record<string, BackyQueryValue> {
+  return {
+    ...options,
+    limit: normalizeListLimit(options.limit),
+    offset: normalizeListOffset(options.offset),
+  } as Record<string, BackyQueryValue>;
 }
 
 export interface BackyPagination {
@@ -1245,7 +1288,8 @@ export class BackyClient {
   }
 
   pages(options: BackyPageListOptions = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
-    const { requestId, siteId, ...query } = options;
+    const { requestId, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
       query,
       requestId,
@@ -1253,7 +1297,8 @@ export class BackyClient {
   }
 
   pagesCached(options: BackyPageListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
-    const { requestId, etag, siteId, ...query } = options;
+    const { requestId, etag, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/pages`, {
       query,
       ifNoneMatch: etag,
@@ -1263,14 +1308,16 @@ export class BackyClient {
 
   blog(options: Record<string, string | number | boolean | undefined> = {}): Promise<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
     const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
-    const { siteId: _siteId, ...query } = options;
+    const { siteId: _siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
     void _siteId;
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query });
   }
 
   blogCached(options: Record<string, string | number | boolean | undefined> & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
     const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
-    const { requestId, etag, siteId: _siteId, ...query } = options;
+    const { requestId, etag, siteId: _siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
     void _siteId;
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId)}/blog`, {
       query,
@@ -1281,13 +1328,14 @@ export class BackyClient {
 
   blogRssUrl(options: { siteId?: string; limit?: number } = {}): string {
     const siteId = options.siteId ?? this.requireSiteId();
-    const query = options.limit ? `?limit=${encodeURIComponent(String(options.limit))}` : '';
+    const limit = normalizeListLimit(options.limit);
+    const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
     return `${this.baseUrl}/api/sites/${encodeURIComponent(siteId)}/blog/rss${query}`;
   }
 
   async blogRss(options: { siteId?: string; limit?: number; requestId?: string } = {}): Promise<string> {
     return this.requestText(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/rss`, {
-      query: { limit: options.limit },
+      query: { limit: normalizeListLimit(options.limit) },
       requestId: options.requestId,
     });
   }
@@ -1326,7 +1374,8 @@ export class BackyClient {
   }
 
   media(options: BackyMediaListOptions = {}): Promise<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media`, {
       query,
       requestId,
@@ -1334,7 +1383,8 @@ export class BackyClient {
   }
 
   mediaCached(options: BackyMediaListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>>> {
-    const { requestId, etag, siteId, ...query } = options;
+    const { requestId, etag, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/media`, {
       query,
       ifNoneMatch: etag,
@@ -1441,7 +1491,8 @@ export class BackyClient {
     collectionId: string,
     options: BackyCollectionRecordListOptions = {},
   ): Promise<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       query,
       requestId,
@@ -1452,7 +1503,8 @@ export class BackyClient {
     collectionId: string,
     options: BackyCollectionRecordListOptions & BackyConditionalOptions = {},
   ): Promise<BackyConditionalResult<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>>> {
-    const { requestId, etag, siteId, ...query } = options;
+    const { requestId, etag, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       query,
       ifNoneMatch: etag,
@@ -1461,7 +1513,8 @@ export class BackyClient {
   }
 
   commerceCatalog(options: BackyCommerceCatalogOptions = {}): Promise<BackyEnvelope<BackyCommerceCatalog>> {
-    const { requestId, siteId, ...query } = options;
+    const { requestId, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
       query,
       requestId,
@@ -1469,7 +1522,8 @@ export class BackyClient {
   }
 
   commerceCatalogCached(options: BackyCommerceCatalogOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyCommerceCatalog>>> {
-    const { requestId, etag, siteId, ...query } = options;
+    const { requestId, etag, siteId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
       query,
       ifNoneMatch: etag,
@@ -1640,7 +1694,8 @@ export class BackyClient {
   }
 
   pageComments(pageId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
       query,
       requestId,
@@ -1667,7 +1722,8 @@ export class BackyClient {
   }
 
   blogComments(postId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
       query,
       requestId,
@@ -1694,7 +1750,8 @@ export class BackyClient {
   }
 
   siteComments(options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
       query,
       requestId,
@@ -1718,7 +1775,8 @@ export class BackyClient {
   }
 
   commentBlocklist(options: BackyCommentBlocklistOptions = {}): Promise<BackyEnvelope<{ siteId?: string; blocklist: BackyCommentBlocklistEntry[]; count: number; pagination?: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`, {
       query,
       requestId,
@@ -1770,7 +1828,8 @@ export class BackyClient {
   }
 
   events(options: BackyEventListOptions = {}): Promise<BackyEnvelope<{ siteId: string; events: BackyInteractionEvent[]; count: number; pagination?: BackyPagination }>> {
-    const { requestId, ...query } = options;
+    const { requestId, ...queryOptions } = options;
+    const query = normalizeListQuery(queryOptions);
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/events`, {
       query,
       requestId,
