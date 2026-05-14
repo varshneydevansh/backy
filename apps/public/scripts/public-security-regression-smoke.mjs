@@ -510,6 +510,16 @@ for (const needle of [
 }
 assertExcludes(catalogRoute, 'limit: 100,', 'commerce catalog route must not cap catalog reads before filtering');
 
+for (const route of [
+  'apps/admin/src/routes/pages.$pageId.edit.tsx',
+  'apps/admin/src/routes/blog.$postId.tsx',
+]) {
+  const source = read(route);
+  assertIncludes(source, "rollbackMethod: 'POST'", `${route} editor handoff must document rollback method`);
+  assertIncludes(source, "rollbackBody: { revisionId: '{revisionId}' }", `${route} editor handoff must document rollback body`);
+  assertExcludes(source, '/rollback/{revisionId}', `${route} editor handoff must not advertise path-based rollback ids`);
+}
+
 const mediaSafety = read('apps/public/src/lib/mediaSafety.ts');
 for (const needle of [
   'deliveryPolicy',
