@@ -7046,11 +7046,9 @@ export function buildContactShareFromSubmission(
     return null;
   }
 
+  const formShareEnabled = form.contactShare?.enabled === true;
   const resolvedShare: ContactShareOverride = {
-    enabled:
-      contactShareOverride?.enabled !== undefined
-        ? contactShareOverride.enabled
-        : form.contactShare?.enabled ?? false,
+    enabled: formShareEnabled && contactShareOverride?.enabled !== false,
     nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
     emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
     phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,

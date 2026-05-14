@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
+import type { BackyJsonValue, Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import {
+  attachCollectionRecordToSubmission,
   buildContactShareFromSubmission,
+  createCollectionRecordFromFormSubmission,
   getFormById,
   getSiteByIdOrSlug,
   getSubmissionById,
   updateFormSubmissionStatus,
+  validateCollectionRecordValues,
+  type StoreCollection,
 } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -82,6 +86,10 @@ const parseShareValue = (values: Record<string, unknown>, field?: string): strin
 
 const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
 
+const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
+  value as Record<string, BackyJsonValue>
+);
+
 const buildRepositoryContactShare = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   form: FormDefinition,
@@ -144,6 +152,99 @@ const buildRepositoryContactShare = async (
     requestId: submission.requestId,
     sourceIpHash: submission.ipHash,
   })).item;
+};
+
+const createRepositoryCollectionRecordFromSubmission = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  siteId: string,
+  form: FormDefinition,
+  submission: FormSubmission,
+): Promise<{
+  record: FormSubmission['collectionRecord'];
+  errors: Array<{ field: string; message: string }>;
+}> => {
+  const target = form.collectionTarget;
+  if (!target?.enabled || submission.collectionRecord) {
+    return {
+      record: submission.collectionRecord || null,
+      errors: submission.collectionRecordErrors || [],
+    };
+  }
+
+  const collection = await repositories.collections.getById(siteId, target.collectionId)
+    || await repositories.collections.getBySlug(siteId, target.collectionId);
+  if (!collection || collection.status !== 'published') {
+    return {
+      record: null,
+      errors: [{ field: 'collectionId', message: 'Target collection is not published or does not exist.' }],
+    };
+  }
+
+  if (!collection.permissions.publicCreate) {
+    return {
+      record: null,
+      errors: [{ field: 'collectionId', message: 'Target collection does not allow public creation.' }],
+    };
+  }
+
+  const fieldKeys = new Set(collection.fields.map((field) => field.key));
+  const fieldMap = target.fieldMap || {};
+  const mappedValues = Object.entries(submission.values).reduce<Record<string, unknown>>((acc, [sourceKey, value]) => {
+    const mappedKey = typeof fieldMap[sourceKey] === 'string' && fieldMap[sourceKey].trim().length > 0
+      ? fieldMap[sourceKey].trim()
+      : sourceKey;
+    if (fieldKeys.has(mappedKey)) {
+      acc[mappedKey] = value;
+    }
+    return acc;
+  }, {});
+
+  const sourceSubmissionFieldKey = ['sourceSubmissionId', 'source_submission_id', 'sourcesubmissionid']
+    .find((key) => fieldKeys.has(key));
+  if (sourceSubmissionFieldKey) {
+    mappedValues[sourceSubmissionFieldKey] = submission.id;
+  }
+
+  const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, mappedValues);
+  if (validationErrors.length > 0) {
+    return { record: null, errors: validationErrors };
+  }
+
+  const slugSource = target.slugField
+    ? submission.values[target.slugField] ?? mappedValues[target.slugField]
+    : mappedValues.slug || mappedValues.title || mappedValues.name;
+  const baseSlug = String(slugSource || `${form.id}-${submission.id}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'submission';
+  let slug = baseSlug;
+  let suffix = 2;
+  while (await repositories.collections.getRecordBySlug(siteId, collection.id, slug)) {
+    slug = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  const saved = (await repositories.collections.createRecord({
+    siteId,
+    collectionId: collection.id,
+    slug,
+    status: 'draft',
+    values: toJsonRecord(mappedValues),
+  })).item;
+
+  return {
+    record: {
+      siteId,
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      recordId: saved.id,
+      recordSlug: saved.slug,
+      status: saved.status,
+      createdAt: saved.createdAt,
+    },
+    errors: [],
+  };
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -239,7 +340,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
       }
 
-      const updated = (await repositories.forms.updateSubmission(site.id, submission.id, {
+      let updated = (await repositories.forms.updateSubmission(site.id, submission.id, {
         status: body.status,
         reviewedBy: body.reviewedBy,
         reviewedAt: new Date().toISOString(),
@@ -250,6 +351,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         : form.contactShare?.enabled === true;
       if (updated.status === 'approved' && shouldShareContact) {
         await buildRepositoryContactShare(repositories, form, updated, body.contactShareOverride);
+      }
+      if (updated.status === 'approved' && form.collectionTarget?.enabled && !updated.collectionRecord) {
+        const collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
+          repositories,
+          site.id,
+          form,
+          updated,
+        );
+        updated = (await repositories.forms.updateSubmission(site.id, updated.id, {
+          collectionRecord: collectionRecordResult.record,
+          collectionRecordErrors: collectionRecordResult.errors,
+        })).item;
       }
       await recordAdminAudit({
         repositories,
@@ -292,7 +405,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
-    const updated = updateFormSubmissionStatus(submissionId, {
+    let updated = updateFormSubmissionStatus(submissionId, {
       status: body.status,
       reviewedBy: body.reviewedBy,
       adminNotes: body.adminNotes,
@@ -312,6 +425,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ipHash: updated.ipHash ?? null,
         sourceSubmissionId: updated.id,
       }, body.contactShareOverride);
+    }
+    if (updated.status === 'approved' && form.collectionTarget?.enabled && !updated.collectionRecord) {
+      const collectionRecordResult = createCollectionRecordFromFormSubmission(
+        site.id,
+        form,
+        updated.values,
+        updated,
+      );
+      updated = attachCollectionRecordToSubmission(updated.id, {
+        record: collectionRecordResult.record,
+        errors: collectionRecordResult.errors,
+      }) || updated;
     }
     await recordAdminAudit({
       siteId: site.id,

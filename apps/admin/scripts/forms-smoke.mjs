@@ -1925,13 +1925,13 @@ const main = async () => {
     await assertConsentExportInUi(client, submitted.id);
     webhookRetry = await retryWebhookDeliveryInUi(client, createdFormId, submitted);
     webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'succeeded', webhookRetry.delivery.requestId);
-    const records = await listCollectionRecords(smokeCollection.id);
-    const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
-    assert(createdRecord, `Collection record was not created for submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
-    assert(createdRecord.values?.company === 'Backy Smoke Co', `Collection record did not persist company value: ${JSON.stringify(createdRecord)}`);
     const consentRetention = await assertConsentRetentionApi(createdFormId, submitted.id);
     await refreshForms(client);
     const approved = await approveSubmissionInUi(client, createdFormId, submitted.id);
+    const records = await listCollectionRecords(smokeCollection.id);
+    const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
+    assert(createdRecord, `Collection record was not created after approving submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
+    assert(createdRecord.values?.company === 'Backy Smoke Co', `Collection record did not persist company value: ${JSON.stringify(createdRecord)}`);
     await refreshForms(client);
     const auditTrail = await assertFormsAuditTrail(client, createdFormId, submitted.id);
     const layout = await assertLayout(client);

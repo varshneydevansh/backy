@@ -533,10 +533,9 @@ const buildRepositoryContactShare = async (
   submission: FormSubmission,
   contactShareOverride?: ContactShareOverridePayload,
 ): Promise<Contact | null> => {
+  const formShareEnabled = form.contactShare?.enabled === true;
   const resolvedShare = {
-    enabled: contactShareOverride?.enabled !== undefined
-      ? contactShareOverride.enabled
-      : form.contactShare?.enabled ?? false,
+    enabled: formShareEnabled && contactShareOverride?.enabled !== false,
     nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
     emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
     phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
@@ -1046,7 +1045,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       let contact: Contact | null = null;
       let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
-      if (classification.status === 'approved' || classification.status === 'pending') {
+      if (classification.status === 'approved') {
         contact = await buildRepositoryContactShare(repositories, form, parsed.values, submission, parsed.contactShareOverride);
         collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
           repositories,
@@ -1190,7 +1189,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     let contact = null;
     let collectionRecordResult = null;
-    if (classification.status === 'approved' || classification.status === 'pending') {
+    if (classification.status === 'approved') {
       contact = buildContactShareFromSubmission(site.id, form.id, parsed.values, {
         status: submission.status,
         pageId: parsed.pageId,

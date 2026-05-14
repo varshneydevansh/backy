@@ -260,10 +260,17 @@ assert(
 const publicFormSubmissionRoute = read('apps/public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts');
 assertIncludes(publicFormSubmissionRoute, '@/lib/publicFormAudienceAccess', 'public form submission route must import audience guard');
 assertIncludes(functionSource(publicFormSubmissionRoute, 'POST', 'public form submission route'), "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')", 'public form submission route must enforce audience before parsing submissions');
+assertIncludes(publicFormSubmissionRoute, 'enabled: formShareEnabled && contactShareOverride?.enabled !== false', 'public form submission route must not let public overrides enable disabled contact sharing');
+assertExcludes(publicFormSubmissionRoute, "classification.status === 'approved' || classification.status === 'pending'", 'public form submission route must not route pending submissions into contacts or collections');
 assert(
   occurrenceCount(publicFormSubmissionRoute, "requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit')") >= 2,
   'public form submission route must enforce audience in repository and demo branches',
 );
+
+const adminFormSubmissionReviewRoute = read('apps/public/src/app/api/admin/sites/[siteId]/forms/[formId]/submissions/[submissionId]/route.ts');
+assertIncludes(adminFormSubmissionReviewRoute, 'createRepositoryCollectionRecordFromSubmission', 'admin submission review must route approved repository submissions into collection records');
+assertIncludes(adminFormSubmissionReviewRoute, 'createCollectionRecordFromFormSubmission(', 'admin submission review must route approved demo submissions into collection records');
+assertIncludes(adminFormSubmissionReviewRoute, "updated.status === 'approved' && form.collectionTarget?.enabled && !updated.collectionRecord", 'admin submission review must create missing collection records only on approval');
 
 const adminPasswordPolicy = read('apps/public/src/lib/admin-auth/passwordPolicy.ts');
 assertIncludes(adminPasswordPolicy, 'getAdminSettings()', 'admin password policy must read persisted settings');
@@ -359,6 +366,7 @@ for (const route of [
 }
 
 const backyStore = read('apps/public/src/lib/backyStore.ts');
+assertIncludes(backyStore, 'enabled: formShareEnabled && contactShareOverride?.enabled !== false', 'demo contact share helper must not let public overrides enable disabled contact sharing');
 const submissionValidationStart = backyStore.indexOf('function validateSubmissionValues(');
 const submissionValidationEnd = backyStore.indexOf('\nfunction makeSubmissionSignature', submissionValidationStart);
 assert(submissionValidationStart !== -1 && submissionValidationEnd !== -1, 'backyStore missing submission validation function');
