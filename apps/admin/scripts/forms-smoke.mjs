@@ -300,6 +300,11 @@ const getFormWithSubmissions = async (formId) => {
   };
 };
 
+const listFormContacts = async (formId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts?limit=100`);
+  return payload.data?.contacts || payload.contacts || [];
+};
+
 const deleteForm = async (formId) => {
   if (!formId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`, { method: 'DELETE' });
@@ -1165,6 +1170,9 @@ const submitRegistration = async (formId) => {
   const submission = payload.data?.submission;
   assert(submission?.id, `Public registration submit did not return a submission: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(submission.status === 'pending', `Registration submission should be pending for manual review: ${submission.status}`);
+  assert(!submission.collectionRecord, `Pending registration submission should not create a collection record: ${JSON.stringify(submission.collectionRecord)}`);
+  assert(!payload.data?.collectionRecord && !payload.collectionRecord, `Pending registration response should not expose a collection record: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(!payload.data?.contact && !payload.contact, `Pending registration response should not create a contact: ${JSON.stringify(payload).slice(0, 500)}`);
   return { ...submission, requestId };
 };
 
@@ -1919,6 +1927,16 @@ const main = async () => {
     await refreshForms(client);
     const formsAnalytics = await assertFormsAnalytics(client, createdFormId, submitted.id);
     await assertDeliveryPanelShowsEmail(client, submitted.id);
+    const pendingRecords = await listCollectionRecords(smokeCollection.id);
+    assert(
+      !pendingRecords.some((record) => record.values?.source_submission_id === submitted.id),
+      `Pending submission ${submitted.id} created a collection record before approval: ${JSON.stringify(pendingRecords.slice(0, 5))}`,
+    );
+    const pendingContacts = await listFormContacts(createdFormId);
+    assert(
+      !pendingContacts.some((contact) => contact.sourceSubmissionId === submitted.id || contact.email === 'forms-smoke@example.com'),
+      `Pending submission ${submitted.id} created a contact before approval: ${JSON.stringify(pendingContacts.slice(0, 5))}`,
+    );
     if (EXPECTED_EMAIL_INITIAL_STATUS === 'failed') {
       emailRetry = await retryEmailDeliveryInUi(client, createdFormId, submitted);
     }
@@ -1932,6 +1950,9 @@ const main = async () => {
     const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
     assert(createdRecord, `Collection record was not created after approving submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
     assert(createdRecord.values?.company === 'Backy Smoke Co', `Collection record did not persist company value: ${JSON.stringify(createdRecord)}`);
+    const approvedContacts = await listFormContacts(createdFormId);
+    const approvedContact = approvedContacts.find((contact) => contact.sourceSubmissionId === submitted.id || contact.email === 'forms-smoke@example.com');
+    assert(approvedContact, `Contact was not created after approving submission ${submitted.id}: ${JSON.stringify(approvedContacts.slice(0, 5))}`);
     await refreshForms(client);
     const auditTrail = await assertFormsAuditTrail(client, createdFormId, submitted.id);
     const layout = await assertLayout(client);
