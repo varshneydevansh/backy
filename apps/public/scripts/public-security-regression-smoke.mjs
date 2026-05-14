@@ -780,6 +780,9 @@ assertIncludes(settingsRoute, 'settings-api-key-rotation-confirm-dialog', 'setti
 assertIncludes(settingsRoute, 'Existing integrations using', 'settings UI must warn that key rotation breaks existing integrations');
 assertIncludes(settingsRoute, 'const statusLabel = !canShowValue', 'settings UI must show redacted admin API keys as hidden, not unconfigured');
 assertIncludes(settingsRoute, 'Hidden without settings.manageKeys', 'settings UI must explain hidden admin API key values');
+assertIncludes(settingsRoute, 'runSettingsStorageProvisioningProbe', 'settings UI must expose the media storage provisioning probe client action');
+assertIncludes(settingsRoute, 'Run storage probe', 'settings UI must render a storage provisioning probe button');
+assertIncludes(settingsRoute, 'storageProvisioningResult.rotation.fields.map', 'settings UI must render storage credential rotation guidance from the provisioning probe');
 
 const siteDetailUiRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
 assertIncludes(siteDetailUiRoute, 'siteSettingsNotice', 'site settings page must render a save success notice');

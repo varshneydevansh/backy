@@ -47,11 +47,13 @@ import {
   getUserPermissions,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
+  runSettingsStorageProvisioningProbe,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
+  type SettingsStorageProvisioningResult,
   updateSettings as updateBackendSettings,
 } from '@/lib/adminContentApi';
 
@@ -3277,6 +3279,9 @@ function InfrastructureSettings({
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
   const [infrastructureCheckError, setInfrastructureCheckError] = useState('');
   const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
+  const [isRunningStorageProbe, setIsRunningStorageProbe] = useState(false);
+  const [storageProbeError, setStorageProbeError] = useState('');
+  const [storageProvisioningResult, setStorageProvisioningResult] = useState<SettingsStorageProvisioningResult | null>(null);
 
   const updateStorage = (next: Partial<StorageSettings>) => {
     if (storageDisabled) return;
@@ -3393,6 +3398,22 @@ function InfrastructureSettings({
       setInfrastructureCheckError(error instanceof Error ? error.message : 'Unable to run infrastructure check.');
     } finally {
       setIsCheckingInfrastructure(false);
+    }
+  };
+
+  const runStorageProvisioningProbe = async () => {
+    if (storageDisabled || isRunningStorageProbe) return;
+
+    setIsRunningStorageProbe(true);
+    setStorageProbeError('');
+    setStorageProvisioningResult(null);
+    try {
+      const result = await runSettingsStorageProvisioningProbe();
+      setStorageProvisioningResult(result);
+    } catch (error) {
+      setStorageProbeError(error instanceof Error ? error.message : 'Unable to run media storage provisioning probe.');
+    } finally {
+      setIsRunningStorageProbe(false);
     }
   };
 
@@ -3534,6 +3555,90 @@ function InfrastructureSettings({
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+        </PanelContent>
+      </Panel>
+
+      <Panel>
+        <PanelHeader
+          title="Storage provisioning probe"
+          description="Run a real media-storage write, read, and cleanup probe before accepting production uploads or rotating provider credentials."
+          icon={<Cloud className="size-4" />}
+          action={
+            <Button size="sm" disabled={storageDisabled || isRunningStorageProbe} onClick={() => void runStorageProvisioningProbe()}>
+              {isRunningStorageProbe ? 'Running...' : 'Run storage probe'}
+            </Button>
+          }
+        />
+        <PanelContent>
+          {storageProbeError && (
+            <Notice tone="warning" title="Storage probe failed">
+              {storageProbeError}
+            </Notice>
+          )}
+          {!storageProvisioningResult && !storageProbeError && (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              This probe writes a temporary file to the configured media provider, reads it back, then deletes it. Use it after changing storage environment variables or bucket policy.
+            </div>
+          )}
+          {storageProvisioningResult && (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">{storageProvisioningResult.summary}</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Provider: <span className="font-mono">{storageProvisioningResult.provider}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Probe path: <span className="font-mono">{storageProvisioningResult.probePath}</span>
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                    storageProvisioningResult.status === 'ready'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-red-50 text-red-700',
+                  )}
+                  >
+                    {storageProvisioningResult.status}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {storageProvisioningResult.checks.map((check) => (
+                    <div key={check.label} className="rounded-md border border-border bg-card px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-foreground">{check.label}</span>
+                        <span className={check.ready ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-red-700'}>
+                          {check.ready ? 'Ready' : 'Blocked'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <h4 className="text-sm font-semibold">Credential rotation</h4>
+                <div className="mt-3 grid gap-2">
+                  {storageProvisioningResult.rotation.fields.map((field) => (
+                    <div key={field.name} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-xs">
+                      <span className="font-mono">{field.name}</span>
+                      <span className={field.detected ? 'font-semibold text-emerald-700' : field.required ? 'font-semibold text-red-700' : 'font-semibold text-amber-700'}>
+                        {field.detected ? 'Detected' : field.required ? 'Required' : 'Optional'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {storageProvisioningResult.rotation.nextSteps.length > 0 && (
+                  <ul className="mt-3 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+                    {storageProvisioningResult.rotation.nextSteps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}
