@@ -2491,16 +2491,16 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
   webhookUrl: string;
 } = {
   email: {
-    newUser: true,
-    pagePublished: true,
-    formSubmission: true,
+    newUser: false,
+    pagePublished: false,
+    formSubmission: false,
     comments: true,
     systemUpdates: false,
     recipient: '',
   },
   inApp: {
     comments: true,
-    mentions: true,
+    mentions: false,
     activity: true,
   },
   digestFrequency: 'instant',
@@ -4116,6 +4116,7 @@ function NotificationSettings({
   value: NotificationSettingsConfig;
   onChange: (next: Partial<NotificationSettingsConfig>) => void;
 }) {
+  const digestFrequency = value.digestFrequency === 'off' ? 'off' : 'instant';
   const updateEmail = (key: keyof NonNullable<NotificationSettingsConfig['email']>, checked: boolean) => {
     onChange({
       email: {
@@ -4149,19 +4150,28 @@ function NotificationSettings({
         <PanelContent>
           <div className="grid gap-3">
             {[
-              { key: 'newUser' as const, label: 'New user registration' },
-              { key: 'pagePublished' as const, label: 'Page published' },
-              { key: 'formSubmission' as const, label: 'New form submission' },
-              { key: 'comments' as const, label: 'Comment moderation events' },
-              { key: 'systemUpdates' as const, label: 'System updates' },
+              { key: 'comments' as const, label: 'Comment moderation events', live: true },
+              { key: 'newUser' as const, label: 'New user registration', live: false },
+              { key: 'pagePublished' as const, label: 'Page published', live: false },
+              { key: 'formSubmission' as const, label: 'New form submission', live: false },
+              { key: 'systemUpdates' as const, label: 'System updates', live: false },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
-                <span>{item.label}</span>
+                <span className="flex flex-col gap-1">
+                  <span>{item.label}</span>
+                  {!item.live && (
+                    <span className="text-xs leading-4 text-muted-foreground">
+                      Planned channel. Backy does not send this email yet.
+                    </span>
+                  )}
+                </span>
                 <input
                   type="checkbox"
-                  checked={Boolean(value.email?.[item.key])}
+                  checked={item.live ? Boolean(value.email?.[item.key]) : false}
+                  disabled={!item.live}
+                  title={item.live ? undefined : 'This email channel is planned and not enforced yet.'}
                   onChange={(event) => updateEmail(item.key, event.target.checked)}
-                  className="size-4 rounded border-input"
+                  className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </label>
             ))}
@@ -4187,17 +4197,26 @@ function NotificationSettings({
         <PanelContent>
           <div className="grid gap-3">
             {[
-              { key: 'comments' as const, label: 'Pending comments' },
-              { key: 'mentions' as const, label: 'Team mentions' },
-              { key: 'activity' as const, label: 'Team activity' },
+              { key: 'comments' as const, label: 'Pending comments', live: true },
+              { key: 'activity' as const, label: 'Team activity', live: true },
+              { key: 'mentions' as const, label: 'Team mentions', live: false },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
-                <span>{item.label}</span>
+                <span className="flex flex-col gap-1">
+                  <span>{item.label}</span>
+                  {!item.live && (
+                    <span className="text-xs leading-4 text-muted-foreground">
+                      Planned channel. Team mention notifications are not generated yet.
+                    </span>
+                  )}
+                </span>
                 <input
                   type="checkbox"
-                  checked={Boolean(value.inApp?.[item.key])}
+                  checked={item.live ? Boolean(value.inApp?.[item.key]) : false}
+                  disabled={!item.live}
+                  title={item.live ? undefined : 'This in-app channel is planned and not enforced yet.'}
                   onChange={(event) => updateInApp(item.key, event.target.checked)}
-                  className="size-4 rounded border-input"
+                  className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </label>
             ))}
@@ -4208,20 +4227,20 @@ function NotificationSettings({
       <Panel>
         <PanelHeader
           title="Digest and webhook"
-          description="Persist notification cadence and a future-compatible webhook endpoint."
+          description="Control active comment delivery cadence plus the comment webhook endpoint."
         />
         <PanelContent>
           <div className="grid gap-4">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Digest frequency</span>
               <select
-                value={value.digestFrequency || DEFAULT_NOTIFICATION_SETTINGS.digestFrequency}
+                value={digestFrequency}
                 onChange={(event) => onChange({ digestFrequency: event.target.value as NotificationSettingsConfig['digestFrequency'] })}
                 className={inputClassName}
               >
                 <option value="instant">Instant</option>
-                <option value="daily">Daily digest</option>
-                <option value="weekly">Weekly digest</option>
+                <option value="daily" disabled>Daily digest (planned)</option>
+                <option value="weekly" disabled>Weekly digest (planned)</option>
                 <option value="off">Off</option>
               </select>
             </label>
@@ -4239,7 +4258,7 @@ function NotificationSettings({
       </Panel>
 
       <Notice tone="info" title="Runtime behavior">
-        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Comment emails and workflow webhooks are recorded in delivery activity when a recipient or webhook URL is configured.
+        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Activity controls audit-based header notifications. Comment emails and comment webhooks are recorded in delivery activity when a recipient or webhook URL is configured.
       </Notice>
     </div>
   );
