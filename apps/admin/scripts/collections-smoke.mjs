@@ -105,6 +105,26 @@ const patchFrontendDesign = async (frontendDesign) => {
   return updated;
 };
 
+const createSite = async ({ name, slug }) => {
+  const payload = await requestApi('/api/admin/sites', {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      slug,
+      description: 'Temporary collections smoke workspace.',
+      status: 'published',
+    }),
+  });
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Create site did not return a site: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const deleteSite = async (siteId) => {
+  if (!siteId) return;
+  await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
+};
+
 const smokeFrontendDesignContract = () => ({
   schemaVersion: 'backy.frontend-design.v1',
   status: 'synced',
@@ -546,6 +566,28 @@ const navigateToCollections = (client, { collectionId, recordSlug }) => {
       search: window.location.search,
     }))()`,
     'Collections page',
+  );
+};
+
+const navigateToEmptyCollections = (client, siteId) => {
+  const params = new URLSearchParams({ siteId });
+
+  return navigate(
+    client,
+    `${ADMIN_BASE_URL}/collections?${params.toString()}`,
+    `(() => {
+      const body = document.body?.innerText || '';
+      const params = new URLSearchParams(window.location.search);
+      return {
+        ready: Boolean(document.querySelector('[data-testid="collections-empty-new-collection-button"]')) &&
+          body.includes('No collections yet') &&
+          params.get('siteId') === ${JSON.stringify(siteId)},
+        body: body.slice(0, 1200),
+        path: window.location.pathname,
+        search: window.location.search,
+      };
+    })()`,
+    'Empty collections page',
   );
 };
 
@@ -1525,7 +1567,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, collectionIds, pageIds, originalFrontendDesign }) => {
+const cleanup = async ({ client, childProcess, userDataDir, collectionIds, pageIds, siteIds, originalFrontendDesign }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -1566,6 +1608,16 @@ const cleanup = async ({ client, childProcess, userDataDir, collectionIds, pageI
     }
   }
 
+  for (const siteId of siteIds || []) {
+    if (siteId) {
+      try {
+        await deleteSite(siteId);
+      } catch {
+        // The smoke creates temporary sites and deletes them best-effort.
+      }
+    }
+  }
+
   if (originalFrontendDesign) {
     try {
       await patchFrontendDesign(originalFrontendDesign);
@@ -1586,6 +1638,7 @@ const main = async () => {
   let draftCollectionId;
   let authoredListPageId;
   let authoredItemPageId;
+  let emptyCollectionsSiteId;
   let originalFrontendDesign;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
@@ -1599,6 +1652,12 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    const emptyCollectionsSite = await createSite({
+      name: `Smoke empty collections ${suffix}`,
+      slug: `smoke-empty-collections-${suffix}`,
+    });
+    emptyCollectionsSiteId = emptyCollectionsSite.id;
+
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());
 
@@ -1656,6 +1715,11 @@ const main = async () => {
       mobile: false,
     });
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
+
+    await navigateToEmptyCollections(client, emptyCollectionsSiteId);
+    await assertNewCollectionButtonReset(client, 'collections-empty-new-collection-button');
+    await deleteSite(emptyCollectionsSiteId);
+    emptyCollectionsSiteId = null;
 
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionId, collectionName, collectionSlug, recordSlug, targetCollectionName, incomingCollectionName });
@@ -1719,6 +1783,7 @@ const main = async () => {
       userDataDir,
       collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId, draftCollectionId],
       pageIds: [authoredListPageId, authoredItemPageId],
+      siteIds: [emptyCollectionsSiteId],
       originalFrontendDesign,
     });
   }
