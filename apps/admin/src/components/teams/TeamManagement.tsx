@@ -212,18 +212,28 @@ const ROLE_BADGES: Record<TeamRole, { bg: string; color: string; label: string }
 
 interface InviteModalProps {
     onClose: () => void;
-    onInvite: (email: string, role: TeamRole) => void;
+    onInvite: (email: string, role: TeamRole) => Promise<void>;
 }
 
 function InviteModal({ onClose, onInvite }: InviteModalProps) {
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<TeamRole>('editor');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (email) {
-            onInvite(email, role);
-            onClose();
+            setIsSubmitting(true);
+            setError('');
+            try {
+                await onInvite(email, role);
+                onClose();
+            } catch (submitError) {
+                setError(submitError instanceof Error ? submitError.message : 'Unable to invite team member');
+            } finally {
+                setIsSubmitting(false);
+            }
         }
     };
 
@@ -244,6 +254,7 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="colleague@company.com"
+                            disabled={isSubmitting}
                             required
                         />
                     </div>
@@ -255,25 +266,33 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             style={{ ...styles.select, width: '100%' }}
                             value={role}
                             onChange={(e) => setRole(e.target.value as TeamRole)}
+                            disabled={isSubmitting}
                         >
                             <option value="viewer">Viewer - Can view sites</option>
                             <option value="editor">Editor - Can edit content</option>
                             <option value="admin">Admin - Full access except billing</option>
                         </select>
                     </div>
+                    {error && (
+                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                            {error}
+                        </p>
+                    )}
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                         <button
                             type="button"
                             style={{ ...styles.button, ...styles.secondaryButton }}
                             onClick={onClose}
+                            disabled={isSubmitting}
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
+                            disabled={isSubmitting}
                         >
-                            Send Invite
+                            {isSubmitting ? 'Sending...' : 'Send Invite'}
                         </button>
                     </div>
                 </form>
@@ -284,17 +303,27 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
 
 interface CreateTeamModalProps {
     onClose: () => void;
-    onCreate: (name: string) => void;
+    onCreate: (name: string) => Promise<void>;
 }
 
 function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
     const [name, setName] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (name) {
-            onCreate(name);
-            onClose();
+            setIsSubmitting(true);
+            setError('');
+            try {
+                await onCreate(name);
+                onClose();
+            } catch (submitError) {
+                setError(submitError instanceof Error ? submitError.message : 'Unable to create team');
+            } finally {
+                setIsSubmitting(false);
+            }
         }
     };
 
@@ -315,22 +344,117 @@ function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="My Awesome Team"
+                            disabled={isSubmitting}
                             required
                         />
                     </div>
+                    {error && (
+                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                            {error}
+                        </p>
+                    )}
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                         <button
                             type="button"
                             style={{ ...styles.button, ...styles.secondaryButton }}
                             onClick={onClose}
+                            disabled={isSubmitting}
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
+                            disabled={isSubmitting}
                         >
-                            Create Team
+                            {isSubmitting ? 'Creating...' : 'Create Team'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+interface EditTeamModalProps {
+    team: Team;
+    onClose: () => void;
+    onUpdate: (updates: Partial<Team>) => Promise<void>;
+}
+
+function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
+    const [name, setName] = useState(team.name);
+    const [slug, setSlug] = useState(team.slug);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setError('');
+        try {
+            await onUpdate({ name, slug });
+            onClose();
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : 'Unable to save team');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div style={styles.modal} onClick={onClose}>
+            <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
+                    Edit Team
+                </h3>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                            Team Name
+                        </label>
+                        <input
+                            type="text"
+                            style={styles.input}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            disabled={isSubmitting}
+                            required
+                        />
+                    </div>
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                            Slug
+                        </label>
+                        <input
+                            type="text"
+                            style={styles.input}
+                            value={slug}
+                            onChange={(e) => setSlug(e.target.value)}
+                            disabled={isSubmitting}
+                            required
+                        />
+                    </div>
+                    {error && (
+                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                            {error}
+                        </p>
+                    )}
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                            type="button"
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={onClose}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            style={{ ...styles.button, ...styles.primaryButton }}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? 'Saving...' : 'Save Team'}
                         </button>
                     </div>
                 </form>
@@ -347,6 +471,8 @@ export function TeamManagement({
     teams,
     currentTeamId,
     onCreateTeam,
+    onUpdateTeam,
+    onDeleteTeam,
     onInviteMember,
     onUpdateMemberRole,
     onRemoveMember,
@@ -354,7 +480,9 @@ export function TeamManagement({
 }: TeamManagementProps) {
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [editTeam, setEditTeam] = useState<Team | null>(null);
     const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
+    const [actionError, setActionError] = useState('');
 
     const currentTeam = teams.find((t) => t.id === currentTeamId);
 
@@ -372,6 +500,30 @@ export function TeamManagement({
             await onCreateTeam(name);
         },
         [onCreateTeam]
+    );
+
+    const handleUpdate = useCallback(
+        async (updates: Partial<Team>) => {
+            if (editTeam) {
+                await onUpdateTeam(editTeam.id, updates);
+            }
+        },
+        [editTeam, onUpdateTeam]
+    );
+
+    const handleDelete = useCallback(
+        async (team: Team) => {
+            const confirmed = window.confirm(`Delete "${team.name}"? This cannot be undone.`);
+            if (!confirmed) return;
+
+            setActionError('');
+            try {
+                await onDeleteTeam(team.id);
+            } catch (deleteError) {
+                setActionError(deleteError instanceof Error ? deleteError.message : 'Unable to delete team');
+            }
+        },
+        [onDeleteTeam]
     );
 
     return (
@@ -403,6 +555,12 @@ export function TeamManagement({
                     ))}
                 </select>
             </div>
+
+            {actionError && (
+                <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '16px' }}>
+                    {actionError}
+                </p>
+            )}
 
             {/* Current Team Details */}
             {currentTeam && (
@@ -445,6 +603,18 @@ export function TeamManagement({
                                 {currentTeam.plan.charAt(0).toUpperCase() + currentTeam.plan.slice(1)}
                             </span>
                         )}
+                        <button
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={() => setEditTeam(currentTeam)}
+                        >
+                            Edit
+                        </button>
+                        <button
+                            style={{ ...styles.button, ...styles.dangerButton }}
+                            onClick={() => handleDelete(currentTeam)}
+                        >
+                            Delete
+                        </button>
                     </div>
 
                     {/* Members List */}
@@ -534,6 +704,13 @@ export function TeamManagement({
                 <CreateTeamModal
                     onClose={() => setShowCreateModal(false)}
                     onCreate={handleCreate}
+                />
+            )}
+            {editTeam && (
+                <EditTeamModal
+                    team={editTeam}
+                    onClose={() => setEditTeam(null)}
+                    onUpdate={handleUpdate}
                 />
             )}
         </div>

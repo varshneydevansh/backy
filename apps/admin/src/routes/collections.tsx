@@ -633,6 +633,17 @@ const createEmptyField = (sortOrder: number): CollectionField => ({
   helpText: null,
 });
 
+const createStarterField = (): CollectionField => ({
+  id: createCollectionFieldId('title'),
+  key: 'title',
+  label: 'Title',
+  type: 'text',
+  required: true,
+  unique: false,
+  sortOrder: 10,
+  helpText: 'Primary display title for each record.',
+});
+
 const RELATION_FIELD_TYPES: CollectionFieldType[] = ['reference', 'multiReference'];
 const MEDIA_FIELD_TYPES: CollectionFieldType[] = ['image', 'video', 'file'];
 const TEXT_FIELD_TYPES: CollectionFieldType[] = ['text', 'richText', 'slug', 'url', 'email', 'phone', 'select', 'tags'];
@@ -1363,7 +1374,7 @@ function CollectionsPage() {
     frontendDesignTemplateId: '',
     dynamicTemplates: defaultDynamicTemplates(),
     visitorWritePolicy: defaultVisitorWritePolicy(),
-    fields: [createEmptyField(10)],
+    fields: [createStarterField()],
   });
   const [recordForm, setRecordForm] = useState({
     slug: '',
@@ -2482,7 +2493,7 @@ function CollectionsPage() {
       frontendDesignTemplateId: '',
       dynamicTemplates: defaultDynamicTemplates(),
       visitorWritePolicy: defaultVisitorWritePolicy(),
-      fields: [createEmptyField(10)],
+      fields: [createStarterField()],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
   };
@@ -2727,6 +2738,7 @@ function CollectionsPage() {
     setError(null);
     setValidationDetails([]);
     setNotice(`${template.name} template loaded. Review fields, then save the schema.`);
+    navigate({ to: '/collections', search: { siteId: activeSiteId, draft: 'new' }, replace: true });
     window.requestAnimationFrame(() => {
       document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });

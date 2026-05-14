@@ -138,6 +138,7 @@ export const parseAdminCollectionFields = (
       ...(toBoolean(rawField.unique) === undefined ? {} : { unique: toBoolean(rawField.unique) }),
       ...(fieldOptions?.length ? { options: fieldOptions } : {}),
       ...(toStringOrUndefined(rawField.referenceCollectionId) ? { referenceCollectionId: toStringOrUndefined(rawField.referenceCollectionId) } : {}),
+      ...(toStringOrUndefined(rawField.helpText) ? { helpText: toStringOrUndefined(rawField.helpText) } : {}),
       ...(rawField.defaultValue === undefined ? {} : { defaultValue: rawField.defaultValue }),
       ...(toValidation(rawField.validation) ? { validation: toValidation(rawField.validation) } : {}),
     });

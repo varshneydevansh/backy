@@ -72,6 +72,8 @@ interface HeaderProps {
 type StaticToolRoute =
   | '/'
   | '/sites'
+  | '/pages'
+  | '/blog'
   | '/forms'
   | '/comments'
   | '/contacts'
@@ -79,6 +81,8 @@ type StaticToolRoute =
   | '/products'
   | '/orders'
   | '/collections'
+  | '/reusable-sections'
+  | '/teams'
   | '/users'
   | '/settings';
 
@@ -305,12 +309,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     if (path.startsWith('/pages')) return 'Pages';
     if (path.startsWith('/blog')) return 'Blog';
     if (path.startsWith('/collections')) return 'Collections';
+    if (path.startsWith('/reusable-sections')) return 'Sections';
     if (path.startsWith('/forms')) return 'Forms';
     if (path.startsWith('/media')) return 'Media';
     if (path.startsWith('/products')) return 'Products';
     if (path.startsWith('/orders')) return 'Orders';
     if (path.startsWith('/comments')) return 'Comments';
     if (path.startsWith('/contacts')) return 'Contacts';
+    if (path.startsWith('/teams')) return 'Teams';
     if (path.startsWith('/users')) return 'Users';
     if (path.startsWith('/settings')) return 'Settings';
     return 'Dashboard';
@@ -330,6 +336,16 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
     if (to === '/forms') {
       navigate({ to: '/forms', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/pages') {
+      navigate({ to: '/pages', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/blog') {
+      navigate({ to: '/blog', search: activeSiteSearch });
       return;
     }
 
@@ -360,6 +376,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
     if (to === '/collections') {
       navigate({ to: '/collections', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/reusable-sections') {
+      navigate({ to: '/reusable-sections', search: activeSiteSearch });
       return;
     }
 
@@ -768,6 +789,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           action: { route: 'user' as const, userId: member.id },
         })),
         { id: 'tool:sites', type: 'Tool' as const, title: 'Sites', detail: 'Site settings, readiness, routing, domains', action: { route: 'static' as const, to: '/sites' as const } },
+        { id: 'tool:pages', type: 'Tool' as const, title: 'Pages', detail: 'Page tree, drafts, publishing', action: { route: 'static' as const, to: '/pages' as const } },
+        { id: 'tool:blog', type: 'Tool' as const, title: 'Blog', detail: 'Posts, categories, authors', action: { route: 'static' as const, to: '/blog' as const } },
         { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },
         { id: 'tool:comments', type: 'Tool' as const, title: 'Comments', detail: 'Moderation queue and public replies', action: { route: 'static' as const, to: '/comments' as const } },
         { id: 'tool:contacts', type: 'Tool' as const, title: 'Contacts', detail: 'Captured leads and audience records', action: { route: 'static' as const, to: '/contacts' as const } },
@@ -775,6 +798,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         { id: 'tool:products', type: 'Tool' as const, title: 'Products', detail: 'Catalog and sellable items', action: { route: 'static' as const, to: '/products' as const } },
         { id: 'tool:orders', type: 'Tool' as const, title: 'Orders', detail: 'Sales and fulfillment queue', action: { route: 'static' as const, to: '/orders' as const } },
         { id: 'tool:collections', type: 'Tool' as const, title: 'Collections', detail: 'Schemas, records, dynamic data', action: { route: 'static' as const, to: '/collections' as const } },
+        { id: 'tool:sections', type: 'Tool' as const, title: 'Sections', detail: 'Reusable page sections', action: { route: 'static' as const, to: '/reusable-sections' as const } },
+        { id: 'tool:teams', type: 'Tool' as const, title: 'Teams', detail: 'Workspace teams and member roles', action: { route: 'static' as const, to: '/teams' as const } },
         { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
         { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
       ]);

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as TeamsRouteImport } from './routes/teams'
 import { Route as SitesRouteImport } from './routes/sites'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReusableSectionsRouteImport } from './routes/reusable-sections'
@@ -39,6 +40,11 @@ import { Route as PagesPageIdEditRouteImport } from './routes/pages.$pageId.edit
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamsRoute = TeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SitesRoute = SitesRouteImport.update({
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
+  '/teams': typeof TeamsRoute
   '/users': typeof UsersRouteWithChildren
   '/blog/$postId': typeof BlogPostIdRoute
   '/blog/new': typeof BlogNewRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByTo {
   '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
+  '/teams': typeof TeamsRoute
   '/users': typeof UsersRouteWithChildren
   '/blog/$postId': typeof BlogPostIdRoute
   '/blog/new': typeof BlogNewRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
+  '/teams': typeof TeamsRoute
   '/users': typeof UsersRouteWithChildren
   '/blog/$postId': typeof BlogPostIdRoute
   '/blog/new': typeof BlogNewRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/reusable-sections'
     | '/settings'
     | '/sites'
+    | '/teams'
     | '/users'
     | '/blog/$postId'
     | '/blog/new'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/reusable-sections'
     | '/settings'
     | '/sites'
+    | '/teams'
     | '/users'
     | '/blog/$postId'
     | '/blog/new'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/reusable-sections'
     | '/settings'
     | '/sites'
+    | '/teams'
     | '/users'
     | '/blog/$postId'
     | '/blog/new'
@@ -357,6 +369,7 @@ export interface RootRouteChildren {
   ReusableSectionsRoute: typeof ReusableSectionsRoute
   SettingsRoute: typeof SettingsRoute
   SitesRoute: typeof SitesRouteWithChildren
+  TeamsRoute: typeof TeamsRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
 
@@ -367,6 +380,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof UsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teams': {
+      id: '/teams'
+      path: '/teams'
+      fullPath: '/teams'
+      preLoaderRoute: typeof TeamsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sites': {
@@ -613,6 +633,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReusableSectionsRoute: ReusableSectionsRoute,
   SettingsRoute: SettingsRoute,
   SitesRoute: SitesRouteWithChildren,
+  TeamsRoute: TeamsRoute,
   UsersRoute: UsersRouteWithChildren,
 }
 export const routeTree = rootRouteImport

@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Contact,
   Layers3,
+  Building2,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -104,6 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Platform',
     items: [
+      { label: 'Teams', to: '/teams', icon: Building2 },
       { label: 'Users', to: '/users', icon: Users },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
@@ -122,6 +124,7 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
   '/forms',
   '/contacts',
   '/comments',
+  '/teams',
   '/users',
 ]);
 

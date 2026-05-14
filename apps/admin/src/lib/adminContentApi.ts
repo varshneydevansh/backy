@@ -426,6 +426,80 @@ interface ApiUserResponse {
   };
 }
 
+export type AdminTeamRole = 'owner' | 'admin' | 'editor' | 'viewer';
+
+export interface AdminTeamMember {
+  id: string;
+  teamId: string;
+  userId: string;
+  email: string;
+  name: string;
+  avatarUrl?: string | null;
+  role: AdminTeamRole;
+  joinedAt: string;
+}
+
+export interface AdminTeam {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId?: string | null;
+  avatarUrl?: string | null;
+  createdAt: string;
+  members: AdminTeamMember[];
+  plan?: 'free' | 'pro' | 'enterprise';
+  settings?: Record<string, unknown>;
+}
+
+interface ApiTeamResponse {
+  success: boolean;
+  data?: {
+    team: AdminTeam;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiListTeamsResponse {
+  success: boolean;
+  data?: {
+    teams: AdminTeam[];
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiTeamMemberResponse {
+  success: boolean;
+  data?: {
+    member: AdminTeamMember;
+    invite?: AdminInviteToken | null;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiTeamMemberDeleteResponse {
+  success: boolean;
+  data?: {
+    removed: boolean;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiBulkUsersResponse {
   success: boolean;
   data?: {
@@ -3500,6 +3574,138 @@ export async function deleteUser(userId: string): Promise<void> {
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete user');
+  }
+}
+
+export async function listTeams(): Promise<AdminTeam[]> {
+  const response = await adminFetch(`${getAdminApiBase()}/teams`);
+  const payload = await readJson<ApiListTeamsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to load teams');
+  }
+
+  return payload.data.teams;
+}
+
+export async function createTeam(input: {
+  name: string;
+  slug?: string;
+  settings?: Record<string, unknown>;
+}): Promise<AdminTeam> {
+  const response = await adminFetch(`${getAdminApiBase()}/teams`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiTeamResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to create team');
+  }
+
+  return payload.data.team;
+}
+
+export async function updateTeam(
+  teamId: string,
+  input: {
+    name?: string;
+    slug?: string;
+    settings?: Record<string, unknown>;
+  },
+): Promise<AdminTeam> {
+  const response = await adminFetch(`${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiTeamResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to save team');
+  }
+
+  return payload.data.team;
+}
+
+export async function deleteTeam(teamId: string): Promise<void> {
+  const response = await adminFetch(`${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw adminContentApiError(payload, 'Unable to delete team');
+  }
+}
+
+export async function inviteTeamMember(
+  teamId: string,
+  input: {
+    email: string;
+    role: AdminTeamRole;
+    fullName?: string;
+  },
+): Promise<{ member: AdminTeamMember; invite?: AdminInviteToken | null }> {
+  const response = await adminFetch(`${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}/members`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiTeamMemberResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to invite team member');
+  }
+
+  return {
+    member: payload.data.member,
+    invite: payload.data.invite ?? null,
+  };
+}
+
+export async function updateTeamMemberRole(
+  teamId: string,
+  memberId: string,
+  role: AdminTeamRole,
+): Promise<AdminTeamMember> {
+  const response = await adminFetch(
+    `${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ role }),
+    },
+  );
+  const payload = await readJson<ApiTeamMemberResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to update team member');
+  }
+
+  return payload.data.member;
+}
+
+export async function removeTeamMember(teamId: string, memberId: string): Promise<void> {
+  const response = await adminFetch(
+    `${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  const payload = await readJson<ApiTeamMemberDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.removed) {
+    throw adminContentApiError(payload, 'Unable to remove team member');
   }
 }
 
