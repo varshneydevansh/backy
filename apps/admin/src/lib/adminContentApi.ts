@@ -1270,6 +1270,116 @@ interface ApiReusableSectionResponse {
   };
   error?: {
     message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiExportReusableSectionsResponse {
+  success: boolean;
+  data?: {
+    export: ReusableSectionsExportSummary;
+    sections: ReusableSectionExportEntry[];
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiImportReusableSectionsResponse {
+  success: boolean;
+  data?: {
+    import: ReusableSectionsImportSummary;
+    sections: ApiReusableSection[];
+    cacheInvalidation?: unknown;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionVersionsResponse {
+  success: boolean;
+  data?: {
+    sectionId: string;
+    currentVersion: number;
+    versions: ReusableSectionVersion[];
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionRestoreResponse {
+  success: boolean;
+  data?: {
+    restored: boolean;
+    restoredFromVersion: number;
+    version: number;
+    section: ApiReusableSection;
+    cacheInvalidation?: unknown;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionInstancesResponse {
+  success: boolean;
+  data?: ReusableSectionInstancesReport;
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionInstancesRefreshResponse {
+  success: boolean;
+  data?: ReusableSectionInstancesRefreshResult;
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionMetadataResponse {
+  success: boolean;
+  data?: {
+    sectionId: string;
+    metadata: Record<string, unknown>;
+    library: ReusableSectionLibraryMetadata;
+    version: number;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
+interface ApiReusableSectionMetadataUpdateResponse {
+  success: boolean;
+  data?: {
+    section: ApiReusableSection;
+    metadata: Record<string, unknown>;
+    library: ReusableSectionLibraryMetadata;
+    version: number;
+    cacheInvalidation?: unknown;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
   };
 }
 
@@ -2462,6 +2572,191 @@ export interface ReusableSectionListFilters {
   category?: string;
   tag?: string;
   search?: string;
+}
+
+export interface ReusableSectionsExportFilters extends ReusableSectionListFilters {
+  sectionIds?: string[];
+}
+
+export interface ReusableSectionsExportSummary {
+  schemaVersion: 'backy.reusable-sections.export.v1' | string;
+  exportedAt: string;
+  siteId: string;
+  siteSlug?: string;
+  sectionCount: number;
+}
+
+export interface ReusableSectionExportEntry {
+  sourceSectionId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category?: string;
+  status?: ReusableSection['status'];
+  tags?: string[];
+  content: ReusableSectionContent;
+  metadata?: Record<string, unknown>;
+  sourceElementId?: string | null;
+}
+
+export interface ReusableSectionsExport {
+  export: ReusableSectionsExportSummary;
+  sections: ReusableSectionExportEntry[];
+}
+
+export interface ReusableSectionsImportSummary {
+  created: number;
+  updated: number;
+  total: number;
+}
+
+export interface ReusableSectionsImportInput {
+  sections: ReusableSectionExportEntry[];
+  upsert?: boolean;
+  importedBy?: string;
+}
+
+export interface ReusableSectionsImportResult {
+  import: ReusableSectionsImportSummary;
+  sections: ReusableSection[];
+  cacheInvalidation?: unknown;
+}
+
+export interface ReusableSectionVersion {
+  version: number;
+  current?: boolean;
+  capturedAt?: string;
+  requestId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category: string;
+  status: string;
+  tags: string[];
+  content: unknown;
+  sourceElementId?: string | null;
+  updatedBy?: string | null;
+  updatedAt: string;
+}
+
+export interface ReusableSectionVersions {
+  sectionId: string;
+  currentVersion: number;
+  versions: ReusableSectionVersion[];
+}
+
+export interface ReusableSectionVersionRestoreInput {
+  expectedVersion?: number;
+  expectedUpdatedAt?: string;
+  restoredBy?: string;
+  updatedBy?: string;
+}
+
+export interface ReusableSectionVersionRestoreResult {
+  restored: boolean;
+  restoredFromVersion: number;
+  version: number;
+  section: ReusableSection;
+  cacheInvalidation?: unknown;
+}
+
+export interface ReusableSectionInstance {
+  elementId: string;
+  elementType: string;
+  path: string;
+  mode: string;
+  sourceUpdatedAt?: string;
+  stale: boolean;
+}
+
+export interface ReusableSectionInstanceTargetReport {
+  type: 'page' | 'post';
+  id: string;
+  title: string;
+  slug: string;
+  status?: string;
+  updatedAt?: string;
+  instances: ReusableSectionInstance[];
+}
+
+export interface ReusableSectionInstancesReport {
+  sectionId: string;
+  sourceUpdatedAt?: string;
+  targets: ReusableSectionInstanceTargetReport[];
+  totals: {
+    targets: number;
+    instances: number;
+    stale: number;
+  };
+}
+
+export interface ReusableSectionInstancesFilters {
+  targetType?: 'page' | 'post' | 'all';
+  targetId?: string;
+}
+
+export interface ReusableSectionInstancesRefreshInput extends ReusableSectionInstancesFilters {
+  dryRun?: boolean;
+  updatedBy?: string;
+}
+
+export interface ReusableSectionInstancesRefreshResult {
+  dryRun: boolean;
+  sectionId: string;
+  sourceUpdatedAt?: string;
+  refreshedTargets: Array<{
+    type: 'page' | 'post';
+    id: string;
+    title: string;
+    slug: string;
+    refreshed: number;
+  }>;
+  totals: {
+    targets: number;
+    instances: number;
+  };
+  cacheInvalidation?: unknown;
+}
+
+export interface ReusableSectionLibraryMetadata {
+  displayName?: string;
+  summary?: string;
+  usageNotes?: string;
+  thumbnailMediaId?: string;
+  frontendDesignTemplateId?: string;
+  previewPath?: string;
+  labels?: string[];
+  owner?: Record<string, unknown>;
+  designSystem?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ReusableSectionMetadata {
+  sectionId: string;
+  metadata: Record<string, unknown>;
+  library: ReusableSectionLibraryMetadata;
+  version: number;
+}
+
+export interface ReusableSectionMetadataPatchInput {
+  expectedVersion?: number;
+  expectedUpdatedAt?: string;
+  updatedBy?: string;
+  metadata?: Record<string, unknown>;
+  displayName?: string | null;
+  summary?: string | null;
+  usageNotes?: string | null;
+  thumbnailMediaId?: string | null;
+  frontendDesignTemplateId?: string | null;
+  previewPath?: string | null;
+  labels?: string[] | string | null;
+  owner?: Record<string, unknown> | null;
+  designSystem?: Record<string, unknown> | null;
+}
+
+export interface ReusableSectionMetadataUpdateResult extends ReusableSectionMetadata {
+  section: ReusableSection;
+  cacheInvalidation?: unknown;
 }
 
 const getEnvValue = (key: string): string => {
@@ -5029,4 +5324,214 @@ export async function deleteReusableSection(siteId: string, sectionId: string): 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete reusable section');
   }
+}
+
+export async function exportReusableSections(
+  siteId: string,
+  filters: ReusableSectionsExportFilters = {},
+): Promise<ReusableSectionsExport> {
+  const query = new URLSearchParams();
+  query.set('status', filters.status || 'all');
+  if (filters.category) query.set('category', filters.category);
+  if (filters.tag) query.set('tag', filters.tag);
+  if (filters.search) query.set('search', filters.search);
+  if (filters.sectionIds?.length) query.set('sectionIds', filters.sectionIds.join(','));
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/export?${query.toString()}`);
+  const payload = await readJson<ApiExportReusableSectionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to export reusable sections',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return {
+    export: payload.data.export,
+    sections: payload.data.sections,
+  };
+}
+
+export async function importReusableSections(
+  siteId: string,
+  input: ReusableSectionsImportInput,
+): Promise<ReusableSectionsImportResult> {
+  const query = new URLSearchParams();
+  if (input.upsert) query.set('upsert', 'true');
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/import?${query.toString()}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sections: input.sections,
+      importedBy: input.importedBy,
+    }),
+  });
+  const payload = await readJson<ApiImportReusableSectionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to import reusable sections',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return {
+    import: payload.data.import,
+    sections: payload.data.sections.map(toReusableSection),
+    cacheInvalidation: payload.data.cacheInvalidation,
+  };
+}
+
+export async function listReusableSectionVersions(
+  siteId: string,
+  sectionId: string,
+): Promise<ReusableSectionVersions> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/versions`);
+  const payload = await readJson<ApiReusableSectionVersionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to load reusable section versions',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return payload.data;
+}
+
+export async function restoreReusableSectionVersion(
+  siteId: string,
+  sectionId: string,
+  version: number,
+  input: ReusableSectionVersionRestoreInput = {},
+): Promise<ReusableSectionVersionRestoreResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/versions/${version}/restore`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiReusableSectionRestoreResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to restore reusable section version',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return {
+    restored: payload.data.restored,
+    restoredFromVersion: payload.data.restoredFromVersion,
+    version: payload.data.version,
+    section: toReusableSection(payload.data.section),
+    cacheInvalidation: payload.data.cacheInvalidation,
+  };
+}
+
+export async function getReusableSectionInstances(
+  siteId: string,
+  sectionId: string,
+  filters: ReusableSectionInstancesFilters = {},
+): Promise<ReusableSectionInstancesReport> {
+  const query = new URLSearchParams();
+  if (filters.targetType && filters.targetType !== 'all') query.set('targetType', filters.targetType);
+  if (filters.targetId) query.set('targetId', filters.targetId);
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/instances?${query.toString()}`);
+  const payload = await readJson<ApiReusableSectionInstancesResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to load reusable section instances',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return payload.data;
+}
+
+export async function refreshReusableSectionInstances(
+  siteId: string,
+  sectionId: string,
+  input: ReusableSectionInstancesRefreshInput = {},
+): Promise<ReusableSectionInstancesRefreshResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/instances`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiReusableSectionInstancesRefreshResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to refresh reusable section instances',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return payload.data;
+}
+
+export async function getReusableSectionMetadata(
+  siteId: string,
+  sectionId: string,
+): Promise<ReusableSectionMetadata> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/metadata`);
+  const payload = await readJson<ApiReusableSectionMetadataResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to load reusable section metadata',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return payload.data;
+}
+
+export async function updateReusableSectionMetadata(
+  siteId: string,
+  sectionId: string,
+  input: ReusableSectionMetadataPatchInput,
+): Promise<ReusableSectionMetadataUpdateResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}/metadata`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiReusableSectionMetadataUpdateResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(
+      payload.error?.message || 'Unable to update reusable section metadata',
+      payload.error?.details,
+      payload.error?.code,
+    );
+  }
+
+  return {
+    sectionId: payload.data.section.id,
+    section: toReusableSection(payload.data.section),
+    metadata: payload.data.metadata,
+    library: payload.data.library,
+    version: payload.data.version,
+    cacheInvalidation: payload.data.cacheInvalidation,
+  };
 }

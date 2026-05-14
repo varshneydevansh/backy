@@ -520,6 +520,25 @@ for (const route of [
   assertExcludes(source, '/rollback/{revisionId}', `${route} editor handoff must not advertise path-based rollback ids`);
 }
 
+const adminContentApi = read('apps/admin/src/lib/adminContentApi.ts');
+for (const needle of [
+  'exportReusableSections(',
+  'importReusableSections(',
+  'listReusableSectionVersions(',
+  'restoreReusableSectionVersion(',
+  'getReusableSectionInstances(',
+  'refreshReusableSectionInstances(',
+  'getReusableSectionMetadata(',
+  'updateReusableSectionMetadata(',
+  '/reusable-sections/export',
+  '/reusable-sections/import',
+  '/versions/${version}/restore',
+  '/instances',
+  '/metadata',
+]) {
+  assertIncludes(adminContentApi, needle, 'admin reusable section workflow API client');
+}
+
 const mediaSafety = read('apps/public/src/lib/mediaSafety.ts');
 for (const needle of [
   'deliveryPolicy',
