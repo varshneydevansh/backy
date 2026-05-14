@@ -1278,16 +1278,15 @@ function OrdersRoute() {
       return;
     }
 
-    const now = new Date().toISOString();
     const actionUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
       if (action === 'paid') {
-        return { orderStatus: 'paid', paymentStatus: 'paid', paidAt: now };
+        return buildPaidWorkflowUpdates(order);
       }
       if (action === 'processing') {
-        return { fulfillmentStatus: 'processing' };
+        return buildProcessingWorkflowUpdates(order);
       }
       if (action === 'fulfilled') {
-        return { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: now };
+        return buildFulfilledWorkflowUpdates(order);
       }
 
       return buildCancelWorkflowUpdates(order);
@@ -2165,8 +2164,8 @@ function OrdersRoute() {
                       disabled={isOrdersAccessBusy || !canEditOrders}
                       onSelectionChange={(checked) => toggleOrderSelection(order.id, checked)}
                       onEdit={() => selectOrderForEditing(order.id)}
-                      onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
-                      onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
+                      onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
+                      onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onCancelled={() => void updateOrderWorkflow(order, buildCancelWorkflowUpdates(order))}
                       onDelete={() => {
@@ -3038,6 +3037,56 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
 });
 
+const existingPaidAt = (order: CollectionRecord): string => (
+  String(readOrderValue(order.values, 'paidat', '') || '')
+);
+
+const appendWorkflowNote = (order: CollectionRecord, note: string): string => {
+  const currentNotes = String(readOrderValue(order.values, 'notes', '') || '').trim();
+  return currentNotes ? `${currentNotes}\n${note}` : note;
+};
+
+const buildPaidWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
+  const currentFulfillmentStatus = asFulfillmentStatus(readOrderValue(order.values, 'fulfillmentstatus', undefined));
+  const fulfilledAt = String(readOrderValue(order.values, 'fulfilledat', '') || '');
+  const nextFulfillmentStatus = currentFulfillmentStatus === 'cancelled'
+    ? 'unfulfilled'
+    : currentFulfillmentStatus;
+
+  return {
+    orderStatus: nextFulfillmentStatus === 'fulfilled' ? 'fulfilled' : 'paid',
+    paymentStatus: 'paid',
+    paidAt: existingPaidAt(order) || new Date().toISOString(),
+    fulfillmentStatus: nextFulfillmentStatus,
+    fulfilledAt: nextFulfillmentStatus === 'fulfilled' ? fulfilledAt : '',
+    refundAmount: '',
+    refundReason: '',
+    notes: appendWorkflowNote(order, `Payment workflow marked paid ${new Date().toISOString()}.`),
+  };
+};
+
+const buildProcessingWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => ({
+  orderStatus: 'paid',
+  paymentStatus: 'paid',
+  paidAt: existingPaidAt(order) || new Date().toISOString(),
+  fulfillmentStatus: 'processing',
+  fulfilledAt: '',
+  refundAmount: '',
+  refundReason: '',
+  notes: appendWorkflowNote(order, `Fulfillment workflow moved to processing ${new Date().toISOString()}.`),
+});
+
+const buildFulfilledWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => ({
+  orderStatus: 'fulfilled',
+  paymentStatus: 'paid',
+  paidAt: existingPaidAt(order) || new Date().toISOString(),
+  fulfillmentStatus: 'fulfilled',
+  fulfilledAt: new Date().toISOString(),
+  refundAmount: '',
+  refundReason: '',
+  notes: appendWorkflowNote(order, `Fulfillment workflow completed ${new Date().toISOString()}.`),
+});
+
 const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
   const total = toNumber(readOrderValue(order.values, 'total', 0));
   const currency = normalizeCurrency(String(readOrderValue(order.values, 'currency', 'USD')));
@@ -3051,6 +3100,9 @@ const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     orderStatus: 'refunded',
     paymentStatus: 'refunded',
     fulfillmentStatus: 'cancelled',
+    fulfilledAt: '',
+    trackingNumber: '',
+    trackingUrl: '',
     refundAmount: String(refundAmount),
     refundReason: currentReason || 'Customer return/refund processed from order workflow.',
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
@@ -3075,10 +3127,12 @@ const buildCancelWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     paymentStatus: nextPaymentStatus,
     paidAt: shouldRefundPayment ? undefined : '',
     fulfillmentStatus: 'cancelled',
-    ...(shouldRefundPayment ? {
-      refundAmount: String(currentRefundAmount > 0 ? currentRefundAmount : total),
-      refundReason: currentReason || 'Order cancelled from admin workflow.',
-    } : {}),
+    fulfillmentCarrier: '',
+    trackingNumber: '',
+    trackingUrl: '',
+    fulfilledAt: '',
+    refundAmount: shouldRefundPayment ? String(currentRefundAmount > 0 ? currentRefundAmount : total) : '',
+    refundReason: shouldRefundPayment ? currentReason || 'Order cancelled from admin workflow.' : '',
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
   };
 };

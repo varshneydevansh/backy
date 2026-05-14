@@ -955,27 +955,41 @@ const main = async () => {
     await exerciseFilters(client, orderNumber);
 
     await selectOrderForBulk(client, orderNumber);
+    await clickByText(client, 'Mark Paid', { exact: true, rootSelector: '#orders-queue' });
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'paid' &&
+        values.paymentstatus === 'paid' &&
+        Boolean(values.paidat) &&
+        (values.refundamount === null || values.refundamount === undefined) &&
+        (values.refundreason === '' || values.refundreason === undefined)
+      ),
+      'Bulk Mark Paid did not persist coherent payment workflow fields',
+    );
+
     await clickByText(client, 'Processing', { exact: true, rootSelector: '#orders-queue' });
     await waitForOrderValue(
       collectionId,
       slug,
-      (values) => values.fulfillmentstatus === 'processing',
-      'Bulk processing action did not persist fulfillment workflow fields',
-    );
-
-    await clickOrderCardButton(client, orderNumber, 'Mark Paid');
-    await waitForOrderValue(
-      collectionId,
-      slug,
-      (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && Boolean(values.paidat),
-      'Mark Paid did not persist payment workflow fields',
+      (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.fulfillmentstatus === 'processing',
+      'Bulk processing action did not persist coherent fulfillment workflow fields',
     );
 
     await clickOrderCardButton(client, orderNumber, 'Fulfill');
     await waitForOrderValue(
       collectionId,
       slug,
-      (values) => values.orderstatus === 'fulfilled' && values.fulfillmentstatus === 'fulfilled' && Boolean(values.fulfilledat),
+      (values) => (
+        values.orderstatus === 'fulfilled' &&
+        values.paymentstatus === 'paid' &&
+        values.fulfillmentstatus === 'fulfilled' &&
+        Boolean(values.paidat) &&
+        Boolean(values.fulfilledat) &&
+        (values.refundamount === null || values.refundamount === undefined) &&
+        (values.refundreason === '' || values.refundreason === undefined)
+      ),
       'Fulfill did not persist fulfillment workflow fields',
     );
 
@@ -1030,6 +1044,38 @@ const main = async () => {
         /Cancellation workflow processed/.test(String(values.notes || ''))
       ),
       'Cancel did not persist coherent payment and fulfillment workflow fields',
+    );
+
+    await updateCollectionRecord(collectionId, orderRecordId, {
+      status: 'published',
+      values: {
+        ...(await getCollectionRecordBySlug(collectionId, slug)).values,
+        orderstatus: 'open',
+        paymentstatus: 'pending',
+        paidat: '',
+        fulfillmentstatus: 'unfulfilled',
+        fulfilledat: '',
+        refundamount: 12,
+        refundreason: 'Stale refund metadata should be cleared.',
+        notes: 'Order smoke reset to pending before unpaid cancellation.',
+      },
+    });
+    await clickByText(client, 'Refresh', { exact: true });
+    await waitUntilIdle(client, '/orders unpaid cancellation refresh');
+    await assertOrderVisible(client, orderNumber, 'Smoke order disappeared before unpaid cancellation test');
+    await clickOrderCardButton(client, orderNumber, 'Cancel');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'cancelled' &&
+        values.paymentstatus === 'failed' &&
+        values.fulfillmentstatus === 'cancelled' &&
+        (values.refundamount === null || values.refundamount === undefined) &&
+        values.refundreason === '' &&
+        /marked payment failed before fulfillment/.test(String(values.notes || ''))
+      ),
+      'Unpaid cancel did not clear stale refund fields and mark payment failed',
     );
 
     const staleOrder = await updateCollectionRecord(collectionId, orderRecordId, {
