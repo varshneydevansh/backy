@@ -562,6 +562,8 @@ export function PropertyPanel({
   const [mediaUploadFilter, setMediaUploadFilter] = useState<EditorMediaUploadFilter>('all');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsLoaded, setCollectionsLoaded] = useState(false);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [appliedChangeCount, setAppliedChangeCount] = useState(0);
   const [showAppliedFeedback, setShowAppliedFeedback] = useState(false);
@@ -569,6 +571,8 @@ export function PropertyPanel({
 
   useEffect(() => {
     if (!siteId || !canViewCollections) {
+      setCollectionsLoading(false);
+      setCollectionsLoaded(true);
       setCollections([]);
       setCollectionsError(!canViewCollections ? collectionsViewDisabledReason || 'You do not have permission to view collections.' : null);
       return;
@@ -576,6 +580,8 @@ export function PropertyPanel({
 
     let cancelled = false;
     const loadCollections = async () => {
+      setCollectionsLoading(true);
+      setCollectionsLoaded(false);
       try {
         const backendCollections = await listCollections(siteId);
         if (!cancelled) {
@@ -586,6 +592,11 @@ export function PropertyPanel({
         if (!cancelled) {
           setCollections([]);
           setCollectionsError(error instanceof Error ? error.message : 'Unable to load collections');
+        }
+      } finally {
+        if (!cancelled) {
+          setCollectionsLoading(false);
+          setCollectionsLoaded(true);
         }
       }
     };
@@ -802,6 +813,7 @@ export function PropertyPanel({
             element={element}
             siteId={siteId}
             collections={collections}
+            collectionsLoading={collectionsLoading || Boolean(siteId && canViewCollections && !collectionsLoaded && !collectionsError)}
             collectionsError={collectionsError}
             onChange={guardedOnChange}
           />
@@ -4207,6 +4219,7 @@ interface DataBindingPropertiesProps {
   element: CanvasElement;
   siteId?: string;
   collections: Collection[];
+  collectionsLoading: boolean;
   collectionsError: string | null;
   onChange: (updates: Partial<CanvasElement>) => void;
 }
@@ -5412,6 +5425,7 @@ function DataBindingProperties({
   element,
   siteId,
   collections,
+  collectionsLoading,
   collectionsError,
   onChange,
 }: DataBindingPropertiesProps) {
@@ -5469,6 +5483,7 @@ function DataBindingProperties({
   const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>(() => loadSavedCollectionBindingPresets());
   const [savedPresetSyncState, setSavedPresetSyncState] = useState<'loading' | 'shared' | 'local'>('loading');
   const [savedPresetSyncError, setSavedPresetSyncError] = useState<string | null>(null);
+  const [savedPresetBusy, setSavedPresetBusy] = useState<'saving' | 'deleting' | null>(null);
   const [savedPresetName, setSavedPresetName] = useState('');
   const [selectedSavedPresetId, setSelectedSavedPresetId] = useState('');
 
@@ -5767,7 +5782,7 @@ function DataBindingProperties({
   };
 
   const saveCurrentBindingPreset = async () => {
-    if (!selectedCollection || !selectedFieldKey) return;
+    if (!selectedCollection || !selectedFieldKey || savedPresetBusy) return;
     const name = savedPresetName.trim() || `${selectedCollection.name} ${selectedField?.label || selectedFieldKey}`;
     const now = new Date().toISOString();
     const existing = savedBindingPresets.find((preset) => (
@@ -5797,11 +5812,16 @@ function DataBindingProperties({
     setSavedBindingPresets(nextPresets);
     setSavedPresetName('');
     setSelectedSavedPresetId(preset.id);
-    await persistSharedBindingPresets(nextPresets);
+    setSavedPresetBusy('saving');
+    try {
+      await persistSharedBindingPresets(nextPresets);
+    } finally {
+      setSavedPresetBusy(null);
+    }
   };
 
   const applySavedBindingPreset = () => {
-    if (!selectedSavedPreset) return;
+    if (!selectedSavedPreset || savedPresetBusy) return;
     updateBinding({
       fieldKey: selectedSavedPreset.fieldKey,
       targetPath: selectedSavedPreset.targetPath,
@@ -5817,12 +5837,28 @@ function DataBindingProperties({
   };
 
   const deleteSavedBindingPreset = async () => {
-    if (!selectedSavedPreset) return;
+    if (!selectedSavedPreset || savedPresetBusy) return;
     const nextPresets = savedBindingPresets.filter((preset) => preset.id !== selectedSavedPreset.id);
     setSavedBindingPresets(nextPresets);
     setSelectedSavedPresetId(nextPresets.find((preset) => preset.collectionId === selectedCollectionId)?.id || '');
-    await persistSharedBindingPresets(nextPresets);
+    setSavedPresetBusy('deleting');
+    try {
+      await persistSharedBindingPresets(nextPresets);
+    } finally {
+      setSavedPresetBusy(null);
+    }
   };
+
+  if (collectionsLoading) {
+    return (
+      <div
+        className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+        data-testid="editor-data-collections-loading"
+      >
+        Loading collections...
+      </div>
+    );
+  }
 
   if (collectionsError) {
     return (
@@ -5904,7 +5940,11 @@ function DataBindingProperties({
             <div className="mb-2 flex items-center justify-between gap-2 text-xs">
               <span className="font-medium text-foreground">Saved presets</span>
               <span className="text-muted-foreground" data-testid="editor-data-saved-preset-sync-state">
-                {savedPresetSyncState === 'loading'
+                {savedPresetBusy === 'saving'
+                  ? 'Saving shared preset...'
+                  : savedPresetBusy === 'deleting'
+                    ? 'Deleting shared preset...'
+                    : savedPresetSyncState === 'loading'
                   ? 'Loading shared presets'
                   : savedPresetSyncState === 'shared'
                     ? 'Shared with this site'
@@ -5917,6 +5957,7 @@ function DataBindingProperties({
                   type="text"
                   value={savedPresetName}
                   onChange={(event) => setSavedPresetName(event.target.value)}
+                  disabled={Boolean(savedPresetBusy)}
                   data-testid="editor-data-saved-preset-name"
                   className={cn(
                     'min-w-0 flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -5927,11 +5968,11 @@ function DataBindingProperties({
                 <button
                   type="button"
                   onClick={saveCurrentBindingPreset}
-                  disabled={!selectedFieldKey}
+                  disabled={!selectedFieldKey || Boolean(savedPresetBusy)}
                   data-testid="editor-data-save-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Save
+                  {savedPresetBusy === 'saving' ? 'Saving...' : 'Save'}
                 </button>
               </div>
 
@@ -5955,7 +5996,7 @@ function DataBindingProperties({
                 <button
                   type="button"
                   onClick={applySavedBindingPreset}
-                  disabled={!selectedSavedPreset}
+                  disabled={!selectedSavedPreset || Boolean(savedPresetBusy)}
                   data-testid="editor-data-apply-saved-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -5964,11 +6005,11 @@ function DataBindingProperties({
                 <button
                   type="button"
                   onClick={deleteSavedBindingPreset}
-                  disabled={!selectedSavedPreset}
+                  disabled={!selectedSavedPreset || Boolean(savedPresetBusy)}
                   data-testid="editor-data-delete-saved-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Delete
+                  {savedPresetBusy === 'deleting' ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
               {selectedSavedPreset && (
