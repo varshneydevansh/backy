@@ -1040,6 +1040,7 @@ function MediaPage() {
       ? fontPreviewUrl
       : selectedAsset.url
     : '';
+  const selectedAssetPreviewBlockedReason = selectedAsset ? mediaPreviewBlockedReason(selectedAsset) : null;
   const metadataReplacementVersions = useMemo(
     () => getReplacementVersions(selectedAsset?.metadata),
     [selectedAsset?.metadata],
@@ -5525,7 +5526,9 @@ function MediaPage() {
 
             <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[220px_1fr]">
               <div className="aspect-square overflow-hidden rounded-lg bg-muted">
-                {selectedAsset.type === 'image' && selectedAsset.url ? (
+                {selectedAssetPreviewBlockedReason ? (
+                  <MediaPreviewBlocked reason={selectedAssetPreviewBlockedReason} />
+                ) : selectedAsset.type === 'image' && selectedAsset.url ? (
                   <img
                     src={selectedAsset.url}
                     alt={metadataForm.altText || selectedAsset.name}
@@ -5603,15 +5606,19 @@ function MediaPage() {
                         className="overflow-hidden rounded-lg border border-border bg-background"
                         style={{ aspectRatio: getImageAspectRatioCssValue(metadataForm.imageAspectRatio) }}
                       >
-                        <img
-                          src={selectedAsset.url}
-                          alt={metadataForm.altText || selectedAsset.name}
-                          className="h-full w-full"
-                          style={{
-                            objectFit: metadataForm.imageObjectFit,
-                            objectPosition: `${metadataForm.imageFocalX}% ${metadataForm.imageFocalY}%`,
-                          }}
-                        />
+                        {selectedAssetPreviewBlockedReason ? (
+                          <MediaPreviewBlocked reason={selectedAssetPreviewBlockedReason} />
+                        ) : (
+                          <img
+                            src={selectedAsset.url}
+                            alt={metadataForm.altText || selectedAsset.name}
+                            className="h-full w-full"
+                            style={{
+                              objectFit: metadataForm.imageObjectFit,
+                              objectPosition: `${metadataForm.imageFocalX}% ${metadataForm.imageFocalY}%`,
+                            }}
+                          />
+                        )}
                       </div>
                       <div className="grid gap-3">
                         <div className="grid gap-3 sm:grid-cols-2">
@@ -6196,6 +6203,10 @@ function MediaPage() {
                           : currentMimeType;
                         const retainedMimeType = version.mimeType || 'retained MIME not exposed';
                         const retainedType = version.type || selectedAsset.type;
+                        const retainedPreviewBlockedReason = selectedAssetPreviewBlockedReason || mediaPreviewBlockedReason({
+                          visibility: selectedAsset.visibility,
+                          metadata: version.metadata,
+                        });
 
                         return (
                           <div key={comparisonKey} className="rounded-lg border border-border bg-background px-3 py-3">
@@ -6207,7 +6218,7 @@ function MediaPage() {
                                 </p>
                               </div>
                               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                                {version.url && (
+                                {version.url && !retainedPreviewBlockedReason && (
                                   <a
                                     href={version.url}
                                     target="_blank"
@@ -6265,17 +6276,19 @@ function MediaPage() {
                                     label="Current preview"
                                     type={selectedAsset.type}
                                     mimeType={currentMimeType}
-                                    url={selectedAsset.url}
+                                    url={selectedAssetPreviewBlockedReason ? undefined : selectedAsset.url}
                                     name={selectedAsset.name}
                                     sizeLabel={formatBytes(currentSizeBytes)}
+                                    blockedReason={selectedAssetPreviewBlockedReason}
                                   />
                                   <MediaVersionPreview
                                     label="Retained preview"
                                     type={retainedType}
                                     mimeType={retainedMimeType}
-                                    url={version.url}
+                                    url={retainedPreviewBlockedReason ? undefined : version.url}
                                     name={retainedName}
                                     sizeLabel={formatReplacementSize(version.sizeBytes)}
+                                    blockedReason={retainedPreviewBlockedReason}
                                   />
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -7310,7 +7323,39 @@ const mediaTypeLabel = (type: MediaAsset['type']) => {
   return type;
 };
 
+const mediaPreviewBlockedReason = (
+  media: Pick<MediaAsset, 'visibility' | 'metadata'> | { visibility?: MediaAsset['visibility']; metadata?: Record<string, unknown> },
+): 'private' | 'quarantined' | null => {
+  if (getMediaSecurityPolicy(media.metadata).status === 'quarantined') {
+    return 'quarantined';
+  }
+  return media.visibility === 'private' ? 'private' : null;
+};
+
+const MediaPreviewBlocked = ({ reason }: { reason: 'private' | 'quarantined' }) => (
+  <div
+    className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/60 p-4 text-center text-xs text-muted-foreground"
+    data-testid="media-preview-blocked"
+    data-preview-blocked={reason}
+  >
+    <AlertTriangle className="size-5" />
+    <span className="font-medium text-foreground">
+      {reason === 'quarantined' ? 'Preview blocked' : 'Private preview'}
+    </span>
+    <span>
+      {reason === 'quarantined'
+        ? 'Quarantined media is blocked from inline preview.'
+        : 'Use a temporary signed URL for private media preview.'}
+    </span>
+  </div>
+);
+
 function MediaAssetPreview({ file }: { file: MediaAsset }) {
+  const blockedReason = mediaPreviewBlockedReason(file);
+  if (blockedReason) {
+    return <MediaPreviewBlocked reason={blockedReason} />;
+  }
+
   if (file.type === 'image' && file.url) {
     return <img src={file.url} alt={file.altText || file.name} className="h-full w-full object-cover" />;
   }
@@ -8103,6 +8148,7 @@ type MediaVersionPreviewProps = {
   url?: string;
   name: string;
   sizeLabel: string;
+  blockedReason?: 'private' | 'quarantined' | null;
 };
 
 const MediaVersionPreview = ({
@@ -8112,6 +8158,7 @@ const MediaVersionPreview = ({
   url,
   name,
   sizeLabel,
+  blockedReason,
 }: MediaVersionPreviewProps) => {
   const previewKind = mediaPreviewKind(type, mimeType);
   const mimeLabel = mimeType && mimeType.trim().length > 0 ? mimeType : 'MIME not exposed';
@@ -8130,7 +8177,11 @@ const MediaVersionPreview = ({
         </div>
         <span className="rounded bg-muted px-2 py-1 text-[11px] uppercase text-muted-foreground">{previewKind}</span>
       </div>
-      {previewKind === 'image' && url ? (
+      {blockedReason ? (
+        <div className="aspect-video overflow-hidden rounded border border-border bg-muted/40">
+          <MediaPreviewBlocked reason={blockedReason} />
+        </div>
+      ) : previewKind === 'image' && url ? (
         <div className="flex aspect-video items-center justify-center overflow-hidden rounded border border-border bg-muted/40">
           <img src={url} alt={name} loading="lazy" className="max-h-full max-w-full object-contain" />
         </div>

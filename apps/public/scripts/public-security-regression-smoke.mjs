@@ -880,6 +880,11 @@ assertIncludes(mediaAdminRoute, 'const hiddenSelectedMediaCount = useMemo(', 'me
 assertIncludes(mediaAdminRoute, 'const handleClearHiddenSelection = () => {', 'media bulk selection must let users clear hidden selected assets');
 assertIncludes(mediaAdminRoute, 'Selected hidden assets remain selected and are included in bulk actions until cleared.', 'media bulk selection copy must disclose hidden selected assets');
 assertIncludes(mediaAdminRoute, 'if (!canExportMediaActivity) {', 'media audit CSV export must fail closed without activity.export');
+assertIncludes(mediaAdminRoute, 'const mediaPreviewBlockedReason = (', 'media previews must centralize private/quarantine blocking');
+assertIncludes(mediaAdminRoute, '<MediaPreviewBlocked reason={blockedReason} />', 'media grid previews must block private or quarantined raw URLs');
+assertIncludes(mediaAdminRoute, '<MediaPreviewBlocked reason={selectedAssetPreviewBlockedReason} />', 'media detail previews must block private or quarantined raw URLs');
+assertIncludes(mediaAdminRoute, 'version.url && !retainedPreviewBlockedReason', 'media retained version links must not expose private or quarantined raw URLs');
+assertIncludes(mediaAdminRoute, 'blockedReason={retainedPreviewBlockedReason}', 'media retained version previews must block private or quarantined raw URLs');
 assert(
   occurrenceCount(mediaAdminRoute, 'onClick={() => void copyMediaHandoffManifest()}') >= 2,
   'media manifest copy controls must route through the permission-checked handler',
