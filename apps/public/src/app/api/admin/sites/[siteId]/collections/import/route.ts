@@ -21,6 +21,7 @@ import {
   type StoreCollection,
 } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   isValidCollectionListRoutePattern,
@@ -58,6 +59,10 @@ type ImportCollection = {
   records: ImportRecord[];
 };
 
+type ImportCollectionParseResult =
+  | { ok: true; collection: ImportCollection }
+  | { ok: false; message: string; details?: Record<string, unknown> };
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: Record<string, unknown>) => (
@@ -89,28 +94,6 @@ const parseStatus = (value: unknown, fallback: PublishStatus = 'draft'): Publish
   value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
     ? value
     : fallback
-);
-
-const normalizeFieldId = (field: Record<string, unknown>, index: number): string => {
-  const existingId = typeof field.id === 'string' ? field.id.trim() : '';
-  if (existingId) {
-    return existingId;
-  }
-
-  const source = field.key || field.label || index + 1;
-  return `field_${normalizeSlug(String(source)).replace(/-/g, '_') || index + 1}`;
-};
-
-const parseFields = (value: unknown): BackyCollectionField[] => (
-  Array.isArray(value)
-    ? value.map((field, index) => {
-        const input = isRecord(field) ? field : {};
-        return {
-          ...input,
-          id: normalizeFieldId(input, index),
-        } as BackyCollectionField;
-      })
-    : []
 );
 
 const parsePermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
@@ -158,13 +141,31 @@ const normalizeImportRecord = (value: unknown): ImportRecord | null => {
   };
 };
 
-const normalizeImportCollection = (value: unknown): ImportCollection | null => {
-  if (!isRecord(value)) return null;
+const normalizeImportCollection = (value: unknown, index: number): ImportCollectionParseResult => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      message: `Imported collection ${index + 1} must be an object.`,
+      details: { index },
+    };
+  }
   const name = typeof value.name === 'string' ? value.name.trim() : '';
   const slug = normalizeSlug(value.slug || name);
-  const fields = parseFields(value.fields);
   if (!name || !slug) {
-    return null;
+    return {
+      ok: false,
+      message: `Imported collection ${index + 1} requires a name or slug.`,
+      details: { index },
+    };
+  }
+
+  const parsedFields = parseAdminCollectionFields(value.fields);
+  if (!parsedFields.ok) {
+    return {
+      ok: false,
+      message: parsedFields.message,
+      details: { index, slug },
+    };
   }
 
   const routePattern = parseRoutePattern(value.routePattern, slug);
@@ -174,16 +175,19 @@ const normalizeImportCollection = (value: unknown): ImportCollection | null => {
     : [];
 
   return {
-    name,
-    slug,
-    description: typeof value.description === 'string' ? value.description.trim() || null : null,
-    status: parseStatus(value.status),
-    routePattern,
-    listRoutePattern,
-    fields,
-    permissions: parsePermissions(value.permissions),
-    metadata: parseMetadata(value.metadata),
-    records,
+    ok: true,
+    collection: {
+      name,
+      slug,
+      description: typeof value.description === 'string' ? value.description.trim() || null : null,
+      status: parseStatus(value.status),
+      routePattern,
+      listRoutePattern,
+      fields: parsedFields.fields || [],
+      permissions: parsePermissions(value.permissions),
+      metadata: parseMetadata(value.metadata),
+      records,
+    },
   };
 };
 
@@ -229,7 +233,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const upsert = searchParams.get('upsert') === 'true';
     const body = await parseJsonBody(request);
-    const collections = collectionsFromBody(body).map(normalizeImportCollection).filter(Boolean) as ImportCollection[];
+    const collections: ImportCollection[] = [];
+    for (const [index, rawCollection] of collectionsFromBody(body).entries()) {
+      const parsed = normalizeImportCollection(rawCollection, index);
+      if (!parsed.ok) {
+        return errorResponse(400, 'VALIDATION_ERROR', parsed.message, requestId, parsed.details);
+      }
+      collections.push(parsed.collection);
+    }
     const invalid = validateImportInput(collections, requestId);
     if (invalid) return invalid;
 

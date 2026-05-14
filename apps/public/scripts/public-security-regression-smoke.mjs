@@ -238,6 +238,16 @@ for (const needle of [
   assertIncludes(adminCollectionFields, needle, 'admin collection field validator');
 }
 
+const adminCollectionImportRoute = read('apps/public/src/app/api/admin/sites/[siteId]/collections/import/route.ts');
+for (const needle of [
+  "import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';",
+  'const parsedFields = parseAdminCollectionFields(value.fields);',
+  "return errorResponse(400, 'VALIDATION_ERROR', parsed.message, requestId, parsed.details);",
+]) {
+  assertIncludes(adminCollectionImportRoute, needle, 'admin collection backup import field validation');
+}
+assertExcludes(adminCollectionImportRoute, 'const parseFields =', 'admin collection backup import field validation');
+
 const commerceReconcileRoute = read('apps/public/src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts');
 const commerceReconcilePost = functionSource(commerceReconcileRoute, 'POST', 'commerce reconcile route');
 assertIncludes(
