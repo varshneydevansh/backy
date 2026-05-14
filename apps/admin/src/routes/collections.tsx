@@ -1584,7 +1584,7 @@ function CollectionsPage() {
           ? 'Collection schema operation in progress...'
           : undefined;
   const isNewCollectionDraftOpen = isCollectionDraftMode && !activeCollection;
-  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Draft is open' : 'Open blank collection draft';
+  const newCollectionButtonLabel = isNewCollectionDraftOpen ? 'Draft open - name schema' : 'Start collection draft';
   const newCollectionButtonTitle = isNewCollectionDraftOpen
     ? 'A new collection draft is open. Jump to the schema form.'
     : schemaActionDisabledTitle;
@@ -2576,7 +2576,7 @@ function CollectionsPage() {
   const beginNewCollection = () => {
     if (isCollectionDraftMode && !activeCollection && canEditCollections) {
       setNotice('New collection draft is already open. Add a schema name and fields, then save it to create the collection.');
-      scrollToCollectionSchema();
+      scrollToNewCollectionDraft();
       return;
     }
 
@@ -2593,7 +2593,25 @@ function CollectionsPage() {
     setError(null);
     setValidationDetails([]);
     setNotice('New collection draft opened. Add a schema name and fields, then save it to create the collection.');
-    scrollToCollectionSchema();
+    scrollToNewCollectionDraft();
+  };
+
+  const revealCollectionsDraftTarget = (targetId: string, focusInputId: string) => {
+    const target = document.getElementById(targetId) || document.getElementById('collections-schema');
+    const focusInput = document.getElementById(focusInputId) || document.getElementById('collections-schema-name');
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (focusInput instanceof HTMLInputElement) {
+      focusInput.focus({ preventScroll: true });
+      focusInput.select();
+    }
+  };
+
+  const scrollToNewCollectionDraft = () => {
+    window.requestAnimationFrame(() => {
+      revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name');
+      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 150);
+      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 450);
+    });
   };
 
   const scrollToCollectionSchema = () => {
@@ -3743,7 +3761,7 @@ function CollectionsPage() {
                   <span className="font-semibold">Draft ready below</span>
                   <button
                     type="button"
-                    onClick={scrollToCollectionSchema}
+                    onClick={scrollToNewCollectionDraft}
                     className="rounded-md border border-primary/30 bg-background px-2 py-1 font-semibold hover:bg-primary/10"
                   >
                     Name schema
@@ -3811,7 +3829,9 @@ function CollectionsPage() {
 
       {isNewCollectionDraftOpen && canEditCollections && (
         <section
+          id="collections-draft-starter"
           className="mb-5 rounded-lg border border-primary/30 bg-card p-4 shadow-sm ring-1 ring-primary/10"
+          aria-live="polite"
           data-testid="collections-draft-starter"
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
