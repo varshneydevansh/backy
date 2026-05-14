@@ -855,6 +855,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       const body = document.body?.innerText || '';
       const nameInput = document.querySelector('#collections-schema-name');
       const form = document.querySelector('#collections-schema');
+      const draftStarter = document.querySelector('[data-testid="collections-draft-starter"]');
       const params = new URLSearchParams(window.location.search);
       return {
         hasNotice: body.includes('New collection draft opened') || body.includes('New collection draft is already open'),
@@ -877,6 +878,7 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
         nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : null,
         activeElementId: document.activeElement?.id || '',
         formTop: form instanceof HTMLElement ? form.getBoundingClientRect().top : null,
+        draftStarterTop: draftStarter instanceof HTMLElement ? draftStarter.getBoundingClientRect().top : null,
         viewportHeight: window.innerHeight,
         draft: params.get('draft'),
         collectionId: params.get('collectionId'),
@@ -898,7 +900,10 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
       state.collectionId === null &&
       state.recordId === null &&
       state.search === null &&
-      (state.activeElementId === 'collections-schema-name' || (state.formTop !== null && state.formTop < state.viewportHeight))
+      (
+        state.activeElementId === 'collections-draft-name' ||
+        (state.draftStarterTop !== null && state.draftStarterTop >= 0 && state.draftStarterTop < state.viewportHeight * 0.85)
+      )
     ) {
       const clickedOpenDraft = await evaluate(client, `(() => {
         const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});

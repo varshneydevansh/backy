@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -2647,6 +2647,24 @@ function CollectionsPage() {
     });
   };
 
+  const revealCollectionsDraftTarget = useCallback((targetId: string, focusInputId: string) => {
+    const target = document.getElementById(targetId) || document.getElementById('collections-schema');
+    const focusInput = document.getElementById(focusInputId) || document.getElementById('collections-schema-name');
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (focusInput instanceof HTMLInputElement) {
+      focusInput.focus({ preventScroll: true });
+      focusInput.select();
+    }
+  }, []);
+
+  const scrollToNewCollectionDraft = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name');
+      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 150);
+      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 450);
+    });
+  }, [revealCollectionsDraftTarget]);
+
   const beginNewCollection = () => {
     if (isCollectionDraftMode && !activeCollection && canEditCollections) {
       setNotice('New collection draft is already open. Add a schema name and fields, then save it to create the collection.');
@@ -2670,23 +2688,12 @@ function CollectionsPage() {
     scrollToNewCollectionDraft();
   };
 
-  const revealCollectionsDraftTarget = (targetId: string, focusInputId: string) => {
-    const target = document.getElementById(targetId) || document.getElementById('collections-schema');
-    const focusInput = document.getElementById(focusInputId) || document.getElementById('collections-schema-name');
-    target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    if (focusInput instanceof HTMLInputElement) {
-      focusInput.focus({ preventScroll: true });
-      focusInput.select();
+  useEffect(() => {
+    if (!isNewCollectionDraftOpen || !canEditCollections) {
+      return;
     }
-  };
-
-  const scrollToNewCollectionDraft = () => {
-    window.requestAnimationFrame(() => {
-      revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name');
-      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 150);
-      window.setTimeout(() => revealCollectionsDraftTarget('collections-draft-starter', 'collections-draft-name'), 450);
-    });
-  };
+    scrollToNewCollectionDraft();
+  }, [canEditCollections, isNewCollectionDraftOpen, scrollToNewCollectionDraft]);
 
   const scrollToCollectionSchema = () => {
     const revealSchemaBuilder = () => {
