@@ -1112,7 +1112,26 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       assert(collection.status === 'draft', `Draft collection status was not persisted: ${JSON.stringify(collection)}`);
       assert(customField.label === customFieldLabel, `Custom field label was not persisted: ${JSON.stringify(customField)}`);
       assert(typeof customField.id === 'string' && customField.id.trim(), `Custom field id was not a stable string: ${JSON.stringify(customField)}`);
-      return collection;
+
+      const uiState = await evaluate(client, `(() => {
+        const body = document.body?.innerText || '';
+        const params = new URLSearchParams(window.location.search);
+        const notice = document.querySelector('[data-testid="collections-success-notice"]');
+        return {
+          hasCreateNotice: Boolean(notice) && body.includes(${JSON.stringify(`${name} collection created.`)}),
+          hasDraftState: Boolean(document.querySelector('[data-testid="collections-new-draft-state"]')),
+          collectionId: params.get('collectionId'),
+          draft: params.get('draft'),
+        };
+      })()`);
+
+      if (uiState.hasCreateNotice && uiState.collectionId === collection.id && uiState.draft === null && !uiState.hasDraftState) {
+        return collection;
+      }
+
+      if (attempt === 79) {
+        throw new Error(`Draft collection saved but UI success state did not settle: ${JSON.stringify(uiState)}`);
+      }
     }
     await sleep(250);
   }

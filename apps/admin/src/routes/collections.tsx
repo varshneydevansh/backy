@@ -3377,6 +3377,7 @@ function CollectionsPage() {
         metadata,
         fields,
       };
+      const isCreatingCollection = !selectedCollectionId;
       const saved = selectedCollectionId
         ? await updateCollection(activeSiteId, selectedCollectionId, payload)
         : await createCollection(activeSiteId, payload);
@@ -3389,6 +3390,7 @@ function CollectionsPage() {
       if (saveInteractionVersion === collectionInteractionVersionRef.current) {
         selectCollection(saved);
         void loadCollectionAuditLogs();
+        setNotice(`${saved.name} collection ${isCreatingCollection ? 'created' : 'updated'}.`);
       }
     } catch (saveError) {
       showApiError(saveError, 'Unable to save collection');
@@ -3777,7 +3779,10 @@ function CollectionsPage() {
       )}
 
       {notice && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div
+          className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          data-testid="collections-success-notice"
+        >
           {notice}
         </div>
       )}
