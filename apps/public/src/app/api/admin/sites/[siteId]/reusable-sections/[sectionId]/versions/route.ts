@@ -30,7 +30,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(_request, requestId, { permission: 'pages.view' });
+  const access = await requireAdminAccess(_request, requestId, { permission: 'pages.view' });
   if (access instanceof NextResponse) return access;
 
   try {

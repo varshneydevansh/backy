@@ -72,7 +72,7 @@ const parseEntity = (value: string | null): BackyRepositoryEntity | undefined =>
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'activity.export' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'activity.export' });
   if (access instanceof NextResponse) {
     return access;
   }

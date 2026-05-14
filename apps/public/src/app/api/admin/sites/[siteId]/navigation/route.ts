@@ -106,7 +106,7 @@ const requestNavigationInput = (body: Record<string, unknown>) => (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'sites.configure' });
   if (access instanceof NextResponse) {
     return access;
   }

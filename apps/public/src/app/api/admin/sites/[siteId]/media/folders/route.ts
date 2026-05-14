@@ -58,7 +58,7 @@ const hasSiblingFolderNameConflict = (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'media.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'media.create' });
   if (access instanceof NextResponse) {
     return access;
   }

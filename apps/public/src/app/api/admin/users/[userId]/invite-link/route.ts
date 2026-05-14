@@ -45,7 +45,7 @@ export async function POST(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

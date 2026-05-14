@@ -45,19 +45,19 @@ export const filterPublicAudienceForms = <TForm extends FormAudienceLike>(forms:
   forms.filter(isPublicFormAudience)
 );
 
-export const requirePublicFormAudienceAccess = (
+export const requirePublicFormAudienceAccess = async (
   request: NextRequest,
   requestId: string,
   form: FormAudienceLike,
   action: FormAudienceAccessAction,
-): NextResponse | null => {
+): Promise<NextResponse | null> => {
   if (isPublicFormAudience(form)) {
     return null;
   }
 
   const audience = form.audience || 'public';
   const permission = action === 'submit' && audience === 'adminOnly' ? 'forms.manage' : 'forms.view';
-  const access = requireAdminAccess(request, requestId, { permission });
+  const access = await requireAdminAccess(request, requestId, { permission });
 
   if (!(access instanceof NextResponse)) {
     return null;

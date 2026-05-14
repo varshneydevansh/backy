@@ -95,7 +95,7 @@ const withMembers = async (
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

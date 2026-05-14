@@ -65,7 +65,7 @@ const parseIds = (raw: unknown): string[] => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'comments.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'comments.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'comments.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

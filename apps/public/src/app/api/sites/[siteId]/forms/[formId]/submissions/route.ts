@@ -905,7 +905,7 @@ async function notifyFormSubmissionWebhook(params: {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, responseRequestId, { permission: 'forms.view' });
+  const access = await requireAdminAccess(request, responseRequestId, { permission: 'forms.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -1004,7 +1004,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!form.isActive) {
         return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
       }
-      const audienceAccess = requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
+      const audienceAccess = await requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
       if (audienceAccess) {
         return audienceAccess;
       }
@@ -1154,7 +1154,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!form.isActive) {
       return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
     }
-    const audienceAccess = requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
+    const audienceAccess = await requirePublicFormAudienceAccess(request, responseRequestId, form, 'submit');
     if (audienceAccess) {
       return audienceAccess;
     }

@@ -137,7 +137,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
 
     if (status !== 'approved') {
-      const access = requireAdminAccess(request, requestId, { permission: 'comments.view' });
+      const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
       }

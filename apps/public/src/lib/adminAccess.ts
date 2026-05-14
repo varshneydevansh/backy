@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSession, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
+import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 type AdminRole = AdminSession['user']['role'];
 
@@ -27,11 +28,24 @@ const getProvidedAdminKey = (request: NextRequest) => {
   return match?.[1]?.trim() || '';
 };
 
-const getExpectedAdminKeys = () => [
-  process.env.BACKY_ADMIN_API_KEY?.trim() || '',
-  process.env.BACKY_ADMIN_SECRET_KEY?.trim() || '',
-  getAdminSettings().apiKeys?.adminApiKey?.trim() || '',
-].filter((value, index, values) => value && values.indexOf(value) === index);
+const uniqueKeys = (keys: string[]) => (
+  keys.filter((value, index, values) => value && values.indexOf(value) === index)
+);
+
+const getEnvironmentAdminKeys = () => uniqueKeys([
+    process.env.BACKY_ADMIN_API_KEY?.trim() || '',
+    process.env.BACKY_ADMIN_SECRET_KEY?.trim() || '',
+]);
+
+const getConfiguredAdminKeys = async () => {
+  if (shouldUseDemoStoreFallback()) {
+    return uniqueKeys([getAdminSettings().apiKeys?.adminApiKey?.trim() || '']);
+  }
+
+  const repositories = await getRequiredDatabaseRepositories();
+  const settings = await repositories.settings.get();
+  return uniqueKeys([settings.apiKeys?.secretKeyId?.trim() || '']);
+};
 
 const hasRequiredRole = (role: AdminRole, allowedRoles: AdminRole[]) => allowedRoles.includes(role);
 
@@ -49,22 +63,25 @@ export const adminAccessError = (status: number, code: string, message: string, 
   )
 );
 
-export function requireAdminAccess(
+export async function requireAdminAccess(
   request: NextRequest,
   requestId: string,
   options: {
     roles?: AdminRole[];
     permission?: string;
   } = {},
-): AdminAccessContext | NextResponse {
+): Promise<AdminAccessContext | NextResponse> {
   const allowedRoles = options.roles || ['owner', 'admin'];
   if (options.permission && !isAdminPermissionKey(options.permission)) {
     return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${options.permission}`, requestId);
   }
   const providedKey = getProvidedAdminKey(request);
-  const expectedKeys = getExpectedAdminKeys();
+  const environmentKeys = getEnvironmentAdminKeys();
+  const configuredKeys = providedKey && !environmentKeys.includes(providedKey)
+    ? await getConfiguredAdminKeys()
+    : [];
 
-  if (providedKey && expectedKeys.includes(providedKey)) {
+  if (providedKey && (environmentKeys.includes(providedKey) || configuredKeys.includes(providedKey))) {
     if (options.permission && isOwnerOnlyAdminPermission(options.permission)) {
       return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
     }
@@ -74,7 +91,13 @@ export function requireAdminAccess(
     };
   }
 
-  const session = getAdminSession(getBearerToken(request));
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const session = await getAdminSessionWithPersistence(
+    getBearerToken(request),
+    repositories ? { getUserById: repositories.users.getById } : {},
+  );
   if (!session) {
     return adminAccessError(401, 'UNAUTHORIZED', 'A valid admin session or admin API key is required.', requestId);
   }

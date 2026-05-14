@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonObject, Contact } from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   deleteContactRecord,
@@ -28,7 +28,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
 );
 
-const getAccessActorId = (access: Exclude<ReturnType<typeof requireAdminAccess>, NextResponse>): string => (
+const getAccessActorId = (access: AdminAccessContext): string => (
   access.session?.user.id || access.session?.user.email || 'admin'
 );
 
@@ -122,7 +122,7 @@ const toFallbackUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -208,7 +208,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

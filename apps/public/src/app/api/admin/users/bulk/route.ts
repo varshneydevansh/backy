@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Bulk action must be updateStatus or delete.', requestId);
   }
 
-  const access = requireAdminAccess(request, requestId, {
+  const access = await requireAdminAccess(request, requestId, {
     permission: action === 'delete' ? 'users.delete' : 'users.manage',
   });
   if (access instanceof NextResponse) {

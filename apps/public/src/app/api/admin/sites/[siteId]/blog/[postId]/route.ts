@@ -170,7 +170,7 @@ const updateAuditMetadata = (post: Parameters<typeof postAuditMetadata>[0], body
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'pages.view' });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -225,7 +225,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -272,7 +272,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
       const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
       if (body.status !== undefined && statusRequiresPublishPermission(status)) {
-        const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+        const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
         if (publishAccess instanceof NextResponse) return publishAccess;
       }
       const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
@@ -381,7 +381,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const scheduledAt = normalizeScheduledAtInput(body.scheduledAt);
     const nextScheduledAt = scheduledAt === undefined ? post.scheduledAt || null : scheduledAt;
     if (body.status !== undefined && statusRequiresPublishPermission(status)) {
-      const publishAccess = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+      const publishAccess = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
       if (publishAccess instanceof NextResponse) return publishAccess;
     }
     const scheduleValidation = validateScheduledContentStatus(status, nextScheduledAt);
@@ -424,7 +424,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'pages.delete' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'pages.delete' });
   if (access instanceof NextResponse) return access;
 
   try {

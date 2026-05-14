@@ -186,7 +186,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
 
     if (status !== 'approved') {
-      const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
+      const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
       }
@@ -271,7 +271,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.manage' });
+  const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

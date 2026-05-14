@@ -123,7 +123,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const contactId = parseTextInput(searchParams.get('contactId'));
     const limit = parseLimit(searchParams.get('limit'));
     const offset = parseOffset(searchParams.get('offset'));
-    const access = requireAdminAccess(request, responseRequestId, { permission: permissionForKind(kind) });
+    const access = await requireAdminAccess(request, responseRequestId, { permission: permissionForKind(kind) });
     if (access instanceof NextResponse) {
       return access;
     }

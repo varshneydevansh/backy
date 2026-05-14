@@ -187,7 +187,7 @@ const remapPageMeta = <T extends { parentPageId?: string | null }>(
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.create' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'sites.create' });
   if (access instanceof NextResponse) {
     return access;
   }

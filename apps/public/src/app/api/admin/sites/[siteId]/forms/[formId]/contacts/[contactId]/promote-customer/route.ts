@@ -213,9 +213,9 @@ const findRepositoryCustomerByEmail = async (
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const formAccess = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const formAccess = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (formAccess instanceof NextResponse) return formAccess;
-  const collectionAccess = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const collectionAccess = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
   if (collectionAccess instanceof NextResponse) return collectionAccess;
 
   try {

@@ -211,12 +211,12 @@ export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const mode = normalizeImportMode(searchParams.get('mode'));
   const dryRun = searchParams.get('dryRun') === 'true';
-  const access = requireAdminAccess(request, requestId, { permission: 'users.create' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.create' });
   if (access instanceof NextResponse) {
     return access;
   }
   if (mode === 'upsert') {
-    const manageAccess = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+    const manageAccess = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
     if (manageAccess instanceof NextResponse) {
       return manageAccess;
     }

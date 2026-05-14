@@ -104,7 +104,7 @@ export async function GET(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -153,7 +153,7 @@ export async function PATCH(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -338,7 +338,7 @@ export async function DELETE(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'users.delete' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.delete' });
   if (access instanceof NextResponse) {
     return access;
   }

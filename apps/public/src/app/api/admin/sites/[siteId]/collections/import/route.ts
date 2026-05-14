@@ -243,7 +243,7 @@ const validateImportInput = (collections: ImportCollection[], requestId: string)
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -261,7 +261,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     const invalid = validateImportInput(collections, requestId);
     if (invalid) return invalid;
-    const commerceAccess = requireCommerceCollectionSlugAccess(
+    const commerceAccess = await requireCommerceCollectionSlugAccess(
       request,
       requestId,
       collections.map((collection) => collection.slug),

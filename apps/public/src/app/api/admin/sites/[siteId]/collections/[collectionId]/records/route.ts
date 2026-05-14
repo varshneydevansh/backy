@@ -173,7 +173,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { searchParams } = new URL(request.url);
   const csvRequested = searchParams.get('format') === 'csv' || searchParams.get('export') === 'csv';
-  const access = requireAdminAccess(request, requestId, { permission: csvRequested ? 'collections.export' : 'collections.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: csvRequested ? 'collections.export' : 'collections.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
-      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
       if (commerceAccess) {
         return commerceAccess;
       }
@@ -268,7 +268,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
-    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
+    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'view');
     if (commerceAccess) {
       return commerceAccess;
     }
@@ -321,7 +321,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
-      const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
       if (commerceAccess) {
         return commerceAccess;
       }
@@ -420,7 +420,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
-    const commerceAccess = requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
     if (commerceAccess) {
       return commerceAccess;
     }

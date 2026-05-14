@@ -748,7 +748,7 @@ const sanitizeSettingsAuditSnapshot = (settings: unknown): BackyJsonObject | und
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'settings.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'settings.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -791,14 +791,14 @@ export async function PATCH(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const mediaStoragePatch = isMediaStorageSettingsPatch(body);
-  const access = requireAdminAccess(request, requestId, {
+  const access = await requireAdminAccess(request, requestId, {
     permission: mediaStoragePatch ? 'media.configure' : 'settings.configure',
   });
   if (access instanceof NextResponse) {
     return access;
   }
   if (body.apiKeys !== undefined) {
-    const keyAccess = requireAdminAccess(request, requestId, {
+    const keyAccess = await requireAdminAccess(request, requestId, {
       permission: 'settings.manageKeys',
     });
     if (keyAccess instanceof NextResponse) {
@@ -921,7 +921,7 @@ export async function POST(request: NextRequest) {
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
     const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
     const keyRegeneration = body.action === 'regenerate-api-keys';
-    const access = requireAdminAccess(request, requestId, {
+    const access = await requireAdminAccess(request, requestId, {
       permission: mediaStorageCheck || mediaStorageProvisioningProbe
         ? 'media.configure'
         : keyRegeneration

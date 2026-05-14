@@ -241,7 +241,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
-    const access = requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
+    const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
     if (access instanceof NextResponse) {
       return access;
     }

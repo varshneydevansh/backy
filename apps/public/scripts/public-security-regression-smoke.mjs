@@ -477,6 +477,13 @@ assertExcludes(adminLoginRoute, '@/lib/admin-auth/emailPolicy', 'login route mus
 assertIncludes(adminLoginRoute, 'authenticateAdminCredentialsWithPersistence', 'login route must use repository-backed user lookup outside demo mode');
 assertIncludes(adminLoginRoute, 'repositories.users.getByEmail', 'login route must resolve database users by email outside demo mode');
 assertIncludes(adminLoginRoute, 'repositories.users.getPasswordCredentialByEmail', 'login route must verify database-backed password credentials outside demo mode');
+const adminAccessSource = read('apps/public/src/lib/adminAccess.ts');
+assertIncludes(adminAccessSource, 'export async function requireAdminAccess', 'admin access checks must support repository-backed async API key lookup');
+assertIncludes(adminAccessSource, 'const settings = await repositories.settings.get()', 'admin access checks must read DB-mode platform settings');
+assertIncludes(adminAccessSource, 'settings.apiKeys?.secretKeyId', 'admin access checks must accept DB-mode regenerated admin keys');
+assertIncludes(adminAccessSource, 'const environmentKeys = getEnvironmentAdminKeys()', 'admin access checks must try environment admin keys before DB settings lookup');
+assertIncludes(adminAccessSource, 'getAdminSessionWithPersistence', 'admin access checks must refresh sessions through repository-backed users');
+assertIncludes(adminAccessSource, 'repositories.users.getById', 'admin access checks must use database users in DB mode');
 
 const adminUsersRoute = read('apps/public/src/app/api/admin/users/route.ts');
 assertIncludes(adminUsersRoute, 'createAdminInviteToken', 'admin user create route must create invite tokens for invited users');

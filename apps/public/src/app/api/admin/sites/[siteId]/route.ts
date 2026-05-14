@@ -325,7 +325,7 @@ const isCommentPolicyOnlyPatch = (body: Record<string, unknown>): boolean => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'sites.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -372,7 +372,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const commentPolicyOnlyPatch = isCommentPolicyOnlyPatch(body);
-  const access = requireAdminAccess(request, requestId, {
+  const access = await requireAdminAccess(request, requestId, {
     permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
   });
   if (access instanceof NextResponse) {
@@ -501,7 +501,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'sites.delete' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'sites.delete' });
   if (access instanceof NextResponse) {
     return access;
   }

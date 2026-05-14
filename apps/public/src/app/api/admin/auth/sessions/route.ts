@@ -43,7 +43,7 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const currentToken = getBearerToken(request);
-  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
   if (access instanceof NextResponse) {
     return access;
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const currentToken = getBearerToken(request);
-  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
   if (access instanceof NextResponse) {
     return access;

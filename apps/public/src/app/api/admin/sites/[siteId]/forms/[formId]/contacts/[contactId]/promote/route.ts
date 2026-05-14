@@ -110,9 +110,9 @@ const auditMetadata = (value: Record<string, unknown>): BackyJsonObject => value
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const formAccess = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const formAccess = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (formAccess instanceof NextResponse) return formAccess;
-  const userAccess = requireAdminAccess(request, requestId, { permission: 'users.create' });
+  const userAccess = await requireAdminAccess(request, requestId, { permission: 'users.create' });
   if (userAccess instanceof NextResponse) return userAccess;
 
   try {

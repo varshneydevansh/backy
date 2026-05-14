@@ -137,7 +137,7 @@ const collectionAuditMetadata = (collection: CollectionAuditSource): BackyJsonOb
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'collections.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'collections.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
       }
 
-      const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
+      const commerceAccess = await requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
       if (commerceAccess) {
         return commerceAccess;
       }
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection status must be draft, published, or archived', requestId);
     }
 
-    const commerceAccess = requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
+    const commerceAccess = await requireCommerceCollectionSlugAccess(request, requestId, [slug], 'configure');
     if (commerceAccess) {
       return commerceAccess;
     }

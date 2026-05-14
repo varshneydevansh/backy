@@ -157,7 +157,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       if (comment.status !== 'approved') {
-        const access = requireAdminAccess(_request, requestId, { permission: 'comments.view' });
+        const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
         if (access instanceof NextResponse) {
           return access;
         }
@@ -184,7 +184,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     if (comment.status !== 'approved') {
-      const access = requireAdminAccess(_request, requestId, { permission: 'comments.view' });
+      const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
       }
@@ -206,7 +206,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const baseRequestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, baseRequestId, { permission: 'comments.manage' });
+  const access = await requireAdminAccess(request, baseRequestId, { permission: 'comments.manage' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -440,7 +440,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'comments.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'comments.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

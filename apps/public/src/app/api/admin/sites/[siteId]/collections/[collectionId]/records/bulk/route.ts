@@ -121,7 +121,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const action = typeof body.action === 'string' ? body.action : '';
-  const access = requireAdminAccess(request, requestId, { permission: action === 'delete' ? 'collections.delete' : 'collections.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: action === 'delete' ? 'collections.delete' : 'collections.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!collection) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
-      const commerceAccess = requireCommerceCollectionAccess(
+      const commerceAccess = await requireCommerceCollectionAccess(
         request,
         requestId,
         collection.slug,
@@ -305,7 +305,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!collection) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
-    const commerceAccess = requireCommerceCollectionAccess(
+    const commerceAccess = await requireCommerceCollectionAccess(
       request,
       requestId,
       collection.slug,

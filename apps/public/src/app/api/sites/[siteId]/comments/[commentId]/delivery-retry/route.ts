@@ -222,7 +222,7 @@ async function retryDeliveryForComment(params: {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const baseRequestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, baseRequestId, { permission: 'comments.manage' });
+  const access = await requireAdminAccess(request, baseRequestId, { permission: 'comments.manage' });
   if (access instanceof NextResponse) {
     return access;
   }

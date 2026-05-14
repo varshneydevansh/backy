@@ -185,7 +185,7 @@ const parseJsonBody = async (request: NextRequest): Promise<ContactListPayload> 
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.view' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.view' });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -221,7 +221,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (access instanceof NextResponse) return access;
 
   try {
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (access instanceof NextResponse) return access;
 
   try {

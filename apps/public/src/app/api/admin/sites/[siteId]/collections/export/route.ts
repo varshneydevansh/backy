@@ -135,7 +135,7 @@ const listAllRepositoryRecords = async (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.export' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'collections.export' });
   if (access instanceof NextResponse) return access;
 
   try {

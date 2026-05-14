@@ -63,7 +63,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             if (!form || !form.isActive) {
                 return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
             }
-            const audienceAccess = requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
+            const audienceAccess = await requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
             if (audienceAccess) {
                 return audienceAccess;
             }
@@ -97,7 +97,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         if (!form || form.isActive === false) {
             return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
         }
-        const audienceAccess = requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
+        const audienceAccess = await requirePublicFormAudienceAccess(_request, requestId, form, 'definition');
         if (audienceAccess) {
             return audienceAccess;
         }

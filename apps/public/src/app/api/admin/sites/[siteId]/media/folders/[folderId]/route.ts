@@ -86,7 +86,7 @@ const wouldCreateFolderCycle = (
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'media.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -212,7 +212,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.delete' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'media.delete' });
   if (access instanceof NextResponse) {
     return access;
   }

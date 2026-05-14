@@ -170,7 +170,7 @@ const deliverContactSync = async (input: {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'forms.manage' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'forms.manage' });
   if (access instanceof NextResponse) return access;
 
   try {

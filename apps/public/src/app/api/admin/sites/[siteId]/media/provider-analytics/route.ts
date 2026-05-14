@@ -158,7 +158,7 @@ const conversionRate = (conversions: number, totalRequests: number): number => (
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'media.edit' });
+  const access = await requireAdminAccess(request, requestId, { permission: 'media.edit' });
   if (access instanceof NextResponse) {
     return access;
   }
