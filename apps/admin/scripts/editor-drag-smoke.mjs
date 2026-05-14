@@ -9768,6 +9768,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
         hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
         hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
         hasCreateFolder: Boolean(document.querySelector('[data-testid="media-library-create-folder"]')),
+        hasCreateFolderParent: Boolean(document.querySelector('[data-testid="media-library-create-folder-parent"]')),
       };
     })()`);
 
@@ -9779,7 +9780,8 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.fileAccept === 'image/*' &&
         opened.hasVisibility &&
         opened.hasFolder &&
-        opened.hasCreateFolder,
+        opened.hasCreateFolder &&
+        opened.hasCreateFolderParent,
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
     );
 

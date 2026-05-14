@@ -937,6 +937,14 @@ function MediaPage() {
   );
   const folderOptions = useMemo(() => buildMediaFolderOptions(folders), [folders]);
   const folderOptionById = useMemo(() => new Map(folderOptions.map((folder) => [folder.id, folder])), [folderOptions]);
+  const selectedFolderFilterIds = useMemo(() => {
+    if (typeof selectedFolderId !== 'string') {
+      return null;
+    }
+    const ids = getMediaFolderDescendantIds(folders, selectedFolderId);
+    ids.add(selectedFolderId);
+    return ids;
+  }, [folders, selectedFolderId]);
   const folderAssetCounts = useMemo(() => {
     const counts = new Map<string, number>();
     files.forEach((file) => {
@@ -1037,7 +1045,7 @@ function MediaPage() {
         return false;
       }
 
-      if (typeof selectedFolderId === 'string' && file.folderId !== selectedFolderId) {
+      if (typeof selectedFolderId === 'string' && (!file.folderId || !selectedFolderFilterIds?.has(file.folderId))) {
         return false;
       }
 
@@ -1072,7 +1080,7 @@ function MediaPage() {
       }
       return true;
     });
-  }, [files, searchQuery, selectedFolderId, typeFilter, usageFilter, visibilityFilter]);
+  }, [files, searchQuery, selectedFolderFilterIds, selectedFolderId, typeFilter, usageFilter, visibilityFilter]);
   const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
     ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
     : 0;
@@ -1473,7 +1481,7 @@ function MediaPage() {
         search: searchQuery.trim() || undefined,
         type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
-        folderId: selectedFolderId,
+        folderId: selectedFolderId === null ? null : undefined,
       };
       const firstPage = await listMediaLibrary({
         ...baseOptions,
@@ -1494,7 +1502,7 @@ function MediaPage() {
       };
       let nextOffset = latestPagination.offset + latestPagination.limit;
 
-      while (mode === 'all' && latestPagination.hasMore) {
+      while ((mode === 'all' || typeof selectedFolderId === 'string') && latestPagination.hasMore) {
         const nextPage = await listMediaLibrary({
           ...baseOptions,
           offset: nextOffset,

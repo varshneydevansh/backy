@@ -480,9 +480,10 @@ const navigate = async (client, url, readyExpression, description) => {
   return null;
 };
 
-const navigateToMedia = (client, searchText = '') => {
+const navigateToMedia = (client, searchText = '', options = {}) => {
   const params = new URLSearchParams({ siteId: SITE_ID });
   if (searchText) params.set('q', searchText);
+  if (options.folderId !== undefined) params.set('folderId', options.folderId === null ? 'root' : options.folderId);
   return navigate(
     client,
     `${ADMIN_BASE_URL}/media?${params.toString()}`,
@@ -494,6 +495,30 @@ const navigateToMedia = (client, searchText = '') => {
     }))()`,
     'Media page',
   );
+};
+
+const assertFolderFilterShowsAsset = async (client, { folderId, assetName, searchText }) => {
+  await navigateToMedia(client, searchText, { folderId });
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        ready: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
+        folderId: params.get('folderId'),
+        hasAsset: document.body?.innerText?.includes(${JSON.stringify(assetName)}) || false,
+        body: document.body?.innerText?.slice(0, 1400) || '',
+      };
+    })()`);
+    if (state.ready && state.folderId === folderId && state.hasAsset) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Media folder filter did not show descendant asset ${assetName}: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const waitForMediaPageAsset = async (client, name) => {
@@ -1784,6 +1809,7 @@ const main = async () => {
   const replacementName = `${marker}-replacement.png`;
   const renamedImageName = `${marker}-renamed.png`;
   const privateName = `${marker}.txt`;
+  const childFolderAssetName = `${marker}-child-folder.txt`;
   const centralUploadName = `${marker}-central-upload.txt`;
   const bulkName = `${marker}-bulk.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
@@ -1849,6 +1875,16 @@ const main = async () => {
       caption: 'Temporary private file for signed delivery smoke.',
     });
     mediaIds.push(privateFile.id);
+    const childFolderFile = await uploadMedia({
+      filename: childFolderAssetName,
+      mimeType: 'text/plain',
+      bytes: Buffer.from(`Backy nested folder media smoke ${suffix}\n`, 'utf8'),
+      visibility: 'public',
+      folderId: childFolderId,
+      tags: ['smoke', 'nested-folder'],
+      caption: 'Temporary child-folder file for parent filter smoke.',
+    });
+    mediaIds.push(childFolderFile.id);
     const bulkFile = await uploadMedia({
       filename: bulkName,
       mimeType: 'text/plain',
@@ -1920,6 +1956,8 @@ const main = async () => {
     await navigateToMedia(client, marker);
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
+    await assertFolderFilterShowsAsset(client, { folderId, assetName: childFolderAssetName, searchText: marker });
+    await navigateToMedia(client, marker);
     await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
     centralUploadedFile = await waitForMedia(marker, (item) => (
       item.originalName === centralUploadName &&
@@ -2093,6 +2131,11 @@ const main = async () => {
 
     await deleteMedia(publicImage.id);
     mediaIds.splice(mediaIds.indexOf(publicImage.id), 1);
+    await deleteMedia(childFolderFile.id);
+    const childFolderFileIndex = mediaIds.indexOf(childFolderFile.id);
+    if (childFolderFileIndex !== -1) {
+      mediaIds.splice(childFolderFileIndex, 1);
+    }
     if (centralUploadedFile) {
       await deleteMedia(centralUploadedFile.id);
       const centralUploadIndex = mediaIds.indexOf(centralUploadedFile.id);

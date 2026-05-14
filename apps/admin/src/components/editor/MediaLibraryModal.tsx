@@ -15,7 +15,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createMediaFolder, getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
+import { createMediaFolder, getDefaultMediaSiteId, listMediaFolders, listMediaLibrary, uploadMedia, type MediaFolder, type MediaListOptions } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 
@@ -23,6 +23,7 @@ type AllowedType = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'an
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
 type UploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
 type MediaLibraryTab = 'library' | 'upload';
+const MEDIA_PICKER_PAGE_SIZE = 100;
 
 export interface MediaContext {
   siteId?: string;
@@ -46,6 +47,30 @@ interface MediaLibraryModalProps {
   viewDisabledReason?: string;
   createDisabledReason?: string;
 }
+
+const loadAllPickerMedia = async (options: MediaListOptions): Promise<MediaAsset[]> => {
+  const loaded = new Map<string, MediaAsset>();
+  let offset = options.offset || 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const result = await listMediaLibrary({
+      ...options,
+      limit: options.limit || MEDIA_PICKER_PAGE_SIZE,
+      offset,
+    });
+
+    result.media.forEach((item) => loaded.set(item.id, item));
+    hasMore = Boolean(result.pagination?.hasMore);
+    offset = (result.pagination?.offset || offset) + (result.pagination?.limit || options.limit || MEDIA_PICKER_PAGE_SIZE);
+
+    if (!result.pagination && result.media.length === 0) {
+      hasMore = false;
+    }
+  }
+
+  return Array.from(loaded.values());
+};
 
 export function MediaLibraryModal({
   isOpen,
@@ -73,6 +98,7 @@ export function MediaLibraryModal({
   const [libraryFolderFilter, setLibraryFolderFilter] = useState<'all' | 'root' | string>('all');
   const [includeNestedFolders, setIncludeNestedFolders] = useState(true);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderParentId, setNewFolderParentId] = useState<'root' | string>('root');
   const [uploadTags, setUploadTags] = useState('');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -97,6 +123,7 @@ export function MediaLibraryModal({
     setLibraryFolderFilter('all');
     setIncludeNestedFolders(true);
     setNewFolderName('');
+    setNewFolderParentId('root');
     setSearchQuery('');
   }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
@@ -197,7 +224,11 @@ export function MediaLibraryModal({
     if (libraryFolderFilter !== 'all' && libraryFolderFilter !== 'root' && !folderPathById.has(libraryFolderFilter)) {
       setLibraryFolderFilter('all');
     }
-  }, [folderPathById, libraryFolderFilter, uploadFolderId]);
+
+    if (newFolderParentId !== 'root' && !folderPathById.has(newFolderParentId)) {
+      setNewFolderParentId('root');
+    }
+  }, [folderPathById, libraryFolderFilter, newFolderParentId, uploadFolderId]);
 
   const uploadFolderLabel = useMemo(() => {
     if (uploadFolderId === 'root') return 'Root library';
@@ -242,13 +273,14 @@ export function MediaLibraryModal({
     setError(null);
 
     try {
+      const mediaOptions: MediaListOptions = {
+        siteId,
+        limit: MEDIA_PICKER_PAGE_SIZE,
+        pageId: targetScope === 'page' ? targetId : undefined,
+        postId: targetScope === 'post' ? targetId : undefined,
+      };
       const [loaded, loadedFolders] = await Promise.all([
-        listMedia({
-          siteId,
-          limit: 100,
-          pageId: targetScope === 'page' ? targetId : undefined,
-          postId: targetScope === 'post' ? targetId : undefined,
-        }),
+        loadAllPickerMedia(mediaOptions),
         listMediaFolders(siteId),
       ]);
       setMedia(loaded);
@@ -403,9 +435,13 @@ export function MediaLibraryModal({
       return;
     }
 
-    const duplicate = folderOptions.some((folder) => folder.path.toLowerCase() === name.toLowerCase() || folder.name.toLowerCase() === name.toLowerCase());
+    const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
+    const duplicate = folderOptions.some((folder) => (
+      (folder.parentId || null) === parentId &&
+      folder.name.trim().toLowerCase() === name.toLowerCase()
+    ));
     if (duplicate) {
-      setError(`A media folder named "${name}" already exists.`);
+      setError(`A sibling media folder named "${name}" already exists.`);
       return;
     }
 
@@ -413,10 +449,11 @@ export function MediaLibraryModal({
     setError(null);
 
     try {
-      const folder = await createMediaFolder(name, siteId);
+      const folder = await createMediaFolder(name, siteId, { parentId });
       setFolders((current) => [...current.filter((item) => item.id !== folder.id), folder]);
       setUploadFolderId(folder.id);
       setLibraryFolderFilter(folder.id);
+      setNewFolderParentId(folder.id);
       setNewFolderName('');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create media folder');
@@ -431,7 +468,21 @@ export function MediaLibraryModal({
         <FolderPlus className="h-3.5 w-3.5" />
         Create folder
       </div>
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]">
+        <select
+          value={newFolderParentId}
+          onChange={(event) => setNewFolderParentId(event.target.value)}
+          disabled={isUploading || isCreatingFolder || !canCreate}
+          title={canCreate ? undefined : createDisabledReason}
+          data-testid="media-library-create-folder-parent"
+          className="h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="New media folder parent"
+        >
+          <option value="root">Root library</option>
+          {folderOptions.map((folder) => (
+            <option key={folder.id} value={folder.id}>{folder.path}</option>
+          ))}
+        </select>
         <input
           type="text"
           value={newFolderName}
@@ -445,7 +496,7 @@ export function MediaLibraryModal({
           disabled={isUploading || isCreatingFolder || !canCreate}
           title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder-name"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Campaign assets"
         />
         <button
@@ -678,23 +729,35 @@ export function MediaLibraryModal({
 
                 {!isLoading && filteredMedia.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                    {filteredMedia.map((item) => (
+                    {filteredMedia.map((item) => {
+                      const isPrivateAsset = item.visibility === 'private';
+                      return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => {
+                          if (isPrivateAsset) {
+                            setError('Private media cannot be inserted directly into public editor fields. Generate a signed URL from Media details instead.');
+                            return;
+                          }
                           onSelect(item);
                           onClose();
                         }}
+                        aria-disabled={isPrivateAsset}
+                        title={isPrivateAsset ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.' : undefined}
                         data-testid="media-library-item"
                         data-media-id={item.id}
                         data-media-name={item.name}
                         data-media-type={item.type}
                         data-media-url={item.url}
+                        data-media-private-select-disabled={isPrivateAsset ? 'true' : 'false'}
                         data-media-scope={item.scope || 'global'}
                         data-media-scope-target-id={item.scopeTargetId || ''}
                         data-media-folder-id={item.folderId || ''}
-                        className="group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className={cn(
+                          'group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30',
+                          isPrivateAsset && 'cursor-not-allowed opacity-65 hover:translate-y-0 hover:border-border hover:shadow-sm'
+                        )}
                       >
                         <div className="aspect-[4/3] overflow-hidden bg-muted">
                           {renderMediaThumb(item)}
@@ -723,7 +786,8 @@ export function MediaLibraryModal({
                           <p className="truncate text-xs text-muted-foreground">{item.size}</p>
                         </div>
                       </button>
-                    ))}
+                    );
+                    })}
                   </div>
                 ) : null}
 
