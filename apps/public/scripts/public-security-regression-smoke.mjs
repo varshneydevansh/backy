@@ -216,6 +216,16 @@ for (const route of commerceCollectionAdminRoutes) {
   }
 }
 
+const commerceOrderRecordDetailRoute = read('apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
+for (const needle of [
+  'applyRepositoryOrderInventoryRestore',
+  'applyDemoOrderInventoryRestore',
+  'inventoryrestoredat',
+  'shouldRestoreOrderInventory',
+]) {
+  assertIncludes(commerceOrderRecordDetailRoute, needle, 'admin order workflow must restore reserved inventory once on cancel/refund');
+}
+
 const adminCollectionFields = read('apps/public/src/lib/adminCollectionFields.ts');
 for (const needle of [
   'COLLECTION_FIELD_TYPES',
