@@ -405,6 +405,7 @@ function OrdersRoute() {
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(routeSearch.orderId || null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
   const [itemDraft, setItemDraft] = useState<OrderLineItemDraft>({
     title: '',
@@ -542,6 +543,11 @@ function OrdersRoute() {
       return matchesSearch;
     });
   }, [filter, fulfillmentFilter, orders, paymentFilter, searchQuery, sourceFilter]);
+  const selectedVisibleOrders = useMemo(
+    () => filteredOrders.filter((order) => selectedOrderIds.includes(order.id)),
+    [filteredOrders, selectedOrderIds],
+  );
+  const allVisibleOrdersSelected = filteredOrders.length > 0 && selectedVisibleOrders.length === filteredOrders.length;
   const metrics = useMemo(() => ({
     orders: orders.length,
     revenue: orders
@@ -933,6 +939,11 @@ function OrdersRoute() {
     setFormState(orderToForm(selectedOrder));
   }, [selectedOrder]);
 
+  useEffect(() => {
+    const orderIds = new Set(orders.map((order) => order.id));
+    setSelectedOrderIds((current) => current.filter((orderId) => orderIds.has(orderId)));
+  }, [orders]);
+
   const clearOrderEditorState = (nextFormState: OrderFormState = EMPTY_ORDER_FORM) => {
     setSelectedOrderId(null);
     setFormState(nextFormState);
@@ -1221,6 +1232,97 @@ function OrdersRoute() {
       setNotice('Order workflow updated.');
     } catch (workflowError) {
       setError(workflowError instanceof Error ? workflowError.message : 'Unable to update order');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleOrderSelection = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds((current) => {
+      if (checked) {
+        return current.includes(orderId) ? current : [...current, orderId];
+      }
+
+      return current.filter((selectedId) => selectedId !== orderId);
+    });
+  };
+
+  const toggleVisibleOrderSelection = (checked: boolean) => {
+    if (!checked) {
+      const visibleOrderIds = new Set(filteredOrders.map((order) => order.id));
+      setSelectedOrderIds((current) => current.filter((orderId) => !visibleOrderIds.has(orderId)));
+      return;
+    }
+
+    setSelectedOrderIds((current) => {
+      const selected = new Set(current);
+      filteredOrders.forEach((order) => selected.add(order.id));
+      return Array.from(selected);
+    });
+  };
+
+  const bulkUpdateOrderWorkflow = async (
+    action: 'paid' | 'processing' | 'fulfilled' | 'cancelled',
+  ) => {
+    if (!ordersCollection) return;
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot update order workflow.');
+      return;
+    }
+
+    const selectedOrders = selectedVisibleOrders;
+    if (selectedOrders.length === 0) {
+      setError('Select at least one order before applying a bulk action.');
+      setNotice(null);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const actionUpdates = (order: CollectionRecord): Partial<OrderFormState> => {
+      if (action === 'paid') {
+        return { orderStatus: 'paid', paymentStatus: 'paid', paidAt: now };
+      }
+      if (action === 'processing') {
+        return { fulfillmentStatus: 'processing' };
+      }
+      if (action === 'fulfilled') {
+        return { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: now };
+      }
+
+      return buildCancelWorkflowUpdates(order);
+    };
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updatedOrders = await Promise.all(selectedOrders.map((order) => (
+        updateCollectionRecord(activeSiteId, ordersCollection.id, order.id, {
+          status: order.status,
+          values: {
+            ...order.values,
+            ...toOrderValueUpdates(actionUpdates(order)),
+          },
+        })
+      )));
+      const updatedById = new Map(updatedOrders.map((order) => [order.id, order]));
+      setOrders((current) => current.map((order) => updatedById.get(order.id) || order));
+      const updatedSelectedOrder = selectedOrderId ? updatedById.get(selectedOrderId) : null;
+      if (updatedSelectedOrder) {
+        setFormState(orderToForm(updatedSelectedOrder));
+      }
+      const actionLabel = action === 'paid'
+        ? 'marked paid'
+        : action === 'processing'
+          ? 'moved to processing'
+          : action === 'fulfilled'
+            ? 'fulfilled'
+            : 'cancelled';
+      setNotice(`${updatedOrders.length} selected order${updatedOrders.length === 1 ? '' : 's'} ${actionLabel}.`);
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Unable to update selected orders');
     } finally {
       setIsSaving(false);
     }
@@ -1999,12 +2101,69 @@ function OrdersRoute() {
                 </div>
               ) : (
                 <div className="grid gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all visible orders"
+                        checked={allVisibleOrdersSelected}
+                        onChange={(event) => toggleVisibleOrderSelection(event.target.checked)}
+                        disabled={isOrdersAccessBusy || !canEditOrders || filteredOrders.length === 0}
+                        className="size-4 rounded border-border"
+                      />
+                      {selectedVisibleOrders.length} selected
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateOrderWorkflow('paid')}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        iconStart={<CreditCard className="size-4" />}
+                      >
+                        Mark Paid
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateOrderWorkflow('processing')}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        iconStart={<Truck className="size-4" />}
+                      >
+                        Processing
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateOrderWorkflow('fulfilled')}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        iconStart={<PackageCheck className="size-4" />}
+                      >
+                        Fulfill
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void bulkUpdateOrderWorkflow('cancelled')}
+                        disabled={isOrdersAccessBusy || !canEditOrders || selectedVisibleOrders.length === 0}
+                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        iconStart={<Archive className="size-4" />}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                   {filteredOrders.map((order) => (
                     <OrderCard
                       key={order.id}
                       order={order}
                       selected={order.id === selectedOrderId}
+                      selectedForBulk={selectedOrderIds.includes(order.id)}
                       disabled={isOrdersAccessBusy || !canEditOrders}
+                      onSelectionChange={(checked) => toggleOrderSelection(order.id, checked)}
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
@@ -2572,7 +2731,9 @@ function OrderApiSnippet({ icon, label, value }: { icon: ReactNode; label: strin
 function OrderCard({
   order,
   selected,
+  selectedForBulk,
   disabled,
+  onSelectionChange,
   onEdit,
   onPaid,
   onFulfilled,
@@ -2584,9 +2745,11 @@ function OrderCard({
 }: {
   order: CollectionRecord;
   selected: boolean;
+  selectedForBulk: boolean;
   disabled: boolean;
   canDelete: boolean;
   deleteDisabledReason?: string;
+  onSelectionChange: (checked: boolean) => void;
   onEdit: () => void;
   onPaid: () => void;
   onFulfilled: () => void;
@@ -2616,48 +2779,58 @@ function OrderCard({
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">{String(readOrderValue(values, 'ordernumber', order.slug))}</h3>
-            <StatusBadge status={order.status} />
-          </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {String(readOrderValue(values, 'customername', 'Unknown customer'))} · {String(values.email || 'No email')}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {paymentReference ? (
-              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                Ref {paymentReference}
+        <div className="flex min-w-0 flex-1 gap-3">
+          <input
+            type="checkbox"
+            aria-label={`Select order ${String(readOrderValue(values, 'ordernumber', order.slug))}`}
+            checked={selectedForBulk}
+            onChange={(event) => onSelectionChange(event.target.checked)}
+            disabled={disabled}
+            className="mt-1 size-4 shrink-0 rounded border-border"
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold">{String(readOrderValue(values, 'ordernumber', order.slug))}</h3>
+              <StatusBadge status={order.status} />
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              {String(readOrderValue(values, 'customername', 'Unknown customer'))} · {String(values.email || 'No email')}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {paymentReference ? (
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                  Ref {paymentReference}
+                </span>
+              ) : null}
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium capitalize text-muted-foreground">
+                {orderSource}
               </span>
-            ) : null}
-            <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium capitalize text-muted-foreground">
-              {orderSource}
-            </span>
-            {checkoutSessionId ? (
-              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                Checkout {checkoutSessionId}
-              </span>
-            ) : null}
-            {customerId ? (
-              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                Customer {customerId}
-              </span>
-            ) : null}
-            {trackingNumber ? (
-              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                Track {trackingNumber}
-              </span>
-            ) : null}
-            {refundAmount > 0 ? (
-              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
-                Refund {formatMoney(refundAmount, currency)}
-              </span>
-            ) : null}
-            {lineItems.length > 0 ? (
-              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                {lineItems.length} item{lineItems.length === 1 ? '' : 's'} · {lineItemQuantity} unit{lineItemQuantity === 1 ? '' : 's'}
-              </span>
-            ) : null}
+              {checkoutSessionId ? (
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                  Checkout {checkoutSessionId}
+                </span>
+              ) : null}
+              {customerId ? (
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                  Customer {customerId}
+                </span>
+              ) : null}
+              {trackingNumber ? (
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                  Track {trackingNumber}
+                </span>
+              ) : null}
+              {refundAmount > 0 ? (
+                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  Refund {formatMoney(refundAmount, currency)}
+                </span>
+              ) : null}
+              {lineItems.length > 0 ? (
+                <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                  {lineItems.length} item{lineItems.length === 1 ? '' : 's'} · {lineItemQuantity} unit{lineItemQuantity === 1 ? '' : 's'}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="text-right">

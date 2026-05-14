@@ -757,6 +757,57 @@ const navigateToComments = async (client, expectedAuthors) => {
   return null;
 };
 
+const assertCommentsFilterRouteSearch = async (client) => {
+  const routeUrl = new URL(`${ADMIN_BASE_URL}/comments`);
+  routeUrl.searchParams.set('siteId', SITE_ID);
+  routeUrl.searchParams.set('q', 'Comments Smoke Report');
+  routeUrl.searchParams.set('status', 'pending');
+  routeUrl.searchParams.set('triage', 'reported');
+  routeUrl.searchParams.set('sort', 'oldest');
+  await client.send('Page.navigate', { url: routeUrl.toString() });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const search = document.querySelector('input[aria-label="Search comments"]');
+      const triage = document.querySelector('select[aria-label="Comment triage filter"]');
+      const sort = document.querySelector('select[aria-label="Comment sort order"]');
+      const pendingButton = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').trim().toLowerCase() === 'pending'
+      ));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+        searchValue: search instanceof HTMLInputElement ? search.value : null,
+        triageValue: triage instanceof HTMLSelectElement ? triage.value : null,
+        sortValue: sort instanceof HTMLSelectElement ? sort.value : null,
+        pendingPressed: pendingButton instanceof HTMLButtonElement ? pendingButton.getAttribute('aria-pressed') : null,
+        reportVisible: document.body?.innerText?.includes('Comments Smoke Report') || false,
+        url: window.location.href,
+      };
+    })()`);
+
+    if (
+      state.ready &&
+      state.searchValue === 'Comments Smoke Report' &&
+      state.triageValue === 'reported' &&
+      state.sortValue === 'oldest' &&
+      state.pendingPressed === 'true' &&
+      state.reportVisible &&
+      state.url.includes('status=pending') &&
+      state.url.includes('triage=reported')
+    ) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Comments route search filters did not hydrate: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const moderateCommentInUi = async (client, authorName, action, reason = '') => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1401,6 +1452,16 @@ const main = async () => {
     });
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: getAuthStorageScript() });
 
+    await navigateToComments(client, [
+      'Comments Smoke Approve',
+      'Comments Smoke Reject',
+      'Comments Smoke Report',
+      'Comments Smoke Block',
+      'Comments Smoke Thread Parent',
+      'Comments Smoke Thread Reply',
+      'Comments Smoke Move Parent',
+    ]);
+    await assertCommentsFilterRouteSearch(client);
     await navigateToComments(client, [
       'Comments Smoke Approve',
       'Comments Smoke Reject',

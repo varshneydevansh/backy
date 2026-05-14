@@ -520,6 +520,85 @@ const assertUnsavedWorkflowGuard = async (client, originalTitle) => {
   return null;
 };
 
+const assertPublishWorkflowVersionGuard = async (client, post) => {
+  assert(post?.updatedAt, `Smoke post did not expose updatedAt before publish workflow: ${JSON.stringify(post).slice(0, 500)}`);
+
+  const captureInstalled = await evaluate(client, `(() => {
+    window.__backyBlogEditorPublishBodies = [];
+    if (!window.__backyOriginalFetchForBlogEditorPublish) {
+      window.__backyOriginalFetchForBlogEditorPublish = window.fetch.bind(window);
+      window.fetch = async (input, init = {}) => {
+        const url = String(input instanceof Request ? input.url : input || '');
+        const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        if (method === 'POST' && url.includes(${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog/${post.id}/publish`)})) {
+          let body = init?.body || '';
+          if (typeof body !== 'string') {
+            body = String(body || '');
+          }
+          let parsed = null;
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            parsed = body;
+          }
+          window.__backyBlogEditorPublishBodies.push({ url, method, body: parsed });
+        }
+        return window.__backyOriginalFetchForBlogEditorPublish(input, init);
+      };
+    }
+    return true;
+  })()`);
+  assert(captureInstalled, 'Unable to install blog editor publish capture');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('#blog-editor-publish button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Publish'
+      ));
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        found: Boolean(button),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        title: button instanceof HTMLButtonElement ? button.getAttribute('title') || '' : '',
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+    if (clicked.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Blog editor publish button was not ready: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(200);
+  }
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const published = await requestApi(`/api/admin/sites/${SITE_ID}/blog?limit=100`).then((payload) => {
+      const posts = payload.data?.posts || payload.posts || [];
+      return posts.find((candidate) => candidate.id === post.id);
+    });
+    const captured = await evaluate(client, `window.__backyBlogEditorPublishBodies || []`);
+    const publishPost = captured.find((entry) => entry?.body && Object.prototype.hasOwnProperty.call(entry.body, 'expectedUpdatedAt'));
+
+    if (published?.status === 'published' && publishPost) {
+      assert(
+        publishPost.body.expectedUpdatedAt === post.updatedAt,
+        `Blog editor publish workflow did not send expectedUpdatedAt guard: ${JSON.stringify(publishPost).slice(0, 500)}`,
+      );
+      return {
+        status: published.status,
+        expectedUpdatedAt: publishPost.body.expectedUpdatedAt,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error('Blog editor publish workflow did not persist a guarded publish request');
+};
+
 const captureScreenshot = async (client, screenshotPath) => {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
@@ -577,6 +656,7 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     const editorState = await waitForEditor(client, post.id);
+    const publishWorkflowState = await assertPublishWorkflowVersionGuard(client, post);
     const unsavedGuardState = await assertUnsavedWorkflowGuard(client, post.title);
     const focusState = await assertFocusMode(client);
     const screenshotPath = await captureScreenshot(client, SCREENSHOT_PATH);
@@ -595,6 +675,7 @@ const main = async () => {
       postId: post.id,
       slug,
       editorState,
+      publishWorkflowState,
       unsavedGuardState,
       focusState,
       screenshotPath,

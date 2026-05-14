@@ -843,8 +843,8 @@ function EditBlogPostPage() {
             }
 
             const nextPost = action === 'publish'
-                ? await publishBlogPost(activeSiteId, postId)
-                : await archiveBlogPost(activeSiteId, postId);
+                ? await publishBlogPost(activeSiteId, postId, { expectedUpdatedAt: post.updatedAt })
+                : await archiveBlogPost(activeSiteId, postId, { expectedUpdatedAt: post.updatedAt });
             syncPostState(nextPost);
             setWorkflowNotice(action === 'publish' ? 'Post published.' : 'Post archived.');
             void loadPostReadiness();

@@ -40,11 +40,18 @@ const AUTH_WORKSPACE_ITEMS = [
   },
 ];
 
+type LoginSearch = {
+  email?: string;
+};
+
 // ============================================
 // ROUTE DEFINITION
 // ============================================
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    email: typeof search.email === 'string' ? search.email : undefined,
+  }),
   component: LoginPage,
 });
 
@@ -59,6 +66,7 @@ export const Route = createFileRoute('/login')({
  */
 function LoginPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch() as LoginSearch;
   const { signIn, isLoading, error, clearError, user } = useAuthStore();
 
   useEffect(() => {
@@ -68,7 +76,7 @@ function LoginPage() {
   }, [user, navigate]);
 
   // Form state
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});

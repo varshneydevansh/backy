@@ -510,6 +510,8 @@ const assertOrdersLayout = async (client) => {
     checkout: document.body?.innerText?.includes('/commerce/orders') || false,
     privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+    hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
+      Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
     adminApiOpensWithButton: (() => {
       const controls = Array.from(document.querySelectorAll('#orders-api button, #orders-api a'));
       const control = controls.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Open admin API');
@@ -517,7 +519,7 @@ const assertOrdersLayout = async (client) => {
     })(),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -746,6 +748,22 @@ const clickOrderCardButton = async (client, orderNumber, buttonText) => {
   return result;
 };
 
+const selectOrderForBulk = async (client, orderNumber) => {
+  const result = await evaluate(client, `(() => {
+    const checkbox = document.querySelector('[aria-label="' + CSS.escape(${JSON.stringify(`Select order ${orderNumber}`)}) + '"]');
+    if (!(checkbox instanceof HTMLInputElement) || checkbox.type !== 'checkbox' || checkbox.disabled) {
+      return { ok: false, reason: 'checkbox-not-ready', disabled: checkbox instanceof HTMLInputElement ? checkbox.disabled : null };
+    }
+    if (!checkbox.checked) {
+      checkbox.click();
+    }
+    return { ok: true, checked: checkbox.checked };
+  })()`);
+  assert(result.ok && result.checked, `Unable to select order for bulk action: ${JSON.stringify(result)}`);
+  await sleep(200);
+  return result;
+};
+
 const editOrderAfterWorkflow = async (client, orderNumber) => {
   await clickOrderCardButton(client, orderNumber, 'Edit');
   await setLabeledControl(client, 'Refund amount', '5', { exact: true });
@@ -935,6 +953,15 @@ const main = async () => {
     orderRecordId = createdOrder.id;
 
     await exerciseFilters(client, orderNumber);
+
+    await selectOrderForBulk(client, orderNumber);
+    await clickByText(client, 'Processing', { exact: true, rootSelector: '#orders-queue' });
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => values.fulfillmentstatus === 'processing',
+      'Bulk processing action did not persist fulfillment workflow fields',
+    );
 
     await clickOrderCardButton(client, orderNumber, 'Mark Paid');
     await waitForOrderValue(

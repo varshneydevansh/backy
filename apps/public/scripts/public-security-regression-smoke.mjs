@@ -182,6 +182,12 @@ for (const route of commerceCollectionAdminRoutes) {
   assertIncludes(source, "from '@/lib/adminAccess'", route.file);
   assertIncludes(source, 'requireAdminAccess(', route.file);
   assertIncludes(source, '@/lib/adminCommerceCollectionAccess', route.file);
+  if (
+    route.file === 'apps/public/src/app/api/admin/sites/[siteId]/collections/route.ts' ||
+    route.file === 'apps/public/src/app/api/admin/sites/[siteId]/collections/[collectionId]/route.ts'
+  ) {
+    assertIncludes(source, 'parseAdminCollectionFields(', route.file);
+  }
   for (const handler of route.handlers) {
     const handlerSource = functionSource(source, handler.name, route.file);
     assertIncludes(handlerSource, handler.collectionPermission, `${route.file} ${handler.name}`);
@@ -196,6 +202,18 @@ for (const route of commerceCollectionAdminRoutes) {
       );
     }
   }
+}
+
+const adminCollectionFields = read('apps/public/src/lib/adminCollectionFields.ts');
+for (const needle of [
+  'COLLECTION_FIELD_TYPES',
+  'isCollectionFieldType',
+  'Collection fields must be an array.',
+  'has an unsupported type.',
+  'is duplicated.',
+  'default value must be JSON-compatible.',
+]) {
+  assertIncludes(adminCollectionFields, needle, 'admin collection field validator');
 }
 
 const commerceReconcileRoute = read('apps/public/src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts');

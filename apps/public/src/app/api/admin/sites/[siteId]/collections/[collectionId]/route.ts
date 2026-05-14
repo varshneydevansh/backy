@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionField, BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
+import type { BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
 import {
   deleteAdminCollection,
   getCollectionByIdOrSlug,
@@ -30,6 +30,7 @@ import {
   normalizeCollectionRoutePattern,
 } from '@/lib/collectionRoutes';
 import { findCollectionRouteConflict } from '@/lib/routeConflicts';
+import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';
 
 export const runtime = 'nodejs';
 
@@ -72,30 +73,6 @@ const normalizeSlug = (value: unknown): string => (
   typeof value === 'string'
     ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     : ''
-);
-
-const normalizeFieldId = (field: Record<string, unknown>, index: number): string => {
-  const existingId = typeof field.id === 'string' ? field.id.trim() : '';
-  if (existingId) {
-    return existingId;
-  }
-
-  const source = field.key || field.label || index + 1;
-  return `field_${normalizeSlug(String(source)).replace(/-/g, '_') || index + 1}`;
-};
-
-const toCollectionFields = (value: unknown): BackyCollectionField[] | undefined => (
-  Array.isArray(value)
-    ? value.map((field, index) => {
-        const input = field && typeof field === 'object' && !Array.isArray(field)
-          ? field as Record<string, unknown>
-          : {};
-        return {
-          ...input,
-          id: normalizeFieldId(input, index),
-        } as BackyCollectionField;
-      })
-    : undefined
 );
 
 const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
@@ -258,7 +235,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      const fields = body.fields === undefined ? undefined : toCollectionFields(body.fields);
+      const parsedFields = parseAdminCollectionFields(body.fields, { allowUndefined: true });
+      if (!parsedFields.ok) {
+        return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+      }
       const routePattern = parseRoutePattern(body.routePattern, nextSlug || collection.slug);
       if (body.routePattern !== undefined && routePattern === null) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
@@ -290,7 +270,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
         ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
         ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
-        ...(fields === undefined ? {} : { fields }),
+        ...(parsedFields.fields === undefined ? {} : { fields: parsedFields.fields }),
         ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
         ...(body.metadata === undefined ? {} : { metadata: toCollectionMetadata(body.metadata) || {} }),
         ...(nextSlug ? { slug: nextSlug } : {}),
@@ -362,6 +342,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.listRoutePattern !== undefined && listRoutePattern === null) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
     }
+    const parsedFields = parseAdminCollectionFields(body.fields, { allowUndefined: true });
+    if (!parsedFields.ok) {
+      return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+    }
 
     const routeConflict = findCollectionRouteConflict({
       id: collection.id,
@@ -377,6 +361,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const updated = updateAdminCollection(site.id, collection.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
+      ...(parsedFields.fields === undefined ? {} : { fields: parsedFields.fields }),
       ...(routePattern === undefined ? {} : { routePattern }),
       ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
     });

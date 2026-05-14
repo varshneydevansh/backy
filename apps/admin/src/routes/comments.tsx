@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   CheckCircle2,
   CircleSlash,
@@ -51,12 +51,8 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
-
-export const Route = createFileRoute('/comments')({
-  component: CommentsRoute,
-});
 
 type CommentStatusFilter = CommentModerationStatus | 'all';
 type CommentTriageFilter =
@@ -71,6 +67,56 @@ type CommentTriageFilter =
   | 'unreviewed';
 type CommentSortFilter = 'newest' | 'oldest';
 type CommentPermissionKey = 'comments.view' | 'comments.manage' | 'comments.configure' | 'activity.export';
+
+interface CommentsSearch {
+  siteId?: string;
+  status?: CommentStatusFilter;
+  targetType?: CommentModerationTarget;
+  triage?: CommentTriageFilter;
+  thread?: string;
+  sort?: CommentSortFilter;
+  q?: string;
+}
+
+const COMMENT_STATUS_FILTERS: CommentStatusFilter[] = ['all', 'pending', 'approved', 'rejected', 'spam', 'blocked'];
+const COMMENT_TARGET_TYPE_FILTERS: CommentModerationTarget[] = ['all', 'page', 'post'];
+const COMMENT_TRIAGE_FILTERS: CommentTriageFilter[] = ['all', 'reported', 'replies', 'top-level', 'anonymous', 'authenticated', 'missing-email', 'reviewed', 'unreviewed'];
+const COMMENT_SORT_FILTERS: CommentSortFilter[] = ['newest', 'oldest'];
+
+const isCommentStatusFilter = (value: unknown): value is CommentStatusFilter => (
+  typeof value === 'string' && COMMENT_STATUS_FILTERS.includes(value as CommentStatusFilter)
+);
+
+const isCommentTargetTypeFilter = (value: unknown): value is CommentModerationTarget => (
+  typeof value === 'string' && COMMENT_TARGET_TYPE_FILTERS.includes(value as CommentModerationTarget)
+);
+
+const isCommentTriageFilter = (value: unknown): value is CommentTriageFilter => (
+  typeof value === 'string' && COMMENT_TRIAGE_FILTERS.includes(value as CommentTriageFilter)
+);
+
+const isCommentSortFilter = (value: unknown): value is CommentSortFilter => (
+  typeof value === 'string' && COMMENT_SORT_FILTERS.includes(value as CommentSortFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const Route = createFileRoute('/comments')({
+  validateSearch: (search: Record<string, unknown>): CommentsSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    status: isCommentStatusFilter(search.status) ? search.status : undefined,
+    targetType: isCommentTargetTypeFilter(search.targetType) ? search.targetType : undefined,
+    triage: isCommentTriageFilter(search.triage) ? search.triage : undefined,
+    thread: normalizedSearchString(search.thread),
+    sort: isCommentSortFilter(search.sort) ? search.sort : undefined,
+    q: normalizedSearchString(search.q),
+  }),
+  component: CommentsRoute,
+});
 
 const COMMENT_PERMISSION_ROLE_DEFAULTS: Record<CommentPermissionKey, Array<AuthUser['role']>> = {
   'comments.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -250,8 +296,8 @@ function CommentsRoute() {
   const { sites } = useStore();
   const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
-  const routerState = useRouterState();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const routeSearch = Route.useSearch();
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [commentAnalytics, setCommentAnalytics] = useState<CommentAnalytics | null>(null);
   const [commentDeliveryEvents, setCommentDeliveryEvents] = useState<CommentDeliveryEvent[]>([]);
@@ -264,12 +310,12 @@ function CommentsRoute() {
   const [blocklistSearch, setBlocklistSearch] = useState('');
   const [targets, setTargets] = useState<CommentTargetSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>('all');
-  const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>('all');
-  const [triageFilter, setTriageFilter] = useState<CommentTriageFilter>('all');
-  const [threadFilter, setThreadFilter] = useState('all');
-  const [sortFilter, setSortFilter] = useState<CommentSortFilter>('newest');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>(routeSearch.status || 'all');
+  const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>(routeSearch.targetType || 'all');
+  const [triageFilter, setTriageFilter] = useState<CommentTriageFilter>(routeSearch.triage || 'all');
+  const [threadFilter, setThreadFilter] = useState(routeSearch.thread || 'all');
+  const [sortFilter, setSortFilter] = useState<CommentSortFilter>(routeSearch.sort || 'newest');
+  const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [moderationReason, setModerationReason] = useState('');
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState<CommentReplyDraft>(DEFAULT_REPLY_DRAFT);
@@ -804,6 +850,35 @@ function CommentsRoute() {
   const rejectReason = moderationReasonText || 'Rejected from moderation queue.';
   const spamReason = moderationReasonText || 'Marked as spam.';
   const blockReason = moderationReasonText || 'Blocked from moderation queue.';
+  const commentsRouteSearch = useMemo<CommentsSearch>(() => ({
+    siteId: activeSiteId,
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(targetTypeFilter !== 'all' ? { targetType: targetTypeFilter } : {}),
+    ...(triageFilter !== 'all' ? { triage: triageFilter } : {}),
+    ...(threadFilter !== 'all' ? { thread: threadFilter } : {}),
+    ...(sortFilter !== 'newest' ? { sort: sortFilter } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+  }), [activeSiteId, searchQuery, sortFilter, statusFilter, targetTypeFilter, threadFilter, triageFilter]);
+
+  const updateCommentsRouteSearch = (next: CommentsSearch) => {
+    if (isCommentsBusy) return;
+
+    const merged: CommentsSearch = {
+      ...commentsRouteSearch,
+      ...next,
+    };
+    const normalized: CommentsSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
+      ...(merged.targetType && merged.targetType !== 'all' ? { targetType: merged.targetType } : {}),
+      ...(merged.triage && merged.triage !== 'all' ? { triage: merged.triage } : {}),
+      ...(merged.thread?.trim() && merged.thread !== 'all' ? { thread: merged.thread.trim() } : {}),
+      ...(merged.sort && merged.sort !== 'newest' ? { sort: merged.sort } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+    };
+
+    navigate({ to: '/comments', search: normalized, replace: true });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1018,21 +1093,37 @@ function CommentsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
-
-    setSelectedSiteId(nextSiteId);
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+    }
+    setSearchQuery(routeSearch.q || '');
+    setStatusFilter(routeSearch.status || 'all');
+    setTargetTypeFilter(routeSearch.targetType || 'all');
+    setTriageFilter(routeSearch.triage || 'all');
+    setThreadFilter(routeSearch.thread || 'all');
+    setSortFilter(routeSearch.sort || 'newest');
     setSelectedIds([]);
     setModerationReason('');
     setReplyingToId(null);
     setReplyDraft(DEFAULT_REPLY_DRAFT);
     setMovingCommentId(null);
     setMoveParentDraft('');
-    clearCommentFilters();
-  }, [routerState.location.search, selectedSiteId, sites]);
+  }, [
+    routeSearch.q,
+    routeSearch.siteId,
+    routeSearch.sort,
+    routeSearch.status,
+    routeSearch.targetType,
+    routeSearch.thread,
+    routeSearch.triage,
+    selectedSiteId,
+    sites,
+  ]);
 
   useEffect(() => {
     if (!isPermissionMatrixPending) {
@@ -1392,6 +1483,14 @@ function CommentsRoute() {
     setTriageFilter('all');
     setThreadFilter('all');
     setSortFilter('newest');
+    updateCommentsRouteSearch({
+      q: undefined,
+      status: 'all',
+      targetType: 'all',
+      triage: 'all',
+      thread: 'all',
+      sort: 'newest',
+    });
   };
   const selectCommentsSite = (nextSiteId: string) => {
     if (isCommentsBusy) return;
@@ -1403,7 +1502,6 @@ function CommentsRoute() {
     setReplyDraft(DEFAULT_REPLY_DRAFT);
     setMovingCommentId(null);
     setMoveParentDraft('');
-    clearCommentFilters();
     navigate({ to: '/comments', search: { siteId: nextSiteId }, replace: true });
   };
   const openCommentWorkflowSurface = (surface: typeof COMMENT_WORKFLOW_SURFACES[number]) => {
@@ -2118,7 +2216,12 @@ function CommentsRoute() {
                 aria-label="Comment thread filter"
                 value={threadFilter}
                 disabled={isCommentsBusy}
-                onChange={(event) => setThreadFilter(event.target.value)}
+                onChange={(event) => {
+                  if (isCommentsBusy) return;
+                  const thread = event.target.value;
+                  setThreadFilter(thread);
+                  updateCommentsRouteSearch({ thread });
+                }}
                 data-testid="comments-thread-filter"
                 className="min-h-10 max-w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -2130,7 +2233,16 @@ function CommentsRoute() {
                 ))}
               </select>
               {threadFilter !== 'all' ? (
-                <Button size="sm" variant="outline" disabled={isCommentsBusy} onClick={() => setThreadFilter('all')}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isCommentsBusy}
+                  onClick={() => {
+                    if (isCommentsBusy) return;
+                    setThreadFilter('all');
+                    updateCommentsRouteSearch({ thread: 'all' });
+                  }}
+                >
                   Clear thread
                 </Button>
               ) : null}
@@ -2411,7 +2523,9 @@ function CommentsRoute() {
                 disabled={isCommentsBusy}
                 onChange={(event) => {
                   if (isCommentsBusy) return;
-                  setSearchQuery(event.target.value);
+                  const q = event.target.value;
+                  setSearchQuery(q);
+                  updateCommentsRouteSearch({ q: q || undefined });
                 }}
                 placeholder="Search author, content, request, or target..."
                 className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -2423,7 +2537,9 @@ function CommentsRoute() {
               disabled={isCommentsBusy}
               onChange={(event) => {
                 if (isCommentsBusy) return;
-                setTargetTypeFilter(event.target.value as CommentModerationTarget);
+                const targetType = event.target.value as CommentModerationTarget;
+                setTargetTypeFilter(targetType);
+                updateCommentsRouteSearch({ targetType });
               }}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -2437,7 +2553,9 @@ function CommentsRoute() {
               disabled={isCommentsBusy}
               onChange={(event) => {
                 if (isCommentsBusy) return;
-                setTriageFilter(event.target.value as CommentTriageFilter);
+                const triage = event.target.value as CommentTriageFilter;
+                setTriageFilter(triage);
+                updateCommentsRouteSearch({ triage });
               }}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -2457,7 +2575,9 @@ function CommentsRoute() {
               disabled={isCommentsBusy}
               onChange={(event) => {
                 if (isCommentsBusy) return;
-                setThreadFilter(event.target.value);
+                const thread = event.target.value;
+                setThreadFilter(thread);
+                updateCommentsRouteSearch({ thread });
               }}
               className="min-h-10 max-w-72 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -2474,7 +2594,9 @@ function CommentsRoute() {
               disabled={isCommentsBusy}
               onChange={(event) => {
                 if (isCommentsBusy) return;
-                setSortFilter(event.target.value as CommentSortFilter);
+                const sort = event.target.value as CommentSortFilter;
+                setSortFilter(sort);
+                updateCommentsRouteSearch({ sort });
               }}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -2490,6 +2612,7 @@ function CommentsRoute() {
                   onClick={() => {
                     if (isCommentsBusy) return;
                     setStatusFilter(status);
+                    updateCommentsRouteSearch({ status });
                   }}
                   disabled={isCommentsBusy}
                   aria-pressed={statusFilter === status}

@@ -114,6 +114,17 @@ const navigate = async (client, url, readyExpression, description) => {
   return null;
 };
 
+const waitForState = async (client, readyExpression, description) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, readyExpression);
+    if (state.ready) return state;
+    if (attempt === 119) throw new Error(`${description} did not become ready: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const setInputValue = async (client, selector, value) => {
   const result = await evaluate(client, `(() => {
     const input = document.querySelector(${JSON.stringify(selector)});
@@ -144,16 +155,18 @@ const clickButton = async (client, label) => {
 };
 
 const waitForText = async (client, text) => {
+  let lastState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       hasText: document.body?.innerText?.includes(${JSON.stringify(text)}) || false,
       body: document.body?.innerText?.slice(0, 900) || '',
     }))()`);
+    lastState = state;
     if (state.hasText) return state;
     await sleep(250);
   }
 
-  throw new Error(`Timed out waiting for text ${text}`);
+  throw new Error(`Timed out waiting for text ${text}: ${JSON.stringify(lastState)}`);
 };
 
 const waitForDashboard = async (client) => {
@@ -243,7 +256,45 @@ const main = async () => {
     await waitForText(client, 'Invalid email or password.');
 
     await clickButton(client, 'Forgot password?');
-    await waitForText(client, 'filled from the admin auth API');
+    await waitForState(
+      client,
+      `(() => {
+        const input = document.querySelector('#recovery-email');
+        return {
+          ready: window.location.pathname === '/forgot-password' &&
+            window.location.search.includes('email=admin%40backy.io') &&
+            document.body?.innerText?.includes('Forgot Password') &&
+            document.body?.innerText?.includes('Request Recovery') &&
+            input instanceof HTMLInputElement &&
+            input.value === 'admin@backy.io',
+          path: window.location.pathname,
+          search: window.location.search,
+          email: input instanceof HTMLInputElement ? input.value : '',
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      'Forgot password page',
+    );
+    await clickButton(client, 'Back to login');
+    await waitForState(
+      client,
+      `(() => {
+        const input = document.querySelector('#email');
+        return {
+          ready: window.location.pathname === '/login' &&
+            window.location.search.includes('email=admin%40backy.io') &&
+            document.body?.innerText?.includes('Authenticated admin access') &&
+            input instanceof HTMLInputElement &&
+            input.value === 'admin@backy.io',
+          path: window.location.pathname,
+          search: window.location.search,
+          email: input instanceof HTMLInputElement ? input.value : '',
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      'Login page after password recovery return',
+    );
+    await setInputValue(client, '#password', 'admin123');
     await clickButton(client, 'Sign in');
     await waitForDashboard(client);
 

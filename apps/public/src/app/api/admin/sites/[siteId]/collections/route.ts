@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionField, BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
+import type { BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollection,
   getCollectionByIdOrSlug,
@@ -27,6 +27,7 @@ import {
 } from '@/lib/collectionRoutes';
 import { seedCollectionInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { findCollectionRouteConflict } from '@/lib/routeConflicts';
+import { parseAdminCollectionFields } from '@/lib/adminCollectionFields';
 
 export const runtime = 'nodejs';
 
@@ -68,30 +69,6 @@ const normalizeSlug = (value: unknown): string => (
   typeof value === 'string'
     ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     : ''
-);
-
-const normalizeFieldId = (field: Record<string, unknown>, index: number): string => {
-  const existingId = typeof field.id === 'string' ? field.id.trim() : '';
-  if (existingId) {
-    return existingId;
-  }
-
-  const source = field.key || field.label || index + 1;
-  return `field_${normalizeSlug(String(source)).replace(/-/g, '_') || index + 1}`;
-};
-
-const toCollectionFields = (value: unknown): BackyCollectionField[] => (
-  Array.isArray(value)
-    ? value.map((field, index) => {
-        const input = field && typeof field === 'object' && !Array.isArray(field)
-          ? field as Record<string, unknown>
-          : {};
-        return {
-          ...input,
-          id: normalizeFieldId(input, index),
-        } as BackyCollectionField;
-      })
-    : []
 );
 
 const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
@@ -253,6 +230,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (body.listRoutePattern !== undefined && listRoutePattern === null) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
       }
+      const parsedFields = parseAdminCollectionFields(body.fields);
+      if (!parsedFields.ok) {
+        return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+      }
 
       const pages = await repositories.pages.list({
         siteId: site.id,
@@ -279,7 +260,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         listRoutePattern,
         description: typeof body.description === 'string' ? body.description : null,
         status: parseStatus(body.status) || 'draft',
-        fields: toCollectionFields(body.fields),
+        fields: parsedFields.fields || [],
         permissions: toCollectionPermissions(body.permissions),
         metadata: toCollectionMetadata(body.metadata),
       })).item;
@@ -348,6 +329,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (body.listRoutePattern !== undefined && listRoutePattern === null) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
     }
+    const parsedFields = parseAdminCollectionFields(body.fields);
+    if (!parsedFields.ok) {
+      return errorResponse(400, 'VALIDATION_ERROR', parsedFields.message, requestId);
+    }
 
     const routeConflict = findCollectionRouteConflict({
       slug,
@@ -363,6 +348,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ...body,
       name,
       slug,
+      fields: parsedFields.fields || [],
       ...(routePattern === undefined ? {} : { routePattern }),
       ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
     });
