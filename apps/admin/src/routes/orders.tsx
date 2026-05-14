@@ -73,7 +73,7 @@ const ORDER_CONTROL_AREAS = [
   },
   {
     title: 'Order queue',
-    detail: 'Search, filter, mark paid, fulfill, cancel, edit, and delete records.',
+    detail: 'Search, filter, mark paid, fulfill, record manual cancellations, edit, and delete records.',
     href: '#orders-queue',
   },
   {
@@ -629,7 +629,7 @@ function OrdersRoute() {
         { label: 'Capture', detail: 'Create the private order record from checkout, manual entry, or a server-side integration.' },
         { label: 'Verify', detail: 'Track customer, line items, payment status, provider reference, and paid timestamp.' },
         { label: 'Fulfill', detail: 'Move orders through processing, carrier, tracking, fulfilled date, or digital delivery notes.' },
-        { label: 'Resolve', detail: 'Handle cancellations, refunds, internal notes, and private reporting without exposing order data publicly.' },
+        { label: 'Resolve', detail: 'Record manual cancellations, refund notes, internal notes, and private reporting without exposing order data publicly.' },
       ],
     };
   }, [
@@ -1229,7 +1229,12 @@ function OrdersRoute() {
       if (selectedOrderId === updated.id) {
         setFormState(orderToForm(updated));
       }
-      setNotice('Order workflow updated.');
+      const workflowNotice = updates.orderStatus === 'refunded'
+        ? 'Manual refund/return state recorded in Backy. Complete the provider refund separately if payment was captured outside Backy.'
+        : updates.orderStatus === 'cancelled'
+          ? 'Manual cancellation state recorded in Backy. Complete provider cancellation/refund steps separately if needed.'
+          : 'Order workflow updated.';
+      setNotice(workflowNotice);
     } catch (workflowError) {
       setError(workflowError instanceof Error ? workflowError.message : 'Unable to update order');
     } finally {
@@ -1318,7 +1323,7 @@ function OrdersRoute() {
           ? 'moved to processing'
           : action === 'fulfilled'
             ? 'fulfilled'
-            : 'cancelled';
+            : 'marked cancelled in Backy';
       setNotice(`${updatedOrders.length} selected order${updatedOrders.length === 1 ? '' : 's'} ${actionLabel}.`);
     } catch (bulkError) {
       setError(bulkError instanceof Error ? bulkError.message : 'Unable to update selected orders');
@@ -2151,7 +2156,7 @@ function OrdersRoute() {
                         title={!canEditOrders ? editPermissionTitle : undefined}
                         iconStart={<Archive className="size-4" />}
                       >
-                        Cancel
+                        Record cancel
                       </Button>
                     </div>
                   </div>
@@ -2878,8 +2883,8 @@ function OrderCard({
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
-        <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Refund/Return</Button>
-        <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Cancel</Button>
+        <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
+        <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
     </article>
@@ -3094,7 +3099,7 @@ const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
   const refundAmount = currentRefundAmount > 0 ? currentRefundAmount : total;
   const currentReason = String(readOrderValue(order.values, 'refundreason', '') || '').trim();
   const currentNotes = String(readOrderValue(order.values, 'notes', '') || '').trim();
-  const workflowNote = `Refund/return workflow processed ${new Date().toISOString()} for ${formatMoney(refundAmount, currency)}.`;
+  const workflowNote = `Manual refund/return state recorded in Backy ${new Date().toISOString()} for ${formatMoney(refundAmount, currency)}. Provider refund, if required, must be completed in the payment provider.`;
 
   return {
     orderStatus: 'refunded',
@@ -3104,7 +3109,7 @@ const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     trackingNumber: '',
     trackingUrl: '',
     refundAmount: String(refundAmount),
-    refundReason: currentReason || 'Customer return/refund processed from order workflow.',
+    refundReason: currentReason || 'Customer return/refund manually recorded from Backy order workflow.',
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
   };
 };
@@ -3119,8 +3124,8 @@ const buildCancelWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
   const shouldRefundPayment = currentPaymentStatus === 'paid' || currentPaymentStatus === 'refunded';
   const nextPaymentStatus: PaymentStatus = shouldRefundPayment ? 'refunded' : 'failed';
   const workflowNote = shouldRefundPayment
-    ? `Cancellation workflow processed ${new Date().toISOString()} and marked payment refunded for ${formatMoney(currentRefundAmount > 0 ? currentRefundAmount : total, currency)}.`
-    : `Cancellation workflow processed ${new Date().toISOString()} and marked payment failed before fulfillment.`;
+    ? `Manual cancellation state recorded in Backy ${new Date().toISOString()} and payment state marked refunded for ${formatMoney(currentRefundAmount > 0 ? currentRefundAmount : total, currency)}. Provider cancellation/refund, if required, must be completed in the payment provider.`
+    : `Manual cancellation state recorded in Backy ${new Date().toISOString()} and payment state marked failed before fulfillment. Provider cancellation, if required, must be completed outside Backy.`;
 
   return {
     orderStatus: 'cancelled',
@@ -3132,7 +3137,7 @@ const buildCancelWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     trackingUrl: '',
     fulfilledAt: '',
     refundAmount: shouldRefundPayment ? String(currentRefundAmount > 0 ? currentRefundAmount : total) : '',
-    refundReason: shouldRefundPayment ? currentReason || 'Order cancelled from admin workflow.' : '',
+    refundReason: shouldRefundPayment ? currentReason || 'Order cancellation manually recorded from Backy order workflow.' : '',
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
   };
 };
