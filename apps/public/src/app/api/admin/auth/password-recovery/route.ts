@@ -11,6 +11,7 @@ import {
   getEmailDeliveryConfig,
   sendEmailMessage,
 } from '@/lib/formEmailDelivery';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -129,7 +130,12 @@ export async function POST(request: NextRequest) {
   let localRecovery: { resetUrl: string; expiresAt: string } | undefined;
 
   try {
-    const user = getAdminUserByEmail(email);
+    const repositories = !shouldUseDemoStoreFallback()
+      ? await getRequiredDatabaseRepositories()
+      : null;
+    const user = repositories
+      ? await repositories.users.getByEmail(email)
+      : getAdminUserByEmail(email);
     if (user && user.status !== 'inactive' && user.status !== 'suspended') {
       const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(user.status, 'active');
       if (inviteOnlyPolicy.ok) {

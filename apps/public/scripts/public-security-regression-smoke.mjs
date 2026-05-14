@@ -292,7 +292,8 @@ assertIncludes(adminPasswordPolicy, 'MAX_PASSWORD_LENGTH = 128', 'admin password
 const resetPasswordRoute = read('apps/public/src/app/api/admin/auth/reset-password/route.ts');
 assertIncludes(resetPasswordRoute, '@/lib/admin-auth/passwordPolicy', 'reset password route must import password policy');
 assertIncludes(resetPasswordRoute, 'validateAdminPasswordPolicy(password)', 'reset password route must enforce persisted password policy');
-assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, password)', 'reset password route must await invite-only reset policy checks');
+assertIncludes(resetPasswordRoute, 'getRequiredDatabaseRepositories', 'reset password route must support database-backed users');
+assertIncludes(resetPasswordRoute, 'await resetAdminPasswordToken(token, password, repositories', 'reset password route must await repository-aware invite-only reset policy checks');
 assertIncludes(resetPasswordRoute, "'INVITE_ONLY_REQUIRED'", 'reset password route must return stable invite-only policy code');
 assertExcludes(resetPasswordRoute, 'password.length < 8', 'reset password route');
 
@@ -302,6 +303,7 @@ for (const needle of [
   'getEmailDeliveryConfig',
   'sendEmailMessage',
   'validateAdminInviteOnlyActivationPolicy',
+  'getRequiredDatabaseRepositories',
   'BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN',
 ]) {
   assertIncludes(passwordRecoveryRoute, needle, 'password recovery route must create and deliver reset tokens without account enumeration');
@@ -344,6 +346,12 @@ const adminSessionStore = read('apps/public/src/lib/admin-auth/sessionStore.ts')
 assertIncludes(adminSessionStore, '@/lib/admin-auth/emailPolicy', 'admin session store must import invite-only policy');
 assertIncludes(adminSessionStore, 'await validateAdminInviteOnlyActivationPolicy(currentUser.status,', 'admin password reset accept must enforce invite-only policy before activation');
 assertIncludes(adminSessionStore, "reason: 'invite-only'", 'admin password reset accept must expose invite-only failure');
+assertIncludes(adminSessionStore, 'persistence.getUserById', 'admin session store must support repository-backed invite/reset user lookup');
+assertIncludes(adminSessionStore, 'persistence.updateUser', 'admin session store must support repository-backed invite/reset user updates');
+
+const acceptInviteRoute = read('apps/public/src/app/api/admin/auth/accept-invite/route.ts');
+assertIncludes(acceptInviteRoute, 'getRequiredDatabaseRepositories', 'accept invite route must support database-backed users');
+assertIncludes(acceptInviteRoute, 'await acceptAdminInviteToken(token, repositories', 'accept invite route must pass repository callbacks into invite acceptance');
 
 const contactEmailPolicy = read('apps/public/src/lib/contactEmailPolicy.ts');
 assertIncludes(contactEmailPolicy, 'CONTACT_EMAIL_PATTERN', 'contact email policy must define a validation pattern');

@@ -85,10 +85,24 @@ type LocalCredential = {
   salt: string;
   userEmail: string;
   label: string;
+  user?: AdminAuthUser;
 };
 
 type StoredSession = AdminSession & {
   lastSeenAt: string;
+};
+
+type AdminAuthUserLike = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: AdminAuthUser['role'];
+  status: AdminAuthUser['status'];
+};
+
+type AdminAuthUserPersistence = {
+  getUserById?: (userId: string) => Promise<AdminAuthUserLike | null | undefined>;
+  updateUser?: (userId: string, input: Partial<Pick<AdminAuthUser, 'status'>>) => Promise<AdminAuthUserLike | null | undefined>;
 };
 
 const globalAdminSessionStore = globalThis as typeof globalThis & {
@@ -163,7 +177,7 @@ const verifyPassword = (password: string, credential: LocalCredential) => {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 };
 
-const toAuthUser = (user: ReturnType<typeof getAdminUserById>): AdminAuthUser | null => {
+const toAuthUser = (user: AdminAuthUserLike | null | undefined): AdminAuthUser | null => {
   if (!user) return null;
 
   return {
@@ -262,7 +276,7 @@ export function authenticateAdminCredentials(email: string, password: string): A
   const normalizedEmail = normalizeEmail(email);
   const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
   if (localCredential && verifyPassword(password, localCredential)) {
-    const user = toAuthUser(getAdminUserByEmail(localCredential.userEmail));
+    const user = toAuthUser(getAdminUserByEmail(localCredential.userEmail)) || localCredential.user || null;
     if (!user || user.status !== 'active') {
       return null;
     }
@@ -284,17 +298,21 @@ export function authenticateAdminCredentials(email: string, password: string): A
 }
 
 export function setLocalAdminPassword(input: {
-  user: Pick<AdminAuthUser, 'email' | 'fullName'>;
+  user: Pick<AdminAuthUser, 'email' | 'fullName'> & Partial<AdminAuthUser>;
   password: string;
 }) {
   const email = normalizeEmail(input.user.email);
   const salt = randomUUID().replace(/-/g, '');
+  const user = toAuthUser(input.user.id && input.user.role && input.user.status
+    ? input.user as AdminAuthUserLike
+    : null);
 
   LOCAL_CREDENTIALS.set(email, {
     passwordHash: hashPassword(input.password, salt),
     salt,
     userEmail: email,
     label: input.user.fullName || email,
+    ...(user ? { user } : {}),
   });
 }
 
@@ -305,7 +323,7 @@ export function getAdminSession(token: string | null | undefined): AdminSession 
   const session = ADMIN_SESSIONS.get(token.trim());
   if (!session) return null;
 
-  const user = toAuthUser(getAdminUserById(session.user.id));
+  const user = toAuthUser(getAdminUserById(session.user.id)) || session.user;
   if (!user || user.status !== 'active') {
     ADMIN_SESSIONS.delete(session.token);
     return null;
@@ -343,7 +361,7 @@ export function listAdminSessions(options: {
 
   return Array.from(ADMIN_SESSIONS.values())
     .filter((session) => {
-      const user = toAuthUser(getAdminUserById(session.user.id));
+      const user = toAuthUser(getAdminUserById(session.user.id)) || session.user;
       if (!user || user.status !== 'active') {
         ADMIN_SESSIONS.delete(session.token);
         return false;
@@ -425,6 +443,7 @@ export function createAdminPasswordResetToken(input: {
 export async function resetAdminPasswordToken(
   token: string | null | undefined,
   password: string,
+  persistence: AdminAuthUserPersistence = {},
 ): Promise<AdminPasswordResetResult> {
   pruneExpiredSessions();
 
@@ -439,7 +458,10 @@ export async function resetAdminPasswordToken(
     return { reset: false, reason: 'expired', resetToken };
   }
 
-  const currentUser = getAdminUserById(resetToken.userId);
+  const currentUser = toAuthUser(
+    (persistence.getUserById ? await persistence.getUserById(resetToken.userId) : null)
+    || getAdminUserById(resetToken.userId),
+  );
   if (!currentUser) {
     PASSWORD_RESET_TOKENS.delete(normalizedToken);
     return { reset: false, reason: 'user-not-found', resetToken };
@@ -459,9 +481,13 @@ export async function resetAdminPasswordToken(
   }
 
   const previousStatus = currentUser.status;
-  const updated = updateAdminUser(currentUser.id, {
-    status: currentUser.status === 'invited' ? 'active' : currentUser.status,
-  });
+  const updated = persistence.updateUser
+    ? await persistence.updateUser(currentUser.id, {
+      status: currentUser.status === 'invited' ? 'active' : currentUser.status,
+    })
+    : updateAdminUser(currentUser.id, {
+      status: currentUser.status === 'invited' ? 'active' : currentUser.status,
+    });
   const user = toAuthUser(updated);
   if (!user) {
     return { reset: false, reason: 'user-not-found', resetToken };
@@ -509,7 +535,10 @@ export function createAdminInviteToken(input: {
   return inviteToken;
 }
 
-export function acceptAdminInviteToken(token: string | null | undefined): AdminInviteAcceptResult {
+export async function acceptAdminInviteToken(
+  token: string | null | undefined,
+  persistence: AdminAuthUserPersistence = {},
+): Promise<AdminInviteAcceptResult> {
   pruneExpiredSessions();
 
   const normalizedToken = token?.trim() || '';
@@ -523,7 +552,10 @@ export function acceptAdminInviteToken(token: string | null | undefined): AdminI
     return { accepted: false, reason: 'expired', invite };
   }
 
-  const currentUser = getAdminUserById(invite.userId);
+  const currentUser = toAuthUser(
+    (persistence.getUserById ? await persistence.getUserById(invite.userId) : null)
+    || getAdminUserById(invite.userId),
+  );
   if (!currentUser) {
     INVITE_TOKENS.delete(normalizedToken);
     return { accepted: false, reason: 'user-not-found', invite };
@@ -538,7 +570,9 @@ export function acceptAdminInviteToken(token: string | null | undefined): AdminI
   }
 
   const previousStatus = currentUser.status;
-  const updated = updateAdminUser(currentUser.id, { status: 'active' });
+  const updated = persistence.updateUser
+    ? await persistence.updateUser(currentUser.id, { status: 'active' })
+    : updateAdminUser(currentUser.id, { status: 'active' });
   const user = toAuthUser(updated);
   if (!user) {
     return { accepted: false, reason: 'user-not-found', invite };

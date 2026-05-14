@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -88,7 +89,15 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
-  const result = await resetAdminPasswordToken(token, password);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const result = await resetAdminPasswordToken(token, password, repositories
+    ? {
+      getUserById: (userId) => repositories.users.getById(userId),
+      updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
+    }
+    : undefined);
   if (!result.reset) {
     const status = result.reason === 'expired'
       ? 410
@@ -112,6 +121,7 @@ export async function POST(request: NextRequest) {
   }
 
   await recordAdminAudit({
+    repositories,
     actorId: result.user.id,
     entity: 'user',
     entityId: result.user.id,

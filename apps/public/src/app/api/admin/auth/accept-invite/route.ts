@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acceptAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -40,7 +41,15 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Invite token is required.', requestId);
   }
 
-  const result = acceptAdminInviteToken(token);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const result = await acceptAdminInviteToken(token, repositories
+    ? {
+      getUserById: (userId) => repositories.users.getById(userId),
+      updateUser: async (userId, input) => (await repositories.users.update(userId, input)).item,
+    }
+    : undefined);
   if (!result.accepted) {
     const status = result.reason === 'expired'
       ? 410
@@ -59,6 +68,7 @@ export async function POST(request: NextRequest) {
   }
 
   await recordAdminAudit({
+    repositories,
     actorId: result.user.id,
     entity: 'user',
     entityId: result.user.id,
