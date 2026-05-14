@@ -993,7 +993,7 @@ const main = async () => {
       'Fulfill did not persist fulfillment workflow fields',
     );
 
-    await clickOrderCardButton(client, orderNumber, 'Refund/Return');
+    await clickOrderCardButton(client, orderNumber, 'Record Refund/Return');
     await waitForOrderValue(
       collectionId,
       slug,
@@ -1002,8 +1002,9 @@ const main = async () => {
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
         Number(values.refundamount) === 85 &&
-        values.refundreason === 'Customer return/refund processed from order workflow.' &&
-        /Refund\/return workflow processed/.test(String(values.notes || ''))
+        values.refundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
+        /Manual refund\/return state recorded in Backy/.test(String(values.notes || '')) &&
+        /Provider refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
       ),
       'Refund/Return did not persist refund workflow fields',
     );
@@ -1031,7 +1032,7 @@ const main = async () => {
     await clickByText(client, 'Refresh', { exact: true });
     await waitUntilIdle(client, '/orders cancellation refresh');
     await assertOrderVisible(client, orderNumber, 'Smoke order disappeared before cancellation test');
-    await clickOrderCardButton(client, orderNumber, 'Cancel');
+    await clickOrderCardButton(client, orderNumber, 'Record Cancel');
     await waitForOrderValue(
       collectionId,
       slug,
@@ -1040,8 +1041,9 @@ const main = async () => {
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
         Number(values.refundamount) === 85 &&
-        values.refundreason === 'Order cancelled from admin workflow.' &&
-        /Cancellation workflow processed/.test(String(values.notes || ''))
+        values.refundreason === 'Order cancellation manually recorded from Backy order workflow.' &&
+        /Manual cancellation state recorded in Backy/.test(String(values.notes || '')) &&
+        /Provider cancellation\/refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
       ),
       'Cancel did not persist coherent payment and fulfillment workflow fields',
     );
@@ -1063,7 +1065,7 @@ const main = async () => {
     await clickByText(client, 'Refresh', { exact: true });
     await waitUntilIdle(client, '/orders unpaid cancellation refresh');
     await assertOrderVisible(client, orderNumber, 'Smoke order disappeared before unpaid cancellation test');
-    await clickOrderCardButton(client, orderNumber, 'Cancel');
+    await clickOrderCardButton(client, orderNumber, 'Record Cancel');
     await waitForOrderValue(
       collectionId,
       slug,
