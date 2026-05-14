@@ -3750,14 +3750,34 @@ export function CanvasEditor({
       setEditorNotice(message);
       throw new Error(message);
     }
-    setPageSettings(newSettings);
+
+    const previousChangeSequence = changeSequenceRef.current;
+    const previousPendingChangeCount = pendingChangeCount;
+    const wasDirty = hasUnsavedChanges;
     markChanges();
 
     const saved = await handleSaveWrapper(newSettings, false);
     if (!saved) {
+      if (changeSequenceRef.current === previousChangeSequence + 1) {
+        changeSequenceRef.current = previousChangeSequence;
+        setPendingChangeCount(previousPendingChangeCount);
+        setHasUnsavedChanges(wasDirty);
+      }
       throw new Error('Unable to save page settings. Changes were not persisted.');
     }
-  }, [canEdit, canPublish, editDisabledReason, handleSaveWrapper, markChanges, pageSettings.status, publishDisabledReason]);
+
+    setPageSettings(newSettings);
+  }, [
+    canEdit,
+    canPublish,
+    editDisabledReason,
+    handleSaveWrapper,
+    hasUnsavedChanges,
+    markChanges,
+    pageSettings.status,
+    pendingChangeCount,
+    publishDisabledReason,
+  ]);
 
   const handleTogglePublish = useCallback(async () => {
     if (!canEdit) {
