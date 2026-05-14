@@ -504,22 +504,96 @@ const navigateToContacts = async (client, formId) => {
 const updateContactInUi = async (client, contactId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
+      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      const editIdentity = card.querySelector('[data-testid="contacts-edit-identity-button"]');
+      if (!(editIdentity instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'edit-identity-missing', buttons: Array.from(card.querySelectorAll('button')).map((button) => button.textContent || '') };
+      }
+      const name = card.querySelector('[data-testid="contacts-identity-name-input"]');
+      const email = card.querySelector('[data-testid="contacts-identity-email-input"]');
+      const phone = card.querySelector('[data-testid="contacts-identity-phone-input"]');
+      if (!(name instanceof HTMLInputElement) || !(email instanceof HTMLInputElement) || !(phone instanceof HTMLInputElement)) {
+        if ((editIdentity.textContent || '').includes('Edit identity')) {
+          editIdentity.click();
+        }
+        return { ok: false, reason: 'identity-controls-pending', body: card.textContent?.slice(0, 800) || '' };
+      }
+
+      setInputValue(name, 'Contacts Smoke Edited');
+      setInputValue(email, 'contacts-smoke@example.com');
+      setInputValue(phone, '+1 555 0177');
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to save contact identity in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
+      const saveIdentity = card?.querySelector('[data-testid="contacts-save-identity-button"]');
+      if (!(saveIdentity instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'save-identity-missing', body: card?.textContent?.slice(0, 800) || '' };
+      }
+      if (saveIdentity.disabled) {
+        return { ok: false, reason: 'save-identity-disabled' };
+      }
+      saveIdentity.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to trigger contact identity save in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(contactId.formId);
+    const contact = contacts.find((item) => item.id === contactId.id);
+    if (contact?.name === 'Contacts Smoke Edited' && contact.phone === '+1 555 0177') {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Contact identity did not persist: ${JSON.stringify(contact)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
       const setTextAreaValue = (textarea, value) => {
         const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
         descriptor?.set?.call(textarea, value);
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const card = Array.from(document.querySelectorAll('article')).find((candidate) => (
-        (candidate.textContent || '').includes('contacts-smoke@example.com')
-      ));
+      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
       if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
       const notes = card.querySelector('textarea');
       const save = Array.from(card.querySelectorAll('button')).find((button) => (
         (button.getAttribute('aria-label') || '').startsWith('Save notes for')
       ));
       const qualified = Array.from(card.querySelectorAll('button')).find((button) => (
-        (button.getAttribute('aria-label') || '').startsWith('Mark Contacts Smoke User as qualified')
+        (button.getAttribute('aria-label') || '').includes('as qualified')
       ));
 
       if (!(notes instanceof HTMLTextAreaElement) || !(save instanceof HTMLButtonElement) || !(qualified instanceof HTMLButtonElement)) {
@@ -561,11 +635,9 @@ const updateContactInUi = async (client, contactId) => {
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
-      const card = Array.from(document.querySelectorAll('article')).find((candidate) => (
-        (candidate.textContent || '').includes('contacts-smoke@example.com')
-      ));
+      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
       const qualified = card && Array.from(card.querySelectorAll('button')).find((button) => (
-        (button.getAttribute('aria-label') || '').startsWith('Mark Contacts Smoke User as qualified')
+        (button.getAttribute('aria-label') || '').includes('as qualified')
       ));
       if (qualified instanceof HTMLButtonElement && !qualified.disabled) {
         qualified.click();

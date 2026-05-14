@@ -1406,6 +1406,38 @@ function ContactsRoute() {
     }
   };
 
+  const handleIdentity = async (
+    contact: AdminContact,
+    input: { name: string | null; email: string | null; phone: string | null },
+  ) => {
+    if (isContactsBusy) return;
+    if (!canManageForms) {
+      showPermissionDenied('forms.manage', 'edit contact identity');
+      return;
+    }
+    if (!input.name && !input.email && !input.phone) {
+      setError('Contact requires a name, email, or phone.');
+      setNotice(null);
+      throw new Error('Contact requires a name, email, or phone.');
+    }
+
+    setUpdatingId(contact.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateContact(activeSiteId, contact.formId, contact.id, input);
+      updateContactInState(updated);
+      setNotice(`Identity saved for ${updated.name || updated.email || 'contact'}.`);
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : 'Unable to save contact identity';
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handlePromoteContactToUser = async (contact: AdminContact) => {
     if (isContactsBusy) return;
     if (!canManageForms) {
@@ -2861,6 +2893,7 @@ function ContactsRoute() {
                   selected={selectedContactSet.has(contact.id)}
                   disabled={contactMutationDisabled}
                   onSelect={(selected) => toggleContactSelection(contact.id, selected)}
+                  onIdentity={(input) => handleIdentity(contact, input)}
                   onStatus={(status) => void handleStatus(contact, status)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
                   onPromoteUser={() => void handlePromoteContactToUser(contact)}
@@ -3017,6 +3050,7 @@ function ContactCard({
   selected,
   disabled,
   onSelect,
+  onIdentity,
   onStatus,
   onNotes,
   onPromoteUser,
@@ -3031,6 +3065,7 @@ function ContactCard({
   selected: boolean;
   disabled: boolean;
   onSelect: (selected: boolean) => void;
+  onIdentity: (input: { name: string | null; email: string | null; phone: string | null }) => Promise<void>;
   onStatus: (status: ContactStatus) => void;
   onNotes: (notes: string) => void;
   onPromoteUser: () => void;
@@ -3040,12 +3075,31 @@ function ContactCard({
   promoteCustomerDisabled: boolean;
   promoteCustomerTitle?: string;
 }) {
+  const [isEditingIdentity, setIsEditingIdentity] = useState(false);
+  const [identityDraft, setIdentityDraft] = useState({
+    name: contact.name || '',
+    email: contact.email || '',
+    phone: contact.phone || '',
+  });
   const [notesDraft, setNotesDraft] = useState(contact.notes || '');
+
+  useEffect(() => {
+    setIdentityDraft({
+      name: contact.name || '',
+      email: contact.email || '',
+      phone: contact.phone || '',
+    });
+  }, [contact.name, contact.email, contact.phone]);
 
   useEffect(() => {
     setNotesDraft(contact.notes || '');
   }, [contact.notes]);
 
+  const identityChanged = (
+    identityDraft.name.trim() !== (contact.name || '').trim() ||
+    identityDraft.email.trim() !== (contact.email || '').trim() ||
+    identityDraft.phone.trim() !== (contact.phone || '').trim()
+  );
   const notesChanged = notesDraft.trim() !== (contact.notes || '').trim();
   const promotion = getContactPromotion(contact);
   const customerPromotion = getContactCustomerPromotion(contact);
@@ -3055,7 +3109,11 @@ function ContactCard({
   const canPromoteToCustomer = Boolean(contact.email && contact.status === 'qualified' && !customerPromotion?.recordId);
 
   return (
-    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
+    <article
+      className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}
+      data-contact-id={contact.id}
+      data-testid="contacts-contact-card"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <input
@@ -3081,20 +3139,119 @@ function ContactCard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 text-sm">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-medium text-muted-foreground">Identity</div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setIsEditingIdentity((current) => !current)}
+          disabled={disabled}
+          iconStart={<Contact className="size-4" />}
+          data-testid="contacts-edit-identity-button"
+        >
+          {isEditingIdentity ? 'Close identity' : 'Edit identity'}
+        </Button>
+      </div>
+
+      <div className="mt-2 grid gap-2 text-sm">
         {contact.email ? (
           <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-primary hover:underline">
             <Mail className="size-4" />
             {contact.email}
           </a>
-        ) : null}
+        ) : (
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Mail className="size-4" />
+            No email
+          </span>
+        )}
         {contact.phone ? (
           <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-primary hover:underline">
             <Phone className="size-4" />
             {contact.phone}
           </a>
-        ) : null}
+        ) : (
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Phone className="size-4" />
+            No phone
+          </span>
+        )}
       </div>
+
+      {isEditingIdentity ? (
+        <div className="mt-4 rounded-md border border-border bg-muted/40 p-3" data-testid="contacts-identity-editor">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+              Name
+              <input
+                value={identityDraft.name}
+                disabled={disabled}
+                onChange={(event) => setIdentityDraft((current) => ({ ...current, name: event.target.value }))}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder="Lead name"
+                data-testid="contacts-identity-name-input"
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+              Email
+              <input
+                value={identityDraft.email}
+                disabled={disabled}
+                onChange={(event) => setIdentityDraft((current) => ({ ...current, email: event.target.value }))}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder="lead@example.com"
+                type="email"
+                data-testid="contacts-identity-email-input"
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+              Phone
+              <input
+                value={identityDraft.phone}
+                disabled={disabled}
+                onChange={(event) => setIdentityDraft((current) => ({ ...current, phone: event.target.value }))}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder="+1 555 0100"
+                data-testid="contacts-identity-phone-input"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => {
+                setIdentityDraft({
+                  name: contact.name || '',
+                  email: contact.email || '',
+                  phone: contact.phone || '',
+                });
+                setIsEditingIdentity(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={disabled || !identityChanged}
+              onClick={() => {
+                void onIdentity({
+                  name: identityDraft.name.trim() || null,
+                  email: identityDraft.email.trim() || null,
+                  phone: identityDraft.phone.trim() || null,
+                })
+                  .then(() => setIsEditingIdentity(false))
+                  .catch(() => undefined);
+              }}
+              iconStart={<Save className="size-4" />}
+              data-testid="contacts-save-identity-button"
+            >
+              Save identity
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
         <label className="text-xs font-medium text-muted-foreground" htmlFor={`contact-notes-${contact.id}`}>
