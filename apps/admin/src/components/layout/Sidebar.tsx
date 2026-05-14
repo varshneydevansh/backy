@@ -32,6 +32,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuthStore, type User } from '@/stores/authStore';
 
 // ============================================
 // TYPES
@@ -55,6 +56,8 @@ interface NavItem {
   icon: React.ElementType;
   /** Badge text (optional) */
   badge?: string;
+  /** Roles that can open this route by default */
+  roles?: User['role'][];
 }
 
 interface NavSection {
@@ -105,9 +108,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Platform',
     items: [
-      { label: 'Teams', to: '/teams', icon: Building2 },
-      { label: 'Users', to: '/users', icon: Users },
-      { label: 'Settings', to: '/settings', icon: Settings },
+      { label: 'Teams', to: '/teams', icon: Building2, roles: ['owner', 'admin'] },
+      { label: 'Users', to: '/users', icon: Users, roles: ['owner', 'admin'] },
+      { label: 'Settings', to: '/settings', icon: Settings, roles: ['owner', 'admin'] },
     ],
   },
 ];
@@ -142,12 +145,19 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
  */
 export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const location = useLocation();
+  const currentUserRole = useAuthStore((state) => state.user?.role || null);
   const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
   const activeSiteId = new URLSearchParams(currentSearch).get('siteId')?.trim();
   const activeSiteSearch = activeSiteId ? { siteId: activeSiteId } : undefined;
   const getNavSearch = (to: string) => (
     activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
   );
+  const visibleSections = NAV_SECTIONS
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.roles || (currentUserRole && item.roles.includes(currentUserRole))),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <aside
@@ -176,7 +186,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="Primary">
         <div className="space-y-5">
-          {NAV_SECTIONS.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.label} className="space-y-1">
               {!collapsed && (
                 <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
