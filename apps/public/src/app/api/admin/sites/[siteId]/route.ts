@@ -7,11 +7,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Site, SiteSettings, SiteWebhookEventKind, ThemeConfig } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, type Site, type SiteSettings, type SiteWebhookEventKind, type ThemeConfig } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   deleteAdminSite,
+  getAdminSettings,
   getSiteByIdOrSlug,
   updateAdminSite,
 } from '@/lib/backyStore';
@@ -101,9 +102,85 @@ const sanitizeString = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const normalizeCustomDomain = (value: unknown): string => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.$/, '');
+};
+
 const numberValue = (value: unknown, fallback: number): number => (
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback
 );
+
+const readCustomDomainBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
+  const siteRoot = isRecord(siteSettings) ? siteSettings : {};
+  const workspaceRoot = isRecord(workspaceSettings) ? workspaceSettings : {};
+  const integrations = isRecord(workspaceRoot.integrations) ? workspaceRoot.integrations : {};
+  const commerce = isRecord(integrations.commerce) ? integrations.commerce : {};
+  const billingQuota = isRecord(siteRoot.billingQuota) ? siteRoot.billingQuota : {};
+  const limits = isRecord(billingQuota.limits) ? billingQuota.limits : {};
+  const limit = Number(limits.customDomains);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    customDomainLimit: Number.isFinite(limit) && limit >= 0
+      ? Math.round(limit)
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.customDomains,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+const countConfiguredCustomDomains = (site: { customDomain?: string | null }, siteSettings: unknown): number => {
+  const settingsRoot = isRecord(siteSettings) ? siteSettings : {};
+  const domainVerification = isRecord(settingsRoot.domainVerification) ? settingsRoot.domainVerification : {};
+  const vercelDeployment = isRecord(settingsRoot.vercelDeployment) ? settingsRoot.vercelDeployment : {};
+  const domains = new Set([
+    normalizeCustomDomain(site.customDomain),
+    normalizeCustomDomain(domainVerification.domain),
+    normalizeCustomDomain(vercelDeployment.productionDomain),
+  ].filter(Boolean));
+
+  return domains.size;
+};
+
+const isCustomDomainBillingPatch = (body: Record<string, unknown>): boolean => {
+  const settings = body.settings;
+  return body.customDomain !== undefined
+    || (isRecord(settings) && (
+      isRecord(settings.domainVerification)
+      || isRecord(settings.vercelDeployment)
+    ));
+};
+
+const enforceCustomDomainBillingLimit = (
+  site: { customDomain?: string | null },
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  requestId: string,
+) => {
+  const policy = readCustomDomainBillingPolicy(siteSettings, workspaceSettings);
+  const configuredDomains = countConfiguredCustomDomains(site, siteSettings);
+
+  if (policy.overageMode === 'block' && configuredDomains > policy.customDomainLimit) {
+    return errorResponse(
+      402,
+      'BILLING_CUSTOM_DOMAIN_LIMIT',
+      `The ${policy.billingPlan} site plan allows ${policy.customDomainLimit} custom domain${policy.customDomainLimit === 1 ? '' : 's'}. Update the site billing quota before adding another custom domain.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const siteWebhookEventKinds: SiteWebhookEventKind[] = [
   'form-submission',
@@ -473,6 +550,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const domainVerificationPatch = isDomainVerificationPatch(body);
   const webhooksPatch = isWebhooksPatch(body);
   const themePublishPatch = isThemePublishPatch(body);
+  const customDomainBillingPatch = isCustomDomainBillingPatch(body);
   const access = await requireAdminAccess(request, requestId, {
     permission: commentPolicyOnlyPatch ? 'comments.configure' : 'sites.configure',
   });
@@ -496,6 +574,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const nextSettings = nextStatus
         ? { ...settings, siteStatus: nextStatus } as SiteSettings
         : settings;
+      if (customDomainBillingPatch) {
+        const workspaceSettings = await repositories.settings.get();
+        const nextSiteForBilling = {
+          ...site,
+          customDomain: body.customDomain === undefined
+            ? site.customDomain
+            : sanitizeString(body.customDomain) || null,
+        };
+        const domainLimitError = enforceCustomDomainBillingLimit(
+          nextSiteForBilling,
+          nextSettings || site.settings,
+          workspaceSettings,
+          requestId,
+        );
+        if (domainLimitError) {
+          return domainLimitError;
+        }
+      }
       const updated = await repositories.sites.update(site.id, {
         name: typeof body.name === 'string' ? body.name : undefined,
         slug: typeof body.slug === 'string' ? body.slug : undefined,
@@ -577,6 +673,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    if (customDomainBillingPatch) {
+      const nextSiteSettings = site.settings
+        ? mergeSiteSettings(site.settings, body.settings) || site.settings
+        : DEFAULT_SITE_SETTINGS;
+      const nextSiteForBilling = {
+        ...site,
+        customDomain: body.customDomain === undefined
+          ? site.customDomain
+          : sanitizeString(body.customDomain) || null,
+      };
+      const domainLimitError = enforceCustomDomainBillingLimit(
+        nextSiteForBilling,
+        nextSiteSettings,
+        getAdminSettings(),
+        requestId,
+      );
+      if (domainLimitError) {
+        return domainLimitError;
+      }
     }
 
     const updated = updateAdminSite(site.id, body);

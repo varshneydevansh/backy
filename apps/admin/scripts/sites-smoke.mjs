@@ -269,6 +269,76 @@ const assertSiteBillingLimitEnforced = async (suffix) => {
   }
 };
 
+const assertCustomDomainBillingLimitEnforced = async (suffix) => {
+  const settings = await getSettings();
+  const existingSites = await listSites();
+  const sourceSite = existingSites[0];
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+
+  assert(sourceSite?.id, `Custom-domain billing smoke needs an existing source site: ${JSON.stringify(existingSites).slice(0, 500)}`);
+
+  const site = await getSite(sourceSite.id);
+  const originalCustomDomain = site.customDomain || null;
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const blockedDomain = `blocked-domain-${suffix}.example.com`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await requestApi(`/api/admin/sites/${sourceSite.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      settings: {
+        ...originalSiteSettings,
+        billingQuota: {
+          ...originalBillingQuota,
+          limits: {
+            ...originalLimits,
+            customDomains: 0,
+          },
+        },
+      },
+    }),
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/sites/${sourceSite.id}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        customDomain: blockedDomain,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing custom-domain limit should reject domain updates, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_CUSTOM_DOMAIN_LIMIT', `Billing custom-domain limit should return BILLING_CUSTOM_DOMAIN_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const persisted = await getSite(sourceSite.id);
+    assert(persisted.customDomain !== blockedDomain, `Billing-limited custom domain unexpectedly persisted: ${JSON.stringify(persisted).slice(0, 500)}`);
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+    await requestApi(`/api/admin/sites/${sourceSite.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        customDomain: originalCustomDomain,
+        settings: originalSiteSettings,
+      }),
+    });
+  }
+};
+
 const waitForSeededPages = async (siteId, expectedSlugs) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const pages = await listSitePages(siteId);
@@ -1265,6 +1335,7 @@ const main = async () => {
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
     await assertSiteBillingLimitEnforced(suffix);
+    await assertCustomDomainBillingLimitEnforced(suffix);
     const owner = await createUser({
       fullName: `Sites Owner ${suffix}`,
       email: ownerEmail,
