@@ -724,6 +724,42 @@ export interface BackyBlogAuthor {
   [key: string]: unknown;
 }
 
+export interface BackyBlogListOptions extends BackyListOptions {
+  siteId?: string;
+  slug?: string;
+  categoryId?: string;
+  categorySlug?: string;
+  tagId?: string;
+  tagSlug?: string;
+  authorId?: string;
+  authorSlug?: string;
+  q?: string;
+  search?: string;
+  year?: string | number;
+  month?: string | number;
+  previewToken?: string;
+}
+
+export type BackyBlogResponse = BackyEnvelope<{
+  post?: BackyPostResource;
+  posts?: BackyPostResource[];
+  pagination?: BackyPagination;
+} & Record<string, unknown>>;
+
+export type BackyBlogConditionalResult = BackyConditionalResult<BackyBlogResponse>;
+
+export type BackyBlogCategoriesResponse = BackyEnvelope<{
+  categories: BackyBlogCategory[];
+} & Record<string, unknown>>;
+
+export type BackyBlogTagsResponse = BackyEnvelope<{
+  tags: BackyBlogTag[];
+} & Record<string, unknown>>;
+
+export type BackyBlogAuthorsResponse = BackyEnvelope<{
+  authors: BackyBlogAuthor[];
+} & Record<string, unknown>>;
+
 export interface BackyBlogFeedDiscovery {
   id: string;
   title?: string;
@@ -1404,15 +1440,15 @@ export class BackyClient {
     });
   }
 
-  blog(options: Record<string, string | number | boolean | undefined> = {}): Promise<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
+  blog(options: BackyBlogListOptions = {}): Promise<BackyBlogResponse> {
     const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
-    const { siteId: _siteId, ...queryOptions } = options;
+    const { requestId, siteId: _siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
     void _siteId;
-    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query });
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query, requestId });
   }
 
-  blogCached(options: Record<string, string | number | boolean | undefined> & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>>> {
+  blogCached(options: BackyBlogListOptions & BackyConditionalOptions = {}): Promise<BackyBlogConditionalResult> {
     const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
     const { requestId, etag, siteId: _siteId, ...queryOptions } = options;
     const query = normalizeListQuery(queryOptions as BackyListOptions & Record<string, BackyQueryValue>);
@@ -1443,33 +1479,33 @@ export class BackyClient {
     return Array.isArray(manifest.data.modules?.blog?.feeds) ? manifest.data.modules.blog.feeds : [];
   }
 
-  blogCategories(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ categories: BackyBlogCategory[] } & Record<string, unknown>>> {
+  blogCategories(siteId = this.requireSiteId()): Promise<BackyBlogCategoriesResponse> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/categories`);
   }
 
-  blogCategoriesCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ categories: BackyBlogCategory[] } & Record<string, unknown>>>> {
+  blogCategoriesCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogCategoriesResponse>> {
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/categories`, {
       ifNoneMatch: options.etag,
       requestId: options.requestId,
     });
   }
 
-  blogTags(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ tags: BackyBlogTag[] } & Record<string, unknown>>> {
+  blogTags(siteId = this.requireSiteId()): Promise<BackyBlogTagsResponse> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/tags`);
   }
 
-  blogTagsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ tags: BackyBlogTag[] } & Record<string, unknown>>>> {
+  blogTagsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogTagsResponse>> {
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/tags`, {
       ifNoneMatch: options.etag,
       requestId: options.requestId,
     });
   }
 
-  blogAuthors(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ authors: BackyBlogAuthor[] } & Record<string, unknown>>> {
+  blogAuthors(siteId = this.requireSiteId()): Promise<BackyBlogAuthorsResponse> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog/authors`);
   }
 
-  blogAuthorsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ authors: BackyBlogAuthor[] } & Record<string, unknown>>>> {
+  blogAuthorsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyBlogAuthorsResponse>> {
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/authors`, {
       ifNoneMatch: options.etag,
       requestId: options.requestId,

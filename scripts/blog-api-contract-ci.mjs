@@ -83,6 +83,8 @@ let server = null;
 try {
   originalNextEnv = await readFile(nextEnvUrl, 'utf8').catch(() => null);
 
+  await runStep('Blog SDK type contract', ['--workspace', '@backy/sdk-js', 'run', 'test:blog-types']);
+
   const serverState = { exited: false };
   server = spawn(npmBin, ['--workspace', '@backy/public', 'run', 'dev'], {
     cwd: root,
