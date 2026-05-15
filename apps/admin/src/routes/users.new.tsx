@@ -393,7 +393,14 @@ function NewUserPage() {
       }
       className="w-full"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6"
+        data-testid="user-invite-form"
+        data-can-submit={canSubmit ? 'true' : 'false'}
+        data-selected-role={formData.role}
+        data-selected-status={formData.status}
+      >
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-invite-command-center">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
@@ -403,6 +410,7 @@ function NewUserPage() {
                   'rounded-full px-2.5 py-1 text-xs font-semibold',
                   inviteReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
                 )}
+                data-testid="user-invite-readiness-score"
                 >
                   {inviteReadiness.score}% ready
                 </span>
@@ -436,6 +444,7 @@ function NewUserPage() {
                 disabled={isInviteBusy || !canSubmit || !canCreateUsers}
                 title={!canCreateUsers ? createPermissionTitle : undefined}
                 iconStart={<UserPlus className="size-4" />}
+                data-testid="user-invite-submit-primary"
               >
                 {submitLabel}
               </Button>
@@ -555,6 +564,7 @@ function NewUserPage() {
               <input
                 type="text"
                 value={formData.fullName}
+                data-testid="user-invite-full-name"
                 disabled={isInviteBusy || !canCreateUsers}
                 title={!canCreateUsers ? createPermissionTitle : undefined}
                 onChange={(e) => {
@@ -574,6 +584,7 @@ function NewUserPage() {
                 <input
                   type="email"
                   value={formData.email}
+                  data-testid="user-invite-email"
                   disabled={isInviteBusy || !canCreateUsers}
                   title={!canCreateUsers ? createPermissionTitle : undefined}
                   onChange={(e) => {
@@ -614,6 +625,7 @@ function NewUserPage() {
                     name="role"
                     value={role.value}
                     checked={formData.role === role.value}
+                    data-testid={`user-invite-role-${role.value}`}
                     disabled={isInviteBusy || !canCreateUsers}
                     onChange={(e) => {
                       if (isInviteBusy) return;
@@ -664,6 +676,7 @@ function NewUserPage() {
                     name="status"
                     value={status.value}
                     checked={formData.status === status.value}
+                    data-testid={`user-invite-status-${status.value}`}
                     disabled={isInviteBusy || !canCreateUsers}
                     onChange={(e) => {
                       if (isInviteBusy) return;
@@ -770,7 +783,10 @@ function NewUserPage() {
                 Copy manifest
               </Button>
             </div>
-            <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <pre
+              className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground"
+              data-testid="user-invite-payload-preview"
+            >
 {JSON.stringify(invitePayload, null, 2)}
             </pre>
           </section>
@@ -787,6 +803,7 @@ function NewUserPage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
+              data-testid="user-invite-submit-footer"
               disabled={isInviteBusy || !canSubmit}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >

@@ -431,20 +431,12 @@ const fillInviteForm = async (client, { fullName, email }) => {
         input.dispatchEvent(new Event('change', { bubbles: true }));
         input.dispatchEvent(new Event('blur', { bubbles: true }));
       };
-      const inviteSection = document.querySelector('#user-invite-identity');
-      const labels = Array.from(inviteSection?.querySelectorAll('label') || []);
-      const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-      const findInput = (labelText, type) => {
-        const label = labels.find((candidate) => normalize(candidate.querySelector('span')?.textContent || candidate.textContent) === labelText);
-        const input = label?.querySelector(\`input[type="\${type}"]\`);
-        return input instanceof HTMLInputElement ? input : null;
-      };
-      const nameInput = findInput('Full name', 'text');
-      const emailInput = findInput('Email address', 'email');
-      const adminRole = document.querySelector('input[name="role"][value="admin"]');
-      const invitedStatus = document.querySelector('input[name="status"][value="invited"]');
+      const nameInput = document.querySelector('[data-testid="user-invite-full-name"]');
+      const emailInput = document.querySelector('[data-testid="user-invite-email"]');
+      const adminRole = document.querySelector('[data-testid="user-invite-role-admin"]');
+      const invitedStatus = document.querySelector('[data-testid="user-invite-status-invited"]');
       if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
-        return { ok: false, reason: 'inputs-missing', labels: labels.map((label) => normalize(label.querySelector('span')?.textContent || label.textContent)).slice(0, 20) };
+        return { ok: false, reason: 'inputs-missing', body: document.body?.innerText?.slice(0, 900) || '' };
       }
       setInputValue(nameInput, ${JSON.stringify(fullName)});
       setInputValue(emailInput, ${JSON.stringify(email)});
@@ -454,7 +446,35 @@ const fillInviteForm = async (client, { fullName, email }) => {
       if (invitedStatus instanceof HTMLInputElement && !invitedStatus.checked) {
         invitedStatus.click();
       }
-      return { ok: nameInput.value === ${JSON.stringify(fullName)} && emailInput.value === ${JSON.stringify(email)}, name: nameInput.value, email: emailInput.value };
+      const form = document.querySelector('[data-testid="user-invite-form"]');
+      const payloadPreview = document.querySelector('[data-testid="user-invite-payload-preview"]');
+      const payload = JSON.parse(payloadPreview?.textContent || '{}');
+      const primarySubmit = document.querySelector('[data-testid="user-invite-submit-primary"]');
+      const footerSubmit = document.querySelector('[data-testid="user-invite-submit-footer"]');
+      return {
+        ok: nameInput.value === ${JSON.stringify(fullName)} &&
+          emailInput.value === ${JSON.stringify(email)} &&
+          form?.getAttribute('data-can-submit') === 'true' &&
+          form?.getAttribute('data-selected-role') === 'admin' &&
+          form?.getAttribute('data-selected-status') === 'invited' &&
+          payload.fullName === ${JSON.stringify(fullName)} &&
+          payload.email === ${JSON.stringify(email.toLowerCase())} &&
+          payload.role === 'admin' &&
+          payload.status === 'invited' &&
+          payload.createInvite === true &&
+          primarySubmit instanceof HTMLButtonElement &&
+          primarySubmit.disabled === false &&
+          footerSubmit instanceof HTMLButtonElement &&
+          footerSubmit.disabled === false,
+        name: nameInput.value,
+        email: emailInput.value,
+        canSubmit: form?.getAttribute('data-can-submit') || '',
+        selectedRole: form?.getAttribute('data-selected-role') || '',
+        selectedStatus: form?.getAttribute('data-selected-status') || '',
+        payload,
+        primaryDisabled: primarySubmit instanceof HTMLButtonElement ? primarySubmit.disabled : null,
+        footerDisabled: footerSubmit instanceof HTMLButtonElement ? footerSubmit.disabled : null,
+      };
     })()`);
     if (result.ok) return result;
     await sleep(250);
@@ -466,10 +486,8 @@ const fillInviteForm = async (client, { fullName, email }) => {
 const submitInviteFormAndAssertLink = async (client, email) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
-      const buttons = Array.from(document.querySelectorAll('button')).filter((candidate) => (
-        (candidate.textContent || '').trim() === 'Send invite'
-      ));
-      const button = buttons.find((candidate) => candidate instanceof HTMLButtonElement && !candidate.disabled) || buttons[0];
+      const button = document.querySelector('[data-testid="user-invite-submit-primary"]') ||
+        Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Send invite');
       if (!(button instanceof HTMLButtonElement)) {
         return { ok: false, reason: 'button-missing' };
       }
@@ -477,10 +495,10 @@ const submitInviteFormAndAssertLink = async (client, email) => {
         return {
           ok: false,
           reason: 'button-disabled',
-          buttonCount: buttons.length,
           values: {
-            name: document.querySelector('input[type="text"]') instanceof HTMLInputElement ? document.querySelector('input[type="text"]').value : null,
-            email: document.querySelector('input[type="email"]') instanceof HTMLInputElement ? document.querySelector('input[type="email"]').value : null,
+            name: document.querySelector('[data-testid="user-invite-full-name"]') instanceof HTMLInputElement ? document.querySelector('[data-testid="user-invite-full-name"]').value : null,
+            email: document.querySelector('[data-testid="user-invite-email"]') instanceof HTMLInputElement ? document.querySelector('[data-testid="user-invite-email"]').value : null,
+            canSubmit: document.querySelector('[data-testid="user-invite-form"]')?.getAttribute('data-can-submit') || '',
             body: document.body?.innerText?.slice(0, 700) || '',
           },
         };
