@@ -1141,6 +1141,12 @@ const openCollectionRecordMediaPicker = async (client, fieldKey, expectedAllowed
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
         typeFilters: Array.from(document.querySelectorAll('[data-testid^="media-library-type-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
         uploadFilters: Array.from(document.querySelectorAll('[data-testid^="media-upload-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
+        hasInsertControls: Boolean(document.querySelector('[data-testid="media-library-insert-controls"]')),
+        insertPreset: document.querySelector('[data-testid="media-library-insert-preset"]')?.value || '',
+        hasFocalControls: Boolean(document.querySelector('[data-testid="media-library-focal-x"]')) &&
+          Boolean(document.querySelector('[data-testid="media-library-focal-y"]')) &&
+          Boolean(document.querySelector('[data-testid="media-library-image-fit"]')),
+        hasFontControls: Boolean(document.querySelector('[data-testid="media-library-font-controls"]')),
         itemTypes,
         error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
         body: body.slice(0, 1000),
@@ -1250,6 +1256,10 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
   const imagePicker = await openCollectionRecordMediaPicker(client, 'hero_image', 'image', 'image');
   assert(
     imagePicker.itemTypes.every((type) => type === 'image') &&
+      imagePicker.hasInsertControls &&
+      imagePicker.insertPreset === 'fill-frame' &&
+      imagePicker.hasFocalControls &&
+      !imagePicker.hasFontControls &&
       imagePicker.typeFilters.includes('media-library-type-filter-image') &&
       !imagePicker.typeFilters.includes('media-library-type-filter-all') &&
       !imagePicker.typeFilters.includes('media-library-type-filter-video') &&
@@ -1270,7 +1280,9 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
   const galleryFirstPicker = await openCollectionRecordMediaPicker(client, 'gallery_files', 'any', 'file');
   assert(
     galleryFirstPicker.typeFilters.includes('media-library-type-filter-file') &&
-      galleryFirstPicker.typeFilters.includes('media-library-type-filter-image'),
+      galleryFirstPicker.typeFilters.includes('media-library-type-filter-image') &&
+      galleryFirstPicker.hasInsertControls &&
+      galleryFirstPicker.hasFontControls,
     `File media picker did not expose mixed media filters: ${JSON.stringify(galleryFirstPicker)}`,
   );
   await selectMediaLibraryItem(client, 'media-demo-hero');

@@ -10187,6 +10187,10 @@ const waitForUploadedMediaItem = async (client, filename) => {
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
         folderFilter: modal?.getAttribute('data-folder-filter') || '',
         includeNestedFolders: modal?.getAttribute('data-include-nested-folders') || '',
+        insertPreset: modal?.getAttribute('data-insert-preset') || '',
+        uploadProgressTotal: Number(modal?.getAttribute('data-upload-progress-total') || 0),
+        uploadProgressCompleted: Number(modal?.getAttribute('data-upload-progress-completed') || 0),
+        uploadProgressFailed: Number(modal?.getAttribute('data-upload-progress-failed') || 0),
         isUploading: uploadZone?.getAttribute('data-uploading') === 'true',
         error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
         hasFolderFilter: Boolean(document.querySelector('[data-testid="media-library-folder-filter"]')),
@@ -10228,11 +10232,15 @@ const clickMediaLibraryItemByName = async (client, filename) => {
       name: item.getAttribute('data-media-name') || '',
       type: item.getAttribute('data-media-type') || '',
       url: item.getAttribute('data-media-url') || '',
-      scope: item.getAttribute('data-media-scope') || '',
-      scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
-      folderId: item.getAttribute('data-media-folder-id') || '',
-    };
-  })()`);
+        scope: item.getAttribute('data-media-scope') || '',
+        scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
+        folderId: item.getAttribute('data-media-folder-id') || '',
+        insertPreset: item.getAttribute('data-insert-preset') || '',
+        imageObjectFit: item.getAttribute('data-image-object-fit') || '',
+        imageFocalX: item.getAttribute('data-image-focal-x') || '',
+        imageFocalY: item.getAttribute('data-image-focal-y') || '',
+      };
+    })()`);
 
   assert(clicked?.ok && clicked.id && clicked.url, `Unable to select uploaded media item: ${JSON.stringify(clicked)}`);
   await sleep(350);
@@ -10501,6 +10509,11 @@ const testMediaUploadModalControls = async (client, pageId) => {
         hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
         hasCreateFolder: Boolean(document.querySelector('[data-testid="media-library-create-folder"]')),
         hasCreateFolderParent: Boolean(document.querySelector('[data-testid="media-library-create-folder-parent"]')),
+        hasImageDefaults: Boolean(document.querySelector('[data-testid="media-upload-image-defaults"]')),
+        insertPreset: document.querySelector('[data-testid="media-upload-insert-preset"]')?.value || '',
+        imageFit: document.querySelector('[data-testid="media-upload-image-fit"]')?.value || '',
+        focalX: document.querySelector('[data-testid="media-upload-focal-x"]')?.value || '',
+        focalY: document.querySelector('[data-testid="media-upload-focal-y"]')?.value || '',
       };
     })()`);
 
@@ -10513,10 +10526,19 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.hasVisibility &&
         opened.hasFolder &&
         opened.hasCreateFolder &&
-        opened.hasCreateFolderParent,
+        opened.hasCreateFolderParent &&
+        opened.hasImageDefaults &&
+        opened.insertPreset === 'fill-frame' &&
+        opened.imageFit === 'cover' &&
+        opened.focalX === '50' &&
+        opened.focalY === '50',
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
     );
 
+    await setFormControlByTestId(client, 'media-upload-insert-preset', 'square');
+    await setFormControlByTestId(client, 'media-upload-image-fit', 'contain');
+    await setFormControlByTestId(client, 'media-upload-focal-x', '28');
+    await setFormControlByTestId(client, 'media-upload-focal-y', '72');
     await setFormControlByTestId(client, 'media-library-create-folder-name', imageUploadFolderName);
     await clickControlByTestId(client, 'media-library-create-folder');
     const createdImageFolder = await waitForMediaLibraryFolder(client, imageUploadFolderName);
@@ -10526,7 +10548,11 @@ const testMediaUploadModalControls = async (client, pageId) => {
       uploaded.hasFolderFilter &&
         uploaded.hasNestedFolderToggle &&
         uploaded.folderFilter === createdImageFolder.match.value &&
-        uploaded.item.folderId === createdImageFolder.match.value,
+        uploaded.item.folderId === createdImageFolder.match.value &&
+        uploaded.insertPreset === 'square' &&
+        uploaded.uploadProgressTotal === 1 &&
+        uploaded.uploadProgressCompleted === 1 &&
+        uploaded.uploadProgressFailed === 0,
       `Uploaded image did not remain organized under the created picker folder: ${JSON.stringify({ createdImageFolder, uploaded })}`,
     );
     const selected = await clickMediaLibraryItemByName(client, imageUploadFile.filename);
@@ -10534,6 +10560,13 @@ const testMediaUploadModalControls = async (client, pageId) => {
     await clickSave(client);
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
+    assert(
+      persisted.objectFit === 'contain' &&
+        persisted.objectPosition === '28% 72%' &&
+        persisted.imageFocalPoint?.x === 28 &&
+        persisted.imageFocalPoint?.y === 72,
+      `Image picker insertion controls were not persisted into image props: ${JSON.stringify(persisted)}`,
+    );
 
     await selectLayerById(client, 'smoke-video');
     await switchToPropertiesPanel(client);
@@ -10623,6 +10656,10 @@ const testMediaUploadModalControls = async (client, pageId) => {
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
         fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
         hasScopeSwitcher: Boolean(document.querySelector('[data-testid="media-library-scope-all"]')),
+        hasFontDefaults: Boolean(document.querySelector('[data-testid="media-upload-font-defaults"]')),
+        fontWeight: document.querySelector('[data-testid="media-upload-font-weight"]')?.value || '',
+        fontDisplay: document.querySelector('[data-testid="media-upload-font-display"]')?.value || '',
+        fontFallback: document.querySelector('[data-testid="media-upload-font-fallback"]')?.value || '',
       };
     })()`);
 
@@ -10632,12 +10669,25 @@ const testMediaUploadModalControls = async (client, pageId) => {
         fontOpened.allowedTypes === 'font' &&
         fontOpened.uploadFilter === 'font' &&
         fontOpened.fileAccept === '.woff,.woff2,.ttf,.otf,.eot,font/*' &&
-        !fontOpened.hasScopeSwitcher,
+        !fontOpened.hasScopeSwitcher &&
+        fontOpened.hasFontDefaults &&
+        fontOpened.fontWeight === '400' &&
+        fontOpened.fontDisplay === 'swap' &&
+        fontOpened.fontFallback.includes('system-ui'),
       `Font upload modal opened with unexpected state: ${JSON.stringify(fontOpened)}`,
     );
 
+    await setFormControlByTestId(client, 'media-upload-font-weight', '700');
+    await setFormControlByTestId(client, 'media-upload-font-display', 'optional');
+    await setFormControlByTestId(client, 'media-upload-font-fallback', 'Inter, system-ui, sans-serif');
     await setFileInputByTestId(client, 'media-upload-input', [fontUploadFile.filePath]);
     const fontUploaded = await waitForUploadedMediaItem(client, fontUploadFile.filename);
+    assert(
+      fontUploaded.uploadProgressTotal === 1 &&
+        fontUploaded.uploadProgressCompleted === 1 &&
+        fontUploaded.uploadProgressFailed === 0,
+      `Font upload progress was not recorded on the picker root: ${JSON.stringify(fontUploaded)}`,
+    );
     const fontSelected = await clickMediaLibraryItemByName(client, fontUploadFile.filename);
     const fontFamily = await waitForFontFamilyValue(client, fontUploadFile.fontFamily);
     await clickSave(client);

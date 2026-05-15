@@ -847,7 +847,7 @@ export function PropertyPanel({
       <MediaLibraryModal
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
-        onSelect={(media) => {
+        onSelect={(media, selectionOptions) => {
           const mediaPropKey = mediaField === 'video' || mediaField === 'embed' ? 'src' : mediaField;
           const nextProps = {
             ...element.props,
@@ -856,12 +856,32 @@ export function PropertyPanel({
             mediaScope: media.scope || mediaContext?.scope || 'global',
             mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
           };
+          const nextElementUpdates = {};
 
           if (mediaField === 'src' && element.type === 'image') {
             const currentAlt = typeof element.props.alt === 'string' ? element.props.alt.trim() : '';
             const currentTitle = typeof element.props.title === 'string' ? element.props.title.trim() : '';
             const mediaAlt = typeof media.altText === 'string' ? media.altText.trim() : '';
             const mediaCaption = typeof media.caption === 'string' ? media.caption.trim() : '';
+
+            if (selectionOptions?.imagePresentation) {
+              nextProps.objectFit = selectionOptions.imagePresentation.objectFit;
+              nextProps.objectPosition = selectionOptions.imagePresentation.objectPosition;
+              nextProps.imageFocalPoint = selectionOptions.imagePresentation.focalPoint;
+            }
+
+            if (selectionOptions?.insertPreset === 'fit-inside') {
+              nextProps.objectFit = 'contain';
+            } else if (selectionOptions?.insertPreset === 'square') {
+              nextElementUpdates.width = 360;
+              nextElementUpdates.height = 360;
+            } else if (selectionOptions?.insertPreset === 'hero') {
+              nextElementUpdates.width = 960;
+              nextElementUpdates.height = 420;
+            } else if (selectionOptions?.insertPreset === 'natural') {
+              nextElementUpdates.width = 420;
+              nextElementUpdates.height = 280;
+            }
 
             if (!currentAlt && mediaAlt) {
               nextProps.alt = mediaAlt;
@@ -873,6 +893,7 @@ export function PropertyPanel({
           }
 
           guardedOnChange({
+            ...nextElementUpdates,
             props: nextProps,
           });
         }}
@@ -880,6 +901,7 @@ export function PropertyPanel({
         initialUploadFilter={mediaUploadFilter}
         mediaContext={mediaContext}
         allowedTypes={mediaAllowedTypes}
+        replaceAssetId={typeof element.props.mediaId === 'string' ? element.props.mediaId : null}
         canView={canViewMedia}
         canCreate={canCreateMedia}
         viewDisabledReason={mediaViewDisabledReason}

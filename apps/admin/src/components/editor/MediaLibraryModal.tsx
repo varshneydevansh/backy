@@ -13,9 +13,11 @@ import {
   FolderOpen,
   FolderPlus,
   CheckCircle2,
+  Crop,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createMediaFolder, getDefaultMediaSiteId, listMediaFolders, listMediaLibrary, uploadMedia, type MediaFolder, type MediaListOptions } from '@/lib/mediaApi';
+import { createMediaFolder, getDefaultMediaSiteId, listMediaFolders, listMediaLibrary, replaceMedia, updateMedia, uploadMedia, type MediaFolder, type MediaListOptions } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 
@@ -23,7 +25,25 @@ type AllowedType = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'an
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
 type UploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
 type MediaLibraryTab = 'library' | 'upload';
+type MediaInsertSizePreset = 'fill-frame' | 'fit-inside' | 'natural' | 'square' | 'hero';
+type FontDisplayMode = 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
 const MEDIA_PICKER_PAGE_SIZE = 100;
+
+export interface MediaSelectionOptions {
+  insertPreset: MediaInsertSizePreset;
+  imagePresentation?: {
+    objectFit: 'cover' | 'contain' | 'fill' | 'none';
+    objectPosition: string;
+    focalPoint: { x: number; y: number };
+  };
+  fontRegistration?: {
+    family: string;
+    weight: string;
+    style: 'normal' | 'italic' | 'oblique';
+    fallback: string;
+    display: FontDisplayMode;
+  };
+}
 
 export interface MediaContext {
   siteId?: string;
@@ -35,13 +55,14 @@ export interface MediaContext {
 interface MediaLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (media: MediaAsset) => void;
+  onSelect: (media: MediaAsset, options?: MediaSelectionOptions) => void;
   allowedTypes?: AllowedType;
   mediaContext?: MediaContext;
   allowScopeSwitcher?: boolean;
   allowStatusLabels?: boolean;
   initialTab?: MediaLibraryTab;
   initialUploadFilter?: UploadFilter;
+  replaceAssetId?: string | null;
   canView?: boolean;
   canCreate?: boolean;
   viewDisabledReason?: string;
@@ -82,6 +103,7 @@ export function MediaLibraryModal({
   allowStatusLabels = true,
   initialTab = 'library',
   initialUploadFilter = 'all',
+  replaceAssetId = null,
   canView = true,
   canCreate = true,
   viewDisabledReason = 'You do not have permission to view media.',
@@ -100,11 +122,22 @@ export function MediaLibraryModal({
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderParentId, setNewFolderParentId] = useState<'root' | string>('root');
   const [uploadTags, setUploadTags] = useState('');
+  const [insertSizePreset, setInsertSizePreset] = useState<MediaInsertSizePreset>('fill-frame');
+  const [imageObjectFit, setImageObjectFit] = useState<'cover' | 'contain' | 'fill' | 'none'>('cover');
+  const [imageFocalX, setImageFocalX] = useState(50);
+  const [imageFocalY, setImageFocalY] = useState(50);
+  const [fontWeight, setFontWeight] = useState('400');
+  const [fontStyle, setFontStyle] = useState<'normal' | 'italic' | 'oblique'>('normal');
+  const [fontFallback, setFontFallback] = useState('system-ui, sans-serif');
+  const [fontDisplay, setFontDisplay] = useState<FontDisplayMode>('swap');
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; completed: number; failed: number; skipped: number; currentName: string } | null>(null);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<MediaScopeFilter>(mediaContext?.scope || 'all');
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isReplacing, setIsReplacing] = useState(false);
+  const [selectingMediaId, setSelectingMediaId] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +158,16 @@ export function MediaLibraryModal({
     setNewFolderName('');
     setNewFolderParentId('root');
     setSearchQuery('');
+    setInsertSizePreset('fill-frame');
+    setImageObjectFit('cover');
+    setImageFocalX(50);
+    setImageFocalY(50);
+    setFontWeight('400');
+    setFontStyle('normal');
+    setFontFallback('system-ui, sans-serif');
+    setFontDisplay('swap');
+    setUploadProgress(null);
+    setSelectingMediaId(null);
   }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
@@ -184,6 +227,10 @@ export function MediaLibraryModal({
   );
 
   const uploadTagList = useMemo(() => parseTagInput(uploadTags, 10), [uploadTags]);
+  const replaceAsset = useMemo(
+    () => replaceAssetId ? normalized.find((item) => item.id === replaceAssetId) || null : null,
+    [normalized, replaceAssetId]
+  );
 
   const folderOptions = useMemo(() => {
     const childrenByParent = new Map<string, MediaFolder[]>();
@@ -422,6 +469,75 @@ export function MediaLibraryModal({
     return undefined;
   };
 
+  const clampPercent = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+  const buildSelectionOptions = (item: MediaAsset): MediaSelectionOptions => {
+    const focalPoint = {
+      x: clampPercent(imageFocalX),
+      y: clampPercent(imageFocalY),
+    };
+    const fontFamily = typeof item.metadata?.fontFamily === 'string' && item.metadata.fontFamily.trim()
+      ? item.metadata.fontFamily.trim()
+      : cleanFontFamilyFromFilename(item.name);
+
+    return {
+      insertPreset: insertSizePreset,
+      imagePresentation: item.type === 'image'
+        ? {
+          objectFit: imageObjectFit,
+          objectPosition: `${focalPoint.x}% ${focalPoint.y}%`,
+          focalPoint,
+        }
+        : undefined,
+      fontRegistration: item.type === 'font'
+        ? {
+          family: fontFamily,
+          weight: fontWeight.trim() || '400',
+          style: fontStyle,
+          fallback: fontFallback.trim() || 'system-ui, sans-serif',
+          display: fontDisplay,
+        }
+        : undefined,
+    };
+  };
+
+  const handleSelectMedia = async (item: MediaAsset) => {
+    if (item.visibility === 'private') {
+      setError('Private media cannot be inserted directly into public editor fields. Generate a signed URL from Media details instead.');
+      return;
+    }
+
+    const options = buildSelectionOptions(item);
+    let selectedItem = item;
+
+    if (item.type === 'font' && options.fontRegistration) {
+      setSelectingMediaId(item.id);
+      setError(null);
+      try {
+        selectedItem = await updateMedia(item.id, {
+          metadata: {
+            ...(item.metadata || {}),
+            fontFamily: options.fontRegistration.family,
+            fontWeight: options.fontRegistration.weight,
+            fontStyle: options.fontRegistration.style,
+            fontFallback: options.fontRegistration.fallback,
+            fontDisplay: options.fontRegistration.display,
+          },
+          tags: Array.from(new Set([...(item.tags || []), 'font'])),
+        }, siteId);
+        setMedia([selectedItem, ...media.filter((current) => current.id !== selectedItem.id)]);
+      } catch (fontError) {
+        setError(fontError instanceof Error ? fontError.message : 'Unable to save font registration before inserting.');
+        setSelectingMediaId(null);
+        return;
+      }
+      setSelectingMediaId(null);
+    }
+
+    onSelect(selectedItem, options);
+    onClose();
+  };
+
   const handleCreateFolder = async () => {
     if (isCreatingFolder || isUploading) return;
     if (!canCreate) {
@@ -546,11 +662,17 @@ export function MediaLibraryModal({
 
     setIsUploading(true);
     setError(null);
+    setUploadProgress({ total: acceptedFiles.length, completed: 0, failed: 0, skipped: skippedCount, currentName: acceptedFiles[0]?.name || '' });
     const uploaded: MediaAsset[] = [];
     const failed: unknown[] = [];
 
-    for (const file of acceptedFiles) {
+    for (const [index, file] of acceptedFiles.entries()) {
       const resolvedType = getUploadType(file);
+      const focalPoint = {
+        x: clampPercent(imageFocalX),
+        y: clampPercent(imageFocalY),
+      };
+      setUploadProgress((current) => current ? { ...current, currentName: file.name } : current);
 
       try {
         const uploadedItem = await uploadMedia(file, {
@@ -560,15 +682,34 @@ export function MediaLibraryModal({
           visibility: uploadVisibility,
           folderId: uploadFolderId === 'root' ? null : uploadFolderId,
           fontFamily: resolvedType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
-          fontWeight: resolvedType === 'font' ? '400' : undefined,
-          fontStyle: resolvedType === 'font' ? 'normal' : undefined,
+          fontWeight: resolvedType === 'font' ? fontWeight.trim() || '400' : undefined,
+          fontStyle: resolvedType === 'font' ? fontStyle : undefined,
+          fontFallback: resolvedType === 'font' ? fontFallback.trim() || 'system-ui, sans-serif' : undefined,
+          fontDisplay: resolvedType === 'font' ? fontDisplay : undefined,
           tags: resolvedType === 'font'
             ? Array.from(new Set(['font', ...uploadTagList]))
             : uploadTagList.length ? uploadTagList : undefined,
+          metadata: resolvedType === 'image'
+            ? {
+              imagePresentation: {
+                objectFit: imageObjectFit,
+                focalPoint,
+                objectPosition: `${focalPoint.x}% ${focalPoint.y}%`,
+              },
+              preferredInsertPreset: insertSizePreset,
+            }
+            : undefined,
         });
         uploaded.push(uploadedItem);
       } catch (uploadError) {
         failed.push(uploadError);
+      } finally {
+        setUploadProgress((current) => current ? {
+          ...current,
+          completed: index + 1,
+          failed: failed.length,
+          currentName: acceptedFiles[index + 1]?.name || file.name,
+        } : current);
       }
     }
 
@@ -593,6 +734,42 @@ export function MediaLibraryModal({
     setIsUploading(false);
   };
 
+  const handleReplaceCurrentAsset = async (files: FileList | null) => {
+    if (isReplacing || isUploading) return;
+    if (!canCreate) {
+      setError(createDisabledReason);
+      return;
+    }
+    if (!replaceAssetId || !files || files.length === 0) return;
+
+    const file = files[0];
+    setIsReplacing(true);
+    setError(null);
+    setUploadProgress({ total: 1, completed: 0, failed: 0, skipped: Math.max(0, files.length - 1), currentName: file.name });
+
+    try {
+      const updated = await replaceMedia(replaceAssetId, file, {
+        siteId,
+        replacedBy: 'editor',
+        reason: 'Replacement from editor media picker',
+        fontFamily: getUploadType(file) === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+        fontWeight: getUploadType(file) === 'font' ? fontWeight.trim() || '400' : undefined,
+        fontStyle: getUploadType(file) === 'font' ? fontStyle : undefined,
+        fontFallback: getUploadType(file) === 'font' ? fontFallback.trim() || 'system-ui, sans-serif' : undefined,
+        fontDisplay: getUploadType(file) === 'font' ? fontDisplay : undefined,
+      });
+      setMedia([updated, ...media.filter((item) => item.id !== updated.id)]);
+      setUploadProgress({ total: 1, completed: 1, failed: 0, skipped: Math.max(0, files.length - 1), currentName: file.name });
+      onSelect(updated, buildSelectionOptions(updated));
+      onClose();
+    } catch (replaceError) {
+      setUploadProgress((current) => current ? { ...current, completed: 1, failed: 1 } : current);
+      setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace the current media asset.');
+    } finally {
+      setIsReplacing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -608,6 +785,11 @@ export function MediaLibraryModal({
       data-scope-filter={scopeFilter}
       data-folder-filter={libraryFolderFilter}
       data-include-nested-folders={includeNestedFolders ? 'true' : 'false'}
+      data-insert-preset={insertSizePreset}
+      data-replace-asset-id={replaceAssetId || ''}
+      data-upload-progress-total={uploadProgress?.total ?? 0}
+      data-upload-progress-completed={uploadProgress?.completed ?? 0}
+      data-upload-progress-failed={uploadProgress?.failed ?? 0}
     >
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
@@ -731,18 +913,13 @@ export function MediaLibraryModal({
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                     {filteredMedia.map((item) => {
                       const isPrivateAsset = item.visibility === 'private';
+                      const isSelecting = selectingMediaId === item.id;
                       return (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => {
-                          if (isPrivateAsset) {
-                            setError('Private media cannot be inserted directly into public editor fields. Generate a signed URL from Media details instead.');
-                            return;
-                          }
-                          onSelect(item);
-                          onClose();
-                        }}
+                        onClick={() => void handleSelectMedia(item)}
+                        disabled={Boolean(selectingMediaId)}
                         aria-disabled={isPrivateAsset}
                         title={isPrivateAsset ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.' : undefined}
                         data-testid="media-library-item"
@@ -754,9 +931,13 @@ export function MediaLibraryModal({
                         data-media-scope={item.scope || 'global'}
                         data-media-scope-target-id={item.scopeTargetId || ''}
                         data-media-folder-id={item.folderId || ''}
+                        data-insert-preset={insertSizePreset}
+                        data-image-object-fit={imageObjectFit}
+                        data-image-focal-x={imageFocalX}
+                        data-image-focal-y={imageFocalY}
                         className={cn(
                           'group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30',
-                          isPrivateAsset && 'cursor-not-allowed opacity-65 hover:translate-y-0 hover:border-border hover:shadow-sm'
+                          (isPrivateAsset || selectingMediaId) && 'cursor-not-allowed opacity-65 hover:translate-y-0 hover:border-border hover:shadow-sm'
                         )}
                       >
                         <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -765,7 +946,11 @@ export function MediaLibraryModal({
                         <div className="space-y-2 p-3">
                           <div className="flex items-start justify-between gap-2">
                             <span className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</span>
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-primary opacity-0 transition group-hover:opacity-100" />
+                            {isSelecting ? (
+                              <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-primary opacity-0 transition group-hover:opacity-100" />
+                            )}
                           </div>
                           {allowStatusLabels ? (
                             <div className="flex flex-wrap gap-1.5">
@@ -879,6 +1064,135 @@ export function MediaLibraryModal({
                     Assets available for this component.
                   </p>
                 </div>
+
+                <div className="mt-5 rounded-lg border border-border bg-background p-3" data-testid="media-library-insert-controls">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    <Crop className="h-3.5 w-3.5" />
+                    Insert sizing
+                  </div>
+                  <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                    Size preset
+                    <select
+                      value={insertSizePreset}
+                      onChange={(event) => setInsertSizePreset(event.target.value as MediaInsertSizePreset)}
+                      data-testid="media-library-insert-preset"
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    >
+                      <option value="fill-frame">Fill selected frame</option>
+                      <option value="fit-inside">Fit inside frame</option>
+                      <option value="natural">Natural card</option>
+                      <option value="square">Square crop</option>
+                      <option value="hero">Wide hero crop</option>
+                    </select>
+                  </label>
+                  <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                    Image fit
+                    <select
+                      value={imageObjectFit}
+                      onChange={(event) => setImageObjectFit(event.target.value as 'cover' | 'contain' | 'fill' | 'none')}
+                      data-testid="media-library-image-fit"
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    >
+                      <option value="cover">Cover crop</option>
+                      <option value="contain">Contain</option>
+                      <option value="fill">Stretch fill</option>
+                      <option value="none">Natural pixels</option>
+                    </select>
+                  </label>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Focal X
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={imageFocalX}
+                        onChange={(event) => setImageFocalX(clampPercent(Number(event.target.value)))}
+                        data-testid="media-library-focal-x"
+                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Focal Y
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={imageFocalY}
+                        onChange={(event) => setImageFocalY(clampPercent(Number(event.target.value)))}
+                        data-testid="media-library-focal-y"
+                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Image selections pass focal point and fit metadata into the editor instead of forcing a generic center crop.
+                  </p>
+                </div>
+
+                {(allowedTypes === 'any' || allowedTypes === 'font') ? (
+                  <div className="mt-5 rounded-lg border border-border bg-background p-3" data-testid="media-library-font-controls">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      <TypeIcon className="h-3.5 w-3.5" />
+                      Font registration
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Weight
+                        <input
+                          type="text"
+                          value={fontWeight}
+                          onChange={(event) => setFontWeight(event.target.value)}
+                          data-testid="media-library-font-weight"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                          placeholder="400"
+                        />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Style
+                        <select
+                          value={fontStyle}
+                          onChange={(event) => setFontStyle(event.target.value as 'normal' | 'italic' | 'oblique')}
+                          data-testid="media-library-font-style"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="italic">Italic</option>
+                          <option value="oblique">Oblique</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                      Fallback stack
+                      <input
+                        type="text"
+                        value={fontFallback}
+                        onChange={(event) => setFontFallback(event.target.value)}
+                        data-testid="media-library-font-fallback"
+                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        placeholder="system-ui, sans-serif"
+                      />
+                    </label>
+                    <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                      Display
+                      <select
+                        value={fontDisplay}
+                        onChange={(event) => setFontDisplay(event.target.value as FontDisplayMode)}
+                        data-testid="media-library-font-display"
+                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      >
+                        <option value="swap">Swap</option>
+                        <option value="auto">Auto</option>
+                        <option value="block">Block</option>
+                        <option value="fallback">Fallback</option>
+                        <option value="optional">Optional</option>
+                      </select>
+                    </label>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Font selections save these registration fields before inserting the family into text controls.
+                    </p>
+                  </div>
+                ) : null}
               </aside>
             </div>
           ) : (
@@ -967,6 +1281,24 @@ export function MediaLibraryModal({
                   <span className="pointer-events-none mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                     Choose files
                   </span>
+                  {uploadProgress ? (
+                    <div className="pointer-events-none mt-5 w-full max-w-md rounded-lg border border-border bg-background/90 p-3 text-left" data-testid="media-upload-progress">
+                      <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                        <span className="truncate">{uploadProgress.currentName || 'Preparing upload'}</span>
+                        <span>{uploadProgress.completed}/{uploadProgress.total}</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: `${Math.round((uploadProgress.completed / Math.max(1, uploadProgress.total)) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+                        <span>{uploadProgress.failed} failed</span>
+                        <span>{uploadProgress.skipped} skipped</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1011,6 +1343,33 @@ export function MediaLibraryModal({
 
                   {renderCreateFolderControl()}
 
+                  {replaceAssetId ? (
+                    <div className="rounded-lg border border-border bg-background p-3" data-testid="media-library-replace-current">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Replace current asset
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Keep the same media id{replaceAsset ? ` for ${replaceAsset.name}` : ''} and replace the stored file.
+                      </p>
+                      <label className="mt-3 flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-xs font-medium text-muted-foreground transition hover:border-primary hover:text-primary">
+                        {isReplacing ? 'Replacing...' : 'Choose replacement'}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          disabled={isReplacing || isUploading || !canCreate}
+                          title={canCreate ? undefined : createDisabledReason}
+                          accept={getAcceptValue(uploadFilter)}
+                          data-testid="media-library-replace-input"
+                          onChange={(event) => {
+                            void handleReplaceCurrentAsset(event.target.files);
+                            event.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
                       <span>Default tags</span>
@@ -1025,6 +1384,121 @@ export function MediaLibraryModal({
                       disabled={isUploading || !canCreate}
                     />
                   </div>
+
+                  <div className="rounded-lg border border-border bg-background p-3" data-testid="media-upload-image-defaults">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Crop className="h-3.5 w-3.5" />
+                      Image insertion defaults
+                    </div>
+                    <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                      Size preset
+                      <select
+                        value={insertSizePreset}
+                        onChange={(event) => setInsertSizePreset(event.target.value as MediaInsertSizePreset)}
+                        disabled={isUploading || !canCreate}
+                        data-testid="media-upload-insert-preset"
+                        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <option value="fill-frame">Fill selected frame</option>
+                        <option value="fit-inside">Fit inside frame</option>
+                        <option value="natural">Natural card</option>
+                        <option value="square">Square crop</option>
+                        <option value="hero">Wide hero crop</option>
+                      </select>
+                    </label>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Fit
+                        <select
+                          value={imageObjectFit}
+                          onChange={(event) => setImageObjectFit(event.target.value as 'cover' | 'contain' | 'fill' | 'none')}
+                          disabled={isUploading || !canCreate}
+                          data-testid="media-upload-image-fit"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <option value="cover">Cover</option>
+                          <option value="contain">Contain</option>
+                          <option value="fill">Fill</option>
+                          <option value="none">None</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        X
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={imageFocalX}
+                          onChange={(event) => setImageFocalX(clampPercent(Number(event.target.value)))}
+                          disabled={isUploading || !canCreate}
+                          data-testid="media-upload-focal-x"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Y
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={imageFocalY}
+                          onChange={(event) => setImageFocalY(clampPercent(Number(event.target.value)))}
+                          disabled={isUploading || !canCreate}
+                          data-testid="media-upload-focal-y"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {(allowedTypes === 'any' || allowedTypes === 'font') ? (
+                    <div className="rounded-lg border border-border bg-background p-3" data-testid="media-upload-font-defaults">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <TypeIcon className="h-3.5 w-3.5" />
+                        Font defaults
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Weight
+                          <input
+                            type="text"
+                            value={fontWeight}
+                            onChange={(event) => setFontWeight(event.target.value)}
+                            disabled={isUploading || !canCreate}
+                            data-testid="media-upload-font-weight"
+                            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Display
+                          <select
+                            value={fontDisplay}
+                            onChange={(event) => setFontDisplay(event.target.value as FontDisplayMode)}
+                            disabled={isUploading || !canCreate}
+                            data-testid="media-upload-font-display"
+                            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="swap">Swap</option>
+                            <option value="auto">Auto</option>
+                            <option value="block">Block</option>
+                            <option value="fallback">Fallback</option>
+                            <option value="optional">Optional</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">
+                        Fallback stack
+                        <input
+                          type="text"
+                          value={fontFallback}
+                          onChange={(event) => setFontFallback(event.target.value)}
+                          disabled={isUploading || !canCreate}
+                          data-testid="media-upload-font-fallback"
+                          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
 
                   <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
                     <div className="font-medium text-foreground">Target scope</div>
