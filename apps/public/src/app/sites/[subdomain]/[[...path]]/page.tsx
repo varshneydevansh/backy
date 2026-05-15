@@ -40,6 +40,7 @@ import {
     matchCollectionListRoute,
 } from '@/lib/collectionRoutes';
 import { resolveRedirectRoute } from '@/lib/redirectRules';
+import { resolveSiteRoute, type ResolvedSiteRoute } from '@/lib/routeResolver';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import type { Metadata } from 'next';
 
@@ -99,25 +100,23 @@ type HostedDynamicCollectionRoute =
         canonical: string;
     };
 
-function getDynamicCollectionRoute(siteId: string, pathParts: string[] | undefined): HostedDynamicCollectionRoute | null {
-    const path = pathParts && pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
-    const collections = listCollections(siteId);
-    const dynamicListMatch = matchCollectionListRoute(path, collections);
-    if (dynamicListMatch) {
-        const { collection, canonical } = dynamicListMatch;
-        const records = listCollectionRecords(siteId, collection.id, { limit: 100 }).records;
-        return { type: 'list', collection, records, canonical };
-    }
-
-    const dynamicItemMatch = matchCollectionItemRoute(path, collections);
-    if (!dynamicItemMatch) {
+function getResolvedDynamicCollectionRoute(
+    siteId: string,
+    route: Extract<ResolvedSiteRoute, { type: 'dynamicList' | 'dynamicItem' }>,
+): HostedDynamicCollectionRoute | null {
+    const collection = listCollections(siteId).find((item) => item.id === route.resource.collectionId);
+    if (!collection) {
         return null;
     }
 
-    const { collection, recordSlug, canonical } = dynamicItemMatch;
-    const record = getCollectionRecordByIdOrSlug(siteId, collection.id, recordSlug);
+    if (route.type === 'dynamicList') {
+        const records = listCollectionRecords(siteId, collection.id, { limit: 100 }).records;
+        return { type: 'list', collection, records, canonical: route.canonical };
+    }
 
-    return collection && record ? { type: 'item', collection, record, canonical } : null;
+    const record = getCollectionRecordByIdOrSlug(siteId, collection.id, route.resource.slug);
+
+    return record ? { type: 'item', collection, record, canonical: route.canonical } : null;
 }
 
 function getCollectionRecordTitle(record: { slug: string; values: Record<string, unknown> }) {
@@ -456,6 +455,22 @@ function applyHostedRedirects(site: Pick<Site, 'settings'> | StoreSite, path: st
     redirect(redirectRoute.resource.to);
 }
 
+function applyResolvedHostedRouteRedirect(route: ResolvedSiteRoute | null) {
+    if (!route || (route.type !== 'redirect' && route.type !== 'gone')) {
+        return;
+    }
+
+    if (route.type === 'gone') {
+        notFound();
+    }
+
+    if (route.resource.statusCode === 301 || route.resource.statusCode === 308) {
+        permanentRedirect(route.resource.to);
+    }
+
+    redirect(route.resource.to);
+}
+
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { subdomain, path } = await params;
     const previewToken = firstParam((await searchParams)?.previewToken);
@@ -542,10 +557,15 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     }
 
     const { site } = hostedSite;
-    applyHostedRedirects(site, routePath);
-    const page = await getPage(site.id, pageSlug, previewToken);
-    if (!page) {
-        const dynamicRoute = getDynamicCollectionRoute(site.id, path);
+    const route = resolveSiteRoute(site, routePath, { previewToken });
+    applyResolvedHostedRouteRedirect(route);
+
+    if (!route) {
+        return { title: 'Page Not Found' };
+    }
+
+    if (route.type === 'dynamicList' || route.type === 'dynamicItem') {
+        const dynamicRoute = getResolvedDynamicCollectionRoute(site.id, route);
         if (!dynamicRoute) return { title: 'Page Not Found' };
 
         if (dynamicRoute.type === 'list') {
@@ -576,13 +596,12 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             || dynamicRoute.collection.description
             || '';
         const description = typeof descriptionValue === 'string' ? descriptionValue : '';
-        const canonicalPath = dynamicRoute.canonical;
 
         return {
             title,
             description,
             alternates: {
-                canonical: canonicalPath,
+                canonical: dynamicRoute.canonical,
             },
             robots: {
                 index: dynamicRoute.record.status === 'published',
@@ -591,12 +610,21 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             openGraph: {
                 title,
                 description,
-                url: canonicalPath,
+                url: dynamicRoute.canonical,
                 siteName: site.name,
             },
         };
     }
-    const canonicalPath = getCanonicalPathForPage(page);
+
+    if (route.type !== 'page') {
+        return { title: 'Page Not Found' };
+    }
+
+    const page = await getPage(site.id, route.resource.slug, previewToken);
+    if (!page) {
+        return { title: 'Page Not Found' };
+    }
+    const canonicalPath = route.canonical;
     const pageKeywords = page.meta?.keywords || [];
 
     return {
@@ -680,9 +708,21 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const { site } = hostedSite;
-    const page = await getPage(site.id, pageSlug, previewToken);
+    const routePath = routePathFromParts(path);
+    const route = resolveSiteRoute(site, routePath, { previewToken });
+    applyResolvedHostedRouteRedirect(route);
+
+    if (!route) {
+        notFound();
+    }
+
     const fontAssets = getHostedFontAssets(site.id);
-    if (page) {
+    if (route.type === 'page') {
+        const page = await getPage(site.id, route.resource.slug, previewToken);
+        if (!page) {
+            notFound();
+        }
+
         const pageContent = {
             ...page.content,
             elements: resolveElementDataBindings(site.id, page.content.elements),
@@ -708,7 +748,11 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         );
     }
 
-    const dynamicRoute = getDynamicCollectionRoute(site.id, path);
+    if (route.type !== 'dynamicList' && route.type !== 'dynamicItem') {
+        notFound();
+    }
+
+    const dynamicRoute = getResolvedDynamicCollectionRoute(site.id, route);
     if (!dynamicRoute) {
         notFound();
     }

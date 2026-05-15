@@ -160,6 +160,22 @@ await record('published hosted post remains public', async () => {
   assert(text.includes('Backy CMS helps you ship'), `${url} missing published post content`);
 });
 
+await record('hosted dynamic collection routes reuse resolver decisions', async () => {
+  const list = await request('/sites/demo/team');
+  assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+  assertNoStoreCache(list.response, list.url, 'hosted dynamic list');
+  assert(list.response.headers.get('x-backy-cache-scope') === 'hosted-html', `${list.url} expected dynamic list cache scope`);
+  assert(list.text.includes('Team Members'), `${list.url} missing collection title`);
+  assert(list.text.includes('Ada Lovelace'), `${list.url} missing collection record`);
+
+  const item = await request('/sites/demo/team/ada-lovelace');
+  assert(item.response.status === 200, `${item.url} expected 200, got ${item.response.status}`);
+  assertNoStoreCache(item.response, item.url, 'hosted dynamic item');
+  assert(item.response.headers.get('x-backy-cache-scope') === 'hosted-html', `${item.url} expected dynamic item cache scope`);
+  assert(item.text.includes('Ada Lovelace'), `${item.url} missing dynamic item title`);
+  assert(item.text.includes('Systems Architect'), `${item.url} missing dynamic item field value`);
+});
+
 await record('hosted blog archive renders published post cards and filters', async () => {
   const { response, text, url } = await request('/sites/demo/blog');
   assert(response.status === 200, `${url} expected 200, got ${response.status}`);
