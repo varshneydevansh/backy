@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Site } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { createAdminSite, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
+import { createAdminSite, getAdminSettings, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -56,6 +56,45 @@ const normalizeSettingsInput = (value: unknown): Partial<Site['settings']> => (
     ? value as Partial<Site['settings']>
     : {}
 );
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const readBillingSitePolicy = (settings: unknown) => {
+  const root = toRecord(settings);
+  const integrations = toRecord(root.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const limit = Number(commerce.siteLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    siteLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+    billingContactEmail: typeof commerce.billingContactEmail === 'string' ? commerce.billingContactEmail : '',
+  };
+};
+
+const enforceSiteBillingLimit = (
+  settings: unknown,
+  currentSiteCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingSitePolicy(settings);
+  if (policy.overageMode === 'block' && currentSiteCount >= policy.siteLimit) {
+    return errorResponse(
+      402,
+      'BILLING_SITE_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.siteLimit} site${policy.siteLimit === 1 ? '' : 's'}. Update Settings billing limits before creating another site.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const statusForRepositorySite = (site: Site) => (
   normalizeSiteStatus((site.settings as Site['settings'] & { siteStatus?: unknown }).siteStatus)
@@ -195,6 +234,15 @@ export async function POST(request: NextRequest) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
       }
 
+      const [settings, existingSites] = await Promise.all([
+        repositories.settings.get(),
+        repositories.sites.list({ status: 'all', limit: 1, offset: 0 }),
+      ]);
+      const billingLimitError = enforceSiteBillingLimit(settings, existingSites.pagination.total, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const status = normalizeSiteStatus(body.status) || 'draft';
       const settingsInput = normalizeSettingsInput(body.settings);
       const created = await repositories.sites.create({
@@ -245,6 +293,11 @@ export async function POST(request: NextRequest) {
 
     if (getSiteByIdOrSlug(slug)) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
+    }
+
+    const billingLimitError = enforceSiteBillingLimit(getAdminSettings(), getSites({ includeUnpublished: true }).length, requestId);
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const site = createAdminSite({

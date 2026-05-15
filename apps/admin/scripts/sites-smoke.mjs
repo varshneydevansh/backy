@@ -118,9 +118,30 @@ const deleteUser = async (userId) => {
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
 };
 
+const updateUser = async (userId, input) => {
+  const payload = await requestApi(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.user || payload.user;
+};
+
 const listSites = async () => {
   const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
   return payload.data?.sites || payload.sites || [];
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
 };
 
 const getSite = async (siteId) => {
@@ -186,6 +207,45 @@ const waitForSiteMissing = async (slug) => {
   }
 
   throw new Error(`Temporary site ${slug} still exists after cleanup`);
+};
+
+const assertSiteBillingLimitEnforced = async (suffix) => {
+  const settings = await getSettings();
+  const existingSites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        siteLimit: Math.max(1, existingSites.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/sites`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        name: `Blocked Billing ${suffix}`,
+        slug: `blocked-billing-${suffix}`,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing site limit should reject site creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_SITE_LIMIT', `Billing site limit should return BILLING_SITE_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findSiteBySlug(`blocked-billing-${suffix}`)), 'Billing-limited site creation unexpectedly persisted a site.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const waitForSeededPages = async (siteId, expectedSlugs) => {
@@ -1180,8 +1240,10 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await updateUser('user-admin', { role: 'admin', status: 'active' });
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
+    await assertSiteBillingLimitEnforced(suffix);
     const owner = await createUser({
       fullName: `Sites Owner ${suffix}`,
       email: ownerEmail,
@@ -1285,6 +1347,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    await updateUser('user-admin', { role: 'owner', status: 'active' }).catch(() => {});
     await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId, ownerSessionToken });
     if (duplicatedSiteId) {
       await deleteSite(duplicatedSiteId, ownerSessionToken).catch(() => {});
