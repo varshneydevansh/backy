@@ -17,7 +17,7 @@ const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const PRODUCT_REQUIRED_FIELD_COUNT = 30;
-const ORDER_REQUIRED_FIELD_COUNT = 40;
+const ORDER_REQUIRED_FIELD_COUNT = 49;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
@@ -137,7 +137,16 @@ const ORDER_SCHEMA_FIELDS = [
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
   { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
+  { key: 'providerrefundstatus', label: 'Provider Refund Status', type: 'select', required: false, unique: false, sortOrder: 221, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+  { key: 'providerrefundprovider', label: 'Provider Refund Provider', type: 'text', required: false, unique: false, sortOrder: 222 },
+  { key: 'providerrefundid', label: 'Provider Refund ID', type: 'text', required: false, unique: false, sortOrder: 223 },
+  { key: 'providerrefundreference', label: 'Provider Refund Reference', type: 'text', required: false, unique: false, sortOrder: 224 },
+  { key: 'providerrefundamount', label: 'Provider Refund Amount', type: 'number', required: false, unique: false, sortOrder: 225 },
+  { key: 'providerrefundreason', label: 'Provider Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 226 },
+  { key: 'providerrefundrequestedat', label: 'Provider Refund Requested At', type: 'date', required: false, unique: false, sortOrder: 227 },
+  { key: 'providerrefundcompletedat', label: 'Provider Refund Completed At', type: 'date', required: false, unique: false, sortOrder: 228 },
+  { key: 'providerrefundpayload', label: 'Provider Refund Payload', type: 'richText', required: false, unique: false, sortOrder: 229 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 240 },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1341,6 +1350,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord.values?.riskreviewstatus === 'pending_review', `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(String(orderRecord.values?.riskreasons || '').includes('Manual payment capture'), `Order risk reasons were not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.shippinglabelstatus === 'none', `Order shipping label default was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.providerrefundstatus === 'none', `Order provider refund default was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const orderEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
   const orderEvents = orderEventsPayload.data?.events || orderEventsPayload.events || [];

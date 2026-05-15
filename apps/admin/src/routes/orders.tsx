@@ -29,6 +29,7 @@ import {
 import {
   createCollection,
   createCollectionRecord,
+  createOrderProviderRefund,
   createOrderShippingLabel,
   deleteCollectionRecord,
   getUserPermissions,
@@ -105,6 +106,7 @@ type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
 type OrderRiskLevel = 'low' | 'medium' | 'high';
 type OrderRiskReviewStatus = 'cleared' | 'pending_review' | 'approved' | 'held';
 type ShippingLabelStatus = 'none' | 'draft' | 'purchased' | 'voided';
+type ProviderRefundStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'requires_action';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
@@ -204,6 +206,15 @@ interface OrderFormState {
   billingAddress: string;
   refundAmount: string;
   refundReason: string;
+  providerRefundStatus: ProviderRefundStatus;
+  providerRefundProvider: string;
+  providerRefundId: string;
+  providerRefundReference: string;
+  providerRefundAmount: string;
+  providerRefundReason: string;
+  providerRefundRequestedAt: string;
+  providerRefundCompletedAt: string;
+  providerRefundPayload: string;
   notes: string;
   recordStatus: ContentStatus;
 }
@@ -322,7 +333,16 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
   { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
+  { key: 'providerrefundstatus', label: 'Provider Refund Status', type: 'select', required: false, unique: false, sortOrder: 221, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+  { key: 'providerrefundprovider', label: 'Provider Refund Provider', type: 'text', required: false, unique: false, sortOrder: 222 },
+  { key: 'providerrefundid', label: 'Provider Refund ID', type: 'text', required: false, unique: false, sortOrder: 223 },
+  { key: 'providerrefundreference', label: 'Provider Refund Reference', type: 'text', required: false, unique: false, sortOrder: 224 },
+  { key: 'providerrefundamount', label: 'Provider Refund Amount', type: 'number', required: false, unique: false, sortOrder: 225 },
+  { key: 'providerrefundreason', label: 'Provider Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 226 },
+  { key: 'providerrefundrequestedat', label: 'Provider Refund Requested At', type: 'date', required: false, unique: false, sortOrder: 227 },
+  { key: 'providerrefundcompletedat', label: 'Provider Refund Completed At', type: 'date', required: false, unique: false, sortOrder: 228 },
+  { key: 'providerrefundpayload', label: 'Provider Refund Payload', type: 'richText', required: false, unique: false, sortOrder: 229 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 240 },
 ];
 
 const ORDER_EXPORT_COLUMNS = [
@@ -370,6 +390,15 @@ const ORDER_EXPORT_COLUMNS = [
   'billing_address',
   'refund_amount',
   'refund_reason',
+  'provider_refund_status',
+  'provider_refund_provider',
+  'provider_refund_id',
+  'provider_refund_reference',
+  'provider_refund_amount',
+  'provider_refund_reason',
+  'provider_refund_requested_at',
+  'provider_refund_completed_at',
+  'provider_refund_payload',
   'notes',
   'admin_order_url',
   'public_blocked_url',
@@ -421,6 +450,15 @@ const ORDER_IMPORT_COLUMNS = [
   'billingaddress',
   'refundamount',
   'refundreason',
+  'providerrefundstatus',
+  'providerrefundprovider',
+  'providerrefundid',
+  'providerrefundreference',
+  'providerrefundamount',
+  'providerrefundreason',
+  'providerrefundrequestedat',
+  'providerrefundcompletedat',
+  'providerrefundpayload',
   'notes',
 ] as const;
 
@@ -433,7 +471,7 @@ const ORDER_BACKEND_SYSTEMS = [
   {
     key: 'payment',
     title: 'Payment reconciliation',
-    detail: 'Payment status, provider, reference, checkout session, paid time, refunds, and accounting export fields.',
+    detail: 'Payment status, provider, reference, checkout session, paid time, provider refund handoff, and accounting export fields.',
   },
   {
     key: 'fulfillment',
@@ -502,6 +540,15 @@ const EMPTY_ORDER_FORM: OrderFormState = {
   billingAddress: '',
   refundAmount: '',
   refundReason: '',
+  providerRefundStatus: 'none',
+  providerRefundProvider: '',
+  providerRefundId: '',
+  providerRefundReference: '',
+  providerRefundAmount: '',
+  providerRefundReason: '',
+  providerRefundRequestedAt: '',
+  providerRefundCompletedAt: '',
+  providerRefundPayload: '',
   notes: '',
   recordStatus: 'published',
 };
@@ -833,6 +880,7 @@ function OrdersRoute() {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
       adminShippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
+      adminProviderRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
       checkoutIntake: publicOrderIntakeUrl,
@@ -1495,6 +1543,15 @@ function OrdersRoute() {
         billingaddress: formState.billingAddress.trim(),
         refundamount: formState.refundAmount ? Number(formState.refundAmount) : null,
         refundreason: formState.refundReason.trim(),
+        providerrefundstatus: formState.providerRefundStatus,
+        providerrefundprovider: formState.providerRefundProvider.trim(),
+        providerrefundid: formState.providerRefundId.trim(),
+        providerrefundreference: formState.providerRefundReference.trim(),
+        providerrefundamount: formState.providerRefundAmount ? Number(formState.providerRefundAmount) : null,
+        providerrefundreason: formState.providerRefundReason.trim(),
+        providerrefundrequestedat: formState.providerRefundRequestedAt || null,
+        providerrefundcompletedat: formState.providerRefundCompletedAt || null,
+        providerrefundpayload: formState.providerRefundPayload.trim(),
         notes: formState.notes.trim(),
       },
     };
@@ -1585,6 +1642,38 @@ function OrdersRoute() {
       setNotice(`Shipping label draft ${label.id} prepared for ${label.provider}.`);
     } catch (labelError) {
       setError(labelError instanceof Error ? labelError.message : 'Unable to prepare shipping label');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const requestOrderProviderRefund = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot request provider refunds.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const amount = toNumber(readOrderValue(order.values, 'refundamount', 0)) || toNumber(readOrderValue(order.values, 'total', 0));
+      const reason = String(readOrderValue(order.values, 'refundreason', '') || '').trim() || 'Provider refund requested from Backy order workflow.';
+      const { record: updated, refund } = await createOrderProviderRefund(activeSiteId, order.id, {
+        amount,
+        reason,
+        provider: String(readOrderValue(order.values, 'paymentprovider', '') || '').trim() || 'manual',
+      });
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Provider refund ${refund.status} for ${formatMoney(refund.amount, refund.currency)}.`);
+    } catch (refundError) {
+      setError(refundError instanceof Error ? refundError.message : 'Unable to request provider refund');
     } finally {
       setIsSaving(false);
     }
@@ -2808,6 +2897,7 @@ function OrdersRoute() {
                       onShippingLabel={() => void prepareOrderShippingLabel(order)}
                       onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
+                      onProviderRefund={() => void requestOrderProviderRefund(order)}
                       onCancelled={() => void updateOrderWorkflow(order, buildCancelWorkflowUpdates(order))}
                       onDelete={() => {
                         if (isOrdersBusy) return;
@@ -3492,6 +3582,97 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-provider-refund-controls">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Provider refund automation</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Request and track provider refund handoff payloads without exposing payment credentials in the order record.
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Refund status">
+                      <select
+                        aria-label="Provider refund status"
+                        value={formState.providerRefundStatus}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundStatus: event.target.value as ProviderRefundStatus }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      >
+                        <option value="none">None</option>
+                        <option value="requested">Requested</option>
+                        <option value="succeeded">Succeeded</option>
+                        <option value="failed">Failed</option>
+                        <option value="requires_action">Requires action</option>
+                      </select>
+                    </Field>
+                    <Field label="Refund provider">
+                      <input
+                        value={formState.providerRefundProvider}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundProvider: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="stripe, manual"
+                      />
+                    </Field>
+                    <Field label="Provider refund ID">
+                      <input
+                        value={formState.providerRefundId}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundId: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="Generated by Backy"
+                      />
+                    </Field>
+                    <Field label="Provider amount">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formState.providerRefundAmount}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundAmount: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="Provider reference">
+                      <input
+                        value={formState.providerRefundReference}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundReference: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                    <Field label="Requested at">
+                      <input
+                        type="datetime-local"
+                        value={toDateTimeLocalValue(formState.providerRefundRequestedAt)}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundRequestedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                    <Field label="Completed at">
+                      <input
+                        type="datetime-local"
+                        value={toDateTimeLocalValue(formState.providerRefundCompletedAt)}
+                        onChange={(event) => setFormState((current) => ({ ...current, providerRefundCompletedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Provider refund reason">
+                    <textarea
+                      value={formState.providerRefundReason}
+                      onChange={(event) => setFormState((current) => ({ ...current, providerRefundReason: event.target.value }))}
+                      rows={2}
+                      className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    />
+                  </Field>
+                  <Field label="Provider payload">
+                    <textarea
+                      value={formState.providerRefundPayload}
+                      onChange={(event) => setFormState((current) => ({ ...current, providerRefundPayload: event.target.value }))}
+                      rows={3}
+                      className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 font-mono text-xs"
+                    />
+                  </Field>
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders}>Clear</Button>
                   <Button type="submit" variant="primary" disabled={isOrdersAccessBusy || !canEditOrders || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Receipt className="size-4" />}>
@@ -3628,6 +3809,7 @@ function OrderCard({
   onShippingLabel,
   onFulfilled,
   onRefunded,
+  onProviderRefund,
   onCancelled,
   onDelete,
   canDelete,
@@ -3645,6 +3827,7 @@ function OrderCard({
   onShippingLabel: () => void;
   onFulfilled: () => void;
   onRefunded: () => void;
+  onProviderRefund: () => void;
   onCancelled: () => void;
   onDelete: () => void;
 }) {
@@ -3670,6 +3853,11 @@ function OrderCard({
   const shippingLabelCost = toNumber(readOrderValue(values, 'shippinglabelcost', 0));
   const shippingLabelCreatedAt = String(readOrderValue(values, 'shippinglabelcreatedat', ''));
   const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
+  const providerRefundStatus = String(readOrderValue(values, 'providerrefundstatus', 'none'));
+  const providerRefundProvider = String(readOrderValue(values, 'providerrefundprovider', ''));
+  const providerRefundId = String(readOrderValue(values, 'providerrefundid', ''));
+  const providerRefundAmount = toNumber(readOrderValue(values, 'providerrefundamount', 0));
+  const providerRefundRequestedAt = String(readOrderValue(values, 'providerrefundrequestedat', ''));
   const riskScore = toNumber(readOrderValue(values, 'riskscore', 0));
   const riskLevel = String(readOrderValue(values, 'risklevel', riskScore >= 60 ? 'high' : riskScore >= 25 ? 'medium' : 'low'));
   const riskReviewStatus = String(readOrderValue(values, 'riskreviewstatus', riskLevel === 'low' ? 'cleared' : 'pending_review'));
@@ -3732,6 +3920,11 @@ function OrderCard({
                   Refund {formatMoney(refundAmount, currency)}
                 </span>
               ) : null}
+              {providerRefundId ? (
+                <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700">
+                  Provider refund {providerRefundStatus}
+                </span>
+              ) : null}
               <span className={cn(
                 'rounded-md border px-2 py-1 text-[11px] font-medium capitalize',
                 riskLevel === 'high'
@@ -3774,6 +3967,14 @@ function OrderCard({
       {riskReasons ? (
         <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {riskReasons}
+        </div>
+      ) : null}
+      {providerRefundId ? (
+        <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-800">
+          <RotateCcw className="mr-1 inline size-3.5" />
+          Provider refund {providerRefundId} is {providerRefundStatus.replace(/_/g, ' ')} through {providerRefundProvider || 'manual'}
+          {providerRefundAmount > 0 ? ` for ${formatMoney(providerRefundAmount, currency)}` : ''}
+          {providerRefundRequestedAt ? ` on ${formatWorkflowDate(providerRefundRequestedAt)}` : ''}.
         </div>
       ) : null}
       {lineItemSummary ? (
@@ -3825,6 +4026,7 @@ function OrderCard({
         ) : null}
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
+        <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabled || Boolean(providerRefundId) || paymentStatus === 'pending' || paymentStatus === 'failed'} iconStart={<CreditCard className="size-4" />}>Provider Refund</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
@@ -3945,6 +4147,12 @@ const asShippingLabelStatus = (value: unknown): ShippingLabelStatus => (
     : 'none'
 );
 
+const asProviderRefundStatus = (value: unknown): ProviderRefundStatus => (
+  ['none', 'requested', 'succeeded', 'failed', 'requires_action'].includes(String(value))
+    ? String(value) as ProviderRefundStatus
+    : 'none'
+);
+
 const asOrderSource = (value: unknown): OrderSource => (
   ['web', 'manual', 'api', 'import', 'pos'].includes(String(value))
     ? String(value) as OrderSource
@@ -3989,6 +4197,15 @@ const camelizeOrderKey = (key: string): string => {
   if (key === 'billingaddress') return 'billingAddress';
   if (key === 'refundamount') return 'refundAmount';
   if (key === 'refundreason') return 'refundReason';
+  if (key === 'providerrefundstatus') return 'providerRefundStatus';
+  if (key === 'providerrefundprovider') return 'providerRefundProvider';
+  if (key === 'providerrefundid') return 'providerRefundId';
+  if (key === 'providerrefundreference') return 'providerRefundReference';
+  if (key === 'providerrefundamount') return 'providerRefundAmount';
+  if (key === 'providerrefundreason') return 'providerRefundReason';
+  if (key === 'providerrefundrequestedat') return 'providerRefundRequestedAt';
+  if (key === 'providerrefundcompletedat') return 'providerRefundCompletedAt';
+  if (key === 'providerrefundpayload') return 'providerRefundPayload';
   return key;
 };
 
@@ -4012,6 +4229,15 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.shippingLabelCreatedAt !== undefined ? { shippinglabelcreatedat: updates.shippingLabelCreatedAt || null } : {}),
   ...(updates.refundAmount !== undefined ? { refundamount: updates.refundAmount ? Number(updates.refundAmount) : null } : {}),
   ...(updates.refundReason !== undefined ? { refundreason: updates.refundReason } : {}),
+  ...(updates.providerRefundStatus !== undefined ? { providerrefundstatus: updates.providerRefundStatus } : {}),
+  ...(updates.providerRefundProvider !== undefined ? { providerrefundprovider: updates.providerRefundProvider } : {}),
+  ...(updates.providerRefundId !== undefined ? { providerrefundid: updates.providerRefundId } : {}),
+  ...(updates.providerRefundReference !== undefined ? { providerrefundreference: updates.providerRefundReference } : {}),
+  ...(updates.providerRefundAmount !== undefined ? { providerrefundamount: updates.providerRefundAmount ? Number(updates.providerRefundAmount) : null } : {}),
+  ...(updates.providerRefundReason !== undefined ? { providerrefundreason: updates.providerRefundReason } : {}),
+  ...(updates.providerRefundRequestedAt !== undefined ? { providerrefundrequestedat: updates.providerRefundRequestedAt || null } : {}),
+  ...(updates.providerRefundCompletedAt !== undefined ? { providerrefundcompletedat: updates.providerRefundCompletedAt || null } : {}),
+  ...(updates.providerRefundPayload !== undefined ? { providerrefundpayload: updates.providerRefundPayload } : {}),
   ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
 });
 
@@ -4167,6 +4393,17 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
     ? ''
     : String(readOrderValue(order.values, 'refundamount', '')),
   refundReason: String(readOrderValue(order.values, 'refundreason', '')),
+  providerRefundStatus: asProviderRefundStatus(readOrderValue(order.values, 'providerrefundstatus', undefined)),
+  providerRefundProvider: String(readOrderValue(order.values, 'providerrefundprovider', '')),
+  providerRefundId: String(readOrderValue(order.values, 'providerrefundid', '')),
+  providerRefundReference: String(readOrderValue(order.values, 'providerrefundreference', '')),
+  providerRefundAmount: readOrderValue(order.values, 'providerrefundamount', null) === null || readOrderValue(order.values, 'providerrefundamount', undefined) === undefined
+    ? ''
+    : String(readOrderValue(order.values, 'providerrefundamount', '')),
+  providerRefundReason: String(readOrderValue(order.values, 'providerrefundreason', '')),
+  providerRefundRequestedAt: String(readOrderValue(order.values, 'providerrefundrequestedat', '') || ''),
+  providerRefundCompletedAt: String(readOrderValue(order.values, 'providerrefundcompletedat', '') || ''),
+  providerRefundPayload: String(readOrderValue(order.values, 'providerrefundpayload', '')),
   notes: String(order.values.notes || ''),
   recordStatus: order.status,
 });
@@ -4353,6 +4590,15 @@ const orderToExportRecord = (
   billing_address: String(readOrderValue(order.values, 'billingaddress', '')),
   refund_amount: optionalNumber(readOrderValue(order.values, 'refundamount', null)),
   refund_reason: String(readOrderValue(order.values, 'refundreason', '')),
+  provider_refund_status: asProviderRefundStatus(readOrderValue(order.values, 'providerrefundstatus', undefined)),
+  provider_refund_provider: String(readOrderValue(order.values, 'providerrefundprovider', '')),
+  provider_refund_id: String(readOrderValue(order.values, 'providerrefundid', '')),
+  provider_refund_reference: String(readOrderValue(order.values, 'providerrefundreference', '')),
+  provider_refund_amount: optionalNumber(readOrderValue(order.values, 'providerrefundamount', null)),
+  provider_refund_reason: String(readOrderValue(order.values, 'providerrefundreason', '')),
+  provider_refund_requested_at: String(readOrderValue(order.values, 'providerrefundrequestedat', '') || ''),
+  provider_refund_completed_at: String(readOrderValue(order.values, 'providerrefundcompletedat', '') || ''),
+  provider_refund_payload: String(readOrderValue(order.values, 'providerrefundpayload', '')),
   notes: String(order.values.notes || ''),
   admin_order_url: `${context.adminOrdersApiUrl}/${encodeURIComponent(order.id)}`,
   public_blocked_url: context.publicOrdersApiUrl,

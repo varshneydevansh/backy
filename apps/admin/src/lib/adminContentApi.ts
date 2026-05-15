@@ -1421,6 +1421,33 @@ interface ApiOrderShippingLabelResponse {
   };
 }
 
+export interface AdminOrderProviderRefund {
+  id: string;
+  status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
+  provider: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload: Record<string, unknown>;
+}
+
+interface ApiOrderProviderRefundResponse {
+  success: boolean;
+  data?: {
+    record: ApiCollectionRecord;
+    order?: ApiCollectionRecord;
+    refund: AdminOrderProviderRefund;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiBulkCollectionRecordsResponse {
   success: boolean;
   data?: {
@@ -6165,6 +6192,30 @@ export async function createOrderShippingLabel(
   return {
     record: toCollectionRecord(payload.data.record || payload.data.order),
     label: payload.data.label,
+  };
+}
+
+export async function createOrderProviderRefund(
+  siteId: string,
+  orderId: string,
+  input: { amount?: number; reason?: string; provider?: string } = {},
+): Promise<{ record: CollectionRecord; refund: AdminOrderProviderRefund }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/provider-refund`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiOrderProviderRefundResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to request provider refund');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    refund: payload.data.refund,
   };
 }
 

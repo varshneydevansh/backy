@@ -17,7 +17,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-const ORDER_REQUIRED_FIELD_COUNT = 40;
+const ORDER_REQUIRED_FIELD_COUNT = 49;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -60,7 +60,16 @@ const ORDER_FIELDS = [
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
   { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
+  { key: 'providerrefundstatus', label: 'Provider Refund Status', type: 'select', required: false, unique: false, sortOrder: 221, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+  { key: 'providerrefundprovider', label: 'Provider Refund Provider', type: 'text', required: false, unique: false, sortOrder: 222 },
+  { key: 'providerrefundid', label: 'Provider Refund ID', type: 'text', required: false, unique: false, sortOrder: 223 },
+  { key: 'providerrefundreference', label: 'Provider Refund Reference', type: 'text', required: false, unique: false, sortOrder: 224 },
+  { key: 'providerrefundamount', label: 'Provider Refund Amount', type: 'number', required: false, unique: false, sortOrder: 225 },
+  { key: 'providerrefundreason', label: 'Provider Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 226 },
+  { key: 'providerrefundrequestedat', label: 'Provider Refund Requested At', type: 'date', required: false, unique: false, sortOrder: 227 },
+  { key: 'providerrefundcompletedat', label: 'Provider Refund Completed At', type: 'date', required: false, unique: false, sortOrder: 228 },
+  { key: 'providerrefundpayload', label: 'Provider Refund Payload', type: 'richText', required: false, unique: false, sortOrder: 229 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 240 },
 ];
 
 const CUSTOMER_FIELDS = [
@@ -799,6 +808,7 @@ const assertOrdersLayout = async (client) => {
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
       shippingLabelControls: Boolean(document.querySelector('[data-testid="orders-shipping-label-controls"]')),
+      providerRefundControls: Boolean(document.querySelector('[data-testid="orders-provider-refund-controls"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
@@ -816,7 +826,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -885,6 +895,15 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'billingaddress',
     'refundamount',
     'refundreason',
+    'providerrefundstatus',
+    'providerrefundprovider',
+    'providerrefundid',
+    'providerrefundreference',
+    'providerrefundamount',
+    'providerrefundreason',
+    'providerrefundrequestedat',
+    'providerrefundcompletedat',
+    'providerrefundpayload',
     'notes',
   ];
   const row = [
@@ -929,6 +948,15 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'Imported billing address',
     '0',
     '',
+    'requested',
+    'manual',
+    `rf_import_${suffix}`,
+    `pi_import_${suffix}`,
+    '0',
+    'Imported provider refund request.',
+    '2026-05-10T10:06:00.000Z',
+    '',
+    JSON.stringify({ schemaVersion: 'backy.provider-refund.v1', idempotencyKey: `orders-import-${suffix}` }),
     'Imported order through CSV smoke.',
   ];
   const csv = `${headers.join(',')}\n${row.map(csvEscape).join(',')}\n`;
@@ -952,6 +980,7 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(record.values?.paymentstatus === 'paid', `Imported payment status was unexpected: ${JSON.stringify(record.values?.paymentstatus)}`);
   assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
   assert(record.values?.shippinglabelstatus === 'draft' && record.values?.shippinglabelprovider === 'UPS' && record.values?.shippinglabelid === `lbl_import_${suffix}` && record.values?.shippinglabelcost === 6, `Imported shipping label fields were unexpected: ${JSON.stringify(record.values)}`);
+  assert(record.values?.providerrefundstatus === 'requested' && record.values?.providerrefundprovider === 'manual' && record.values?.providerrefundid === `rf_import_${suffix}` && record.values?.providerrefundamount === 0 && String(record.values?.providerrefundpayload || '').includes('backy.provider-refund.v1'), `Imported provider refund fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.riskscore === 12 && record.values?.risklevel === 'low' && record.values?.riskreviewstatus === 'cleared', `Imported risk fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
 
@@ -1390,6 +1419,7 @@ const main = async () => {
         values.fulfillmentstatus === 'unfulfilled' &&
         values.customerid === customerFixture.record.id &&
         values.shippinglabelstatus === 'none' &&
+        values.providerrefundstatus === 'none' &&
         Number(values.riskscore) === 0 &&
         values.risklevel === 'low' &&
         values.riskreviewstatus === 'cleared'
@@ -1484,6 +1514,31 @@ const main = async () => {
       ),
       'Refund/Return did not persist refund workflow fields',
     );
+
+    await clickOrderCardButton(client, orderNumber, 'Provider Refund');
+    const providerRefundRecord = await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'refunded' &&
+        values.paymentstatus === 'refunded' &&
+        values.fulfillmentstatus === 'cancelled' &&
+        values.providerrefundstatus === 'requires_action' &&
+        values.providerrefundprovider === 'manual' &&
+        Boolean(values.providerrefundid) &&
+        String(values.providerrefundreference || '').includes(String(values.paymentreference || '')) &&
+        String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
+        Number(values.providerrefundamount) === 85 &&
+        values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
+        Boolean(values.providerrefundrequestedat) &&
+        String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
+        /Provider refund handoff/.test(String(values.notes || ''))
+      ),
+      'Provider Refund did not persist provider refund handoff fields',
+    );
+
+    const providerRefundPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerRefundRecord.id}/provider-refund`);
+    assert(providerRefundPayload.data?.refund?.id === providerRefundRecord.values.providerrefundid, `Provider refund endpoint did not return the prepared handoff: ${JSON.stringify(providerRefundPayload)}`);
 
     await editOrderAfterWorkflow(client, orderNumber);
     await waitForOrderValue(

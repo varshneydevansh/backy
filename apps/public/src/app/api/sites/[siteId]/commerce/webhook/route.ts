@@ -180,13 +180,24 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
   }
 
   if (lowerType === 'charge.refunded' || lowerType === 'refund.created' || lowerType === 'payment.refunded') {
+    const refundProvider = textValue(object.provider) || textValue(currentValues.paymentprovider) || 'provider';
+    const refundId = textValue(object.refund || object.refundId || object.id) || textValue(currentValues.providerrefundid);
+    const refundReason = textValue(object.reason) || 'Provider refund webhook processed.';
     return {
       status: 'refunded' as const,
       values: {
         orderstatus: 'refunded',
         paymentstatus: 'refunded',
         refundamount: moneyValue(refundAmount),
-        refundreason: textValue(object.reason) || 'Provider refund webhook processed.',
+        refundreason: refundReason,
+        providerrefundstatus: 'succeeded',
+        providerrefundprovider: refundProvider,
+        providerrefundid: refundId,
+        providerrefundreference: paymentReference || textValue(currentValues.providerrefundreference),
+        providerrefundamount: moneyValue(refundAmount),
+        providerrefundreason: refundReason,
+        providerrefundrequestedat: textValue(currentValues.providerrefundrequestedat) || now,
+        providerrefundcompletedat: now,
         ...(paymentReference ? { paymentreference: paymentReference } : {}),
       },
     };
