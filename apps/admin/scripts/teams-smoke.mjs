@@ -110,10 +110,10 @@ const listSites = async () => {
   return payload.data?.sites || [];
 };
 
-const createTeam = async (name) => {
+const createTeam = async (name, overrides = {}) => {
   const payload = await requestApi('/api/admin/teams', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...overrides }),
   });
   const team = payload.data?.team;
   assert(team?.id, `Create team did not return a team: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -509,6 +509,78 @@ const main = async () => {
     await deleteTeam(apiCreatedTeam.id);
     temporaryTeamIds.pop();
     await waitForTeamMissing(`api-${editedSlug}`);
+
+    const memberPolicyTeam = await createTeam(`API Member Policy ${suffix}`);
+    temporaryTeamIds.push(memberPolicyTeam.id);
+    const selfMember = memberPolicyTeam.members.find((member) => member.userId === adminSession.user.id);
+    assert(selfMember?.id, `Current admin owner member missing from policy team: ${JSON.stringify(memberPolicyTeam).slice(0, 500)}`);
+    await expectApiError(
+      `/api/admin/teams/${encodeURIComponent(memberPolicyTeam.id)}/members/${encodeURIComponent(selfMember.id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ role: 'editor' }),
+      },
+      'SELF_TEAM_MEMBER_RESTRICTED',
+    );
+    await expectApiError(
+      `/api/admin/teams/${encodeURIComponent(memberPolicyTeam.id)}/members/${encodeURIComponent(selfMember.id)}`,
+      { method: 'DELETE' },
+      'SELF_TEAM_MEMBER_RESTRICTED',
+    );
+    await expectApiError(
+      `/api/admin/teams/${encodeURIComponent(memberPolicyTeam.id)}/members`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: `teams-owner-denied-${suffix}@example.com`, role: 'owner' }),
+      },
+      'OWNER_ROLE_RESTRICTED',
+    );
+    await deleteTeam(memberPolicyTeam.id);
+    temporaryTeamIds.pop();
+
+    const ownerActorAccount = await createUser({
+      fullName: `Teams Owner Actor ${suffix}`,
+      email: `teams-owner-actor-${suffix}@example.com`,
+      role: 'owner',
+      status: 'invited',
+    });
+    temporaryUserIds.push(ownerActorAccount.user.id);
+    assert(ownerActorAccount.invite?.token, `Owner actor invite token missing: ${JSON.stringify(ownerActorAccount).slice(0, 500)}`);
+    const ownerTargetAccount = await createUser({
+      fullName: `Teams Owner Target ${suffix}`,
+      email: `teams-owner-target-${suffix}@example.com`,
+      role: 'owner',
+      status: 'invited',
+    });
+    temporaryUserIds.push(ownerTargetAccount.user.id);
+    const ownerActorSession = await acceptInvite(ownerActorAccount.invite.token);
+    const originalAdminSessionToken = apiAdminSessionToken;
+    try {
+      apiAdminSessionToken = ownerActorSession.session.token;
+      const finalOwnerPolicyTeam = await createTeam(`API Final Owner Policy ${suffix}`, {
+        ownerId: ownerTargetAccount.user.id,
+      });
+      temporaryTeamIds.push(finalOwnerPolicyTeam.id);
+      const finalOwnerMember = finalOwnerPolicyTeam.members.find((member) => member.userId === ownerTargetAccount.user.id);
+      assert(finalOwnerMember?.id, `Final owner member missing from policy team: ${JSON.stringify(finalOwnerPolicyTeam).slice(0, 500)}`);
+      await expectApiError(
+        `/api/admin/teams/${encodeURIComponent(finalOwnerPolicyTeam.id)}/members/${encodeURIComponent(finalOwnerMember.id)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ role: 'admin' }),
+        },
+        'FINAL_TEAM_OWNER_REQUIRED',
+      );
+      await expectApiError(
+        `/api/admin/teams/${encodeURIComponent(finalOwnerPolicyTeam.id)}/members/${encodeURIComponent(finalOwnerMember.id)}`,
+        { method: 'DELETE' },
+        'FINAL_TEAM_OWNER_REQUIRED',
+      );
+      await deleteTeam(finalOwnerPolicyTeam.id);
+      temporaryTeamIds.pop();
+    } finally {
+      apiAdminSessionToken = originalAdminSessionToken;
+    }
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();

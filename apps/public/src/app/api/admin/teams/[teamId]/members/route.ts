@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getAdminTeamMembershipPolicyViolation } from '@/lib/adminTeamMembershipPolicy';
 import {
   getAdminAuthPolicySettings,
   validateAdminEmailDomainPolicy,
@@ -60,15 +61,6 @@ const normalizeEmail = (value: unknown): string => (
 
 const normalizeRole = (value: unknown): TeamRole | null => (
   value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
-);
-
-const requireOwnerRoleAccess = (
-  access: { session: { user: { role: TeamRole } } | null },
-  requestId: string,
-) => (
-  access.session?.user.role === 'owner'
-    ? null
-    : errorResponse(403, 'OWNER_ROLE_RESTRICTED', 'Only workspace owners can assign owner team roles.', requestId)
 );
 
 const nameFromEmail = (email: string) => (
@@ -175,12 +167,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const body = await parseJsonBody(request);
     const role = normalizeRole(body.role) || 'editor';
-    if (role === 'owner') {
-      const ownerAccessError = requireOwnerRoleAccess(access, requestId);
-      if (ownerAccessError) {
-        return ownerAccessError;
-      }
+    const ownerRolePolicyViolation = getAdminTeamMembershipPolicyViolation({
+      access,
+      members: [],
+      targetMember: null,
+      nextRole: role,
+      action: 'upsert',
+    });
+    if (ownerRolePolicyViolation) {
+      return errorResponse(ownerRolePolicyViolation.status, ownerRolePolicyViolation.code, ownerRolePolicyViolation.message, requestId);
     }
+
     const userId = typeof body.userId === 'string' && body.userId.trim() ? body.userId.trim() : '';
     const email = normalizeEmail(body.email);
     let user = userId
@@ -245,6 +242,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
           });
         }
       }
+    }
+
+    const members = repositories
+      ? (await repositories.teams.listMembers({ teamId })).items
+      : listAdminTeamMembers(teamId);
+    const existingMember = user
+      ? members.find((member) => member.userId === user.id) || null
+      : null;
+    const policyViolation = getAdminTeamMembershipPolicyViolation({
+      access,
+      members,
+      targetMember: existingMember,
+      nextRole: role,
+      action: 'upsert',
+    });
+    if (policyViolation) {
+      return errorResponse(policyViolation.status, policyViolation.code, policyViolation.message, requestId);
     }
 
     const member = repositories

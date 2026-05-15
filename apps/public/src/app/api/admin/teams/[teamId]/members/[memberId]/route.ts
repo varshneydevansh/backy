@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getAdminTeamMembershipPolicyViolation } from '@/lib/adminTeamMembershipPolicy';
 import {
   getAdminTeamById,
   getAdminUserById,
@@ -50,15 +51,6 @@ const normalizeRole = (value: unknown): TeamRole | null => (
   value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
 );
 
-const requireOwnerRoleAccess = (
-  access: { session: { user: { role: TeamRole } } | null },
-  requestId: string,
-) => (
-  access.session?.user.role === 'owner'
-    ? null
-    : errorResponse(403, 'OWNER_ROLE_RESTRICTED', 'Only workspace owners can change owner team roles.', requestId)
-);
-
 const getMember = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   teamId: string,
@@ -67,10 +59,6 @@ const getMember = async (
   const members = await repositories.teams.listMembers({ teamId });
   return members.items.find((member) => member.id === memberId) || null;
 };
-
-const getDemoMember = (teamId: string, memberId: string) => (
-  listAdminTeamMembers(teamId).find((member) => member.id === memberId) || null
-);
 
 const enrichMember = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -110,7 +98,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
 
-    const before = repositories ? await getMember(repositories, teamId, memberId) : getDemoMember(teamId, memberId);
+    const members = repositories
+      ? (await repositories.teams.listMembers({ teamId })).items
+      : listAdminTeamMembers(teamId);
+    const before = members.find((member) => member.id === memberId) || null;
     if (!before) {
       return errorResponse(404, 'TEAM_MEMBER_NOT_FOUND', 'Team member not found.', requestId);
     }
@@ -120,11 +111,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!role) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Role must be owner, admin, editor, or viewer.', requestId);
     }
-    if (role === 'owner' || before.role === 'owner') {
-      const ownerAccessError = requireOwnerRoleAccess(access, requestId);
-      if (ownerAccessError) {
-        return ownerAccessError;
-      }
+
+    const policyViolation = getAdminTeamMembershipPolicyViolation({
+      access,
+      members,
+      targetMember: before,
+      nextRole: role,
+      action: 'update',
+    });
+    if (policyViolation) {
+      return errorResponse(policyViolation.status, policyViolation.code, policyViolation.message, requestId);
     }
 
     const member = repositories
@@ -180,9 +176,22 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return errorResponse(404, 'TEAM_NOT_FOUND', 'Team not found.', requestId);
     }
 
-    const before = repositories ? await getMember(repositories, teamId, memberId) : getDemoMember(teamId, memberId);
+    const members = repositories
+      ? (await repositories.teams.listMembers({ teamId })).items
+      : listAdminTeamMembers(teamId);
+    const before = members.find((member) => member.id === memberId) || null;
     if (!before) {
       return errorResponse(404, 'TEAM_MEMBER_NOT_FOUND', 'Team member not found.', requestId);
+    }
+
+    const policyViolation = getAdminTeamMembershipPolicyViolation({
+      access,
+      members,
+      targetMember: before,
+      action: 'remove',
+    });
+    if (policyViolation) {
+      return errorResponse(policyViolation.status, policyViolation.code, policyViolation.message, requestId);
     }
 
     if (repositories) {
