@@ -88,12 +88,12 @@ const bearerToken = (request: NextRequest): string => {
 };
 
 const publicWriteTokenFromRequest = (request: NextRequest, body: Record<string, unknown> = {}): string => (
-  bearerToken(request) ||
   normalizeString(request.headers.get('x-backy-public-write-token')) ||
   normalizeString(request.headers.get('x-backy-visitor-token')) ||
   normalizeString(body.publicWriteToken) ||
   normalizeString(body.writeToken) ||
-  normalizeString(body.token)
+  normalizeString(body.token) ||
+  bearerToken(request)
 );
 
 const publicWritePolicyFromCollection = (

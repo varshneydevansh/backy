@@ -8,6 +8,7 @@ const runWriteSmoke = process.env.BACKY_SDK_SKIP_WRITE_SMOKE !== '1';
 const configuredAdminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 let adminRequestApiKey = configuredAdminApiKey;
 let adminSessionToken = '';
+let cleanupOwnerSession = null;
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -170,6 +171,10 @@ async function createSdkSmokeFixture() {
               formActive: true,
               moderationMode: 'auto-approve',
               enableHoneypot: false,
+              contactShareEnabled: true,
+              contactShareNameField: 'title',
+              contactShareNotesField: 'message',
+              contactShareDedupeByEmail: true,
               collectionWriteEnabled: true,
               collectionWriteCollectionId: collectionId,
               collectionWriteSlugField: 'title',
@@ -331,12 +336,60 @@ async function createSdkSmokeFixture() {
   };
 }
 
+async function getCleanupOwnerSession() {
+  if (cleanupOwnerSession) {
+    return cleanupOwnerSession;
+  }
+
+  await loginAdminApi();
+
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const user = await request('/api/admin/users', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      fullName: 'SDK Smoke Cleanup Owner',
+      email: `sdk-smoke-owner-${unique}@backy.io`,
+      role: 'owner',
+      status: 'invited',
+      createInvite: true,
+    }),
+  });
+  assert(user.response.status === 201, `${user.url} expected cleanup owner create 201, got ${user.response.status}`);
+  const userId = user.json?.data?.user?.id;
+  const inviteToken = user.json?.data?.invite?.token;
+  assert(userId && inviteToken, 'cleanup owner creation did not return user and invite token');
+
+  const accepted = await request('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: inviteToken }),
+  });
+  assert(accepted.response.status === 200, `${accepted.url} expected cleanup owner invite accept 200, got ${accepted.response.status}`);
+  const token = accepted.json?.data?.session?.token;
+  assert(token, 'cleanup owner invite acceptance did not return a session token');
+
+  cleanupOwnerSession = { userId, token };
+  return cleanupOwnerSession;
+}
+
 async function deleteFixture(siteId) {
   if (!siteId) {
     return;
   }
 
-  await request(`/api/admin/sites/${siteId}`, { method: 'DELETE' }).catch(() => {});
+  const owner = await getCleanupOwnerSession();
+  try {
+    const deleted = await request(`/api/admin/sites/${siteId}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${owner.token}` },
+    });
+    assert(deleted.response.status === 200, `${deleted.url} expected fixture site delete 200, got ${deleted.response.status}`);
+  } finally {
+    const deletedOwner = await request(`/api/admin/users/${owner.userId}`, { method: 'DELETE' }).catch((error) => ({ error }));
+    assert(!deletedOwner?.error, `cleanup owner delete failed: ${deletedOwner?.error?.message || deletedOwner?.error}`);
+    cleanupOwnerSession = null;
+  }
 }
 
 const client = createBackyClient({
