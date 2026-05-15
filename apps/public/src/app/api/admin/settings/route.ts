@@ -13,7 +13,15 @@ import { listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionSto
 import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
-import { getAdminSettings, listAdminUserPermissionOverrides, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
+import {
+  getAdminSettings,
+  getMediaList,
+  getSiteByIdOrSlug,
+  listAdminUserPermissionOverrides,
+  regenerateAdminApiKeys,
+  updateAdminSettings,
+  updateMediaItem,
+} from '@/lib/backyStore';
 import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
 import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
 import { getMediaStorageAdapter, getMediaStorageConfigSummary, resolveMediaStorageConfig } from '@/lib/mediaStorage';
@@ -24,7 +32,7 @@ import {
   shouldUseDemoStoreFallback,
 } from '@/lib/repositoryRuntime';
 import { createStorageAdapter } from '@backy/storage';
-import type { BackyJsonObject, BackyJsonValue, BackySettings } from '@backy-cms/core';
+import type { BackyJsonObject, BackyJsonValue, BackySettings, MediaItem, MediaVersion } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -943,6 +951,29 @@ interface StorageLifecyclePolicyAutomation {
   };
 }
 
+interface StorageLifecycleCleanupResult {
+  provider: string;
+  action: 'cleanup-expired-storage';
+  status: StorageProvisioningStatus;
+  dryRun: boolean;
+  siteId?: string;
+  cutoff: {
+    probeObjectsBefore: string;
+    retainedVersionsBefore?: string;
+  };
+  deleted: {
+    probeObjects: number;
+    retainedVersions: number;
+    storageObjects: number;
+  };
+  candidates: {
+    probeObjects: number;
+    retainedVersions: number;
+  };
+  errors: string[];
+  detail: string;
+}
+
 const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
   const runtimeImport = new Function('specifier', 'return import(specifier)') as (value: string) => Promise<TModule>;
   return runtimeImport(specifier);
@@ -1446,6 +1477,198 @@ const runStorageLifecyclePolicyAutomation = async (
   }
 };
 
+const dateBefore = (value: unknown, cutoff: Date): boolean => {
+  const timestamp = typeof value === 'string' || typeof value === 'number' || value instanceof Date
+    ? new Date(value).getTime()
+    : Number.NaN;
+  return Number.isFinite(timestamp) && timestamp < cutoff.getTime();
+};
+
+const replacementVersionsFromMetadata = (metadata: MediaItem['metadata'] | undefined): Record<string, unknown>[] => (
+  metadata && Array.isArray(metadata.replacementVersions)
+    ? metadata.replacementVersions.filter((version): version is Record<string, unknown> => (
+        !!version && typeof version === 'object' && !Array.isArray(version)
+      ))
+    : []
+);
+
+const removeReplacementVersions = (
+  metadata: MediaItem['metadata'] | undefined,
+  removedIds: Set<string>,
+): MediaItem['metadata'] => {
+  const nextVersions = replacementVersionsFromMetadata(metadata).filter((version) => (
+    typeof version.id !== 'string' || !removedIds.has(version.id)
+  ));
+  return {
+    ...(metadata || {}),
+    replacementVersions: nextVersions,
+    replacementCount: nextVersions.length,
+  };
+};
+
+const safeLifecycleStoragePath = (siteId: string | undefined, value: unknown): string | null => {
+  const path = typeof value === 'string' ? value.trim() : '';
+  if (!path) return null;
+  if (path.startsWith('sites/_backy/')) return path;
+  if (siteId && path.startsWith(`sites/${siteId}/`)) return path;
+  return null;
+};
+
+const mediaVersionStoragePath = (siteId: string, version: Record<string, unknown> | MediaVersion): string | null => (
+  safeLifecycleStoragePath(siteId, 'storagePath' in version ? version.storagePath : null)
+);
+
+const runStorageLifecycleCleanup = async (input: {
+  settings: AdminSettingsSource;
+  siteId?: string;
+  dryRun?: boolean;
+}): Promise<StorageLifecycleCleanupResult> => {
+  const resolved = resolveMediaStorageConfig();
+  const storage = getStoragePolicySettings(input.settings);
+  const tempRetentionDays = Math.max(1, Math.min(365, Math.round(numberValue(storage.lifecycleTempRetentionDays, 7))));
+  const noncurrentVersionDays = Math.max(1, Math.min(3650, Math.round(numberValue(storage.lifecycleNoncurrentVersionDays, 90))));
+  const probeCutoff = new Date(Date.now() - tempRetentionDays * 24 * 60 * 60 * 1000);
+  const retainedCutoff = new Date(Date.now() - noncurrentVersionDays * 24 * 60 * 60 * 1000);
+  const result: StorageLifecycleCleanupResult = {
+    provider: resolved.summary.provider,
+    action: 'cleanup-expired-storage',
+    status: 'ready',
+    dryRun: input.dryRun !== false,
+    ...(input.siteId ? { siteId: input.siteId } : {}),
+    cutoff: {
+      probeObjectsBefore: probeCutoff.toISOString(),
+      ...(input.siteId ? { retainedVersionsBefore: retainedCutoff.toISOString() } : {}),
+    },
+    deleted: {
+      probeObjects: 0,
+      retainedVersions: 0,
+      storageObjects: 0,
+    },
+    candidates: {
+      probeObjects: 0,
+      retainedVersions: 0,
+    },
+    errors: [],
+    detail: '',
+  };
+
+  if (!resolved.config) {
+    return {
+      ...result,
+      status: 'blocked',
+      detail: resolved.summary.error || `Missing ${resolved.summary.missing.join(', ') || 'storage configuration'}.`,
+    };
+  }
+
+  const adapter = await getMediaStorageAdapter();
+  const deleteStoragePath = async (path: string, kind: 'probe' | 'version') => {
+    if (result.dryRun) return;
+    try {
+      await adapter.delete(path);
+      result.deleted.storageObjects += 1;
+      if (kind === 'probe') result.deleted.probeObjects += 1;
+    } catch (error) {
+      result.errors.push(`${path}: ${error instanceof Error ? error.message : 'delete failed'}`);
+    }
+  };
+
+  for (const prefix of ['sites/_backy/provisioning', 'sites/_backy/rotation']) {
+    try {
+      const objects = await adapter.list(prefix);
+      const expired = objects.filter((item) => (
+        safeLifecycleStoragePath(undefined, item.path) && dateBefore(item.lastModified, probeCutoff)
+      ));
+      result.candidates.probeObjects += expired.length;
+      for (const item of expired) {
+        const path = safeLifecycleStoragePath(undefined, item.path);
+        if (path) await deleteStoragePath(path, 'probe');
+      }
+    } catch (error) {
+      result.errors.push(`${prefix}: ${error instanceof Error ? error.message : 'list failed'}`);
+    }
+  }
+
+  if (input.siteId) {
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(input.siteId) || await repositories.sites.getBySlug(input.siteId);
+      if (site) {
+        const media = (await repositories.media.list({
+          siteId: site.id,
+          type: 'all',
+          visibility: 'all',
+          limit: 10000,
+          offset: 0,
+        })).items;
+        for (const item of media) {
+          const removedIds = new Set<string>();
+          const metadataVersions = replacementVersionsFromMetadata(item.metadata).filter((version) => (
+            typeof version.id === 'string' && dateBefore(version.replacedAt || version.createdAt, retainedCutoff)
+          ));
+          const repositoryVersions = (await repositories.media.listVersions({
+            siteId: site.id,
+            mediaId: item.id,
+            limit: 10000,
+            offset: 0,
+          })).items.filter((version) => dateBefore(version.replacedAt || version.createdAt, retainedCutoff));
+
+          result.candidates.retainedVersions += metadataVersions.length + repositoryVersions.length;
+
+          for (const version of [...metadataVersions, ...repositoryVersions]) {
+            const versionId = typeof version.id === 'string' ? version.id : '';
+            const path = mediaVersionStoragePath(site.id, version);
+            if (versionId) removedIds.add(versionId);
+            if (path) await deleteStoragePath(path, 'version');
+            if (!result.dryRun && 'mediaId' in version && versionId) {
+              await repositories.media.deleteVersion({ siteId: site.id, mediaId: item.id, versionId });
+              result.deleted.retainedVersions += 1;
+            } else if (!result.dryRun && !('mediaId' in version)) {
+              result.deleted.retainedVersions += 1;
+            }
+          }
+
+          if (!result.dryRun && removedIds.size > 0) {
+            await repositories.media.update(site.id, item.id, {
+              metadata: removeReplacementVersions(item.metadata, removedIds),
+            });
+          }
+        }
+      }
+    } else {
+      const site = getSiteByIdOrSlug(input.siteId);
+      if (site) {
+        const media = getMediaList(site.id, { limit: 10000, offset: 0 }).media;
+        for (const item of media) {
+          const expiredVersions = replacementVersionsFromMetadata(item.metadata).filter((version) => (
+            typeof version.id === 'string' && dateBefore(version.replacedAt || version.createdAt, retainedCutoff)
+          ));
+          result.candidates.retainedVersions += expiredVersions.length;
+          const removedIds = new Set(expiredVersions.map((version) => String(version.id)));
+          for (const version of expiredVersions) {
+            const path = mediaVersionStoragePath(site.id, version);
+            if (path) await deleteStoragePath(path, 'version');
+            if (!result.dryRun) result.deleted.retainedVersions += 1;
+          }
+          if (!result.dryRun && removedIds.size > 0) {
+            updateMediaItem(site.id, item.id, {
+              metadata: removeReplacementVersions(item.metadata, removedIds),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const failed = result.errors.length > 0;
+  return {
+    ...result,
+    status: failed ? 'blocked' : 'ready',
+    detail: result.dryRun
+      ? `Lifecycle cleanup preview found ${result.candidates.probeObjects} probe objects and ${result.candidates.retainedVersions} retained versions eligible for cleanup.`
+      : `Lifecycle cleanup removed ${result.deleted.probeObjects} probe objects, ${result.deleted.retainedVersions} retained versions, and ${result.deleted.storageObjects} storage objects.`,
+  };
+};
+
 const runStorageContainerAutomation = async (
   resolved: ResolvedMediaStorage = resolveMediaStorageConfig(),
 ): Promise<StorageProvisioningAutomation> => {
@@ -1767,7 +1990,7 @@ const getSettingsForStorageProbe = async (): Promise<AdminSettingsSource> => {
   return getAdminSettings();
 };
 
-const runMediaStorageProvisioningProbe = async (requestId: string) => {
+const runMediaStorageProvisioningProbe = async (requestId: string, siteId?: string) => {
   const settings = await getSettingsForStorageProbe();
   const resolved = resolveMediaStorageConfig();
   const summary = resolved.summary;
@@ -1775,6 +1998,11 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
   const lifecyclePolicyRequested = boolValue(storagePolicy.lifecyclePolicyEnabled);
   const automation = await runStorageContainerAutomation(resolved);
   const lifecyclePolicy = await runStorageLifecyclePolicyAutomation(settings, resolved);
+  const lifecycleCleanup = await runStorageLifecycleCleanup({
+    settings,
+    siteId,
+    dryRun: !lifecyclePolicyRequested,
+  });
   const credentialRotation = await runMediaStorageCredentialRotationProbe(requestId, summary.provider);
   const checks: StorageProvisioningCheck[] = [
     {
@@ -1797,6 +2025,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
       probePath,
       automation,
       lifecyclePolicy,
+      lifecycleCleanup,
       checks,
       credentialRotation,
       rotation: {
@@ -1823,7 +2052,10 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
   }
 
   const blocked = checks.some((check) => !check.ready);
-  const lifecycleBlocked = lifecyclePolicyRequested && lifecyclePolicy.status === 'blocked';
+  const lifecycleBlocked = lifecyclePolicyRequested && (
+    lifecyclePolicy.status === 'blocked' ||
+    lifecycleCleanup.status === 'blocked'
+  );
   return {
     provider: summary.provider,
     status: blocked || automation.status === 'blocked' || lifecycleBlocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
@@ -1838,6 +2070,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
     probePath,
     automation,
     lifecyclePolicy,
+    lifecycleCleanup,
     checks,
     credentialRotation,
     rotation: {
@@ -2074,7 +2307,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (mediaStorageProvisioningProbe) {
-      const result = await runMediaStorageProvisioningProbe(requestId);
+      const result = await runMediaStorageProvisioningProbe(requestId, stringValue(body.siteId) || undefined);
       await recordAdminAudit({
         entity: 'settings',
         entityId: 'media-storage',
@@ -2083,7 +2316,16 @@ export async function POST(request: NextRequest) {
           provider: result.provider,
           status: result.status,
           probePath: result.probePath,
+          siteId: result.lifecycleCleanup?.siteId || null,
           failedChecks: result.checks.filter((check) => !check.ready).map((check) => check.label),
+          lifecycleCleanup: result.lifecycleCleanup
+            ? {
+                dryRun: result.lifecycleCleanup.dryRun,
+                candidates: result.lifecycleCleanup.candidates,
+                deleted: result.lifecycleCleanup.deleted,
+                errors: result.lifecycleCleanup.errors.length,
+              }
+            : null,
         },
         requestId,
       });

@@ -1140,6 +1140,7 @@ const runMediaStorageProvisioningProbe = async (client) => {
           text.includes('Provisioning and rotation probe') &&
           text.includes('Bucket automation') &&
           text.includes('Lifecycle policy automation') &&
+          text.includes('Lifecycle cleanup worker') &&
           text.includes('Probe upload') &&
           text.includes('Readback') &&
           text.includes('Probe cleanup') &&

@@ -2119,6 +2119,28 @@ export interface SettingsStorageProvisioningResult {
       noncurrentVersionDays: number;
     };
   };
+  lifecycleCleanup?: {
+    provider: string;
+    action: 'cleanup-expired-storage';
+    status: 'ready' | 'blocked';
+    dryRun: boolean;
+    siteId?: string;
+    cutoff: {
+      probeObjectsBefore: string;
+      retainedVersionsBefore?: string;
+    };
+    deleted: {
+      probeObjects: number;
+      retainedVersions: number;
+      storageObjects: number;
+    };
+    candidates: {
+      probeObjects: number;
+      retainedVersions: number;
+    };
+    errors: string[];
+    detail: string;
+  };
   checks: SettingsStorageProvisioningCheck[];
   credentialRotation?: {
     status: 'ready' | 'blocked';
@@ -4423,13 +4445,16 @@ export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInp
   };
 }
 
-export async function runSettingsStorageProvisioningProbe(): Promise<SettingsStorageProvisioningResult> {
+export async function runSettingsStorageProvisioningProbe(siteId?: string): Promise<SettingsStorageProvisioningResult> {
   const response = await adminFetch(`${getAdminApiBase()}/settings`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ action: 'media-storage-provisioning-probe' }),
+    body: JSON.stringify({
+      action: 'media-storage-provisioning-probe',
+      ...(siteId ? { siteId } : {}),
+    }),
   });
   const payload = await readJson<ApiSettingsStorageProvisioningResponse>(response);
 

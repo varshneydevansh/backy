@@ -1832,7 +1832,7 @@ function MediaPage() {
     setIsRunningStorageProvisioningProbe(true);
     setStorageCheckError(null);
     try {
-      const result = await runSettingsStorageProvisioningProbe();
+      const result = await runSettingsStorageProvisioningProbe(siteId);
       setStorageProvisioningResult(result);
     } catch (probeError) {
       setStorageProvisioningResult(null);
@@ -1840,7 +1840,7 @@ function MediaPage() {
     } finally {
       setIsRunningStorageProvisioningProbe(false);
     }
-  }, [canConfigureMediaStorage, isRunningStorageProvisioningProbe]);
+  }, [canConfigureMediaStorage, isRunningStorageProvisioningProbe, siteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7367,6 +7367,34 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
             </div>
           </dl>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.lifecyclePolicy.detail}</p>
+        </div>
+      )}
+      {result.lifecycleCleanup && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-lifecycle-cleanup">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Lifecycle cleanup worker</h4>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', result.lifecycleCleanup.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+              {result.lifecycleCleanup.dryRun ? 'preview' : 'applied'}
+            </span>
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+            <div>
+              <dt className="text-muted-foreground">Probe candidates</dt>
+              <dd>{result.lifecycleCleanup.candidates.probeObjects}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Version candidates</dt>
+              <dd>{result.lifecycleCleanup.candidates.retainedVersions}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Objects removed</dt>
+              <dd>{result.lifecycleCleanup.deleted.storageObjects}</dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.lifecycleCleanup.detail}</p>
+          {result.lifecycleCleanup.errors.length > 0 && (
+            <p className="mt-2 text-xs leading-5 text-warning">{result.lifecycleCleanup.errors.slice(0, 2).join(' · ')}</p>
+          )}
         </div>
       )}
       <div className="mt-4 grid gap-2 md:grid-cols-2">
