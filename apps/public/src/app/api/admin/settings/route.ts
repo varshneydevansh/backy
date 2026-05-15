@@ -74,6 +74,27 @@ const stringValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
+const SECRET_LIKE_VALUE_REGEXES = [
+  /^whsec_/i,
+  /^stripe_whsec/i,
+  /^sk_(live|test)_/i,
+  /^rk_(live|test)_/i,
+  /^gh[pousr]_/i,
+  /^xox[baprs]-/i,
+  /^-----BEGIN [A-Z ]+PRIVATE KEY-----/,
+  /^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}$/,
+];
+
+const isSecretReference = (value: string): boolean => (
+  SECRET_ENV_REFERENCE_REGEX.test(value.trim())
+);
+
+const looksLikeRawSecret = (value: string): boolean => {
+  const trimmed = value.trim();
+  return SECRET_LIKE_VALUE_REGEXES.some((pattern) => pattern.test(trimmed));
+};
+
 const numberValue = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -551,6 +572,25 @@ const normalizeDeploymentHistory = (value: unknown): BackyJsonObject[] => {
     .map((item) => parseJsonObject(item))
     .filter((item): item is BackyJsonObject => Boolean(item))
     .slice(0, 10);
+};
+
+const validateSecretReferencePolicy = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const commerce = parseJsonObject(input?.commerce) || {};
+  const webhookSecretReference = stringValue(commerce.providerWebhookSecretId);
+  if (!webhookSecretReference) {
+    return null;
+  }
+
+  if (isSecretReference(webhookSecretReference)) {
+    return null;
+  }
+
+  if (looksLikeRawSecret(webhookSecretReference)) {
+    return 'Commerce webhook signing secret must be stored in deployment environment variables. Save an env reference such as env:STRIPE_WEBHOOK_SECRET instead of the raw provider secret.';
+  }
+
+  return 'Commerce webhook signing secret must be an environment variable reference such as env:STRIPE_WEBHOOK_SECRET, $STRIPE_WEBHOOK_SECRET, or STRIPE_WEBHOOK_SECRET.';
 };
 
 const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
@@ -1549,6 +1589,10 @@ export async function PATCH(request: NextRequest) {
       const integrations = mediaStoragePatch
         ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
         : normalizeInfrastructureIntegrations(body.integrations) || parseJsonObject(body.integrations);
+      const secretReferenceError = validateSecretReferencePolicy(integrations);
+      if (secretReferenceError) {
+        return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
+      }
       const settings = (await repositories.settings.update({
         ...(deliveryMode ? { deliveryMode } : {}),
         apiKeys: {
@@ -1594,6 +1638,10 @@ export async function PATCH(request: NextRequest) {
     const integrations = mediaStoragePatch
       ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
       : normalizeInfrastructureIntegrations(body.integrations);
+    const secretReferenceError = validateSecretReferencePolicy(integrations);
+    if (secretReferenceError) {
+      return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
+    }
     const settings = updateAdminSettings({
       ...sanitizedBody,
       ...(deliveryMode ? { deliveryMode } : {}),

@@ -14,6 +14,8 @@ const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tm
 const STALE_ADMIN_API_KEY = 'sk_live_stale_settings_smoke_admin_key';
 let apiAdminSessionToken = '';
 
+const commerceWebhookSecretReference = (suffix) => `env:STRIPE_WEBHOOK_SECRET_${suffix.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
@@ -941,7 +943,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Provider account ID', `acct_${suffix}`);
   await setLabeledControl(client, 'Provider mode', 'live');
   await setLabeledControl(client, 'Provider webhook URL', `https://hooks.example.com/commerce/${suffix}`);
-  await setLabeledControl(client, 'Webhook secret reference', `stripe_whsec_${suffix}`);
+  await setLabeledControl(client, 'Webhook secret reference', commerceWebhookSecretReference(suffix));
   await setLabeledControl(client, 'Webhook event allowlist', 'checkout.session.completed,charge.refunded');
   await setLabeledControl(client, 'Reconciliation mode', 'webhook');
   await setLabeledControl(client, 'Reconciliation window', '36');
@@ -1090,7 +1092,7 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.providerAccountId === `acct_${suffix}`, 'Commerce provider account ID was not persisted');
   assert(settings.integrations?.commerce?.providerMode === 'live', 'Commerce provider mode was not persisted');
   assert(settings.integrations?.commerce?.providerWebhookUrl === `https://hooks.example.com/commerce/${suffix}`, 'Commerce provider webhook URL was not persisted');
-  assert(settings.integrations?.commerce?.providerWebhookSecretId === `stripe_whsec_${suffix}`, 'Commerce webhook secret reference was not persisted');
+  assert(settings.integrations?.commerce?.providerWebhookSecretId === commerceWebhookSecretReference(suffix), 'Commerce webhook secret reference was not persisted');
   assert(settings.integrations?.commerce?.providerWebhookEvents === 'checkout.session.completed,charge.refunded', 'Commerce webhook event allowlist was not persisted');
   assert(settings.integrations?.commerce?.reconciliationMode === 'webhook', 'Commerce reconciliation mode was not persisted');
   assert(settings.integrations?.commerce?.reconciliationWindowHours === 36, 'Commerce reconciliation window was not persisted');
@@ -1157,6 +1159,40 @@ const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) =
     email: normalized.integrations?.notifications?.email,
     inApp: normalized.integrations?.notifications?.inApp,
     digestFrequency: normalized.integrations?.notifications?.digestFrequency,
+  };
+};
+
+const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        commerce: {
+          ...(settings.integrations?.commerce || {}),
+          providerWebhookSecretId: 'whsec_settings_smoke_raw_secret_should_not_persist',
+        },
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 400, `Raw commerce webhook secret should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'SECRET_REFERENCE_REQUIRED', `Raw secret rejection should return SECRET_REFERENCE_REQUIRED: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.commerce?.providerWebhookSecretId === settings.integrations?.commerce?.providerWebhookSecretId,
+    `Rejected raw secret patch should not mutate persisted commerce reference: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
+  );
+
+  return {
+    status: response.status,
+    code: payload.error?.code,
   };
 };
 
@@ -1260,6 +1296,7 @@ const main = async () => {
       `Settings webhook retry payload was not captured: ${JSON.stringify(webhookCapture.requests).slice(0, 500)}`,
     );
     const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
+    const secretStorage = await assertDirectSettingsApiRejectsRawSecrets(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1287,6 +1324,7 @@ const main = async () => {
       ui,
       ownerRotation,
       apiNormalization,
+      secretStorage,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,

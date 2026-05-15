@@ -2713,6 +2713,25 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
 const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
 const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
+const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
+const SECRET_LIKE_VALUE_REGEXES = [
+  /^whsec_/i,
+  /^stripe_whsec/i,
+  /^sk_(live|test)_/i,
+  /^rk_(live|test)_/i,
+  /^gh[pousr]_/i,
+  /^xox[baprs]-/i,
+  /^-----BEGIN [A-Z ]+PRIVATE KEY-----/,
+  /^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}$/,
+];
+
+const isSecretEnvReference = (value: string): boolean => (
+  SECRET_ENV_REFERENCE_REGEX.test(value.trim())
+);
+
+const looksLikeRawSecret = (value: string): boolean => (
+  SECRET_LIKE_VALUE_REGEXES.some((pattern) => pattern.test(value.trim()))
+);
 
 const isValidHttpUrl = (value: string): boolean => {
   try {
@@ -2976,6 +2995,20 @@ function validateSettingsDraft({
       label: 'Webhook signing secret reference is missing',
       detail: 'Store only the secret identifier in Settings; the real signing secret should stay in provider environment variables.',
       severity: 'warning',
+    });
+  }
+
+  const webhookSecretReference = commerce.providerWebhookSecretId?.trim();
+  if (webhookSecretReference && !isSecretEnvReference(webhookSecretReference)) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: looksLikeRawSecret(webhookSecretReference)
+        ? 'Webhook signing secret looks like a raw secret'
+        : 'Webhook signing secret must be an env reference',
+      detail: looksLikeRawSecret(webhookSecretReference)
+        ? 'Move the provider signing secret into deployment environment variables and save only env:STRIPE_WEBHOOK_SECRET here.'
+        : 'Use env:STRIPE_WEBHOOK_SECRET, $STRIPE_WEBHOOK_SECRET, or STRIPE_WEBHOOK_SECRET so Settings never stores the raw secret.',
+      severity: 'error',
     });
   }
 
@@ -4587,7 +4620,7 @@ function CommerceSettings({
                 className={inputClassName}
               />
               <span className="text-xs text-muted-foreground">
-                Store the provider signing secret in the runtime environment, then reference it here.
+                Store an env variable reference only; raw provider signing secrets are rejected by Settings.
               </span>
             </label>
             <label className="flex flex-col gap-1 text-sm">
