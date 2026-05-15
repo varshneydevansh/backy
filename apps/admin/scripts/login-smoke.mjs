@@ -378,7 +378,10 @@ const main = async () => {
         const body = document.body?.innerText || '';
         return {
           ready: window.location.pathname === '/forgot-password' &&
-            body.includes('If recovery is available for this account'),
+            body.includes('If recovery is available for this account') &&
+            body.includes('reset email was queued') &&
+            body.includes('Provider ') &&
+            body.includes('status queued'),
           path: window.location.pathname,
           body: body.slice(0, 900),
         };

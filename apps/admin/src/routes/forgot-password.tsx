@@ -24,6 +24,7 @@ function ForgotPasswordPage() {
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
   const [recoveryState, setRecoveryState] = useState<RecoveryState>('ready');
   const [message, setMessage] = useState<string | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<string | null>(null);
   const [localRecoveryUrl, setLocalRecoveryUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -45,12 +46,16 @@ function ForgotPasswordPage() {
     setIsSubmitting(true);
     setRecoveryState('ready');
     setMessage(null);
+    setDeliveryStatus(null);
     setLocalRecoveryUrl(null);
 
     try {
       const recovery = await requestAdminPasswordRecovery(normalizedEmail);
       setRecoveryState('sent');
       setMessage(recovery.message || 'Password recovery was requested. Check your configured delivery channel for next steps.');
+      setDeliveryStatus(recovery.resetDelivery
+        ? `Provider ${recovery.resetDelivery.provider}, status ${recovery.resetDelivery.status}.`
+        : null);
       setLocalRecoveryUrl(recovery.localRecovery?.resetUrl || null);
     } catch (error) {
       setRecoveryState('error');
@@ -148,6 +153,7 @@ function ForgotPasswordPage() {
                     setEmail(event.target.value);
                     setRecoveryState('ready');
                     setMessage(null);
+                    setDeliveryStatus(null);
                     setLocalRecoveryUrl(null);
                   }}
                   placeholder="admin@backy.io"
@@ -172,7 +178,10 @@ function ForgotPasswordPage() {
                   : 'border-amber-200 bg-amber-50 text-amber-800',
               )}
               >
-                {message}
+                <div>{message}</div>
+                {deliveryStatus && (
+                  <div className="mt-1 text-xs opacity-80">{deliveryStatus}</div>
+                )}
               </div>
             )}
 

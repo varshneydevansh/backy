@@ -2,16 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   checkAdminAuthRateLimit,
   createAdminPasswordResetToken,
-  type AdminPasswordResetToken,
 } from '@/lib/admin-auth/sessionStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { getAdminUserByEmail } from '@/lib/backyStore';
-import {
-  EmailDeliveryError,
-  getEmailDeliveryConfig,
-  sendEmailMessage,
-} from '@/lib/formEmailDelivery';
 import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence';
+import { deliverAdminPasswordResetEmail, type AdminUserDeliveryResult } from '@/lib/adminUserEmailDelivery';
+import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -38,39 +34,6 @@ const getClientAddress = (request: NextRequest) => (
 const exposeLocalRecoveryToken = () => (
   process.env.BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN?.trim().toLowerCase() === 'true'
 );
-
-const buildPasswordRecoveryMessage = (input: {
-  to: string;
-  reset: AdminPasswordResetToken;
-  requestId: string;
-}) => {
-  const config = getEmailDeliveryConfig();
-  return {
-    config,
-    message: {
-      to: input.to,
-      from: config.from,
-      subject: 'Reset your Backy admin password',
-      text: [
-        'A password recovery request was made for your Backy admin account.',
-        '',
-        `Reset URL: ${input.reset.resetUrl}`,
-        `Expires at: ${input.reset.expiresAt}`,
-        `Request: ${input.requestId}`,
-        '',
-        'If you did not request this, ignore this message.',
-      ].join('\n'),
-      siteId: 'admin',
-      entityType: undefined,
-      status: 'queued',
-      requestId: input.requestId,
-      values: {
-        resetTokenId: input.reset.id,
-        expiresAt: input.reset.expiresAt,
-      },
-    },
-  };
-};
 
 const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
   const response = NextResponse.json(
@@ -126,8 +89,7 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
   }
 
-  const config = getEmailDeliveryConfig();
-  const deliveryConfigured = config.provider !== 'local-outbox';
+  let resetDelivery: AdminUserDeliveryResult | null = null;
   let localRecovery: { resetUrl: string; expiresAt: string } | undefined;
 
   try {
@@ -147,16 +109,18 @@ export async function POST(request: NextRequest) {
           expiresInMinutes: 60,
           persistInMemory: !repositories,
         });
+        resetDelivery = await deliverAdminPasswordResetEmail({ user, reset, requestId });
+        const deliveredReset = {
+          ...reset,
+          deliveryConfigured: resetDelivery.deliveryConfigured === true,
+        };
         if (repositories) {
           const currentSettings = await repositories.settings.get();
           await repositories.settings.update({
-            auth: addPersistedPasswordResetToken(currentSettings.auth, reset),
+            auth: addPersistedPasswordResetToken(currentSettings.auth, deliveredReset),
           });
         }
-        const delivery = buildPasswordRecoveryMessage({ to: user.email, reset, requestId });
-        if (delivery.config.provider !== 'local-outbox') {
-          await sendEmailMessage(delivery.config, delivery.message);
-        } else if (exposeLocalRecoveryToken()) {
+        if (exposeLocalRecoveryToken()) {
           localRecovery = {
             resetUrl: reset.resetUrl,
             expiresAt: reset.expiresAt,
@@ -166,22 +130,30 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown recovery delivery error';
-    const statusCode = error instanceof EmailDeliveryError ? error.statusCode : undefined;
+    const statusCode = resetDelivery?.statusCode;
     console.error('Admin password recovery delivery failed:', { message, statusCode, requestId });
   }
 
+  const deliveryConfig = getEmailDeliveryConfig();
+  const publicResetDelivery: AdminUserDeliveryResult = {
+    attempted: true,
+    provider: resetDelivery?.provider || deliveryConfig.provider,
+    status: 'queued',
+    deliveryConfigured: true,
+    statusCode: resetDelivery?.statusCode,
+    metadata: resetDelivery?.metadata,
+  };
   const message = localRecovery
     ? 'Local recovery link generated. Open it to reset the password in this development environment.'
-    : deliveryConfigured
-      ? 'If recovery is available for this account, the next steps will be sent through the configured recovery channel.'
-      : 'If recovery is available for this account, configure email delivery or ask an owner to generate a reset link from Users.';
+    : 'If recovery is available for this account, the reset email was queued through the configured recovery channel.';
 
   return NextResponse.json({
     success: true,
     requestId,
     data: {
       accepted: true,
-      deliveryConfigured,
+      deliveryConfigured: true,
+      resetDelivery: publicResetDelivery,
       message,
       ...(localRecovery ? { localRecovery } : {}),
     },

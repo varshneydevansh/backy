@@ -140,6 +140,15 @@ interface AdminPasswordRecoveryResponse {
   data?: {
     accepted: boolean;
     deliveryConfigured: boolean;
+    resetDelivery?: {
+      attempted: boolean;
+      provider: 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
+      status: 'queued' | 'failed';
+      deliveryConfigured: boolean;
+      statusCode?: number;
+      error?: string;
+      metadata?: Record<string, unknown>;
+    } | null;
     message?: string;
     localRecovery?: {
       resetUrl: string;
