@@ -1611,10 +1611,33 @@ const assertStripeCheckoutExecution = async ({
     assert(Number(stripeRequest.form['line_items[0][price_data][unit_amount]']) === Math.round(checkoutSession.amountTotal * 100), `Stripe checkout amount did not match subscription price: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`);
     assert(stripeRequest.form['metadata[amountTotal]'] === String(checkoutSession.amountTotal), `Stripe checkout metadata did not include quote total: ${JSON.stringify(stripeRequest.form)}`);
 
-    const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    let orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
     assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Stripe checkout session id was not persisted: ${JSON.stringify(orderRecord.values)}`);
     assert(orderRecord.values?.paymentprovider === 'stripe', `Stripe payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
     assert(orderRecord.values?.paymentreference === `stripe:${checkoutSession.id}`, `Stripe payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
+
+    const subscriptionWebhookPayload = await postCommerceWebhook({
+      id: `evt_sub_${slug}`,
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: checkoutSession.id,
+          subscription: `sub_${slug}`,
+          amount_total: Math.round(checkoutSession.amountTotal * 100),
+          currency: checkoutSession.currency.toLowerCase(),
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-webhook-${slug}` });
+    assert(subscriptionWebhookPayload.data?.event?.status === 'paid', `Stripe subscription webhook did not mark payment paid: ${JSON.stringify(subscriptionWebhookPayload)}`);
+    assert(subscriptionWebhookPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription webhook did not return the subscription reference: ${JSON.stringify(subscriptionWebhookPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription webhook did not persist paid status: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription webhook did not persist subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('checkout.session.completed'), `Stripe subscription webhook settlement note missing: ${JSON.stringify(orderRecord.values)}`);
 
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')

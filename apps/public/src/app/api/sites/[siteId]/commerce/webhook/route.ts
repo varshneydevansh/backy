@@ -146,6 +146,18 @@ const eventPaymentReference = (payload: Record<string, unknown>, object: Record<
   textValue(object.payment_intent || object.paymentIntent || object.paymentReference || object.charge || payload.paymentReference)
 );
 
+const eventSubscriptionReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
+  textValue(object.subscription || object.subscriptionId || object.subscription_id || payload.subscription || payload.subscriptionId)
+);
+
+const eventInvoiceReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
+  textValue(object.invoice || object.invoiceId || object.invoice_id || payload.invoice || payload.invoiceId)
+);
+
+const eventProviderReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
+  eventPaymentReference(payload, object) || eventSubscriptionReference(payload, object) || eventInvoiceReference(payload, object)
+);
+
 const eventOrderNumber = (object: Record<string, unknown>): string => {
   const metadata = metadataRecord(object);
   return textValue(metadata.orderNumber || metadata.order_number || object.orderNumber);
@@ -164,7 +176,7 @@ const amountFromProvider = (value: unknown): number | null => {
 const settlementForEvent = (type: string, object: Record<string, unknown>, currentValues: Record<string, unknown>) => {
   const lowerType = type.toLowerCase();
   const now = new Date().toISOString();
-  const paymentReference = eventPaymentReference({}, object);
+  const providerReference = eventProviderReference({}, object);
   const refundAmount = amountFromProvider(object.amount_refunded || object.amountRefunded) ?? Number(currentValues.total || 0);
 
   if (lowerType === 'checkout.session.completed' || lowerType === 'payment_intent.succeeded' || lowerType === 'payment.succeeded') {
@@ -174,7 +186,7 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
         orderstatus: 'paid',
         paymentstatus: 'paid',
         paidat: now,
-        ...(paymentReference ? { paymentreference: paymentReference } : {}),
+        ...(providerReference ? { paymentreference: providerReference } : {}),
       },
     };
   }
@@ -193,12 +205,12 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
         providerrefundstatus: 'succeeded',
         providerrefundprovider: refundProvider,
         providerrefundid: refundId,
-        providerrefundreference: paymentReference || textValue(currentValues.providerrefundreference),
+        providerrefundreference: providerReference || textValue(currentValues.providerrefundreference),
         providerrefundamount: moneyValue(refundAmount),
         providerrefundreason: refundReason,
         providerrefundrequestedat: textValue(currentValues.providerrefundrequestedat) || now,
         providerrefundcompletedat: now,
-        ...(paymentReference ? { paymentreference: paymentReference } : {}),
+        ...(providerReference ? { paymentreference: providerReference } : {}),
       },
     };
   }
@@ -208,7 +220,7 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
       status: 'failed' as const,
       values: {
         paymentstatus: 'failed',
-        ...(paymentReference ? { paymentreference: paymentReference } : {}),
+        ...(providerReference ? { paymentreference: providerReference } : {}),
       },
     };
   }
@@ -313,7 +325,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const object = eventObject(payload);
     const providerEventId = eventId(payload);
     const sessionId = eventSessionId(payload, object);
-    const paymentReference = eventPaymentReference(payload, object);
+    const paymentReference = eventProviderReference(payload, object);
+    const subscriptionReference = eventSubscriptionReference(payload, object);
+    const invoiceReference = eventInvoiceReference(payload, object);
     const orderNumber = eventOrderNumber(object);
     const orderSlug = eventOrderSlug(object);
 
@@ -426,6 +440,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           orderNumber: String(updated.values.ordernumber || ''),
           checkoutSessionId: String(updated.values.checkoutsessionid || ''),
           paymentReference: String(updated.values.paymentreference || ''),
+          subscriptionReference,
+          invoiceReference,
         }),
         requestId,
       });
@@ -588,6 +604,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         orderNumber: updated.values.ordernumber,
         checkoutSessionId: updated.values.checkoutsessionid,
         paymentReference: updated.values.paymentreference,
+        subscriptionReference,
+        invoiceReference,
         paymentStatus: updated.values.paymentstatus,
       },
     });
