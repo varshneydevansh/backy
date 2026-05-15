@@ -83,6 +83,7 @@ const stringValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const EMAIL_ADDRESS_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
 const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
@@ -766,6 +767,75 @@ const validateInfrastructureProviderSettings = (integrations: unknown): string |
     && (vercelProductionDomain.includes('://') || !SIMPLE_DOMAIN_REGEX.test(vercelProductionDomain))
   ) {
     return 'Vercel production domain must be a bare hostname without protocol or path.';
+  }
+
+  return null;
+};
+
+const validateCommerceOperationalSettings = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const commerce = parseJsonObject(input?.commerce) || {};
+  const currency = stringValue(commerce.currency);
+
+  if (currency && !/^[A-Z]{3}$/.test(currency)) {
+    return 'Commerce currency must be a three-letter uppercase ISO code.';
+  }
+
+  const checkoutSuccessPath = stringValue(commerce.checkoutSuccessPath);
+  if (checkoutSuccessPath && !checkoutSuccessPath.startsWith('/')) {
+    return 'Commerce success redirect path must start with /.';
+  }
+
+  const checkoutCancelPath = stringValue(commerce.checkoutCancelPath);
+  if (checkoutCancelPath && !checkoutCancelPath.startsWith('/')) {
+    return 'Commerce cancel redirect path must start with /.';
+  }
+
+  const billingContactEmail = stringValue(commerce.billingContactEmail);
+  if (billingContactEmail && !EMAIL_ADDRESS_REGEX.test(billingContactEmail)) {
+    return 'Billing contact email must be a valid email address.';
+  }
+
+  return null;
+};
+
+const validateNotificationRecipientSettings = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const notifications = parseJsonObject(input?.notifications) || {};
+  const email = parseJsonObject(notifications.email) || {};
+  const recipient = stringValue(email.recipient);
+
+  if (recipient && !EMAIL_ADDRESS_REGEX.test(recipient)) {
+    return 'Notification recipient must be a valid email address.';
+  }
+
+  return null;
+};
+
+const validateAuthPolicySettings = (auth: unknown): string | null => {
+  const policy = parseJsonObject(auth);
+  if (!policy) {
+    return null;
+  }
+
+  const minPasswordLength = numberValue(policy.minPasswordLength, 12);
+  if (minPasswordLength < 8 || minPasswordLength > 128) {
+    return 'Minimum password length must be from 8 to 128 characters.';
+  }
+
+  const sessionTimeoutMinutes = numberValue(policy.sessionTimeoutMinutes, 120);
+  if (sessionTimeoutMinutes < 15 || sessionTimeoutMinutes > 10080) {
+    return 'Session timeout must be from 15 to 10080 minutes.';
+  }
+
+  const invalidDomains = stringValue(policy.allowedEmailDomains)
+    .split(',')
+    .map((domain) => domain.trim())
+    .filter(Boolean)
+    .filter((domain) => !SIMPLE_DOMAIN_REGEX.test(domain));
+
+  if (invalidDomains.length > 0) {
+    return `Allowed email domains include invalid values: ${invalidDomains.slice(0, 3).join(', ')}.`;
   }
 
   return null;
@@ -2491,9 +2561,21 @@ export async function PATCH(request: NextRequest) {
       if (infrastructureSettingsError) {
         return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
       }
+      const commerceSettingsError = validateCommerceOperationalSettings(integrations);
+      if (commerceSettingsError) {
+        return errorResponse(400, 'VALIDATION_ERROR', commerceSettingsError, requestId);
+      }
+      const notificationRecipientError = validateNotificationRecipientSettings(integrations);
+      if (notificationRecipientError) {
+        return errorResponse(400, 'VALIDATION_ERROR', notificationRecipientError, requestId);
+      }
       const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
       if (commerceEndpointError) {
         return errorResponse(400, 'VALIDATION_ERROR', commerceEndpointError, requestId);
+      }
+      const authPolicyError = body.auth !== undefined ? validateAuthPolicySettings(mergedAuth) : null;
+      if (authPolicyError) {
+        return errorResponse(400, 'VALIDATION_ERROR', authPolicyError, requestId);
       }
       const settings = (await repositories.settings.update({
         ...(deliveryMode ? { deliveryMode } : {}),
@@ -2548,9 +2630,21 @@ export async function PATCH(request: NextRequest) {
     if (infrastructureSettingsError) {
       return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
     }
+    const commerceSettingsError = validateCommerceOperationalSettings(integrations);
+    if (commerceSettingsError) {
+      return errorResponse(400, 'VALIDATION_ERROR', commerceSettingsError, requestId);
+    }
+    const notificationRecipientError = validateNotificationRecipientSettings(integrations);
+    if (notificationRecipientError) {
+      return errorResponse(400, 'VALIDATION_ERROR', notificationRecipientError, requestId);
+    }
     const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
     if (commerceEndpointError) {
       return errorResponse(400, 'VALIDATION_ERROR', commerceEndpointError, requestId);
+    }
+    const authPolicyError = body.auth !== undefined ? validateAuthPolicySettings(auth) : null;
+    if (authPolicyError) {
+      return errorResponse(400, 'VALIDATION_ERROR', authPolicyError, requestId);
     }
     const settings = updateAdminSettings({
       ...sanitizedBody,

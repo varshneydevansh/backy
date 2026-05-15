@@ -1569,6 +1569,97 @@ const assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings = asyn
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidOperationalSettings = async (settings) => {
+  const sendInvalidSettingsPatch = async (label, body) => {
+    const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 400, `${label} should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'VALIDATION_ERROR', `${label} rejection should return VALIDATION_ERROR: ${JSON.stringify(payload).slice(0, 500)}`);
+
+    return {
+      status: response.status,
+      code: payload.error?.code,
+    };
+  };
+
+  const successPath = await sendInvalidSettingsPatch('Invalid commerce success path', {
+    integrations: {
+      ...(settings.integrations || {}),
+      commerce: {
+        ...(settings.integrations?.commerce || {}),
+        checkoutSuccessPath: 'checkout/complete',
+      },
+    },
+  });
+  const billingEmail = await sendInvalidSettingsPatch('Invalid billing contact email', {
+    integrations: {
+      ...(settings.integrations || {}),
+      commerce: {
+        ...(settings.integrations?.commerce || {}),
+        billingContactEmail: 'billing-not-an-email',
+      },
+    },
+  });
+  const notificationRecipient = await sendInvalidSettingsPatch('Invalid notification recipient', {
+    integrations: {
+      ...(settings.integrations || {}),
+      notifications: {
+        ...(settings.integrations?.notifications || {}),
+        email: {
+          ...(settings.integrations?.notifications?.email || {}),
+          recipient: 'notify-not-an-email',
+        },
+      },
+    },
+  });
+  const passwordPolicy = await sendInvalidSettingsPatch('Invalid password policy', {
+    auth: {
+      ...(settings.auth || {}),
+      minPasswordLength: 4,
+    },
+  });
+  const domainPolicy = await sendInvalidSettingsPatch('Invalid email domain policy', {
+    auth: {
+      ...(settings.auth || {}),
+      allowedEmailDomains: 'example.com, invalid_domain',
+    },
+  });
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.commerce?.checkoutSuccessPath === settings.integrations?.commerce?.checkoutSuccessPath,
+    `Rejected success path patch should not mutate persisted commerce settings: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.commerce?.billingContactEmail === settings.integrations?.commerce?.billingContactEmail,
+    `Rejected billing email patch should not mutate persisted commerce settings: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.notifications?.email?.recipient === settings.integrations?.notifications?.email?.recipient,
+    `Rejected notification recipient patch should not mutate persisted notification settings: ${JSON.stringify(after.integrations?.notifications).slice(0, 500)}`,
+  );
+  assert(
+    after.auth?.minPasswordLength === settings.auth?.minPasswordLength,
+    `Rejected auth policy patch should not mutate persisted auth settings: ${JSON.stringify(after.auth).slice(0, 500)}`,
+  );
+
+  return {
+    successPath,
+    billingEmail,
+    notificationRecipient,
+    passwordPolicy,
+    domainPolicy,
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1672,6 +1763,7 @@ const main = async () => {
     const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
     const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
     const infrastructureProviderValidation = await assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings(await readSettings());
+    const operationalSettingsValidation = await assertDirectSettingsApiRejectsInvalidOperationalSettings(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1704,6 +1796,7 @@ const main = async () => {
       providerEndpointValidation,
       callbackUrlValidation,
       infrastructureProviderValidation,
+      operationalSettingsValidation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,
