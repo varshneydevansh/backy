@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { getSites } from '@/lib/backyStore';
+import { getCommerceCronReadiness } from '@/lib/commerceCronReadiness';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -122,12 +123,14 @@ export async function GET(request: NextRequest) {
       updatedCount: results.reduce((total, result) => total + Number(result.updatedCount || 0), 0),
       unmatchedCount: results.reduce((total, result) => total + Number(result.unmatchedCount || 0), 0),
     };
+    const cronReadiness = getCommerceCronReadiness();
 
     return publicContractJson({
       success: true,
       requestId,
       data: {
         ...summary,
+        cronReadiness,
         results,
         skipped,
         errors,

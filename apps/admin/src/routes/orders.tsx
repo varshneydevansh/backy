@@ -33,6 +33,7 @@ import {
   createOrderShippingLabel,
   deleteCollectionRecord,
   getUserPermissions,
+  getCommerceReconciliationReadiness,
   getOrderAnalytics,
   adminFetch,
   importCollectionRecordsCsv,
@@ -43,6 +44,7 @@ import {
   updateCollection,
   updateCollectionRecord,
   type CommerceReconciliationResult,
+  type CommerceCronReadiness,
   type Collection,
   type CollectionField,
   type CollectionRecord,
@@ -587,6 +589,8 @@ function OrdersRoute() {
   const [isImportingOrders, setIsImportingOrders] = useState(false);
   const [isReconcilingOrders, setIsReconcilingOrders] = useState(false);
   const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
+  const [cronReadiness, setCronReadiness] = useState<CommerceCronReadiness | null>(null);
+  const [cronReadinessError, setCronReadinessError] = useState<string | null>(null);
   const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
   const [isOrderAnalyticsLoading, setIsOrderAnalyticsLoading] = useState(false);
   const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
@@ -1094,6 +1098,23 @@ function OrdersRoute() {
     }
   };
 
+  const loadCronReadiness = async () => {
+    if (!canConfigureOrders || isPermissionMatrixPending) {
+      setCronReadiness(null);
+      setCronReadinessError(null);
+      return;
+    }
+
+    try {
+      const readiness = await getCommerceReconciliationReadiness();
+      setCronReadiness(readiness);
+      setCronReadinessError(null);
+    } catch (loadError) {
+      setCronReadiness(null);
+      setCronReadinessError(loadError instanceof Error ? loadError.message : 'Unable to load scheduled reconciliation readiness');
+    }
+  };
+
   const loadOrders = async () => {
     if (isOrdersBusy) return;
     if (isPermissionMatrixPending) return;
@@ -1107,6 +1128,8 @@ function OrdersRoute() {
       setOrderAnalyticsError(null);
       setOrderDeliveryEvents([]);
       setOrderDeliveryError(null);
+      setCronReadiness(null);
+      setCronReadinessError(null);
       clearOrderEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
       return;
@@ -1130,6 +1153,8 @@ function OrdersRoute() {
         setOrderAnalyticsError(null);
         setOrderDeliveryEvents([]);
         setOrderDeliveryError(null);
+        setCronReadiness(null);
+        setCronReadinessError(null);
         clearOrderEditorState();
         return;
       }
@@ -1155,6 +1180,7 @@ function OrdersRoute() {
       setOrderPagination(result.pagination);
       void loadOrderAnalytics();
       void loadOrderDeliveryEvents();
+      void loadCronReadiness();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load orders');
     } finally {
@@ -2430,6 +2456,55 @@ function OrdersRoute() {
                   </div>
                 </div>
               )}
+              <div className="rounded-lg border border-border bg-background p-3 text-sm" data-testid="orders-cron-readiness">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 font-medium">
+                      {cronReadiness?.ready ? (
+                        <CheckCircle2 className="size-4 text-success" />
+                      ) : (
+                        <AlertTriangle className="size-4 text-warning" />
+                      )}
+                      Scheduled reconciliation
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Vercel calls the platform reconcile endpoint with a bearer cron secret; the secret must match a server admin key.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void loadCronReadiness()}
+                    disabled={isOrdersAccessBusy || !canConfigureOrders}
+                    title={!canConfigureOrders ? configurePermissionTitle : undefined}
+                    iconStart={<RefreshCw className="size-4" />}
+                  >
+                    Check cron
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <CronReadinessPill label="Vercel cron" ready={Boolean(cronReadiness?.vercelCronConfigured)} />
+                  <CronReadinessPill label="CRON_SECRET" ready={Boolean(cronReadiness?.cronSecretConfigured)} />
+                  <CronReadinessPill label="Admin env key" ready={Boolean(cronReadiness?.environmentAdminKeyConfigured)} />
+                  <CronReadinessPill label="Secret matches key" ready={Boolean(cronReadiness?.cronSecretMatchesAdminKey)} />
+                </div>
+                {cronReadiness ? (
+                  <div className="mt-3 grid gap-2 text-xs text-muted-foreground lg:grid-cols-2">
+                    <code className="overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono">{cronReadiness.entrypoint}</code>
+                    <span className="rounded-md border border-border bg-muted px-2 py-1.5">Schedule {cronReadiness.schedule}</span>
+                  </div>
+                ) : null}
+                {cronReadiness?.missing.length ? (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Missing: {cronReadiness.missing.join(', ')}.
+                  </div>
+                ) : null}
+                {cronReadinessError ? (
+                  <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {cronReadinessError}
+                  </div>
+                ) : null}
+              </div>
               <div className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -4040,6 +4115,21 @@ function StatePill({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="font-medium capitalize">{value.replace('-', ' ')}</div>
     </div>
+  );
+}
+
+function CronReadinessPill({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <span className={cn(
+      'inline-flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium',
+      ready
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-amber-200 bg-amber-50 text-amber-800',
+    )}
+    >
+      {label}
+      <span>{ready ? 'Ready' : 'Missing'}</span>
+    </span>
   );
 }
 

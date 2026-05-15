@@ -6238,6 +6238,30 @@ export interface CommerceReconciliationResult {
   unmatchedEvents: Array<Record<string, unknown>>;
 }
 
+export interface CommerceCronReadiness {
+  schemaVersion: 'backy.commerce-cron-readiness.v1';
+  ready: boolean;
+  entrypoint: string;
+  schedule: string;
+  authorizationMode: 'vercel-cron-bearer-admin-key';
+  vercelCronConfigured: boolean;
+  cronSecretConfigured: boolean;
+  environmentAdminKeyConfigured: boolean;
+  cronSecretMatchesAdminKey: boolean;
+  missing: string[];
+  checkedAt: string;
+}
+
+interface ApiCommerceReconciliationReadinessResponse {
+  success: boolean;
+  data?: {
+    cronReadiness: CommerceCronReadiness;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface OrderAnalytics {
   schemaVersion: 'backy.order-analytics.v1';
   generatedAt: string;
@@ -6313,6 +6337,18 @@ export async function reconcileCommerceOrders(siteId: string, limit = 100): Prom
   }
 
   return payload.data as CommerceReconciliationResult;
+}
+
+export async function getCommerceReconciliationReadiness(): Promise<CommerceCronReadiness> {
+  const response = await adminFetch(`${getAdminApiBase()}/commerce/reconcile/readiness`);
+  const payload = await readJson<ApiCommerceReconciliationReadinessResponse>(response);
+  const cronReadiness = payload.data?.cronReadiness;
+
+  if (!response.ok || !payload.success || !cronReadiness) {
+    throw new Error(payload.error?.message || 'Unable to load commerce reconciliation readiness');
+  }
+
+  return cronReadiness;
 }
 
 export async function bulkUpdateCollectionRecords(

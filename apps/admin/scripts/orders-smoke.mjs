@@ -809,6 +809,7 @@ const assertOrdersLayout = async (client) => {
       editor: Boolean(document.querySelector('#orders-editor')),
       shippingLabelControls: Boolean(document.querySelector('[data-testid="orders-shipping-label-controls"]')),
       providerRefundControls: Boolean(document.querySelector('[data-testid="orders-provider-refund-controls"]')),
+      cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
@@ -826,7 +827,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -985,6 +986,19 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
 
   return record;
+};
+
+const assertCommerceCronReadiness = async () => {
+  const payload = await requestApi('/api/admin/commerce/reconcile/readiness');
+  const readiness = payload.data?.cronReadiness;
+  assert(readiness?.schemaVersion === 'backy.commerce-cron-readiness.v1', `Scheduled reconciliation readiness returned wrong schema: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(readiness.entrypoint === '/api/admin/commerce/reconcile?limit=100', `Scheduled reconciliation readiness returned wrong entrypoint: ${JSON.stringify(readiness)}`);
+  assert(readiness.schedule === '0 3 * * *', `Scheduled reconciliation readiness returned wrong schedule: ${JSON.stringify(readiness)}`);
+  assert(typeof readiness.vercelCronConfigured === 'boolean', `Scheduled reconciliation readiness did not expose vercel cron status: ${JSON.stringify(readiness)}`);
+  assert(typeof readiness.cronSecretConfigured === 'boolean', `Scheduled reconciliation readiness did not expose CRON_SECRET status: ${JSON.stringify(readiness)}`);
+  assert(typeof readiness.environmentAdminKeyConfigured === 'boolean', `Scheduled reconciliation readiness did not expose admin key status: ${JSON.stringify(readiness)}`);
+  assert(typeof readiness.cronSecretMatchesAdminKey === 'boolean', `Scheduled reconciliation readiness did not expose secret match status: ${JSON.stringify(readiness)}`);
+  assert(Array.isArray(readiness.missing), `Scheduled reconciliation readiness did not expose missing requirements: ${JSON.stringify(readiness)}`);
 };
 
 const fillOrderEditor = async (client, suffix, customerRecord) => {
@@ -1409,6 +1423,7 @@ const main = async () => {
     importedOrderRecordId = null;
 
     await assertOrdersLayout(client);
+    await assertCommerceCronReadiness();
     const { orderNumber, slug } = await fillOrderEditor(client, suffix, customerFixture.record);
     const createdOrder = await waitForOrderValue(
       collectionId,
