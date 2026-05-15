@@ -982,6 +982,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Bucket', `media-${suffix}`);
   await setLabeledControl(client, 'Public base URL', `https://${suffix}.supabase.co/storage/v1/object/public/media`);
   await setLabeledControl(client, 'Path prefix', 'sites/{siteId}');
+  await setLabeledControl(client, 'Supabase key secret ref', 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY');
+  await setLabeledControl(client, 'S3 access key secret ref', 'env:BACKY_S3_ACCESS_KEY_ID');
+  await setLabeledControl(client, 'S3 secret access key ref', 'env:BACKY_S3_SECRET_ACCESS_KEY');
   await setLabeledControl(client, 'Private files', true);
   await setLabeledControl(client, 'Image transforms', true);
   await setLabeledControl(client, 'Max upload size (MB)', '128');
@@ -1008,6 +1011,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
+    hasStorageSecretRefs: document.body?.innerText?.includes('Storage credentials stay in deployment env') || false,
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
   }))()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
@@ -1017,7 +1021,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasMediaScannerRuntime &&
     infrastructureState.hasNotificationRuntime &&
     infrastructureState.hasCommerceRuntime &&
-    infrastructureState.hasCommerceWebhookSecretEnv,
+    infrastructureState.hasCommerceWebhookSecretEnv &&
+    infrastructureState.hasStorageSecretRefs,
     `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
   );
   assert(infrastructureState.hasInfrastructureCheck, `Infrastructure check control was not visible: ${JSON.stringify(infrastructureState)}`);
@@ -1187,6 +1192,9 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.storage?.workspaceStorageLimitGb === 512, 'Storage workspace limit was not persisted');
   assert(settings.integrations?.storage?.warningThresholdPercent === 85, 'Storage warning threshold was not persisted');
   assert(settings.integrations?.storage?.allowedFileTypes === 'image/*,font/*,application/pdf,.zip', 'Storage allowed file types were not persisted');
+  assert(settings.integrations?.storage?.supabaseKeySecretRef === 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY', 'Storage Supabase key secret ref was not persisted');
+  assert(settings.integrations?.storage?.accessKeyIdSecretRef === 'env:BACKY_S3_ACCESS_KEY_ID', 'Storage S3 access key secret ref was not persisted');
+  assert(settings.integrations?.storage?.secretAccessKeySecretRef === 'env:BACKY_S3_SECRET_ACCESS_KEY', 'Storage S3 secret access key ref was not persisted');
   assert(settings.integrations?.supabase?.projectRef === suffix, 'Supabase project ref was not persisted');
   assert(settings.integrations?.supabase?.databaseEnabled === true, 'Supabase database toggle was not persisted');
   assert(settings.integrations?.vercel?.projectId === `prj_${suffix}`, 'Vercel project id was not persisted');
@@ -1270,7 +1278,7 @@ const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) =
 };
 
 const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+  const commerceResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1286,20 +1294,46 @@ const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
       },
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+  const commercePayload = await commerceResponse.json().catch(() => ({}));
 
-  assert(response.status === 400, `Raw commerce webhook secret should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
-  assert(payload?.error?.code === 'SECRET_REFERENCE_REQUIRED', `Raw secret rejection should return SECRET_REFERENCE_REQUIRED: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(commerceResponse.status === 400, `Raw commerce webhook secret should be rejected, got ${commerceResponse.status}: ${JSON.stringify(commercePayload).slice(0, 500)}`);
+  assert(commercePayload?.error?.code === 'SECRET_REFERENCE_REQUIRED', `Raw commerce secret rejection should return SECRET_REFERENCE_REQUIRED: ${JSON.stringify(commercePayload).slice(0, 500)}`);
+
+  const storageResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        storage: {
+          ...(settings.integrations?.storage || {}),
+          supabaseKeySecretRef: 'sk_live_settings_storage_secret_should_not_persist',
+        },
+      },
+    }),
+  });
+  const storagePayload = await storageResponse.json().catch(() => ({}));
+
+  assert(storageResponse.status === 400, `Raw storage secret should be rejected, got ${storageResponse.status}: ${JSON.stringify(storagePayload).slice(0, 500)}`);
+  assert(storagePayload?.error?.code === 'SECRET_REFERENCE_REQUIRED', `Raw storage secret rejection should return SECRET_REFERENCE_REQUIRED: ${JSON.stringify(storagePayload).slice(0, 500)}`);
 
   const after = await readSettings();
   assert(
     after.integrations?.commerce?.providerWebhookSecretId === settings.integrations?.commerce?.providerWebhookSecretId,
     `Rejected raw secret patch should not mutate persisted commerce reference: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
   );
+  assert(
+    after.integrations?.storage?.supabaseKeySecretRef === settings.integrations?.storage?.supabaseKeySecretRef,
+    `Rejected raw storage secret patch should not mutate persisted storage reference: ${JSON.stringify(after.integrations?.storage).slice(0, 500)}`,
+  );
 
   return {
-    status: response.status,
-    code: payload.error?.code,
+    commerceStatus: commerceResponse.status,
+    storageStatus: storageResponse.status,
+    code: storagePayload.error?.code,
   };
 };
 

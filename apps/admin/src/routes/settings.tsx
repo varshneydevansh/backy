@@ -2717,6 +2717,7 @@ const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
 const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
 const SECRET_LIKE_VALUE_REGEXES = [
+  /^(AKIA|ASIA)[A-Z0-9]{16}$/i,
   /^whsec_/i,
   /^stripe_whsec/i,
   /^sk_(live|test)_/i,
@@ -2734,6 +2735,34 @@ const isSecretEnvReference = (value: string): boolean => (
 const looksLikeRawSecret = (value: string): boolean => (
   SECRET_LIKE_VALUE_REGEXES.some((pattern) => pattern.test(value.trim()))
 );
+
+const secretReferenceEnvKey = (value: string): string => (
+  value.trim().replace(/^env:/i, '').replace(/^\$/, '')
+);
+
+const validateEnvReferenceIssue = (
+  tab: SettingsTab,
+  label: string,
+  value: string | undefined,
+  example: string,
+  rawSecretLabel: string,
+): SettingsValidationIssue | null => {
+  const reference = value?.trim();
+  if (!reference || isSecretEnvReference(reference)) {
+    return null;
+  }
+
+  return {
+    tab,
+    label: looksLikeRawSecret(reference)
+      ? `${label} looks like a raw secret`
+      : `${label} must be an env reference`,
+    detail: looksLikeRawSecret(reference)
+      ? `Move ${rawSecretLabel} into deployment environment variables and save only ${example} here.`
+      : `Use ${example}, $${secretReferenceEnvKey(example)}, or ${secretReferenceEnvKey(example)} so Settings never stores the raw secret.`,
+    severity: 'error',
+  };
+};
 
 const isValidHttpUrl = (value: string): boolean => {
   try {
@@ -2910,6 +2939,16 @@ function validateSettingsDraft({
     });
   }
 
+  [
+    validateEnvReferenceIssue('infrastructure', 'Supabase storage key secret ref', storage.supabaseKeySecretRef, 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY', 'the Supabase service role key'),
+    validateEnvReferenceIssue('infrastructure', 'S3 access key secret ref', storage.accessKeyIdSecretRef, 'env:BACKY_S3_ACCESS_KEY_ID', 'the S3 access key'),
+    validateEnvReferenceIssue('infrastructure', 'S3 secret access key ref', storage.secretAccessKeySecretRef, 'env:BACKY_S3_SECRET_ACCESS_KEY', 'the S3 secret access key'),
+  ].forEach((issue) => {
+    if (issue) {
+      addIssue(issues, issue);
+    }
+  });
+
   if (supabase.projectUrl && !isValidHttpUrl(supabase.projectUrl)) {
     addIssue(issues, {
       tab: 'infrastructure',
@@ -3001,17 +3040,9 @@ function validateSettingsDraft({
   }
 
   const webhookSecretReference = commerce.providerWebhookSecretId?.trim();
-  if (webhookSecretReference && !isSecretEnvReference(webhookSecretReference)) {
-    addIssue(issues, {
-      tab: 'commerce',
-      label: looksLikeRawSecret(webhookSecretReference)
-        ? 'Webhook signing secret looks like a raw secret'
-        : 'Webhook signing secret must be an env reference',
-      detail: looksLikeRawSecret(webhookSecretReference)
-        ? 'Move the provider signing secret into deployment environment variables and save only env:STRIPE_WEBHOOK_SECRET here.'
-        : 'Use env:STRIPE_WEBHOOK_SECRET, $STRIPE_WEBHOOK_SECRET, or STRIPE_WEBHOOK_SECRET so Settings never stores the raw secret.',
-      severity: 'error',
-    });
+  const webhookSecretIssue = validateEnvReferenceIssue('commerce', 'Webhook signing secret', webhookSecretReference, 'env:STRIPE_WEBHOOK_SECRET', 'the provider signing secret');
+  if (webhookSecretIssue) {
+    addIssue(issues, webhookSecretIssue);
   }
 
   if (commerce.reconciliationMode === 'webhook' && !commerce.webhookEventsEnabled) {
@@ -4108,6 +4139,38 @@ function InfrastructureSettings({
                     </div>
                   ))}
                 </div>
+                {storageProvisioningResult.secretReferences && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3" data-testid="settings-storage-secret-references">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Secret references</h5>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                        storageProvisioningResult.secretReferences.status === 'ready'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-red-50 text-red-700',
+                      )}
+                      >
+                        {storageProvisioningResult.secretReferences.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {storageProvisioningResult.secretReferences.summary}
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {storageProvisioningResult.secretReferences.checks.map((check) => (
+                        <div key={check.label} className="rounded-md border border-border bg-background px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-foreground">{check.label}</span>
+                            <span className={check.ready ? 'text-xs font-semibold text-emerald-700' : 'text-xs font-semibold text-red-700'}>
+                              {check.ready ? 'Ready' : 'Missing'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <h4 className="text-sm font-semibold">Credential rotation</h4>
@@ -4214,6 +4277,42 @@ function InfrastructureSettings({
                   placeholder="sites/{siteId}"
                   className={inputClassName}
                 />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Supabase key secret ref</span>
+                <input
+                  value={storage.supabaseKeySecretRef || ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ supabaseKeySecretRef: event.target.value })}
+                  placeholder="env:BACKY_SUPABASE_SERVICE_ROLE_KEY"
+                  className={inputClassName}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Reference only; never paste the Supabase service role key.
+                </span>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">S3 access key secret ref</span>
+                <input
+                  value={storage.accessKeyIdSecretRef || ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ accessKeyIdSecretRef: event.target.value })}
+                  placeholder="env:BACKY_S3_ACCESS_KEY_ID"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                <span className="font-medium">S3 secret access key ref</span>
+                <input
+                  value={storage.secretAccessKeySecretRef || ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ secretAccessKeySecretRef: event.target.value })}
+                  placeholder="env:BACKY_S3_SECRET_ACCESS_KEY"
+                  className={inputClassName}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Storage credentials stay in deployment env or a connected secret store; Settings stores only these references.
+                </span>
               </label>
               <div className="grid gap-2">
                 <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
