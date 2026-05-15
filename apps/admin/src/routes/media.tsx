@@ -1550,6 +1550,11 @@ function MediaPage() {
   );
   const storageEnvContract = useMemo(() => MEDIA_STORAGE_ENV_CONTRACT[selectedStorageProvider], [selectedStorageProvider]);
   const missingStorageEnv = new Set(runtimeStorage?.provider === selectedStorageProvider ? runtimeStorage.missing || [] : []);
+  const storageSecretReferenceCount = [
+    storageSettings.accessKeyIdSecretRef,
+    storageSettings.secretAccessKeySecretRef,
+    storageSettings.supabaseKeySecretRef,
+  ].filter(Boolean).length;
   const selectedProviderInsight = useMemo(
     () => selectedAsset ? getMediaProviderInsight(selectedAsset, runtimeStorage, storageSettings) : undefined,
     [runtimeStorage, selectedAsset, storageSettings],
@@ -4070,6 +4075,39 @@ function MediaPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Supabase key secret ref</span>
+                  <input
+                    aria-label="Supabase key secret ref"
+                    value={storageSettings.supabaseKeySecretRef || ''}
+                    disabled={storageSettingsControlsDisabled}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ supabaseKeySecretRef: event.target.value })}
+                    placeholder="env:BACKY_SUPABASE_SERVICE_ROLE_KEY"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">S3 access key secret ref</span>
+                  <input
+                    aria-label="S3 access key secret ref"
+                    value={storageSettings.accessKeyIdSecretRef || ''}
+                    disabled={storageSettingsControlsDisabled}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ accessKeyIdSecretRef: event.target.value })}
+                    placeholder="env:BACKY_S3_ACCESS_KEY_ID"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                  <span className="font-medium">S3 secret access key ref</span>
+                  <input
+                    aria-label="S3 secret access key ref"
+                    value={storageSettings.secretAccessKeySecretRef || ''}
+                    disabled={storageSettingsControlsDisabled}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ secretAccessKeySecretRef: event.target.value })}
+                    placeholder="env:BACKY_S3_SECRET_ACCESS_KEY"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
                   <span className="font-medium">Supabase project URL</span>
                   <input
                     aria-label="Supabase project URL"
@@ -4197,6 +4235,10 @@ function MediaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Lifecycle policy</dt>
                     <dd>{storageSettings.lifecyclePolicyEnabled ? 'enabled' : 'off'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Secret refs</dt>
+                    <dd>{storageSecretReferenceCount > 0 ? `${storageSecretReferenceCount} configured` : 'unset'}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Supabase storage</dt>
@@ -7323,6 +7365,30 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
           <dd className="break-all font-mono">{result.probePath}</dd>
         </div>
       </dl>
+      {result.secretReferences && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-secret-references">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Secret references</h4>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', result.secretReferences.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+              {result.secretReferences.status}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.secretReferences.summary}</p>
+          <div className="mt-3 grid gap-2">
+            {result.secretReferences.checks.map((check) => (
+              <div key={check.label} className="rounded border border-border bg-background px-2.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{check.label}</span>
+                  <span className={cn('text-[11px] font-semibold', check.ready ? 'text-success' : 'text-warning')}>
+                    {check.ready ? 'Ready' : 'Missing'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {result.automation && (
         <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-container-automation">
           <div className="flex flex-wrap items-center justify-between gap-2">

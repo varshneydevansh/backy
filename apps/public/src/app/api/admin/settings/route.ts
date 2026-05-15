@@ -85,6 +85,7 @@ const stringValue = (value: unknown): string => (
 
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
 const SECRET_LIKE_VALUE_REGEXES = [
+  /^(AKIA|ASIA)[A-Z0-9]{16}$/i,
   /^whsec_/i,
   /^stripe_whsec/i,
   /^sk_(live|test)_/i,
@@ -102,6 +103,15 @@ const isSecretReference = (value: string): boolean => (
 const looksLikeRawSecret = (value: string): boolean => {
   const trimmed = value.trim();
   return SECRET_LIKE_VALUE_REGEXES.some((pattern) => pattern.test(trimmed));
+};
+
+const secretReferenceEnvKey = (reference: string): string => (
+  reference.trim().replace(/^env:/i, '').replace(/^\$/, '')
+);
+
+const secretReferenceResolved = (reference: string): boolean => {
+  const key = secretReferenceEnvKey(reference);
+  return Boolean(key && process.env[key]?.trim());
 };
 
 const numberValue = (value: unknown, fallback = 0): number => {
@@ -583,23 +593,57 @@ const normalizeDeploymentHistory = (value: unknown): BackyJsonObject[] => {
     .slice(0, 10);
 };
 
+const validateSecretReferenceValue = (label: string, reference: string, example: string): string | null => {
+  if (!reference) {
+    return null;
+  }
+
+  if (isSecretReference(reference)) {
+    return null;
+  }
+
+  if (looksLikeRawSecret(reference)) {
+    return `${label} must be stored in deployment environment variables or a connected secret store. Save an env reference such as ${example} instead of the raw secret.`;
+  }
+
+  return `${label} must be an environment variable reference such as ${example}, $${secretReferenceEnvKey(example)}, or ${secretReferenceEnvKey(example)}.`;
+};
+
 const validateSecretReferencePolicy = (integrations: unknown): string | null => {
   const input = parseJsonObject(integrations);
   const commerce = parseJsonObject(input?.commerce) || {};
-  const webhookSecretReference = stringValue(commerce.providerWebhookSecretId);
-  if (!webhookSecretReference) {
-    return null;
+  const storage = parseJsonObject(input?.storage) || {};
+  const checks: Array<{ label: string; reference: string; example: string }> = [
+    {
+      label: 'Commerce webhook signing secret',
+      reference: stringValue(commerce.providerWebhookSecretId),
+      example: 'env:STRIPE_WEBHOOK_SECRET',
+    },
+    {
+      label: 'S3 access key secret reference',
+      reference: stringValue(storage.accessKeyIdSecretRef),
+      example: 'env:BACKY_S3_ACCESS_KEY_ID',
+    },
+    {
+      label: 'S3 secret access key reference',
+      reference: stringValue(storage.secretAccessKeySecretRef),
+      example: 'env:BACKY_S3_SECRET_ACCESS_KEY',
+    },
+    {
+      label: 'Supabase storage key reference',
+      reference: stringValue(storage.supabaseKeySecretRef),
+      example: 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY',
+    },
+  ];
+
+  for (const check of checks) {
+    const error = validateSecretReferenceValue(check.label, check.reference, check.example);
+    if (error) {
+      return error;
+    }
   }
 
-  if (isSecretReference(webhookSecretReference)) {
-    return null;
-  }
-
-  if (looksLikeRawSecret(webhookSecretReference)) {
-    return 'Commerce webhook signing secret must be stored in deployment environment variables. Save an env reference such as env:STRIPE_WEBHOOK_SECRET instead of the raw provider secret.';
-  }
-
-  return 'Commerce webhook signing secret must be an environment variable reference such as env:STRIPE_WEBHOOK_SECRET, $STRIPE_WEBHOOK_SECRET, or STRIPE_WEBHOOK_SECRET.';
+  return null;
 };
 
 const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
@@ -768,6 +812,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       bucket: stringValue(storage.bucket),
       publicBaseUrl: stringValue(storage.publicBaseUrl),
       pathPrefix: stringValue(storage.pathPrefix),
+      accessKeyIdSecretRef: stringValue(storage.accessKeyIdSecretRef),
+      secretAccessKeySecretRef: stringValue(storage.secretAccessKeySecretRef),
+      supabaseKeySecretRef: stringValue(storage.supabaseKeySecretRef),
       privateFilesEnabled: boolValue(storage.privateFilesEnabled),
       imageTransformsEnabled: boolValue(storage.imageTransformsEnabled, true),
       lifecyclePolicyEnabled: boolValue(storage.lifecyclePolicyEnabled),
@@ -913,6 +960,13 @@ interface StorageProvisioningCheck {
   detail: string;
 }
 
+interface StorageSecretReferenceProbe {
+  provider: string;
+  status: StorageProvisioningStatus;
+  summary: string;
+  checks: StorageProvisioningCheck[];
+}
+
 interface StorageProvisioningAutomation {
   provider: string;
   action: 'create-or-verify-container';
@@ -922,6 +976,67 @@ interface StorageProvisioningAutomation {
   target: string;
   detail: string;
 }
+
+const storageSecretReferenceEntries = (storage: BackyJsonObject, provider: string) => {
+  if (provider === 's3') {
+    return [
+      {
+        label: 'S3 access key secret ref',
+        reference: stringValue(storage.accessKeyIdSecretRef),
+      },
+      {
+        label: 'S3 secret access key ref',
+        reference: stringValue(storage.secretAccessKeySecretRef),
+      },
+    ].filter((entry) => entry.reference);
+  }
+
+  if (provider === 'supabase') {
+    return [
+      {
+        label: 'Supabase storage key ref',
+        reference: stringValue(storage.supabaseKeySecretRef),
+      },
+    ].filter((entry) => entry.reference);
+  }
+
+  return [];
+};
+
+const buildStorageSecretReferenceProbe = (storage: BackyJsonObject, provider: string): StorageSecretReferenceProbe => {
+  const entries = storageSecretReferenceEntries(storage, provider);
+  const checks = entries.length > 0
+    ? entries.map((entry) => {
+        const key = secretReferenceEnvKey(entry.reference);
+        const ready = secretReferenceResolved(entry.reference);
+        return {
+          label: entry.label,
+          ready,
+          detail: ready
+            ? `${entry.label} resolves through ${key}.`
+            : `${entry.label} points to ${key || 'an empty reference'}, but no server-side value is available.`,
+        };
+      })
+    : [
+        {
+          label: 'Storage secret refs',
+          ready: true,
+          detail: 'No storage secret refs are configured; Backy will use the standard provider environment variables.',
+        },
+      ];
+  const blocked = checks.some((check) => !check.ready);
+
+  return {
+    provider,
+    status: blocked ? 'blocked' : 'ready',
+    summary: entries.length === 0
+      ? 'Storage secret refs are not configured for this provider.'
+      : blocked
+        ? 'One or more storage secret refs do not resolve in the server environment.'
+        : 'Configured storage secret refs resolve without exposing secret values.',
+    checks,
+  };
+};
 
 interface StorageCredentialRotationProbe {
   status: StorageProvisioningStatus;
@@ -1026,6 +1141,8 @@ const buildInfrastructureDiagnostics = ({
   const storageProvider = stringValue(storage.provider) || runtimeStorage.provider;
   const storageBucket = stringValue(storage.bucket) || runtimeStorage.bucket || runtimeSupabase.storageBucket;
   const storagePublicBaseUrl = stringValue(storage.publicBaseUrl) || runtimeStorage.publicUrl || '';
+  const storageSecretRefs = buildStorageSecretReferenceProbe(storage, storageProvider);
+  const storageSecretRefsConfigured = storageSecretReferenceEntries(storage, storageProvider).length > 0;
   const supabaseProjectUrl = stringValue(supabase.projectUrl) || runtimeSupabase.projectUrl || '';
   const supabaseProjectRef = stringValue(supabase.projectRef) || runtimeSupabase.projectRef || inferSupabaseProjectRef(supabaseProjectUrl);
   const supabaseEnabled = boolValue(supabase.databaseEnabled)
@@ -1085,6 +1202,12 @@ const buildInfrastructureDiagnostics = ({
         detail: storagePublicBaseUrl
           ? 'Public file URL is configured for custom frontends.'
           : 'Custom frontends need a public base URL for media delivery.',
+      },
+      {
+        label: 'Storage secret refs',
+        ready: storageSecretRefs.status === 'ready',
+        required: storageSecretRefsConfigured,
+        detail: storageSecretRefs.summary,
       },
     ]),
     makeInfrastructureDiagnostic('supabase', 'Supabase connection', [
@@ -1995,6 +2118,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string, siteId?: stri
   const resolved = resolveMediaStorageConfig();
   const summary = resolved.summary;
   const storagePolicy = getStoragePolicySettings(settings);
+  const secretReferences = buildStorageSecretReferenceProbe(storagePolicy, summary.provider);
   const lifecyclePolicyRequested = boolValue(storagePolicy.lifecyclePolicyEnabled);
   const automation = await runStorageContainerAutomation(resolved);
   const lifecyclePolicy = await runStorageLifecyclePolicyAutomation(settings, resolved);
@@ -2026,6 +2150,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string, siteId?: stri
       automation,
       lifecyclePolicy,
       lifecycleCleanup,
+      secretReferences,
       checks,
       credentialRotation,
       rotation: {
@@ -2056,11 +2181,14 @@ const runMediaStorageProvisioningProbe = async (requestId: string, siteId?: stri
     lifecyclePolicy.status === 'blocked' ||
     lifecycleCleanup.status === 'blocked'
   );
+  const secretReferenceBlocked = secretReferences.status === 'blocked';
   return {
     provider: summary.provider,
-    status: blocked || automation.status === 'blocked' || lifecycleBlocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
+    status: blocked || automation.status === 'blocked' || lifecycleBlocked || secretReferenceBlocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
     summary: blocked
       ? 'Storage provisioning probe found an operation that needs attention.'
+      : secretReferenceBlocked
+        ? 'Storage secret references need attention before accepting production uploads.'
       : lifecycleBlocked
         ? 'Storage lifecycle policy automation needs attention before accepting production uploads.'
       : automation.status === 'blocked'
@@ -2071,6 +2199,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string, siteId?: stri
     automation,
     lifecyclePolicy,
     lifecycleCleanup,
+    secretReferences,
     checks,
     credentialRotation,
     rotation: {

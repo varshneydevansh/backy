@@ -1893,6 +1893,9 @@ export interface SiteSettingsInput {
       bucket?: string;
       publicBaseUrl?: string;
       pathPrefix?: string;
+      accessKeyIdSecretRef?: string;
+      secretAccessKeySecretRef?: string;
+      supabaseKeySecretRef?: string;
       privateFilesEnabled?: boolean;
       imageTransformsEnabled?: boolean;
       lifecyclePolicyEnabled?: boolean;
@@ -2140,6 +2143,12 @@ export interface SettingsStorageProvisioningResult {
     };
     errors: string[];
     detail: string;
+  };
+  secretReferences?: {
+    provider: string;
+    status: 'ready' | 'blocked';
+    summary: string;
+    checks: SettingsStorageProvisioningCheck[];
   };
   checks: SettingsStorageProvisioningCheck[];
   credentialRotation?: {

@@ -1141,6 +1141,7 @@ const runMediaStorageProvisioningProbe = async (client) => {
           text.includes('Bucket automation') &&
           text.includes('Lifecycle policy automation') &&
           text.includes('Lifecycle cleanup worker') &&
+          text.includes('Secret references') &&
           text.includes('Probe upload') &&
           text.includes('Readback') &&
           text.includes('Probe cleanup') &&
@@ -1371,6 +1372,7 @@ const saveMediaStorageSettingsFromUi = async (client, suffix) => {
   await setMediaStorageField(client, 'Storage bucket', `media-${suffix}`);
   await setMediaStorageField(client, 'Public media base URL', `https://${suffix}.supabase.co/storage/v1/object/public/media-${suffix}`);
   await setMediaStorageField(client, 'Storage path prefix', `sites/${SITE_ID}/${suffix}`);
+  await setMediaStorageField(client, 'Supabase key secret ref', 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY');
   await setMediaStorageField(client, 'Supabase project URL', `https://${suffix}.supabase.co`);
   await setMediaStorageField(client, 'Supabase project ref', suffix);
   await setMediaStorageCheckbox(client, 'Private file delivery', true);
@@ -1389,6 +1391,7 @@ const saveMediaStorageSettingsFromUi = async (client, suffix) => {
         text.includes('BACKY_SUPABASE_URL') &&
         text.includes('BACKY_SUPABASE_SERVICE_ROLE_KEY') &&
         text.includes('BACKY_SUPABASE_STORAGE_BUCKET') &&
+        document.body?.innerText?.includes('Secret refs') &&
         text.includes('secret'),
       text: text.slice(0, 1200),
     };
@@ -2552,8 +2555,27 @@ const main = async () => {
     assert(savedStorageSettings.integrations?.storage?.lifecyclePolicyEnabled === true, 'Media lifecycle policy setting was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.storage?.lifecycleTempRetentionDays === 9, 'Media lifecycle probe retention was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.storage?.lifecycleNoncurrentVersionDays === 120, 'Media lifecycle noncurrent version retention was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.supabaseKeySecretRef === 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY', 'Media Supabase key secret ref was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.supabase?.projectRef === suffix, 'Media Supabase project ref was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.supabase?.storageEnabled === true, 'Media Supabase storage toggle was not persisted through the Media page.');
+    const rawSecretResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        integrations: {
+          storage: {
+            provider: 'supabase',
+            supabaseKeySecretRef: 'sk_live_media_storage_secret_rejected',
+          },
+        },
+      }),
+    });
+    const rawSecretPayload = await rawSecretResponse.json().catch(() => ({}));
+    assert(rawSecretResponse.status === 400, `Raw media storage secret should be rejected, got ${rawSecretResponse.status}: ${JSON.stringify(rawSecretPayload).slice(0, 500)}`);
+    assert(rawSecretPayload?.error?.code === 'SECRET_REFERENCE_REQUIRED', `Raw media storage secret should return SECRET_REFERENCE_REQUIRED: ${JSON.stringify(rawSecretPayload).slice(0, 500)}`);
     await runMediaStorageCheck(client);
     await runMediaStorageProvisioningProbe(client);
 
