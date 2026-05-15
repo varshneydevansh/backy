@@ -57,6 +57,11 @@ export interface CommerceProduct {
     enabled: boolean;
     discountCode: string;
   };
+  subscription: {
+    enabled: boolean;
+    interval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+    trialDays: number;
+  };
   design?: {
     templateId?: string;
     templateName?: string;
@@ -175,6 +180,9 @@ const COMMERCE_PRODUCT_VALUE_KEYS = {
   productType: 'producttype',
   downloadUrl: 'downloadurl',
   checkoutUrl: 'checkouturl',
+  subscriptionEnabled: 'subscriptionenabled',
+  subscriptionInterval: 'subscriptioninterval',
+  subscriptionTrialDays: 'subscriptiontrialdays',
   shippingRequired: 'shippingrequired',
   shippingProfile: 'shippingprofile',
   weight: 'weight',
@@ -431,6 +439,11 @@ const normalizeInventoryPolicy = (value: unknown): CommerceProduct['inventory'][
   return policy === 'continue' || policy === 'preorder' ? policy : 'deny';
 };
 
+const normalizeSubscriptionInterval = (value: unknown): CommerceProduct['subscription']['interval'] => {
+  const interval = normalizeIdentifier(value);
+  return interval === 'weekly' || interval === 'quarterly' || interval === 'yearly' ? interval : 'monthly';
+};
+
 const maybeNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   const number = normalizeNumber(value, Number.NaN);
@@ -557,6 +570,11 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
       url: checkoutUrl || null,
       enabled: checkoutUrl.length > 0,
       discountCode: normalizeText(readProductValue(values, 'discountCode')),
+    },
+    subscription: {
+      enabled: normalizeBoolean(readProductValue(values, 'subscriptionEnabled')),
+      interval: normalizeSubscriptionInterval(readProductValue(values, 'subscriptionInterval')),
+      trialDays: Math.max(0, Math.round(normalizeNumber(readProductValue(values, 'subscriptionTrialDays')))),
     },
     design: buildProductDesignContract(values),
     links: {

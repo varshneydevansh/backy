@@ -433,6 +433,12 @@ export interface BackyCommerceProduct {
   inventory?: Record<string, unknown>;
   delivery?: Record<string, unknown>;
   checkout?: Record<string, unknown>;
+  subscription?: {
+    enabled: boolean;
+    interval: 'weekly' | 'monthly' | 'quarterly' | 'yearly' | string;
+    trialDays: number;
+    [key: string]: unknown;
+  };
   links?: Record<string, unknown>;
   design?: BackyCommerceProductDesign;
   [key: string]: unknown;

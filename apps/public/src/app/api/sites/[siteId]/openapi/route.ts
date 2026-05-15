@@ -2681,7 +2681,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           }),
           CommerceProduct: {
             type: 'object',
-            required: ['id', 'slug', 'title', 'price', 'currency', 'inventory', 'delivery', 'checkout', 'links'],
+            required: ['id', 'slug', 'title', 'price', 'currency', 'inventory', 'delivery', 'checkout', 'subscription', 'links'],
             properties: {
               id: { type: 'string' },
               slug: { type: 'string' },
@@ -2719,6 +2719,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               inventory: { type: 'object', additionalProperties: true },
               delivery: { type: 'object', additionalProperties: true },
               checkout: { type: 'object', additionalProperties: true },
+              subscription: {
+                type: 'object',
+                required: ['enabled', 'interval', 'trialDays'],
+                properties: {
+                  enabled: { type: 'boolean' },
+                  interval: { type: 'string', enum: ['weekly', 'monthly', 'quarterly', 'yearly'] },
+                  trialDays: { type: 'integer', minimum: 0 },
+                },
+              },
               links: { type: 'object', additionalProperties: true },
               design: { $ref: '#/components/schemas/CommerceProductDesign' },
               updatedAt: { type: 'string', format: 'date-time' },

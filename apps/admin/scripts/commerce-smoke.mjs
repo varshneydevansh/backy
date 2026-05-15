@@ -16,7 +16,7 @@ const SCREENSHOT_PATH = process.env.BACKY_COMMERCE_SCREENSHOT || path.join(os.tm
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
-const PRODUCT_REQUIRED_FIELD_COUNT = 27;
+const PRODUCT_REQUIRED_FIELD_COUNT = 30;
 const ORDER_REQUIRED_FIELD_COUNT = 29;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
@@ -36,6 +36,9 @@ const PRODUCT_VALUE_KEYS = {
   productType: 'producttype',
   downloadUrl: 'downloadurl',
   checkoutUrl: 'checkouturl',
+  subscriptionEnabled: 'subscriptionenabled',
+  subscriptionInterval: 'subscriptioninterval',
+  subscriptionTrialDays: 'subscriptiontrialdays',
   shippingRequired: 'shippingrequired',
   shippingProfile: 'shippingprofile',
   weight: 'weight',
@@ -73,21 +76,24 @@ const PRODUCT_SCHEMA_FIELDS = [
   { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
   { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
   { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
-  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
-  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
-  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
-  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
-  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
-  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
+  { key: productFieldKey('subscriptionEnabled'), label: 'Subscription Enabled', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: false },
+  { key: productFieldKey('subscriptionInterval'), label: 'Subscription Interval', type: 'select', required: false, unique: false, sortOrder: 140, options: ['weekly', 'monthly', 'quarterly', 'yearly'], defaultValue: 'monthly' },
+  { key: productFieldKey('subscriptionTrialDays'), label: 'Subscription Trial Days', type: 'number', required: false, unique: false, sortOrder: 150, defaultValue: 0 },
+  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 160, defaultValue: true },
+  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 180 },
+  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 190 },
+  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 200 },
+  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 210 },
+  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 220 },
+  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 230, defaultValue: [] },
+  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 240 },
+  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 250 },
+  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 260 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 270 },
+  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 280 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 290, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 300, defaultValue: true },
 ];
 
 const ORDER_SCHEMA_FIELDS = [
@@ -976,6 +982,10 @@ const fillProductEditor = async (client, suffix) => {
   await setLabeledControl(client, 'Inventory policy', 'deny');
   await setLabeledControl(client, 'Type', 'physical');
   await setLabeledControl(client, 'Checkout URL', `https://checkout.example.com/${slug}`);
+  await setLabeledControl(client, 'Subscription', true);
+  await sleep(150);
+  await setLabeledControl(client, 'Subscription interval', 'monthly');
+  await setLabeledControl(client, 'Trial days', '14');
   await setLabeledControl(client, 'Tax class', 'standard');
   await setLabeledControl(client, 'Shipping profile', 'standard-box');
   await setLabeledControl(client, 'Discount code', 'SMOKE10');
@@ -1156,6 +1166,9 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(productRecord, `Created product record was not found by slug ${slug}`);
   assert(productRecord.status === 'published', `Created product was not published: ${productRecord.status}`);
   assert(productRecord.values?.inventory === 7, `Created product inventory was unexpected: ${productRecord.values?.inventory}`);
+  assert(readProductValue(productRecord.values, 'subscriptionEnabled') === true, `Created product subscription flag was unexpected: ${JSON.stringify(productRecord.values)}`);
+  assert(readProductValue(productRecord.values, 'subscriptionInterval') === 'monthly', `Created product subscription interval was unexpected: ${JSON.stringify(productRecord.values)}`);
+  assert(readProductValue(productRecord.values, 'subscriptionTrialDays') === 14, `Created product subscription trial days was unexpected: ${JSON.stringify(productRecord.values)}`);
   assert(
     Array.isArray(productRecord.values?.variants) &&
       productRecord.values.variants.length === 4 &&
@@ -1178,6 +1191,9 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(product.featured === true, 'Public product featured flag was not true');
   assert(product.checkout?.url === `https://checkout.example.com/${slug}`, `Public checkout URL was unexpected: ${JSON.stringify(product.checkout)}`);
   assert(product.checkout?.discountCode === 'SMOKE10', `Public discount code was unexpected: ${JSON.stringify(product.checkout)}`);
+  assert(product.subscription?.enabled === true, `Public subscription flag was unexpected: ${JSON.stringify(product.subscription)}`);
+  assert(product.subscription?.interval === 'monthly', `Public subscription interval was unexpected: ${JSON.stringify(product.subscription)}`);
+  assert(product.subscription?.trialDays === 14, `Public subscription trial days was unexpected: ${JSON.stringify(product.subscription)}`);
   assert(product.delivery?.shippingProfile === 'standard-box', `Public shipping profile was unexpected: ${JSON.stringify(product.delivery)}`);
   assert(product.delivery?.taxClass === 'standard', `Public tax class was unexpected: ${JSON.stringify(product.delivery)}`);
   assert(product.delivery?.returnPolicy === '30-day returns for unopened smoke-test products.', `Public return policy was unexpected: ${JSON.stringify(product.delivery)}`);
@@ -1321,6 +1337,9 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     productFieldKey('productType'),
     productFieldKey('downloadUrl'),
     productFieldKey('checkoutUrl'),
+    productFieldKey('subscriptionEnabled'),
+    productFieldKey('subscriptionInterval'),
+    productFieldKey('subscriptionTrialDays'),
     productFieldKey('shippingRequired'),
     productFieldKey('shippingProfile'),
     'weight',
@@ -1353,6 +1372,9 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     'digital',
     `https://downloads.example.com/${slug}.zip`,
     '',
+    'true',
+    'yearly',
+    '30',
     'false',
     'digital-delivery',
     '',
@@ -1384,6 +1406,9 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   assert(record?.id, `Imported product was not found by slug ${slug}`);
   assert(record.values?.price === 99, `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`);
   assert(record.values?.inventory === 0, `Imported digital inventory did not stay numeric zero: ${JSON.stringify(record.values?.inventory)}`);
+  assert(readProductValue(record.values, 'subscriptionEnabled') === true, `Imported subscription flag did not stay boolean true: ${JSON.stringify(readProductValue(record.values, 'subscriptionEnabled'))}`);
+  assert(readProductValue(record.values, 'subscriptionInterval') === 'yearly', `Imported subscription interval did not persist: ${JSON.stringify(readProductValue(record.values, 'subscriptionInterval'))}`);
+  assert(readProductValue(record.values, 'subscriptionTrialDays') === 30, `Imported subscription trial days did not stay numeric: ${JSON.stringify(readProductValue(record.values, 'subscriptionTrialDays'))}`);
   assert(readProductValue(record.values, 'shippingRequired') === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(readProductValue(record.values, 'shippingRequired'))}`);
   assert(readProductValue(record.values, 'shippingProfile') === 'digital-delivery', `Imported shipping profile did not persist: ${JSON.stringify(readProductValue(record.values, 'shippingProfile'))}`);
   assert(readProductValue(record.values, 'taxClass') === 'digital-standard', `Imported tax class did not persist: ${JSON.stringify(readProductValue(record.values, 'taxClass'))}`);
@@ -1400,6 +1425,7 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   assert(product.inventory?.quantity === 0, `Imported public inventory quantity was unexpected: ${JSON.stringify(product?.inventory)}`);
   assert(product.inventory?.inStock === true, `Imported zero-inventory digital product should be in stock: ${JSON.stringify(product?.inventory)}`);
   assert(product.inventory?.lowStock === false, `Imported zero-inventory digital product should not be low stock: ${JSON.stringify(product?.inventory)}`);
+  assert(product.subscription?.enabled === true && product.subscription?.interval === 'yearly' && product.subscription?.trialDays === 30, `Imported public subscription metadata was unexpected: ${JSON.stringify(product?.subscription)}`);
 
   return record;
 };
@@ -1414,6 +1440,9 @@ const assertProductsLayout = async (client) => {
       document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
       document.body?.innerText?.includes('Paid revenue') &&
       document.body?.innerText?.includes('Customer profiles'),
+    hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
+      document.body?.innerText?.includes('Subscription metadata') &&
+      document.body?.innerText?.includes('Trial days'),
     hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
       document.body?.innerText?.includes('Page and editor binding contract') &&
       document.body?.innerText?.includes('Product card blocks') &&
@@ -1422,7 +1451,7 @@ const assertProductsLayout = async (client) => {
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasPageBindingContract && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

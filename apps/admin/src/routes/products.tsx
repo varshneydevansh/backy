@@ -145,6 +145,9 @@ interface ProductFormState {
   productType: 'physical' | 'digital' | 'service';
   downloadUrl: string;
   checkoutUrl: string;
+  subscriptionEnabled: boolean;
+  subscriptionInterval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  subscriptionTrialDays: string;
   shippingRequired: boolean;
   shippingProfile: string;
   weight: string;
@@ -255,6 +258,9 @@ const PRODUCT_VALUE_KEYS = {
   productType: 'producttype',
   downloadUrl: 'downloadurl',
   checkoutUrl: 'checkouturl',
+  subscriptionEnabled: 'subscriptionenabled',
+  subscriptionInterval: 'subscriptioninterval',
+  subscriptionTrialDays: 'subscriptiontrialdays',
   shippingRequired: 'shippingrequired',
   shippingProfile: 'shippingprofile',
   weight: 'weight',
@@ -322,21 +328,24 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
   { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
   { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
-  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
-  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 140 },
-  { key: productFieldKey('weight'), label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 150 },
-  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 160 },
-  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 190 },
-  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 200, defaultValue: [] },
-  { key: productFieldKey('category'), label: 'Category', type: 'text', required: false, unique: false, sortOrder: 210 },
-  { key: productFieldKey('tags'), label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 220 },
-  { key: productFieldKey('vendor'), label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 230 },
-  { key: productFieldKey('description'), label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 240 },
-  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 250 },
-  { key: productFieldKey('featured'), label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 260, defaultValue: false },
-  { key: productFieldKey('taxable'), label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 270, defaultValue: true },
+  { key: productFieldKey('subscriptionEnabled'), label: 'Subscription Enabled', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: false },
+  { key: productFieldKey('subscriptionInterval'), label: 'Subscription Interval', type: 'select', required: false, unique: false, sortOrder: 140, options: ['weekly', 'monthly', 'quarterly', 'yearly'], defaultValue: 'monthly' },
+  { key: productFieldKey('subscriptionTrialDays'), label: 'Subscription Trial Days', type: 'number', required: false, unique: false, sortOrder: 150, defaultValue: 0 },
+  { key: productFieldKey('shippingRequired'), label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 160, defaultValue: true },
+  { key: productFieldKey('shippingProfile'), label: 'Shipping Profile', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: productFieldKey('weight'), label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 180 },
+  { key: productFieldKey('taxClass'), label: 'Tax Class', type: 'text', required: false, unique: false, sortOrder: 190 },
+  { key: productFieldKey('discountCode'), label: 'Discount Code', type: 'text', required: false, unique: false, sortOrder: 200 },
+  { key: productFieldKey('returnPolicy'), label: 'Return Policy', type: 'richText', required: false, unique: false, sortOrder: 210 },
+  { key: productFieldKey('imageUrl'), label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 220 },
+  { key: productFieldKey('galleryImages'), label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 230, defaultValue: [] },
+  { key: productFieldKey('category'), label: 'Category', type: 'text', required: false, unique: false, sortOrder: 240 },
+  { key: productFieldKey('tags'), label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 250 },
+  { key: productFieldKey('vendor'), label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 260 },
+  { key: productFieldKey('description'), label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 270 },
+  { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 280 },
+  { key: productFieldKey('featured'), label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 290, defaultValue: false },
+  { key: productFieldKey('taxable'), label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 300, defaultValue: true },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -363,6 +372,9 @@ const PRODUCT_EXPORT_COLUMNS = [
   'gallery_image_count',
   'download_url',
   'checkout_url',
+  'subscription_enabled',
+  'subscription_interval',
+  'subscription_trial_days',
   'shipping_required',
   'shipping_profile',
   'tax_class',
@@ -400,6 +412,9 @@ const PRODUCT_IMPORT_COLUMNS = [
   productFieldKey('productType'),
   productFieldKey('downloadUrl'),
   productFieldKey('checkoutUrl'),
+  productFieldKey('subscriptionEnabled'),
+  productFieldKey('subscriptionInterval'),
+  productFieldKey('subscriptionTrialDays'),
   productFieldKey('shippingRequired'),
   productFieldKey('shippingProfile'),
   productFieldKey('weight'),
@@ -498,6 +513,11 @@ const PRODUCT_PAGE_BINDING_TARGETS = [
     detail: 'Expose option, SKU, price override, and variant stock for sizes, licenses, tiers, colors, or formats.',
   },
   {
+    key: 'subscription-metadata',
+    title: 'Subscription metadata',
+    detail: 'Expose recurring-plan interval, enabled state, and trial-day metadata for frontends while provider billing execution remains external.',
+  },
+  {
     key: 'cart-order-intake',
     title: 'Cart and order intake',
     detail: 'Use checkoutUrl or the Backy order POST contract to create private orders and reserve inventory.',
@@ -528,6 +548,9 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   productType: 'physical',
   downloadUrl: '',
   checkoutUrl: '',
+  subscriptionEnabled: false,
+  subscriptionInterval: 'monthly',
+  subscriptionTrialDays: '0',
   shippingRequired: true,
   shippingProfile: '',
   weight: '',
@@ -827,6 +850,7 @@ function ProductsRoute() {
     const hasPricing = products.some((product) => toNumber(readProductValue(product.values, 'price')) > 0);
     const hasMerchandising = products.some((product) => Boolean(readProductValue(product.values, 'category')) || formatTags(readProductValue(product.values, 'tags')).length > 0 || Boolean(readProductValue(product.values, 'vendor')));
     const hasCheckoutUrls = products.some((product) => Boolean(String(readProductValue(product.values, 'checkoutUrl', '') || '').trim()));
+    const hasSubscriptionMetadata = products.some((product) => Boolean(readProductValue(product.values, 'subscriptionEnabled')));
     const checks = [
       {
         label: 'Catalog schema',
@@ -873,6 +897,11 @@ function ProductsRoute() {
         label: 'Checkout handoff',
         detail: hasCheckoutUrls ? 'Products include checkout URLs for external checkout.' : 'Add checkout URLs or wire the order-intake contract.',
         ready: hasCheckoutUrls || orderIntakeReady,
+      },
+      {
+        label: 'Subscriptions',
+        detail: hasSubscriptionMetadata ? 'Recurring-plan interval and trial metadata is available to storefronts.' : 'Enable subscription metadata when selling recurring products.',
+        ready: hasSubscriptionMetadata || products.length === 0,
       },
       {
         label: 'Variants',
@@ -1011,7 +1040,7 @@ function ProductsRoute() {
       starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
       requiredFields: [productFieldKey('title'), 'slug', productFieldKey('sku'), productFieldKey('price'), productFieldKey('currency'), productFieldKey('inventory'), productFieldKey('productType'), productFieldKey('checkoutUrl')],
-      optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
+      optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('subscriptionEnabled'), productFieldKey('subscriptionInterval'), productFieldKey('subscriptionTrialDays'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
@@ -1087,6 +1116,11 @@ function ProductsRoute() {
       weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? null : toNumber(readProductValue(product.values, 'weight')),
       downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
       checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
+      subscription: {
+        enabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
+        interval: asSubscriptionInterval(readProductValue(product.values, 'subscriptionInterval')),
+        trialDays: Math.max(0, toNumber(readProductValue(product.values, 'subscriptionTrialDays'))),
+      },
       scheduledAt: product.scheduledAt || null,
       storefrontPath: `/products/${product.slug}`,
       frontendDesignTemplateId: getProductFrontendTemplateId(product),
@@ -1690,6 +1724,9 @@ function ProductsRoute() {
         [productFieldKey('productType')]: formState.productType,
         [productFieldKey('downloadUrl')]: formState.downloadUrl.trim(),
         [productFieldKey('checkoutUrl')]: formState.checkoutUrl.trim(),
+        [productFieldKey('subscriptionEnabled')]: formState.subscriptionEnabled,
+        [productFieldKey('subscriptionInterval')]: formState.subscriptionInterval,
+        [productFieldKey('subscriptionTrialDays')]: Math.max(0, Math.round(Number(formState.subscriptionTrialDays || 0))),
         [productFieldKey('shippingRequired')]: formState.shippingRequired,
         [productFieldKey('shippingProfile')]: formState.shippingProfile.trim(),
         [productFieldKey('weight')]: formState.weight ? Number(formState.weight) : null,
@@ -3083,6 +3120,49 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-subscription-metadata">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Subscription metadata</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Recurring-plan fields for storefronts; billing execution stays with checkout/order integrations.</div>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={formState.subscriptionEnabled}
+                        onChange={(event) => setFormState((current) => ({ ...current, subscriptionEnabled: event.target.checked }))}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                      />
+                      Subscription
+                    </label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Subscription interval">
+                      <select
+                        value={formState.subscriptionInterval}
+                        onChange={(event) => setFormState((current) => ({ ...current, subscriptionInterval: asSubscriptionInterval(event.target.value) }))}
+                        disabled={!formState.subscriptionEnabled || isProductsAccessBusy || !canEditProducts}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60"
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </Field>
+                    <Field label="Trial days">
+                      <input
+                        type="number"
+                        min="0"
+                        value={formState.subscriptionTrialDays}
+                        onChange={(event) => setFormState((current) => ({ ...current, subscriptionTrialDays: event.target.value }))}
+                        disabled={!formState.subscriptionEnabled || isProductsAccessBusy || !canEditProducts}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60"
+                        placeholder="0"
+                      />
+                    </Field>
+                  </div>
+                </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Tax class">
                     <input
@@ -3817,6 +3897,9 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   productType: asProductType(readProductValue(product.values, 'productType')),
   downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
   checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
+  subscriptionEnabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
+  subscriptionInterval: asSubscriptionInterval(readProductValue(product.values, 'subscriptionInterval')),
+  subscriptionTrialDays: String(readProductValue(product.values, 'subscriptionTrialDays') ?? '0'),
   shippingRequired: readProductValue(product.values, 'shippingRequired') !== false,
   shippingProfile: String(readProductValue(product.values, 'shippingProfile', '') || ''),
   weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? '' : String(readProductValue(product.values, 'weight')),
@@ -3913,6 +3996,9 @@ const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTempl
       [productFieldKey('productType')]: productType,
       [productFieldKey('downloadUrl')]: optionalStringFromRecord(content, 'downloadUrl') || '',
       [productFieldKey('checkoutUrl')]: optionalStringFromRecord(content, 'checkoutUrl') || '',
+      [productFieldKey('subscriptionEnabled')]: optionalBooleanFromRecord(content, 'subscriptionEnabled') ?? false,
+      [productFieldKey('subscriptionInterval')]: asSubscriptionInterval(optionalStringFromRecord(content, 'subscriptionInterval')),
+      [productFieldKey('subscriptionTrialDays')]: optionalNumberFromRecord(content, 'subscriptionTrialDays') ?? 0,
       [productFieldKey('shippingRequired')]: optionalBooleanFromRecord(content, 'shippingRequired') ?? productType === 'physical',
       [productFieldKey('shippingProfile')]: optionalStringFromRecord(content, 'shippingProfile') || '',
       [productFieldKey('weight')]: optionalNumberFromRecord(content, 'weight') ?? null,
@@ -3979,6 +4065,10 @@ const asProductType = (value: unknown): ProductFormState['productType'] => (
 
 const asInventoryPolicy = (value: unknown): ProductFormState['inventoryPolicy'] => (
   value === 'continue' || value === 'preorder' || value === 'deny' ? value : 'deny'
+);
+
+const asSubscriptionInterval = (value: unknown): ProductFormState['subscriptionInterval'] => (
+  value === 'weekly' || value === 'quarterly' || value === 'yearly' ? value : 'monthly'
 );
 
 const getProductStockState = (values: CollectionRecord['values']) => {
@@ -4149,6 +4239,9 @@ const productToExportRecord = (
   gallery_image_count: formatGalleryImages(readProductValue(product.values, 'galleryImages')).length,
   download_url: String(readProductValue(product.values, 'downloadUrl', '') || ''),
   checkout_url: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
+  subscription_enabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
+  subscription_interval: asSubscriptionInterval(readProductValue(product.values, 'subscriptionInterval')),
+  subscription_trial_days: Math.max(0, toNumber(readProductValue(product.values, 'subscriptionTrialDays'))),
   shipping_required: readProductValue(product.values, 'shippingRequired') !== false,
   shipping_profile: String(readProductValue(product.values, 'shippingProfile', '') || ''),
   tax_class: String(readProductValue(product.values, 'taxClass', '') || ''),
