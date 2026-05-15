@@ -412,6 +412,8 @@ const main = async () => {
   const inviteEmail = `teams-smoke-${suffix}@example.com`;
   const adminEmail = `teams-admin-${suffix}@example.com`;
   const adminFullName = `Teams Admin ${suffix}`;
+  const editorEmail = `teams-editor-${suffix}@example.com`;
+  const editorFullName = `Teams Editor ${suffix}`;
   const readOnlyEmail = `teams-readonly-${suffix}@example.com`;
   const readOnlyFullName = `Teams Readonly ${suffix}`;
   let activeAuthPreload = null;
@@ -630,6 +632,45 @@ const main = async () => {
       'Admin Teams permission pass',
     );
 
+    const editorAccount = await createUser({
+      fullName: editorFullName,
+      email: editorEmail,
+      role: 'editor',
+      status: 'invited',
+    });
+    temporaryUserIds.push(editorAccount.user.id);
+    assert(editorAccount.invite?.token, `Editor role invite token missing: ${JSON.stringify(editorAccount).slice(0, 500)}`);
+    const editorRoleSession = await acceptInvite(editorAccount.invite.token);
+    await removeBrowserPreload(client, activeAuthPreload);
+    activeAuthPreload = await installBrowserAuthPreload(client, editorRoleSession.session.token, editorRoleSession.user);
+    await setBrowserAuthStorage(client, editorRoleSession.session.token, editorRoleSession.user);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const createButton = document.querySelector('[data-testid="teams-create-button"]');
+        const refreshButton = Array.from(document.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').trim() === 'Refresh'
+        ));
+        return {
+          ready: window.location.pathname === '/teams' &&
+            body.includes('Teams unavailable') &&
+            body.includes('editor role does not include this capability.') &&
+            body.includes('No teams yet') &&
+            createButton instanceof HTMLButtonElement &&
+            createButton.disabled === true &&
+            refreshButton instanceof HTMLButtonElement &&
+            refreshButton.disabled === true,
+          path: window.location.pathname,
+          body: body.slice(0, 1600),
+          createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+          refreshDisabled: refreshButton instanceof HTMLButtonElement ? refreshButton.disabled : null,
+        };
+      })()`,
+      'Editor Teams permission block',
+    );
+
     const readOnlyAccount = await createUser({
       fullName: readOnlyFullName,
       email: readOnlyEmail,
@@ -700,6 +741,7 @@ const main = async () => {
       createdSlug: editedSlug,
       invitedEmail: inviteEmail,
       adminEmail,
+      editorEmail,
       readOnlyEmail,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
