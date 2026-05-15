@@ -21,6 +21,7 @@
         "test:commerce-webhook-secret": "tsx scripts/commerce-webhook-secret-smoke.ts",
         "test:repository-runtime": "tsx scripts/repository-runtime-smoke.ts",
         "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx",
+        "test:hosted-responsive": "node scripts/hosted-responsive-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
         "test:public-security": "node scripts/public-security-regression-smoke.mjs"
     },
