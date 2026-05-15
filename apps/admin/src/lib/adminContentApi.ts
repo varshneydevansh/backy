@@ -1445,6 +1445,33 @@ interface ApiOrderTrackingResponse {
   };
 }
 
+export interface AdminOrderQuote {
+  schemaVersion: 'backy.order-quote.v1';
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  shippingAmount: number;
+  total: number;
+  currency: string;
+  discountCode: string;
+  discountRate: number;
+  calculatedAt: string;
+}
+
+interface ApiOrderQuoteResponse {
+  success: boolean;
+  data?: {
+    record: ApiCollectionRecord;
+    order?: ApiCollectionRecord;
+    quote: AdminOrderQuote;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface AdminOrderProviderRefund {
   id: string;
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
@@ -6276,6 +6303,30 @@ export async function refreshOrderTracking(
   return {
     record: toCollectionRecord(payload.data.record || payload.data.order),
     tracking: payload.data.tracking,
+  };
+}
+
+export async function refreshOrderQuote(
+  siteId: string,
+  orderId: string,
+  input: { discountCode?: string } = {},
+): Promise<{ record: CollectionRecord; quote: AdminOrderQuote }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/quote`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiOrderQuoteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to refresh order quote');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    quote: payload.data.quote,
   };
 }
 

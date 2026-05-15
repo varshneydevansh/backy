@@ -193,6 +193,13 @@ const enableCommerceWebhookSettings = async (settings) => {
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
       providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
       webhookEventsEnabled: true,
+      taxEnabled: true,
+      shippingEnabled: true,
+      discountsEnabled: false,
+      taxRatePercent: 10,
+      digitalTaxRatePercent: 4,
+      shippingBaseAmount: 8,
+      shippingWeightRate: 1.25,
       reconciliationMode: 'webhook',
     },
   };
@@ -568,6 +575,30 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const setBrowserSession = async (client, sessionToken) => {
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/login` });
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: document.readyState === 'complete' || document.readyState === 'interactive',
+      href: location.href,
+    }))()`);
+    if (state.ready && state.href.startsWith(ADMIN_BASE_URL)) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  const state = await evaluate(client, `(() => {
+    ${authStorageScript(sessionToken)}
+    const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+    return {
+      hasToken: Boolean(stored?.state?.session?.token),
+      hasUser: Boolean(stored?.state?.user?.id),
+    };
+  })()`);
+  assert(state.hasToken && state.hasUser, `Unable to seed browser admin session: ${JSON.stringify(state)}`);
 };
 
 const navigateToOrders = async (client) => {
@@ -1418,6 +1449,7 @@ const main = async () => {
       mobile: false,
     });
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
+    await setBrowserSession(client, apiAdminSessionToken);
 
     const readyState = await ensureOrdersReady(client);
     const ordersCollection = await findCollection(ORDERS_COLLECTION_SLUG);
@@ -1460,6 +1492,24 @@ const main = async () => {
     await assertOrderCustomerProfileManagement(client, customerFixture.collection, customerFixture.record);
 
     await exerciseFilters(client, orderNumber);
+
+    await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+    const quotedOrder = await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.subtotal === 80 &&
+        values.discountamount === 0 &&
+        values.taxamount === 8 &&
+        values.shippingamount === 8 &&
+        values.total === 96 &&
+        /Order quote refreshed/.test(String(values.notes || ''))
+      ),
+      'Refresh Quote did not persist pricing-rule totals',
+    );
+    const quotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${quotedOrder.id}/quote`);
+    assert(quotePayload.data?.quote?.schemaVersion === 'backy.order-quote.v1', `Quote endpoint returned wrong schema: ${JSON.stringify(quotePayload).slice(0, 500)}`);
+    assert(quotePayload.data?.quote?.total === 96, `Quote endpoint returned unexpected total: ${JSON.stringify(quotePayload).slice(0, 500)}`);
 
     await selectOrderForBulk(client, orderNumber);
     await clickByText(client, 'Mark Paid', { exact: true, rootSelector: '#orders-queue' });
@@ -1581,7 +1631,7 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 85 &&
+        Number(values.refundamount) === 96 &&
         values.refundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         /Manual refund\/return state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1602,7 +1652,7 @@ const main = async () => {
         Boolean(values.providerrefundid) &&
         String(values.providerrefundreference || '').includes(String(values.paymentreference || '')) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
-        Number(values.providerrefundamount) === 85 &&
+        Number(values.providerrefundamount) === 96 &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
@@ -1645,7 +1695,7 @@ const main = async () => {
         values.orderstatus === 'cancelled' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 85 &&
+        Number(values.refundamount) === 96 &&
         values.refundreason === 'Order cancellation manually recorded from Backy order workflow.' &&
         /Manual cancellation state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider cancellation\/refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1771,7 +1821,7 @@ const main = async () => {
     const reconciledAnalytics = reconciledAnalyticsPayload.data?.analytics;
     assert(reconciledAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Reconciled order analytics returned wrong schema: ${JSON.stringify(reconciledAnalyticsPayload).slice(0, 500)}`);
     assert(reconciledAnalytics.payment?.paid?.count >= 1, `Order analytics did not report paid orders after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
-    assert(reconciledAnalytics.revenue?.paidTotal >= 85, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.revenue?.paidTotal >= 96, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
     assert(reconciledAnalytics.operations?.fulfillmentBacklogCount >= 1, `Order analytics did not report fulfillment backlog after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
 
     await clickReconcileProvider(client);

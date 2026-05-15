@@ -40,6 +40,7 @@ import {
   listOrderDeliveryEvents,
   listCollectionRecords,
   listCollections,
+  refreshOrderQuote,
   refreshOrderTracking,
   reconcileCommerceOrders,
   updateCollection,
@@ -1746,6 +1747,32 @@ function OrdersRoute() {
     }
   };
 
+  const refreshOrderQuoteAction = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot refresh order quotes.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { record: updated, quote } = await refreshOrderQuote(activeSiteId, order.id);
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Quote refreshed: ${formatMoney(quote.total, quote.currency)} total.`);
+    } catch (quoteError) {
+      setError(quoteError instanceof Error ? quoteError.message : 'Unable to refresh order quote');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const requestOrderProviderRefund = async (order: CollectionRecord) => {
     if (isOrdersBusy) return;
     if (!canEditOrders) {
@@ -3041,6 +3068,7 @@ function OrdersRoute() {
                       disabled={isOrdersAccessBusy || !canEditOrders}
                       onSelectionChange={(checked) => toggleOrderSelection(order.id, checked)}
                       onEdit={() => selectOrderForEditing(order.id)}
+                      onRefreshQuote={() => void refreshOrderQuoteAction(order)}
                       onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
                       onShippingLabel={() => void prepareOrderShippingLabel(order)}
                       onVoidShippingLabel={() => void voidOrderShippingLabelAction(order)}
@@ -3973,6 +4001,7 @@ function OrderCard({
   disabled,
   onSelectionChange,
   onEdit,
+  onRefreshQuote,
   onPaid,
   onShippingLabel,
   onVoidShippingLabel,
@@ -3993,6 +4022,7 @@ function OrderCard({
   deleteDisabledReason?: string;
   onSelectionChange: (checked: boolean) => void;
   onEdit: () => void;
+  onRefreshQuote: () => void;
   onPaid: () => void;
   onShippingLabel: () => void;
   onVoidShippingLabel: () => void;
@@ -4197,6 +4227,7 @@ function OrderCard({
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
+        <Button size="sm" variant="outline" onClick={onRefreshQuote} disabled={disabled || orderStatus === 'cancelled' || paymentStatus === 'refunded'} iconStart={<RefreshCw className="size-4" />}>Refresh Quote</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
         <Button size="sm" variant="outline" onClick={onShippingLabel} disabled={disabled || (Boolean(shippingLabelId) && shippingLabelStatus !== 'voided') || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<Truck className="size-4" />}>Prepare Label</Button>
         {shippingLabelId ? (
