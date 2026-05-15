@@ -29,6 +29,7 @@ import {
 import {
   createCollection,
   createCollectionRecord,
+  createOrderShippingLabel,
   deleteCollectionRecord,
   getUserPermissions,
   getOrderAnalytics,
@@ -103,6 +104,7 @@ type FulfillmentStatus = 'unfulfilled' | 'processing' | 'fulfilled' | 'cancelled
 type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
 type OrderRiskLevel = 'low' | 'medium' | 'high';
 type OrderRiskReviewStatus = 'cleared' | 'pending_review' | 'approved' | 'held';
+type ShippingLabelStatus = 'none' | 'draft' | 'purchased' | 'voided';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
@@ -187,6 +189,13 @@ interface OrderFormState {
   trackingNumber: string;
   trackingUrl: string;
   fulfilledAt: string;
+  shippingLabelStatus: ShippingLabelStatus;
+  shippingLabelProvider: string;
+  shippingLabelId: string;
+  shippingLabelUrl: string;
+  shippingServiceLevel: string;
+  shippingLabelCost: string;
+  shippingLabelCreatedAt: string;
   riskScore: string;
   riskLevel: OrderRiskLevel;
   riskReasons: string;
@@ -298,15 +307,22 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
-  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
-  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
-  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
-  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
-  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
-  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
-  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 210 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
+  { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
+  { key: 'shippinglabelid', label: 'Shipping Label ID', type: 'text', required: false, unique: false, sortOrder: 173 },
+  { key: 'shippinglabelurl', label: 'Shipping Label URL', type: 'url', required: false, unique: false, sortOrder: 174 },
+  { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
+  { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
+  { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 186, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
+  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
+  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
+  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
 ];
 
 const ORDER_EXPORT_COLUMNS = [
@@ -339,6 +355,13 @@ const ORDER_EXPORT_COLUMNS = [
   'tracking_number',
   'tracking_url',
   'fulfilled_at',
+  'shipping_label_status',
+  'shipping_label_provider',
+  'shipping_label_id',
+  'shipping_label_url',
+  'shipping_service_level',
+  'shipping_label_cost',
+  'shipping_label_created_at',
   'risk_score',
   'risk_level',
   'risk_reasons',
@@ -383,6 +406,13 @@ const ORDER_IMPORT_COLUMNS = [
   'trackingnumber',
   'trackingurl',
   'fulfilledat',
+  'shippinglabelstatus',
+  'shippinglabelprovider',
+  'shippinglabelid',
+  'shippinglabelurl',
+  'shippingservicelevel',
+  'shippinglabelcost',
+  'shippinglabelcreatedat',
   'riskscore',
   'risklevel',
   'riskreasons',
@@ -408,7 +438,7 @@ const ORDER_BACKEND_SYSTEMS = [
   {
     key: 'fulfillment',
     title: 'Fulfillment operations',
-    detail: 'Processing state, carrier, tracking number, tracking URL, fulfilled time, and cancellation flow.',
+    detail: 'Processing state, carrier, shipment label handoff, tracking number, tracking URL, fulfilled time, and cancellation flow.',
   },
   {
     key: 'customer',
@@ -457,6 +487,13 @@ const EMPTY_ORDER_FORM: OrderFormState = {
   trackingNumber: '',
   trackingUrl: '',
   fulfilledAt: '',
+  shippingLabelStatus: 'none',
+  shippingLabelProvider: '',
+  shippingLabelId: '',
+  shippingLabelUrl: '',
+  shippingServiceLevel: '',
+  shippingLabelCost: '',
+  shippingLabelCreatedAt: '',
   riskScore: '0',
   riskLevel: 'low',
   riskReasons: '',
@@ -795,6 +832,7 @@ function OrdersRoute() {
     endpoints: {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
+      adminShippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
       checkoutIntake: publicOrderIntakeUrl,
@@ -1442,6 +1480,13 @@ function OrdersRoute() {
         trackingnumber: formState.trackingNumber.trim(),
         trackingurl: formState.trackingUrl.trim(),
         fulfilledat: formState.fulfilledAt || null,
+        shippinglabelstatus: formState.shippingLabelStatus,
+        shippinglabelprovider: formState.shippingLabelProvider.trim(),
+        shippinglabelid: formState.shippingLabelId.trim(),
+        shippinglabelurl: formState.shippingLabelUrl.trim(),
+        shippingservicelevel: formState.shippingServiceLevel.trim(),
+        shippinglabelcost: formState.shippingLabelCost ? Number(formState.shippingLabelCost) : null,
+        shippinglabelcreatedat: formState.shippingLabelCreatedAt || null,
         riskscore: formState.riskScore ? Number(formState.riskScore) : 0,
         risklevel: formState.riskLevel,
         riskreasons: formState.riskReasons.trim(),
@@ -1510,6 +1555,36 @@ function OrdersRoute() {
       setNotice(workflowNotice);
     } catch (workflowError) {
       setError(workflowError instanceof Error ? workflowError.message : 'Unable to update order');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const prepareOrderShippingLabel = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot prepare shipping labels.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const provider = String(readOrderValue(order.values, 'fulfillmentcarrier', '') || '').trim() || 'manual';
+      const { record: updated, label } = await createOrderShippingLabel(activeSiteId, order.id, {
+        provider,
+        serviceLevel: String(readOrderValue(order.values, 'shippingservicelevel', '') || '').trim() || 'standard',
+      });
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Shipping label draft ${label.id} prepared for ${label.provider}.`);
+    } catch (labelError) {
+      setError(labelError instanceof Error ? labelError.message : 'Unable to prepare shipping label');
     } finally {
       setIsSaving(false);
     }
@@ -2730,6 +2805,7 @@ function OrdersRoute() {
                       onSelectionChange={(checked) => toggleOrderSelection(order.id, checked)}
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
+                      onShippingLabel={() => void prepareOrderShippingLabel(order)}
                       onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onCancelled={() => void updateOrderWorkflow(order, buildCancelWorkflowUpdates(order))}
@@ -3127,6 +3203,81 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-shipping-label-controls">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Shipment label handoff</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Prepare label metadata for external carrier purchase, print, or fulfillment automation.
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Label status">
+                      <select
+                        aria-label="Shipping label status"
+                        value={formState.shippingLabelStatus}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelStatus: event.target.value as ShippingLabelStatus }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      >
+                        <option value="none">None</option>
+                        <option value="draft">Draft</option>
+                        <option value="purchased">Purchased</option>
+                        <option value="voided">Voided</option>
+                      </select>
+                    </Field>
+                    <Field label="Provider">
+                      <input
+                        value={formState.shippingLabelProvider}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelProvider: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="manual, UPS, FedEx"
+                      />
+                    </Field>
+                    <Field label="Service">
+                      <input
+                        value={formState.shippingServiceLevel}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingServiceLevel: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="standard"
+                      />
+                    </Field>
+                    <Field label="Label cost">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formState.shippingLabelCost}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelCost: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
+                    <Field label="Label ID">
+                      <input
+                        value={formState.shippingLabelId}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelId: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="Generated by Backy"
+                      />
+                    </Field>
+                    <Field label="Label URL">
+                      <input
+                        value={formState.shippingLabelUrl}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelUrl: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="/api/admin/sites/.../shipping-label"
+                      />
+                    </Field>
+                    <Field label="Created at">
+                      <input
+                        type="datetime-local"
+                        value={toDateTimeLocalValue(formState.shippingLabelCreatedAt)}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingLabelCreatedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  </div>
+                </div>
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-risk-controls">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Fraud risk controls</div>
@@ -3474,6 +3625,7 @@ function OrderCard({
   onSelectionChange,
   onEdit,
   onPaid,
+  onShippingLabel,
   onFulfilled,
   onRefunded,
   onCancelled,
@@ -3490,6 +3642,7 @@ function OrderCard({
   onSelectionChange: (checked: boolean) => void;
   onEdit: () => void;
   onPaid: () => void;
+  onShippingLabel: () => void;
   onFulfilled: () => void;
   onRefunded: () => void;
   onCancelled: () => void;
@@ -3509,6 +3662,13 @@ function OrderCard({
   const customerId = String(readOrderValue(values, 'customerid', ''));
   const paidAt = String(readOrderValue(values, 'paidat', ''));
   const fulfilledAt = String(readOrderValue(values, 'fulfilledat', ''));
+  const shippingLabelStatus = String(readOrderValue(values, 'shippinglabelstatus', 'none'));
+  const shippingLabelProvider = String(readOrderValue(values, 'shippinglabelprovider', ''));
+  const shippingLabelId = String(readOrderValue(values, 'shippinglabelid', ''));
+  const shippingLabelUrl = String(readOrderValue(values, 'shippinglabelurl', ''));
+  const shippingServiceLevel = String(readOrderValue(values, 'shippingservicelevel', ''));
+  const shippingLabelCost = toNumber(readOrderValue(values, 'shippinglabelcost', 0));
+  const shippingLabelCreatedAt = String(readOrderValue(values, 'shippinglabelcreatedat', ''));
   const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
   const riskScore = toNumber(readOrderValue(values, 'riskscore', 0));
   const riskLevel = String(readOrderValue(values, 'risklevel', riskScore >= 60 ? 'high' : riskScore >= 25 ? 'medium' : 'low'));
@@ -3562,6 +3722,11 @@ function OrderCard({
                   Track {trackingNumber}
                 </span>
               ) : null}
+              {shippingLabelId ? (
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">
+                  Label {shippingLabelStatus} · {shippingLabelId}
+                </span>
+              ) : null}
               {refundAmount > 0 ? (
                 <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
                   Refund {formatMoney(refundAmount, currency)}
@@ -3597,6 +3762,15 @@ function OrderCard({
         <StatePill label="Fulfillment" value={fulfillmentStatus} />
         <StatePill label="Risk review" value={riskReviewStatus.replace(/_/g, ' ')} />
       </div>
+      {shippingLabelId ? (
+        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-blue-800">
+          <Truck className="mr-1 inline size-3.5" />
+          Label {shippingLabelId} prepared with {shippingLabelProvider || 'manual'}
+          {shippingServiceLevel ? ` ${shippingServiceLevel}` : ''}
+          {shippingLabelCost > 0 ? ` for ${formatMoney(shippingLabelCost, currency)}` : ''}
+          {shippingLabelCreatedAt ? ` on ${formatWorkflowDate(shippingLabelCreatedAt)}` : ''}.
+        </div>
+      ) : null}
       {riskReasons ? (
         <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {riskReasons}
@@ -3637,6 +3811,18 @@ function OrderCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
+        <Button size="sm" variant="outline" onClick={onShippingLabel} disabled={disabled || Boolean(shippingLabelId) || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<Truck className="size-4" />}>Prepare Label</Button>
+        {shippingLabelUrl ? (
+          <a
+            href={shippingLabelUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <ExternalLink className="size-4" />
+            Open Label
+          </a>
+        ) : null}
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
@@ -3753,6 +3939,12 @@ const asOrderRiskReviewStatus = (value: unknown): OrderRiskReviewStatus => (
     : 'cleared'
 );
 
+const asShippingLabelStatus = (value: unknown): ShippingLabelStatus => (
+  ['none', 'draft', 'purchased', 'voided'].includes(String(value))
+    ? String(value) as ShippingLabelStatus
+    : 'none'
+);
+
 const asOrderSource = (value: unknown): OrderSource => (
   ['web', 'manual', 'api', 'import', 'pos'].includes(String(value))
     ? String(value) as OrderSource
@@ -3786,6 +3978,13 @@ const camelizeOrderKey = (key: string): string => {
   if (key === 'trackingnumber') return 'trackingNumber';
   if (key === 'trackingurl') return 'trackingUrl';
   if (key === 'fulfilledat') return 'fulfilledAt';
+  if (key === 'shippinglabelstatus') return 'shippingLabelStatus';
+  if (key === 'shippinglabelprovider') return 'shippingLabelProvider';
+  if (key === 'shippinglabelid') return 'shippingLabelId';
+  if (key === 'shippinglabelurl') return 'shippingLabelUrl';
+  if (key === 'shippingservicelevel') return 'shippingServiceLevel';
+  if (key === 'shippinglabelcost') return 'shippingLabelCost';
+  if (key === 'shippinglabelcreatedat') return 'shippingLabelCreatedAt';
   if (key === 'shippingaddress') return 'shippingAddress';
   if (key === 'billingaddress') return 'billingAddress';
   if (key === 'refundamount') return 'refundAmount';
@@ -3804,6 +4003,13 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.trackingNumber !== undefined ? { trackingnumber: updates.trackingNumber } : {}),
   ...(updates.trackingUrl !== undefined ? { trackingurl: updates.trackingUrl } : {}),
   ...(updates.fulfilledAt !== undefined ? { fulfilledat: updates.fulfilledAt || null } : {}),
+  ...(updates.shippingLabelStatus !== undefined ? { shippinglabelstatus: updates.shippingLabelStatus } : {}),
+  ...(updates.shippingLabelProvider !== undefined ? { shippinglabelprovider: updates.shippingLabelProvider } : {}),
+  ...(updates.shippingLabelId !== undefined ? { shippinglabelid: updates.shippingLabelId } : {}),
+  ...(updates.shippingLabelUrl !== undefined ? { shippinglabelurl: updates.shippingLabelUrl } : {}),
+  ...(updates.shippingServiceLevel !== undefined ? { shippingservicelevel: updates.shippingServiceLevel } : {}),
+  ...(updates.shippingLabelCost !== undefined ? { shippinglabelcost: updates.shippingLabelCost ? Number(updates.shippingLabelCost) : null } : {}),
+  ...(updates.shippingLabelCreatedAt !== undefined ? { shippinglabelcreatedat: updates.shippingLabelCreatedAt || null } : {}),
   ...(updates.refundAmount !== undefined ? { refundamount: updates.refundAmount ? Number(updates.refundAmount) : null } : {}),
   ...(updates.refundReason !== undefined ? { refundreason: updates.refundReason } : {}),
   ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
@@ -3942,6 +4148,15 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
   trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
   trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
   fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+  shippingLabelStatus: asShippingLabelStatus(readOrderValue(order.values, 'shippinglabelstatus', undefined)),
+  shippingLabelProvider: String(readOrderValue(order.values, 'shippinglabelprovider', '')),
+  shippingLabelId: String(readOrderValue(order.values, 'shippinglabelid', '')),
+  shippingLabelUrl: String(readOrderValue(order.values, 'shippinglabelurl', '')),
+  shippingServiceLevel: String(readOrderValue(order.values, 'shippingservicelevel', '')),
+  shippingLabelCost: readOrderValue(order.values, 'shippinglabelcost', null) === null || readOrderValue(order.values, 'shippinglabelcost', undefined) === undefined
+    ? ''
+    : String(readOrderValue(order.values, 'shippinglabelcost', '')),
+  shippingLabelCreatedAt: String(readOrderValue(order.values, 'shippinglabelcreatedat', '') || ''),
   riskScore: String(readOrderValue(order.values, 'riskscore', 0) ?? 0),
   riskLevel: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
   riskReasons: String(readOrderValue(order.values, 'riskreasons', '')),
@@ -4123,6 +4338,13 @@ const orderToExportRecord = (
   tracking_number: String(readOrderValue(order.values, 'trackingnumber', '')),
   tracking_url: String(readOrderValue(order.values, 'trackingurl', '')),
   fulfilled_at: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+  shipping_label_status: asShippingLabelStatus(readOrderValue(order.values, 'shippinglabelstatus', undefined)),
+  shipping_label_provider: String(readOrderValue(order.values, 'shippinglabelprovider', '')),
+  shipping_label_id: String(readOrderValue(order.values, 'shippinglabelid', '')),
+  shipping_label_url: String(readOrderValue(order.values, 'shippinglabelurl', '')),
+  shipping_service_level: String(readOrderValue(order.values, 'shippingservicelevel', '')),
+  shipping_label_cost: optionalNumber(readOrderValue(order.values, 'shippinglabelcost', null)),
+  shipping_label_created_at: String(readOrderValue(order.values, 'shippinglabelcreatedat', '') || ''),
   risk_score: optionalNumber(readOrderValue(order.values, 'riskscore', 0)),
   risk_level: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
   risk_reasons: String(readOrderValue(order.values, 'riskreasons', '')),

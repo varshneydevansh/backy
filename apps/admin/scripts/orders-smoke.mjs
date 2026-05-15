@@ -17,7 +17,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-const ORDER_REQUIRED_FIELD_COUNT = 33;
+const ORDER_REQUIRED_FIELD_COUNT = 40;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -45,15 +45,22 @@ const ORDER_FIELDS = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
-  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
-  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
-  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
-  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
-  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
-  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
-  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 210 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
+  { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
+  { key: 'shippinglabelid', label: 'Shipping Label ID', type: 'text', required: false, unique: false, sortOrder: 173 },
+  { key: 'shippinglabelurl', label: 'Shipping Label URL', type: 'url', required: false, unique: false, sortOrder: 174 },
+  { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
+  { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
+  { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 186, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
+  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
+  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
+  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
 ];
 
 const CUSTOMER_FIELDS = [
@@ -791,6 +798,7 @@ const assertOrdersLayout = async (client) => {
       notificationDelivery: Boolean(document.querySelector('[data-testid="orders-notification-delivery"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
+      shippingLabelControls: Boolean(document.querySelector('[data-testid="orders-shipping-label-controls"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
@@ -808,7 +816,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -862,6 +870,13 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'trackingnumber',
     'trackingurl',
     'fulfilledat',
+    'shippinglabelstatus',
+    'shippinglabelprovider',
+    'shippinglabelid',
+    'shippinglabelurl',
+    'shippingservicelevel',
+    'shippinglabelcost',
+    'shippinglabelcreatedat',
     'riskscore',
     'risklevel',
     'riskreasons',
@@ -899,6 +914,13 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     `1ZIMPORT${suffix.toUpperCase()}`,
     `https://carrier.example/import/${suffix}`,
     '',
+    'draft',
+    'UPS',
+    `lbl_import_${suffix}`,
+    `${API_BASE_URL}/api/admin/sites/${SITE_ID}/commerce/orders/imported-order-${suffix}/shipping-label`,
+    'ground',
+    '6',
+    '2026-05-10T10:05:00.000Z',
     '12',
     'low',
     'CSV import baseline risk.',
@@ -929,6 +951,7 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(record.values?.ordersource === 'import', `Imported source was unexpected: ${JSON.stringify(record.values?.ordersource)}`);
   assert(record.values?.paymentstatus === 'paid', `Imported payment status was unexpected: ${JSON.stringify(record.values?.paymentstatus)}`);
   assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
+  assert(record.values?.shippinglabelstatus === 'draft' && record.values?.shippinglabelprovider === 'UPS' && record.values?.shippinglabelid === `lbl_import_${suffix}` && record.values?.shippinglabelcost === 6, `Imported shipping label fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.riskscore === 12 && record.values?.risklevel === 'low' && record.values?.riskreviewstatus === 'cleared', `Imported risk fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
 
@@ -1366,6 +1389,7 @@ const main = async () => {
         values.paymentstatus === 'pending' &&
         values.fulfillmentstatus === 'unfulfilled' &&
         values.customerid === customerFixture.record.id &&
+        values.shippinglabelstatus === 'none' &&
         Number(values.riskscore) === 0 &&
         values.risklevel === 'low' &&
         values.riskreviewstatus === 'cleared'
@@ -1407,6 +1431,27 @@ const main = async () => {
       (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.fulfillmentstatus === 'processing',
       'Bulk processing action did not persist coherent fulfillment workflow fields',
     );
+
+    await clickOrderCardButton(client, orderNumber, 'Prepare Label');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.fulfillmentstatus === 'processing' &&
+        values.shippinglabelstatus === 'draft' &&
+        values.shippinglabelprovider === 'UPS' &&
+        Boolean(values.shippinglabelid) &&
+        String(values.shippinglabelurl || '').includes('/shipping-label') &&
+        values.shippingservicelevel === 'standard' &&
+        Boolean(values.shippinglabelcreatedat) &&
+        /Shipping label handoff prepared/.test(String(values.notes || ''))
+      ),
+      'Prepare Label did not persist shipment label handoff fields',
+    );
+
+    const preparedLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
+    const labelPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${preparedLabelRecord.id}/shipping-label`);
+    assert(labelPayload.data?.label?.id === preparedLabelRecord.values.shippinglabelid, `Shipping label endpoint did not return the prepared label: ${JSON.stringify(labelPayload)}`);
 
     await clickOrderCardButton(client, orderNumber, 'Fulfill');
     await waitForOrderValue(

@@ -17,7 +17,7 @@ const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const PRODUCT_REQUIRED_FIELD_COUNT = 30;
-const ORDER_REQUIRED_FIELD_COUNT = 33;
+const ORDER_REQUIRED_FIELD_COUNT = 40;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
@@ -122,15 +122,22 @@ const ORDER_SCHEMA_FIELDS = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
-  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
-  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
-  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
-  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
-  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
-  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
-  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 210 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
+  { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
+  { key: 'shippinglabelid', label: 'Shipping Label ID', type: 'text', required: false, unique: false, sortOrder: 173 },
+  { key: 'shippinglabelurl', label: 'Shipping Label URL', type: 'url', required: false, unique: false, sortOrder: 174 },
+  { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
+  { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
+  { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 186, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
+  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 200 },
+  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 210 },
+  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 220 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 230 },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1333,6 +1340,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord.values?.risklevel === 'medium', `Order risk level was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.riskreviewstatus === 'pending_review', `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(String(orderRecord.values?.riskreasons || '').includes('Manual payment capture'), `Order risk reasons were not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.shippinglabelstatus === 'none', `Order shipping label default was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const orderEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
   const orderEvents = orderEventsPayload.data?.events || orderEventsPayload.events || [];
