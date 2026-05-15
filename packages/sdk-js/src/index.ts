@@ -1109,6 +1109,30 @@ export interface BackySeoDiscovery {
   };
 }
 
+export interface BackyManifestAdminDiscovery {
+  auth: {
+    authenticated: boolean;
+    mode: 'anonymous' | 'session' | 'api-key';
+    user?: {
+      id: string;
+      role: string;
+      status: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  summary: {
+    allowed: number;
+    total: number;
+    blockedByStatus: boolean;
+    [key: string]: unknown;
+  };
+  capabilities: Record<string, boolean>;
+  permissions: Record<string, boolean>;
+  endpoints: Record<string, string>;
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
@@ -1154,6 +1178,7 @@ export interface BackyFrontendManifest {
     commerce?: BackyCommerceStorefrontContract;
     [key: string]: unknown;
   };
+  admin: BackyManifestAdminDiscovery;
   navigation: { primary?: BackyNavigationItem[]; [key: string]: unknown };
 }
 

@@ -4694,6 +4694,10 @@ try {
       assert(manifestCacheRevision, `${frontendManifest.url} missing manifest cache revision`);
       const manifestEtag = frontendManifest.response.headers.get('etag');
       assert(manifestEtag?.startsWith('"backy-'), `${frontendManifest.url} missing manifest etag`);
+      assert(frontendManifest.json?.data?.admin?.auth?.authenticated === false, `${frontendManifest.url} should expose anonymous admin auth state by default`);
+      assert(frontendManifest.json?.data?.admin?.auth?.mode === 'anonymous', `${frontendManifest.url} should expose anonymous admin mode by default`);
+      assert(frontendManifest.json?.data?.admin?.permissions?.['sites.configure'] === false, `${frontendManifest.url} should not expose configure permission anonymously`);
+      assert(frontendManifest.json?.data?.admin?.capabilities?.frontendDesignWrite === false, `${frontendManifest.url} should not expose frontend design write anonymously`);
       const revalidatedManifest = await request(`/api/sites/${createdSiteId}/manifest`, {
         headers: { 'if-none-match': manifestEtag },
       });
@@ -4754,6 +4758,16 @@ try {
         && collection.dynamicRouteResolveUrl === `/api/sites/${createdSiteId}/resolve?path=/directory/:recordSlug`
         && collection.dynamicRouteRenderUrl === `/api/sites/${createdSiteId}/render?path=/directory/:recordSlug`
       )), `${frontendManifest.url} missing collection manifest`);
+      const authenticatedFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`, {
+        headers: withAdminAuth(),
+      });
+      assert(authenticatedFrontendManifest.response.status === 200, `${authenticatedFrontendManifest.url} expected authenticated manifest`);
+      validateAiFrontendManifest(authenticatedFrontendManifest.json, 'authenticated site frontend manifest');
+      assert(authenticatedFrontendManifest.json?.data?.admin?.auth?.authenticated === true, `${authenticatedFrontendManifest.url} missing authenticated admin state`);
+      assert(['session', 'api-key'].includes(authenticatedFrontendManifest.json?.data?.admin?.auth?.mode), `${authenticatedFrontendManifest.url} missing admin auth mode`);
+      assert(authenticatedFrontendManifest.json?.data?.admin?.permissions?.['sites.view'] === true, `${authenticatedFrontendManifest.url} missing authenticated sites.view permission`);
+      assert(authenticatedFrontendManifest.json?.data?.admin?.capabilities?.frontendDesignRead === true, `${authenticatedFrontendManifest.url} missing frontend design read capability`);
+      assert(authenticatedFrontendManifest.json?.data?.admin?.endpoints?.frontendDesign === `/api/admin/sites/${createdSiteId}/frontend-design`, `${authenticatedFrontendManifest.url} missing admin frontend design endpoint`);
       assert(frontendManifest.json?.data?.modules?.reusableSections?.items?.some((section) => (
         section.id === manifestReusableSectionId &&
         section.detailUrl === `/api/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}` &&

@@ -28,6 +28,8 @@ import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
+import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
+import { buildUserPermissionMatrix, isOwnerOnlyAdminPermission, type AdminUserPermissionMatrix } from '@/lib/adminPermissions';
 
 interface RouteParams {
   params: Promise<{
@@ -44,6 +46,34 @@ type ManifestCollectionRoute = {
   metadata?: unknown;
 };
 
+type ManifestAdminDiscovery = {
+  auth: {
+    authenticated: boolean;
+    mode: 'anonymous' | 'session' | 'api-key';
+    user?: {
+      id: string;
+      role: string;
+      status: string;
+    };
+  };
+  summary: {
+    allowed: number;
+    total: number;
+    blockedByStatus: boolean;
+  };
+  capabilities: Record<string, boolean>;
+  permissions: Record<string, boolean>;
+  endpoints: Record<string, string>;
+};
+
+type ManifestAdminUser = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'inactive' | 'invited' | 'suspended';
+};
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const hasPublicOrderCollectionAccess = (permissions: {
@@ -57,6 +87,139 @@ const hasPublicOrderCollectionAccess = (permissions: {
   permissions.publicUpdate === true ||
   permissions.publicDelete === true
 );
+
+const getBearerToken = (request: NextRequest) => {
+  const authorization = request.headers.get('authorization') || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
+};
+
+const getProvidedAdminKey = (request: NextRequest) => {
+  const explicitKey = request.headers.get('x-backy-admin-key') || request.headers.get('x-api-key');
+  if (explicitKey?.trim()) return explicitKey.trim();
+
+  const authorization = request.headers.get('authorization') || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || '';
+};
+
+const uniqueKeys = (keys: string[]) => keys.filter((key, index, values) => key && values.indexOf(key) === index);
+
+const permissionMap = (matrix: AdminUserPermissionMatrix, transformAllowed: (permissionKey: string, allowed: boolean) => boolean = (_, allowed) => allowed) => (
+  Object.fromEntries(matrix.groups.flatMap((group) => group.permissions.map((permission) => [
+    permission.key,
+    transformAllowed(permission.key, permission.allowed),
+  ])))
+);
+
+const summarizePermissions = (permissions: Record<string, boolean>) => {
+  const values = Object.values(permissions);
+  return {
+    allowed: values.filter(Boolean).length,
+    total: values.length,
+    blockedByStatus: values.length > 0 && values.every((allowed) => !allowed),
+  };
+};
+
+const adminCapabilities = (permissions: Record<string, boolean>) => ({
+  authenticated: Object.values(permissions).some(Boolean),
+  sitesView: permissions['sites.view'] === true,
+  sitesConfigure: permissions['sites.configure'] === true,
+  frontendDesignRead: permissions['sites.view'] === true,
+  frontendDesignWrite: permissions['sites.configure'] === true,
+  pagesEdit: permissions['pages.edit'] === true,
+  pagesPublish: permissions['pages.publish'] === true,
+  collectionsEdit: permissions['collections.edit'] === true,
+  formsManage: permissions['forms.manage'] === true,
+  mediaCreate: permissions['media.create'] === true,
+  commerceEdit: permissions['commerce.edit'] === true,
+  commentsManage: permissions['comments.manage'] === true,
+  usersManage: permissions['users.manage'] === true,
+  settingsView: permissions['settings.view'] === true,
+  settingsConfigure: permissions['settings.configure'] === true,
+  activityExport: permissions['activity.export'] === true,
+});
+
+const adminEndpoints = (siteId: string) => ({
+  site: `/api/admin/sites/${siteId}`,
+  pages: `/api/admin/sites/${siteId}/pages`,
+  blog: `/api/admin/sites/${siteId}/blog`,
+  collections: `/api/admin/sites/${siteId}/collections`,
+  forms: `/api/admin/sites/${siteId}/forms`,
+  media: `/api/admin/sites/${siteId}/media`,
+  frontendDesign: `/api/admin/sites/${siteId}/frontend-design`,
+  settings: '/api/admin/settings',
+  users: '/api/admin/users',
+  auditLogs: `/api/admin/audit-logs?siteId=${encodeURIComponent(siteId)}`,
+});
+
+const emptyAdminDiscovery = (siteId: string, permissions: Record<string, boolean> = {}): ManifestAdminDiscovery => ({
+  auth: {
+    authenticated: false,
+    mode: 'anonymous',
+  },
+  summary: summarizePermissions(permissions),
+  capabilities: adminCapabilities(permissions),
+  permissions,
+  endpoints: adminEndpoints(siteId),
+});
+
+const buildAdminDiscovery = async (
+  request: NextRequest,
+  siteId: string,
+  options: {
+    configuredAdminKey?: string;
+    getUserById?: (userId: string) => Promise<ManifestAdminUser | null | undefined>;
+  } = {},
+): Promise<ManifestAdminDiscovery> => {
+  const baseMatrix = buildUserPermissionMatrix({ id: 'anonymous', role: 'viewer', status: 'inactive' });
+  const basePermissions = permissionMap(baseMatrix, () => false);
+  const providedKey = getProvidedAdminKey(request);
+  const validApiKeys = uniqueKeys([
+    process.env.BACKY_ADMIN_API_KEY?.trim() || '',
+    process.env.BACKY_ADMIN_SECRET_KEY?.trim() || '',
+    options.configuredAdminKey?.trim() || '',
+  ]);
+
+  if (providedKey && validApiKeys.includes(providedKey)) {
+    const apiKeyMatrix = buildUserPermissionMatrix({ id: 'admin-api-key', role: 'owner', status: 'active' });
+    const permissions = permissionMap(apiKeyMatrix, (permissionKey, allowed) => (
+      allowed && !isOwnerOnlyAdminPermission(permissionKey)
+    ));
+    return {
+      auth: {
+        authenticated: true,
+        mode: 'api-key',
+      },
+      summary: summarizePermissions(permissions),
+      capabilities: adminCapabilities(permissions),
+      permissions,
+      endpoints: adminEndpoints(siteId),
+    };
+  }
+
+  const token = getBearerToken(request);
+  const session = await getAdminSessionWithPersistence(token, options.getUserById ? { getUserById: options.getUserById } : {});
+  if (!session) return emptyAdminDiscovery(siteId, basePermissions);
+
+  const sessionOverrides = listAdminSessionPermissionOverrides(session.token, session.user.id);
+  const permissions = permissionMap(buildUserPermissionMatrix(session.user, sessionOverrides || []));
+  return {
+    auth: {
+      authenticated: true,
+      mode: 'session',
+      user: {
+        id: session.user.id,
+        role: session.user.role,
+        status: session.user.status,
+      },
+    },
+    summary: summarizePermissions(permissions),
+    capabilities: adminCapabilities(permissions),
+    permissions,
+    endpoints: adminEndpoints(siteId),
+  };
+};
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   publicContractJson(
@@ -232,6 +395,7 @@ const buildRepositoryManifest = (
     forms: FormDefinition[];
     media: MediaItem[];
     commerceSettings?: unknown;
+    admin: ManifestAdminDiscovery;
   },
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
@@ -479,6 +643,7 @@ const buildRepositoryManifest = (
         },
         commerce,
       },
+      admin: input.admin,
       navigation: buildSiteNavigation(input.site.settings, input.pages.filter(isPubliclyReadable).map((page) => ({
         ...page,
         meta: {
@@ -515,6 +680,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         repositories.media.list({ siteId: site.id, visibility: 'public', limit: 10000, offset: 0 }),
         repositories.settings.get(),
       ]);
+      const admin = await buildAdminDiscovery(request, site.id, {
+        configuredAdminKey: settings.apiKeys?.secretKeyId,
+        getUserById: repositories.users.getById,
+      });
       const manifest = buildRepositoryManifest({
         requestId,
         site,
@@ -528,6 +697,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         forms: forms.items,
         media: media.items,
         commerceSettings: settings.integrations?.commerce,
+        admin,
       });
 
       return publicContractJson(manifest, {
@@ -568,6 +738,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       settings: getAdminSettings().integrations?.commerce,
       hasCatalog: hasCommerceCatalog,
       hasOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+    });
+    const admin = await buildAdminDiscovery(request, site.id, {
+      configuredAdminKey: getAdminSettings().apiKeys?.adminApiKey,
     });
 
     const manifest = {
@@ -804,6 +977,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           commerce,
         },
+        admin,
         navigation: getSiteNavigation(site.id),
       },
     };

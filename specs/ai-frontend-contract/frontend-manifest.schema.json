@@ -447,6 +447,53 @@
           },
           "required": ["routing", "pages", "blog", "collections", "forms", "reusableSections", "media"]
         },
+        "admin": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "auth": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "authenticated": { "type": "boolean" },
+                "mode": { "enum": ["anonymous", "session", "api-key"] },
+                "user": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "id": { "type": "string" },
+                    "role": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              },
+              "required": ["authenticated", "mode"]
+            },
+            "summary": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "allowed": { "type": "number", "minimum": 0 },
+                "total": { "type": "number", "minimum": 0 },
+                "blockedByStatus": { "type": "boolean" }
+              },
+              "required": ["allowed", "total", "blockedByStatus"]
+            },
+            "capabilities": {
+              "type": "object",
+              "additionalProperties": { "type": "boolean" }
+            },
+            "permissions": {
+              "type": "object",
+              "additionalProperties": { "type": "boolean" }
+            },
+            "endpoints": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "required": ["auth", "summary", "capabilities", "permissions", "endpoints"]
+        },
         "navigation": { "type": "object" }
       },
       "required": [
@@ -457,6 +504,7 @@
         "endpoints",
         "routePatterns",
         "modules",
+        "admin",
         "navigation"
       ]
     }

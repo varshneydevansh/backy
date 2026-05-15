@@ -359,6 +359,9 @@ assert(site.data.site?.id, 'discoverSite() did not return a site id');
 const manifest = await client.manifest();
 assert(manifest.data.capabilities?.renderPayload === true, 'manifest() missing render payload capability');
 assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing render endpoint');
+assert(manifest.data.admin?.auth?.authenticated === false, 'manifest() should expose anonymous admin state by default');
+assert(manifest.data.admin?.permissions?.['sites.configure'] === false, 'manifest() should not expose site configure permission anonymously');
+assert(manifest.data.admin?.capabilities?.frontendDesignWrite === false, 'manifest() should not expose frontend design write anonymously');
 const smokePath = manifest.data.modules?.pages?.items?.find?.((page) => typeof page.path === 'string')?.path || '/';
 
 const cachedManifest = await client.manifestCached();
