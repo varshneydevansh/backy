@@ -356,7 +356,7 @@ const enableCommercePricingSettings = async (settings) => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: true,
@@ -396,7 +396,7 @@ const enableStripeCommerceSettings = async () => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: false,
@@ -1638,6 +1638,31 @@ const assertStripeCheckoutExecution = async ({
     assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription webhook did not persist paid status: ${JSON.stringify(orderRecord.values)}`);
     assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription webhook did not persist subscription reference: ${JSON.stringify(orderRecord.values)}`);
     assert(String(orderRecord.values?.notes || '').includes('checkout.session.completed'), `Stripe subscription webhook settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+
+    const renewalInvoicePayload = await postCommerceWebhook({
+      id: `evt_invoice_${slug}`,
+      type: 'invoice.payment_succeeded',
+      data: {
+        object: {
+          id: `in_${slug}`,
+          object: 'invoice',
+          subscription: `sub_${slug}`,
+          payment_intent: `pi_invoice_${slug}`,
+          amount_paid: Math.round(checkoutSession.amountTotal * 100),
+          currency: checkoutSession.currency.toLowerCase(),
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-invoice-${slug}` });
+    assert(renewalInvoicePayload.data?.event?.status === 'paid', `Stripe subscription renewal invoice did not mark payment paid: ${JSON.stringify(renewalInvoicePayload)}`);
+    assert(renewalInvoicePayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription renewal invoice should keep the subscription reference: ${JSON.stringify(renewalInvoicePayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription renewal invoice changed paid status unexpectedly: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription renewal invoice did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('invoice.payment_succeeded'), `Stripe subscription renewal invoice settlement note missing: ${JSON.stringify(orderRecord.values)}`);
 
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')

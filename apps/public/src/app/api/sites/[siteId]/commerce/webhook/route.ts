@@ -146,17 +146,33 @@ const eventPaymentReference = (payload: Record<string, unknown>, object: Record<
   textValue(object.payment_intent || object.paymentIntent || object.paymentReference || object.charge || payload.paymentReference)
 );
 
-const eventSubscriptionReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
-  textValue(object.subscription || object.subscriptionId || object.subscription_id || payload.subscription || payload.subscriptionId)
-);
+const eventSubscriptionReference = (payload: Record<string, unknown>, object: Record<string, unknown>, type = ''): string => {
+  const explicitReference = textValue(object.subscription || object.subscriptionId || object.subscription_id || payload.subscription || payload.subscriptionId);
+  if (explicitReference) return explicitReference;
+  const lowerType = type.toLowerCase();
+  const objectKind = textValue(object.object).toLowerCase();
+  if (lowerType.startsWith('customer.subscription.') || objectKind === 'subscription') {
+    return textValue(object.id);
+  }
+  return '';
+};
 
 const eventInvoiceReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
   textValue(object.invoice || object.invoiceId || object.invoice_id || payload.invoice || payload.invoiceId)
 );
 
-const eventProviderReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
-  eventPaymentReference(payload, object) || eventSubscriptionReference(payload, object) || eventInvoiceReference(payload, object)
-);
+const eventProviderReference = (payload: Record<string, unknown>, object: Record<string, unknown>, type = ''): string => {
+  const subscriptionReference = eventSubscriptionReference(payload, object, type);
+  const paymentReference = eventPaymentReference(payload, object);
+  const invoiceReference = eventInvoiceReference(payload, object);
+  const lowerType = type.toLowerCase();
+  const mode = textValue(object.mode).toLowerCase();
+
+  if (subscriptionReference && (lowerType.startsWith('invoice.') || lowerType.startsWith('customer.subscription.') || mode === 'subscription')) {
+    return subscriptionReference;
+  }
+  return paymentReference || subscriptionReference || invoiceReference;
+};
 
 const eventOrderNumber = (object: Record<string, unknown>): string => {
   const metadata = metadataRecord(object);
@@ -176,10 +192,16 @@ const amountFromProvider = (value: unknown): number | null => {
 const settlementForEvent = (type: string, object: Record<string, unknown>, currentValues: Record<string, unknown>) => {
   const lowerType = type.toLowerCase();
   const now = new Date().toISOString();
-  const providerReference = eventProviderReference({}, object);
+  const providerReference = eventProviderReference({}, object, type);
   const refundAmount = amountFromProvider(object.amount_refunded || object.amountRefunded) ?? Number(currentValues.total || 0);
 
-  if (lowerType === 'checkout.session.completed' || lowerType === 'payment_intent.succeeded' || lowerType === 'payment.succeeded') {
+  if (
+    lowerType === 'checkout.session.completed' ||
+    lowerType === 'payment_intent.succeeded' ||
+    lowerType === 'payment.succeeded' ||
+    lowerType === 'invoice.payment_succeeded' ||
+    lowerType === 'invoice.paid'
+  ) {
     return {
       status: 'paid' as const,
       values: {
@@ -215,7 +237,12 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
     };
   }
 
-  if (lowerType === 'payment_intent.payment_failed' || lowerType === 'checkout.session.expired' || lowerType === 'payment.failed') {
+  if (
+    lowerType === 'payment_intent.payment_failed' ||
+    lowerType === 'checkout.session.expired' ||
+    lowerType === 'payment.failed' ||
+    lowerType === 'invoice.payment_failed'
+  ) {
     return {
       status: 'failed' as const,
       values: {
@@ -325,8 +352,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const object = eventObject(payload);
     const providerEventId = eventId(payload);
     const sessionId = eventSessionId(payload, object);
-    const paymentReference = eventProviderReference(payload, object);
-    const subscriptionReference = eventSubscriptionReference(payload, object);
+    const paymentReference = eventProviderReference(payload, object, type);
+    const subscriptionReference = eventSubscriptionReference(payload, object, type);
     const invoiceReference = eventInvoiceReference(payload, object);
     const orderNumber = eventOrderNumber(object);
     const orderSlug = eventOrderSlug(object);
