@@ -123,6 +123,19 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestApiRaw = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...((endpoint.startsWith('/api/admin/') || endpoint.includes('/events?')) && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -277,6 +290,32 @@ const listForms = async () => {
   return payload.data?.forms || payload.forms || [];
 };
 
+const getSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  return payload.data?.site || payload.site;
+};
+
+const updateSite = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const listReusableSections = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections?status=all`);
   return payload.data?.sections || payload.sections || [];
@@ -308,6 +347,62 @@ const listFormContacts = async (formId) => {
 const deleteForm = async (formId) => {
   if (!formId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`, { method: 'DELETE' });
+};
+
+const assertFormBillingLimitEnforced = async (suffix) => {
+  const site = await getSite();
+  const settings = await getSettings();
+  const existingForms = await listForms();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedName = `blocked-form-limit-${suffix}`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await updateSite({
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          forms: existingForms.length,
+        },
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/forms`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: blockedName,
+        title: 'Blocked form limit smoke',
+        description: 'Temporary form that should be blocked by billing quota.',
+        fields: [
+          { key: 'email', label: 'Email', type: 'email', required: true },
+        ],
+      }),
+    });
+
+    assert(response.status === 402, `Billing form limit should reject form creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_FORM_LIMIT', `Billing form limit should return BILLING_FORM_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const afterForms = await listForms();
+    assert(!afterForms.some((form) => form.name === blockedName || form.title === 'Blocked form limit smoke'), 'Billing-limited form creation unexpectedly persisted a form.');
+  } finally {
+    await updateSite({ settings: originalSiteSettings });
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const createCaptchaSmokeForm = async () => {
@@ -1912,8 +2007,10 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   await loginAdminApi();
+  const suffix = Date.now().toString(36);
   await assertFormsPermissionOverridesAreEnforced();
   await assertFormCreateFieldSanitization();
+  await assertFormBillingLimitEnforced(suffix);
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));

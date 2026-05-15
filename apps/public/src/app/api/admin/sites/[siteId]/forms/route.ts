@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { FormDefinition } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, type FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { createAdminForm, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
+import { createAdminForm, getAdminSettings, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { parseFormFields } from '@/lib/adminFormFieldPolicy';
 import { validateAdminFormCollectionTarget } from '@/lib/adminFormCollectionTargetPolicy';
@@ -48,6 +48,45 @@ const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): T
     ? value as TRecord
     : undefined
 );
+
+const readFormBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
+  const siteRoot = parseRecord<Record<string, unknown>>(siteSettings) || {};
+  const workspaceRoot = parseRecord<Record<string, unknown>>(workspaceSettings) || {};
+  const integrations = parseRecord<Record<string, unknown>>(workspaceRoot.integrations) || {};
+  const commerce = parseRecord<Record<string, unknown>>(integrations.commerce) || {};
+  const billingQuota = parseRecord<Record<string, unknown>>(siteRoot.billingQuota) || {};
+  const limits = parseRecord<Record<string, unknown>>(billingQuota.limits) || {};
+  const limit = Number(limits.forms);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    formLimit: Number.isFinite(limit) && limit >= 0
+      ? Math.round(limit)
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.forms,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+const enforceFormBillingLimit = (
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  currentFormCount: number,
+  requestId: string,
+) => {
+  const policy = readFormBillingPolicy(siteSettings, workspaceSettings);
+  if (policy.overageMode === 'block' && currentFormCount >= policy.formLimit) {
+    return errorResponse(
+      402,
+      'BILLING_FORM_LIMIT',
+      `The ${policy.billingPlan} site plan allows ${policy.formLimit} form${policy.formLimit === 1 ? '' : 's'}. Update the site billing quota before creating another form.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const mergeFormSettings = (
   settings: Record<string, unknown>,
@@ -211,6 +250,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const [settings, existingForms] = await Promise.all([
+        repositories.settings.get(),
+        repositories.forms.list({
+          siteId: site.id,
+          limit: 1,
+          offset: 0,
+        }),
+      ]);
+      const billingLimitError = enforceFormBillingLimit(site.settings, settings, existingForms.pagination.total, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const created = (await repositories.forms.create({
         ...input,
         siteId: site.id,
@@ -268,6 +320,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         collectionTargetValidation.message,
         requestId,
       );
+    }
+
+    const existingForms = listFormsBySite(site.id);
+    const billingLimitError = enforceFormBillingLimit(site.settings, getAdminSettings(), existingForms.length, requestId);
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const created = createAdminForm({
