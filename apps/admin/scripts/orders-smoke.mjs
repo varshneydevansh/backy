@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -130,6 +131,39 @@ const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) =>
   childProcess.once('exit', onExit);
 });
 
+const createQuoteProviderServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      const kind = body.kind || String(request.url || '').replace('/', '');
+      const payload = kind === 'tax'
+        ? { taxAmount: 12.34, lines: [{ provider: 'orders-smoke-tax', amount: 12.34, jurisdiction: 'CA' }], reference: 'tax-smoke-quote' }
+        : kind === 'shipping'
+          ? { shippingAmount: 7.89, lines: [{ provider: 'orders-smoke-shipping', amount: 7.89, service: 'ground' }], reference: 'ship-smoke-quote' }
+          : { discountAmount: 6.54, lines: [{ provider: 'orders-smoke-discount', amount: 6.54, code: 'SMOKE' }], reference: 'discount-smoke-quote' };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(payload));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  return {
+    baseUrl,
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('content-type')) {
@@ -207,6 +241,26 @@ const enableCommerceWebhookSettings = async (settings) => {
       shippingBaseAmount: 8,
       shippingWeightRate: 1.25,
       reconciliationMode: 'webhook',
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
+const enableCommerceQuoteProviders = async (settings, providerBaseUrl) => {
+  const next = JSON.parse(JSON.stringify(settings));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      taxEnabled: true,
+      shippingEnabled: true,
+      discountsEnabled: true,
+      taxProvider: 'http',
+      taxProviderUrl: `${providerBaseUrl}/tax`,
+      shippingProvider: 'http',
+      shippingProviderUrl: `${providerBaseUrl}/shipping`,
+      discountProvider: 'http',
+      discountProviderUrl: `${providerBaseUrl}/discount`,
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -1440,6 +1494,7 @@ const main = async () => {
   let customerCollectionId;
   let customerRecordId;
   let customerFixture;
+  let quoteProviderServer;
   assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
   const originalSettings = await getSettings();
@@ -1529,6 +1584,29 @@ const main = async () => {
     const quotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${quotedOrder.id}/quote`);
     assert(quotePayload.data?.quote?.schemaVersion === 'backy.order-quote.v1', `Quote endpoint returned wrong schema: ${JSON.stringify(quotePayload).slice(0, 500)}`);
     assert(quotePayload.data?.quote?.total === 96, `Quote endpoint returned unexpected total: ${JSON.stringify(quotePayload).slice(0, 500)}`);
+
+    quoteProviderServer = await createQuoteProviderServer();
+    const currentSettings = await getSettings();
+    await enableCommerceQuoteProviders(currentSettings, quoteProviderServer.baseUrl);
+    await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+    const providerQuotedOrder = await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.subtotal === 80 &&
+        values.discountamount === 6.54 &&
+        values.taxamount === 12.34 &&
+        values.shippingamount === 7.89 &&
+        values.total === 93.69 &&
+        /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+      ),
+      'Refresh Quote did not persist provider-calculated totals',
+    );
+    const providerQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerQuotedOrder.id}/quote`);
+    const providerQuote = providerQuotePayload.data?.quote;
+    assert(providerQuote?.providerAdjustments?.length === 3, `Quote endpoint did not expose provider adjustments: ${JSON.stringify(providerQuotePayload).slice(0, 500)}`);
+    assert(providerQuote.providerAdjustments.every((item) => item.status === 'succeeded'), `Quote provider adjustments were not all successful: ${JSON.stringify(providerQuote).slice(0, 500)}`);
+    assert(quoteProviderServer.requests.length >= 6, `Quote provider server did not receive tax/shipping/discount calls from POST and GET: ${quoteProviderServer.requests.length}`);
 
     await selectOrderForBulk(client, orderNumber);
     await clickByText(client, 'Mark Paid', { exact: true, rootSelector: '#orders-queue' });
@@ -1670,7 +1748,7 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 96 &&
+        Number(values.refundamount) === 93.69 &&
         values.refundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         /Manual refund\/return state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1691,7 +1769,7 @@ const main = async () => {
         Boolean(values.providerrefundid) &&
         String(values.providerrefundreference || '').includes(String(values.paymentreference || '')) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
-        Number(values.providerrefundamount) === 96 &&
+        Number(values.providerrefundamount) === 93.69 &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
@@ -1734,7 +1812,7 @@ const main = async () => {
         values.orderstatus === 'cancelled' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 96 &&
+        Number(values.refundamount) === 93.69 &&
         values.refundreason === 'Order cancellation manually recorded from Backy order workflow.' &&
         /Manual cancellation state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider cancellation\/refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1860,7 +1938,7 @@ const main = async () => {
     const reconciledAnalytics = reconciledAnalyticsPayload.data?.analytics;
     assert(reconciledAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Reconciled order analytics returned wrong schema: ${JSON.stringify(reconciledAnalyticsPayload).slice(0, 500)}`);
     assert(reconciledAnalytics.payment?.paid?.count >= 1, `Order analytics did not report paid orders after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
-    assert(reconciledAnalytics.revenue?.paidTotal >= 96, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.revenue?.paidTotal >= 93.69, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
     assert(reconciledAnalytics.operations?.fulfillmentBacklogCount >= 1, `Order analytics did not report fulfillment backlog after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
 
     await clickReconcileProvider(client);
@@ -1894,6 +1972,9 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (quoteProviderServer) {
+      await quoteProviderServer.close().catch(() => {});
+    }
     await cleanup({
       client,
       childProcess,

@@ -1479,6 +1479,17 @@ export interface AdminOrderQuote {
   currency: string;
   discountCode: string;
   discountRate: number;
+  providerAdjustments?: Array<{
+    kind: 'tax' | 'shipping' | 'discount';
+    provider: 'http';
+    status: 'succeeded' | 'failed' | 'skipped';
+    url?: string;
+    amount?: number;
+    lines?: Array<Record<string, unknown>>;
+    error?: string;
+    statusCode?: number;
+    reference?: string;
+  }>;
   calculatedAt: string;
 }
 
@@ -1936,6 +1947,12 @@ export interface SiteSettingsInput {
       shippingBaseAmount?: number;
       shippingWeightRate?: number;
       discountPercent?: number;
+      taxProvider?: 'manual' | 'http';
+      taxProviderUrl?: string;
+      shippingProvider?: 'manual' | 'http';
+      shippingProviderUrl?: string;
+      discountProvider?: 'manual' | 'http';
+      discountProviderUrl?: string;
       inventoryReservations?: boolean;
       reservationMinutes?: number;
       webhookEventsEnabled?: boolean;

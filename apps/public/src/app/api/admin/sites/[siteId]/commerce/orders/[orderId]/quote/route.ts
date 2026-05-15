@@ -78,8 +78,21 @@ interface OrderQuotePayload {
   taxLines: Array<Record<string, unknown>>;
   shippingLines: Array<Record<string, unknown>>;
   discountLines: Array<Record<string, unknown>>;
+  providerAdjustments: QuoteProviderAdjustment[];
   pricing: CommerceStorefrontContract['pricing'];
   calculatedAt: string;
+}
+
+interface QuoteProviderAdjustment {
+  kind: 'tax' | 'shipping' | 'discount';
+  provider: 'http';
+  status: 'succeeded' | 'failed' | 'skipped';
+  url?: string;
+  amount?: number;
+  lines?: Array<Record<string, unknown>>;
+  error?: string;
+  statusCode?: number;
+  reference?: string;
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
@@ -201,6 +214,109 @@ const discountPercentFromCode = (code: string, rules: CommerceStorefrontContract
   return Math.max(0, Math.min(90, Number(match[1]))) / 100;
 };
 
+const providerUrlForKind = (settings: Record<string, unknown>, kind: QuoteProviderAdjustment['kind']): string => {
+  const mode = textValue(settings[`${kind}Provider`]).toLowerCase();
+  const url = textValue(settings[`${kind}ProviderUrl`]);
+  if (mode !== 'http' || !url) return '';
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const quoteProviderAmount = (payload: Record<string, unknown>, kind: QuoteProviderAdjustment['kind']): number | null => {
+  const keyed = payload[`${kind}Amount`];
+  const generic = payload.amount;
+  const parsed = numberValue(keyed ?? generic, Number.NaN);
+  return Number.isFinite(parsed) && parsed >= 0 ? moneyValue(parsed) : null;
+};
+
+const quoteProviderLines = (payload: Record<string, unknown>): Array<Record<string, unknown>> => (
+  Array.isArray(payload.lines) ? payload.lines.map(toRecord) : []
+);
+
+const callQuoteProvider = async ({
+  kind,
+  url,
+  record,
+  lineItems,
+  quote,
+  requestId,
+}: {
+  kind: QuoteProviderAdjustment['kind'];
+  url: string;
+  record: CollectionRecordAuditSource;
+  lineItems: QuoteLineItem[];
+  quote: OrderQuotePayload;
+  requestId: string;
+}): Promise<QuoteProviderAdjustment> => {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-request-id': requestId,
+        'x-backy-provider-kind': kind,
+      },
+      body: JSON.stringify({
+        schemaVersion: 'backy.quote-provider-request.v1',
+        kind,
+        order: {
+          id: record.id,
+          slug: record.slug,
+          values: record.values || {},
+        },
+        lineItems,
+        quote,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const body = toRecord(payload);
+    if (!response.ok) {
+      return {
+        kind,
+        provider: 'http',
+        status: 'failed',
+        url,
+        statusCode: response.status,
+        error: textValue(body.error) || textValue(toRecord(body.error).message) || `Provider returned HTTP ${response.status}.`,
+      };
+    }
+    const amount = quoteProviderAmount(body, kind);
+    if (amount === null) {
+      return {
+        kind,
+        provider: 'http',
+        status: 'failed',
+        url,
+        statusCode: response.status,
+        error: 'Provider response did not include a non-negative amount.',
+      };
+    }
+    return {
+      kind,
+      provider: 'http',
+      status: 'succeeded',
+      url,
+      statusCode: response.status,
+      amount,
+      lines: quoteProviderLines(body),
+      reference: textValue(body.reference || body.providerReference),
+    };
+  } catch (error) {
+    return {
+      kind,
+      provider: 'http',
+      status: 'failed',
+      url,
+      error: error instanceof Error ? error.message : 'Provider quote request failed.',
+    };
+  }
+};
+
 const collectionRecordAuditMetadata = (
   collection: CollectionAuditSource,
   record: CollectionRecordAuditSource,
@@ -232,6 +348,15 @@ const quoteAuditMetadata = (
   shippingAmount: quote.shippingAmount,
   total: quote.total,
   currency: quote.currency,
+  providerAdjustments: quote.providerAdjustments.map((item) => ({
+    kind: item.kind,
+    provider: item.provider,
+    status: item.status,
+    amount: item.amount ?? null,
+    statusCode: item.statusCode ?? null,
+    reference: item.reference || null,
+    error: item.error || null,
+  })),
 });
 
 const appendNote = (current: unknown, note: string): string => {
@@ -250,13 +375,15 @@ const commerceContractForSite = (siteId: string) => {
   });
 };
 
-const calculateQuote = (
+const calculateQuote = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
   commerce: CommerceStorefrontContract,
-): OrderQuotePayload => {
+  requestId: string,
+): Promise<OrderQuotePayload> => {
   const calculatedAt = new Date().toISOString();
   const values = toRecord(record.values);
+  const commerceSettings = toRecord(toRecord(getAdminSettings().integrations).commerce);
   const lineItems = normalizeLineItems(record);
   const fallbackCurrency = textValue(values.currency) || commerce.currency || 'USD';
   const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
@@ -324,33 +451,84 @@ const calculateQuote = (
     amount: moneyValue(group.base + group.weightTotal * commerce.pricing.rules.shippingWeightRate),
   }));
   const shippingAmount = moneyValue(shippingLines.reduce((sum, line) => sum + numberValue(line.amount), 0));
-  const total = moneyValue(Math.max(0, subtotal - discountAmount + taxAmount + shippingAmount));
 
-  return {
+  const localQuote: OrderQuotePayload = {
     schemaVersion: 'backy.order-quote.v1',
     subtotal,
     discountAmount,
     taxAmount,
     shippingAmount,
-    total,
+    total: moneyValue(Math.max(0, subtotal - discountAmount + taxAmount + shippingAmount)),
     currency: lineItems[0]?.currency || fallbackCurrency,
     discountCode,
     discountRate,
     taxLines,
     shippingLines,
     discountLines,
+    providerAdjustments: [],
     pricing: commerce.pricing,
     calculatedAt,
   };
+
+  const providerAdjustments = (await Promise.all(([
+    ['tax', commerce.pricing.taxes],
+    ['shipping', commerce.pricing.shipping],
+    ['discount', commerce.pricing.discounts],
+  ] as Array<[QuoteProviderAdjustment['kind'], boolean]>).map(async ([kind, enabled]) => {
+    const url = providerUrlForKind(commerceSettings, kind);
+    if (!enabled || !url) {
+      return null;
+    }
+    return callQuoteProvider({
+      kind,
+      url,
+      record,
+      lineItems,
+      quote: localQuote,
+      requestId,
+    });
+  }))).filter(Boolean) as QuoteProviderAdjustment[];
+
+  const providerAmount = (kind: QuoteProviderAdjustment['kind'], fallback: number): number => {
+    const adjustment = providerAdjustments.find((item) => item.kind === kind && item.status === 'succeeded' && typeof item.amount === 'number');
+    if (!adjustment) return fallback;
+    if (kind === 'discount') return moneyValue(Math.min(subtotal, Math.max(0, adjustment.amount || 0)));
+    return moneyValue(Math.max(0, adjustment.amount || 0));
+  };
+
+  const providerLines = (
+    kind: QuoteProviderAdjustment['kind'],
+    fallback: Array<Record<string, unknown>>,
+  ): Array<Record<string, unknown>> => {
+    const adjustment = providerAdjustments.find((item) => item.kind === kind && item.status === 'succeeded' && item.lines && item.lines.length > 0);
+    return adjustment?.lines || fallback;
+  };
+
+  const finalTaxAmount = providerAmount('tax', taxAmount);
+  const finalShippingAmount = providerAmount('shipping', shippingAmount);
+  const finalDiscountAmount = providerAmount('discount', discountAmount);
+
+  return {
+    ...localQuote,
+    discountAmount: finalDiscountAmount,
+    taxAmount: finalTaxAmount,
+    shippingAmount: finalShippingAmount,
+    total: moneyValue(Math.max(0, subtotal - finalDiscountAmount + finalTaxAmount + finalShippingAmount)),
+    discountLines: providerLines('discount', discountLines),
+    taxLines: providerLines('tax', taxLines),
+    shippingLines: providerLines('shipping', shippingLines),
+    providerAdjustments,
+  };
 };
 
-const buildQuoteUpdate = (
+const buildQuoteUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
   commerce: CommerceStorefrontContract,
+  requestId: string,
 ) => {
   const values = toRecord(record.values);
-  const quote = calculateQuote(record, body, commerce);
+  const quote = await calculateQuote(record, body, commerce, requestId);
   return {
     quote,
     values: {
@@ -361,7 +539,7 @@ const buildQuoteUpdate = (
       shippingamount: quote.shippingAmount,
       total: quote.total,
       currency: quote.currency,
-      notes: appendNote(values.notes, `Order quote refreshed ${quote.calculatedAt}: subtotal ${quote.subtotal.toFixed(2)}, tax ${quote.taxAmount.toFixed(2)}, shipping ${quote.shippingAmount.toFixed(2)}, discount ${quote.discountAmount.toFixed(2)}, total ${quote.total.toFixed(2)}.`),
+      notes: appendNote(values.notes, `Order quote refreshed ${quote.calculatedAt}: subtotal ${quote.subtotal.toFixed(2)}, tax ${quote.taxAmount.toFixed(2)}, shipping ${quote.shippingAmount.toFixed(2)}, discount ${quote.discountAmount.toFixed(2)}, total ${quote.total.toFixed(2)}.${quote.providerAdjustments.length > 0 ? ` Provider adjustments: ${quote.providerAdjustments.map((item) => `${item.kind}:${item.status}`).join(', ')}.` : ''}`),
     },
   };
 };
@@ -388,7 +566,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      return NextResponse.json({ success: true, requestId, data: { record, quote: calculateQuote(record, {}, commerce) } });
+      return NextResponse.json({ success: true, requestId, data: { record, quote: await calculateQuote(record, {}, commerce, requestId) } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -402,7 +580,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    return NextResponse.json({ success: true, requestId, data: { record, quote: calculateQuote(record, {}, commerce) } });
+    return NextResponse.json({ success: true, requestId, data: { record, quote: await calculateQuote(record, {}, commerce, requestId) } });
   } catch (error) {
     console.error('Admin order quote read API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -433,7 +611,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      const { quote, values: rawValues } = buildQuoteUpdate(record, body, commerce);
+      const { quote, values: rawValues } = await buildQuoteUpdate(record, body, commerce, requestId);
       const values = normalizeCollectionRecordMediaValues(collection, rawValues);
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
@@ -485,7 +663,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    const { quote, values: rawValues } = buildQuoteUpdate(record, body, commerce);
+    const { quote, values: rawValues } = await buildQuoteUpdate(record, body, commerce, requestId);
     const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
     const validationErrors = validateCollectionRecordValues(collection, values, {
       existingValues: record.values,

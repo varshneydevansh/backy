@@ -2619,6 +2619,12 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   shippingBaseAmount: 8,
   shippingWeightRate: 1.25,
   discountPercent: 10,
+  taxProvider: 'manual',
+  taxProviderUrl: '',
+  shippingProvider: 'manual',
+  shippingProviderUrl: '',
+  discountProvider: 'manual',
+  discountProviderUrl: '',
   inventoryReservations: true,
   reservationMinutes: 15,
   webhookEventsEnabled: false,
@@ -4912,6 +4918,40 @@ function CommerceSettings({
                   <span className="shrink-0 text-xs text-muted-foreground">%</span>
                 </div>
               </label>
+            </div>
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+              {([
+                ['tax', 'Tax provider'],
+                ['shipping', 'Shipping provider'],
+                ['discount', 'Discount provider'],
+              ] as const).map(([key, label]) => {
+                const providerKey = `${key}Provider` as keyof CommerceSettingsConfig;
+                const urlKey = `${key}ProviderUrl` as keyof CommerceSettingsConfig;
+                return (
+                  <div key={key} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3">
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium">{label}</span>
+                      <select
+                        value={String(resolved[providerKey] || 'manual')}
+                        onChange={(event) => update({ [providerKey]: event.target.value as 'manual' | 'http' } as Partial<CommerceSettingsConfig>)}
+                        className={inputClassName}
+                      >
+                        <option value="manual">Built-in rules</option>
+                        <option value="http">HTTP calculator</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium">Endpoint URL</span>
+                      <input
+                        value={String(resolved[urlKey] || '')}
+                        onChange={(event) => update({ [urlKey]: event.target.value } as Partial<CommerceSettingsConfig>)}
+                        placeholder={`https://api.example.com/${key}-quote`}
+                        className={inputClassName}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="mt-5 grid gap-3 border-t border-border pt-4">

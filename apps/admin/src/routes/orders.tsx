@@ -1809,7 +1809,10 @@ function OrdersRoute() {
         setFormState(orderToForm(updated));
       }
       void loadOrderAnalytics();
-      setNotice(`Quote refreshed: ${formatMoney(quote.total, quote.currency)} total.`);
+      const providerSummary = quote.providerAdjustments?.length
+        ? ` Provider calculators: ${quote.providerAdjustments.map((item) => `${item.kind} ${item.status}`).join(', ')}.`
+        : '';
+      setNotice(`Quote refreshed: ${formatMoney(quote.total, quote.currency)} total.${providerSummary}`);
     } catch (quoteError) {
       setError(quoteError instanceof Error ? quoteError.message : 'Unable to refresh order quote');
     } finally {
