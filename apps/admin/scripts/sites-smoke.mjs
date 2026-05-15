@@ -212,8 +212,11 @@ const waitForSiteMissing = async (slug) => {
 const assertSiteBillingLimitEnforced = async (suffix) => {
   const settings = await getSettings();
   const existingSites = await listSites();
+  const sourceSite = existingSites[0];
   const originalIntegrations = settings.integrations || {};
   const originalCommerce = originalIntegrations.commerce || {};
+
+  assert(sourceSite?.id, `Billing site-limit smoke needs an existing source site to duplicate: ${JSON.stringify(existingSites).slice(0, 500)}`);
 
   await updateSettings({
     integrations: {
@@ -243,6 +246,24 @@ const assertSiteBillingLimitEnforced = async (suffix) => {
     assert(response.status === 402, `Billing site limit should reject site creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload?.error?.code === 'BILLING_SITE_LIMIT', `Billing site limit should return BILLING_SITE_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(!(await findSiteBySlug(`blocked-billing-${suffix}`)), 'Billing-limited site creation unexpectedly persisted a site.');
+
+    const duplicateSlug = `blocked-billing-duplicate-${suffix}`;
+    const duplicateResponse = await fetch(`${API_BASE_URL}/api/admin/sites/${encodeURIComponent(sourceSite.id)}/duplicate`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        name: `Blocked Billing Duplicate ${suffix}`,
+        slug: duplicateSlug,
+      }),
+    });
+    const duplicatePayload = await duplicateResponse.json().catch(() => ({}));
+
+    assert(duplicateResponse.status === 402, `Billing site limit should reject site duplication, got ${duplicateResponse.status}: ${JSON.stringify(duplicatePayload).slice(0, 500)}`);
+    assert(duplicatePayload?.error?.code === 'BILLING_SITE_LIMIT', `Billing site-limited duplicate should return BILLING_SITE_LIMIT: ${JSON.stringify(duplicatePayload).slice(0, 500)}`);
+    assert(!(await findSiteBySlug(duplicateSlug)), 'Billing-limited site duplication unexpectedly persisted a site.');
   } finally {
     await updateSettings({ integrations: originalIntegrations });
   }

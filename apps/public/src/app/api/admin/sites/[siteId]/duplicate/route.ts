@@ -18,7 +18,9 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createAdminPage,
   createAdminSite,
+  getAdminSettings,
   getSiteByIdOrSlug,
+  getSites,
   listAdminPages,
   updateAdminPage,
   updateAdminSite,
@@ -67,6 +69,44 @@ const normalizeSlug = (value: unknown): string => (
     ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     : ''
 );
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const readBillingSitePolicy = (settings: unknown) => {
+  const root = toRecord(settings);
+  const integrations = toRecord(root.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const limit = Number(commerce.siteLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    siteLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const enforceSiteBillingLimit = (
+  settings: unknown,
+  currentSiteCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingSitePolicy(settings);
+  if (policy.overageMode === 'block' && currentSiteCount >= policy.siteLimit) {
+    return errorResponse(
+      402,
+      'BILLING_SITE_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.siteLimit} site${policy.siteLimit === 1 ? '' : 's'}. Update Settings billing limits before duplicating another site.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const duplicateSlugBase = (sourceSlug: string): string => {
   const suffix = Date.now().toString(36).slice(-6);
@@ -209,6 +249,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : `${source.name} Copy`;
       const desiredSlug = normalizeSlug(body.slug) || duplicateSlugBase(source.slug);
       const slug = await resolveRepositoryDuplicateSlug(repositories, source.teamId, desiredSlug);
+      const [settings, existingSites] = await Promise.all([
+        repositories.settings.get(),
+        repositories.sites.list({ status: 'all', limit: 1, offset: 0 }),
+      ]);
+      const billingLimitError = enforceSiteBillingLimit(settings, existingSites.pagination.total, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
+      }
       const initialSettings = duplicateSiteSettings(source.settings, new Map());
       const created = await repositories.sites.create({
         teamId: source.teamId,
@@ -306,6 +354,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : `${source.name} Copy`;
     const desiredSlug = normalizeSlug(body.slug) || duplicateSlugBase(source.slug);
     const slug = resolveDemoDuplicateSlug(desiredSlug);
+    const billingLimitError = enforceSiteBillingLimit(getAdminSettings(), getSites({ includeUnpublished: true }).length, requestId);
+    if (billingLimitError) {
+      return billingLimitError;
+    }
     const created = createAdminSite({
       name: desiredName,
       slug,
