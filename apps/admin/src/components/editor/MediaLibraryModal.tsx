@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   X,
   Upload,
@@ -16,7 +16,7 @@ import {
   Crop,
   RefreshCw,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatBytes } from '@/lib/utils';
 import { createMediaFolder, getDefaultMediaSiteId, listMediaFolders, listMediaLibrary, replaceMedia, updateMedia, uploadMedia, type MediaFolder, type MediaListOptions } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
@@ -67,6 +67,17 @@ interface MediaLibraryModalProps {
   canCreate?: boolean;
   viewDisabledReason?: string;
   createDisabledReason?: string;
+}
+
+interface ReplacementBinaryComparison {
+  currentName: string;
+  currentType: string;
+  currentBytes: number | null;
+  candidateName: string;
+  candidateType: string;
+  candidateBytes: number;
+  deltaBytes: number | null;
+  status: 'selected' | 'replaced' | 'failed';
 }
 
 const loadAllPickerMedia = async (options: MediaListOptions): Promise<MediaAsset[]> => {
@@ -139,6 +150,8 @@ export function MediaLibraryModal({
   const [isReplacing, setIsReplacing] = useState(false);
   const [selectingMediaId, setSelectingMediaId] = useState<string | null>(null);
   const [focalPreviewAssetId, setFocalPreviewAssetId] = useState<string | null>(null);
+  const [isDraggingFocal, setIsDraggingFocal] = useState(false);
+  const [replacementBinaryComparison, setReplacementBinaryComparison] = useState<ReplacementBinaryComparison | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,6 +183,8 @@ export function MediaLibraryModal({
     setUploadProgress(null);
     setSelectingMediaId(null);
     setFocalPreviewAssetId(null);
+    setIsDraggingFocal(false);
+    setReplacementBinaryComparison(null);
   }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
@@ -233,6 +248,9 @@ export function MediaLibraryModal({
     () => replaceAssetId ? normalized.find((item) => item.id === replaceAssetId) || null : null,
     [normalized, replaceAssetId]
   );
+  const replaceAssetBytes = typeof replaceAsset?.sizeBytes === 'number' && Number.isFinite(replaceAsset.sizeBytes)
+    ? Math.max(0, replaceAsset.sizeBytes)
+    : null;
 
   const folderOptions = useMemo(() => {
     const childrenByParent = new Map<string, MediaFolder[]>();
@@ -508,22 +526,64 @@ export function MediaLibraryModal({
     };
   };
 
-  const setFocalFromPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const setFocalFromPointer = (target: HTMLElement, clientX: number, clientY: number) => {
+    const rect = target.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    setImageFocalX(clampPercent(((event.clientX - rect.left) / rect.width) * 100));
-    setImageFocalY(clampPercent(((event.clientY - rect.top) / rect.height) * 100));
+    setImageFocalX(clampPercent(((clientX - rect.left) / rect.width) * 100));
+    setImageFocalY(clampPercent(((clientY - rect.top) / rect.height) * 100));
+  };
+
+  const handleFocalPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDraggingFocal(true);
+    setFocalFromPointer(event.currentTarget, event.clientX, event.clientY);
+  };
+
+  const handleFocalPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingFocal && !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    setFocalFromPointer(event.currentTarget, event.clientX, event.clientY);
+  };
+
+  const handleFocalPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsDraggingFocal(false);
+  };
+
+  const handleFocalKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 10 : 1;
+    if (event.key === 'ArrowLeft') setImageFocalX((value) => clampPercent(value - step));
+    if (event.key === 'ArrowRight') setImageFocalX((value) => clampPercent(value + step));
+    if (event.key === 'ArrowUp') setImageFocalY((value) => clampPercent(value - step));
+    if (event.key === 'ArrowDown') setImageFocalY((value) => clampPercent(value + step));
+    if (event.key === 'Home') {
+      setImageFocalX(50);
+      setImageFocalY(50);
+    }
+    if (event.key === 'End') {
+      setImageFocalX(100);
+      setImageFocalY(100);
+    }
   };
 
   const renderFocalPreview = (testId: string, previewAsset: MediaAsset | null = null) => (
-    <button
-      type="button"
-      onPointerDown={setFocalFromPointer}
+    <div
+      role="button"
+      tabIndex={0}
+      onPointerDown={handleFocalPointerDown}
+      onPointerMove={handleFocalPointerMove}
+      onPointerUp={handleFocalPointerEnd}
+      onPointerCancel={handleFocalPointerEnd}
+      onKeyDown={handleFocalKeyDown}
       data-testid={testId}
       data-focal-x={imageFocalX}
       data-focal-y={imageFocalY}
+      data-focal-dragging={isDraggingFocal ? 'true' : 'false'}
       data-preview-media-id={previewAsset?.id || ''}
-      className="relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg border border-border bg-[linear-gradient(45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(-45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(148,163,184,0.16)_75%),linear-gradient(-45deg,transparent_75%,rgba(148,163,184,0.16)_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
+      className="relative mt-3 aspect-[4/3] w-full cursor-crosshair touch-none overflow-hidden rounded-lg border border-border bg-[linear-gradient(45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(-45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(148,163,184,0.16)_75%),linear-gradient(-45deg,transparent_75%,rgba(148,163,184,0.16)_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
       aria-label="Set image focal point"
     >
       {previewAsset?.url ? (
@@ -542,13 +602,38 @@ export function MediaLibraryModal({
         </div>
       )}
       <span
-        className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow-md ring-2 ring-primary/35"
+        data-testid={`${testId}-crop-box`}
+        className="pointer-events-none absolute inset-[12%] rounded-md border border-white/85 shadow-[0_0_0_9999px_rgba(15,23,42,0.2)]"
+      />
+      {[
+        ['nw', 'left-[12%] top-[12%] -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize'],
+        ['n', 'left-1/2 top-[12%] -translate-x-1/2 -translate-y-1/2 cursor-ns-resize'],
+        ['ne', 'right-[12%] top-[12%] translate-x-1/2 -translate-y-1/2 cursor-nesw-resize'],
+        ['e', 'right-[12%] top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize'],
+        ['se', 'right-[12%] bottom-[12%] translate-x-1/2 translate-y-1/2 cursor-nwse-resize'],
+        ['s', 'bottom-[12%] left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize'],
+        ['sw', 'bottom-[12%] left-[12%] -translate-x-1/2 translate-y-1/2 cursor-nesw-resize'],
+        ['w', 'left-[12%] top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize'],
+      ].map(([position, positionClass]) => (
+        <span
+          key={position}
+          data-testid={`${testId}-crop-handle-${position}`}
+          className={cn('absolute z-10 h-3 w-3 rounded-sm border border-primary bg-background shadow-sm', positionClass)}
+        />
+      ))}
+      <span className="pointer-events-none absolute left-1/3 top-[12%] h-[76%] border-l border-white/45" />
+      <span className="pointer-events-none absolute left-2/3 top-[12%] h-[76%] border-l border-white/45" />
+      <span className="pointer-events-none absolute left-[12%] top-1/3 w-[76%] border-t border-white/45" />
+      <span className="pointer-events-none absolute left-[12%] top-2/3 w-[76%] border-t border-white/45" />
+      <span
+        data-testid={`${testId}-drag-handle`}
+        className="absolute z-20 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-white bg-primary shadow-md ring-2 ring-primary/35 active:cursor-grabbing"
         style={{ left: `${imageFocalX}%`, top: `${imageFocalY}%` }}
       />
       <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-background/90 px-2 py-1 font-mono text-[10px] text-muted-foreground shadow-sm">
         {imageFocalX}% {imageFocalY}%
       </span>
-    </button>
+    </div>
   );
 
   const handleSelectMedia = async (item: MediaAsset) => {
@@ -793,6 +878,18 @@ export function MediaLibraryModal({
     if (!replaceAssetId || !files || files.length === 0) return;
 
     const file = files[0];
+    const candidateType = getUploadType(file);
+    const nextBinaryComparison: ReplacementBinaryComparison = {
+      currentName: replaceAsset?.name || 'Current media asset',
+      currentType: replaceAsset?.type || 'asset',
+      currentBytes: replaceAssetBytes,
+      candidateName: file.name,
+      candidateType: file.type || candidateType,
+      candidateBytes: file.size,
+      deltaBytes: replaceAssetBytes === null ? null : file.size - replaceAssetBytes,
+      status: 'selected',
+    };
+    setReplacementBinaryComparison(nextBinaryComparison);
     setIsReplacing(true);
     setError(null);
     setUploadProgress({ total: 1, completed: 0, failed: 0, skipped: Math.max(0, files.length - 1), currentName: file.name });
@@ -802,17 +899,19 @@ export function MediaLibraryModal({
         siteId,
         replacedBy: 'editor',
         reason: 'Replacement from editor media picker',
-        fontFamily: getUploadType(file) === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
-        fontWeight: getUploadType(file) === 'font' ? fontWeight.trim() || '400' : undefined,
-        fontStyle: getUploadType(file) === 'font' ? fontStyle : undefined,
-        fontFallback: getUploadType(file) === 'font' ? fontFallback.trim() || 'system-ui, sans-serif' : undefined,
-        fontDisplay: getUploadType(file) === 'font' ? fontDisplay : undefined,
+        fontFamily: candidateType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+        fontWeight: candidateType === 'font' ? fontWeight.trim() || '400' : undefined,
+        fontStyle: candidateType === 'font' ? fontStyle : undefined,
+        fontFallback: candidateType === 'font' ? fontFallback.trim() || 'system-ui, sans-serif' : undefined,
+        fontDisplay: candidateType === 'font' ? fontDisplay : undefined,
       });
+      setReplacementBinaryComparison({ ...nextBinaryComparison, status: 'replaced' });
       setMedia([updated, ...media.filter((item) => item.id !== updated.id)]);
       setUploadProgress({ total: 1, completed: 1, failed: 0, skipped: Math.max(0, files.length - 1), currentName: file.name });
       onSelect(updated, buildSelectionOptions(updated));
       onClose();
     } catch (replaceError) {
+      setReplacementBinaryComparison({ ...nextBinaryComparison, status: 'failed' });
       setUploadProgress((current) => current ? { ...current, completed: 1, failed: 1 } : current);
       setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace the current media asset.');
     } finally {
@@ -1412,6 +1511,7 @@ export function MediaLibraryModal({
                         data-current-media-id={replaceAsset?.id || replaceAssetId || ''}
                         data-current-media-name={replaceAsset?.name || ''}
                         data-current-media-type={replaceAsset?.type || ''}
+                        data-current-media-bytes={replaceAssetBytes ?? ''}
                       >
                         <div className="h-[54px] overflow-hidden rounded border border-border bg-background">
                           {replaceAsset ? renderMediaThumb(replaceAsset) : (
@@ -1425,6 +1525,46 @@ export function MediaLibraryModal({
                           <div className="mt-1 font-mono text-[10px] text-muted-foreground">{replaceAsset?.id || replaceAssetId}</div>
                           <div className="mt-1 text-muted-foreground">
                             {(replaceAsset?.type || 'asset')} · keep stable id
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className="mt-3 rounded-lg border border-border bg-muted/20 p-2 text-xs"
+                        data-testid="media-library-replace-binary-diff"
+                        data-current-bytes={replaceAssetBytes ?? ''}
+                        data-candidate-bytes={replacementBinaryComparison?.candidateBytes ?? ''}
+                        data-delta-bytes={replacementBinaryComparison?.deltaBytes ?? ''}
+                        data-status={replacementBinaryComparison?.status || 'waiting'}
+                      >
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Current binary</div>
+                            <div className="mt-1 truncate font-medium text-foreground">{replaceAsset?.name || 'Current asset'}</div>
+                            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                              {replaceAssetBytes === null ? 'Unknown size' : formatBytes(replaceAssetBytes)} · {replaceAsset?.type || 'asset'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Replacement candidate</div>
+                            <div className="mt-1 truncate font-medium text-foreground">
+                              {replacementBinaryComparison?.candidateName || 'Choose a file'}
+                            </div>
+                            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                              {replacementBinaryComparison
+                                ? `${formatBytes(replacementBinaryComparison.candidateBytes)} · ${replacementBinaryComparison.candidateType}`
+                                : 'Bytes and type compare before upload'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Delta</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-foreground">
+                              {replacementBinaryComparison?.deltaBytes === null || !replacementBinaryComparison
+                                ? 'Pending'
+                                : `${replacementBinaryComparison.deltaBytes >= 0 ? '+' : '-'}${formatBytes(Math.abs(replacementBinaryComparison.deltaBytes))}`}
+                            </div>
+                            <div className="mt-1 text-[10px] text-muted-foreground">
+                              {replacementBinaryComparison ? replacementBinaryComparison.status : 'Stable id will be retained'}
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -2303,6 +2303,72 @@ const setCheckboxByTestId = async (client, testId, checked) => {
   return changed;
 };
 
+const dragFocalPreviewHandle = async (client, testId, targetXPercent, targetYPercent) => {
+  const geometry = await evaluate(client, `(() => {
+    const preview = document.querySelector('[data-testid="${testId}"]');
+    if (!(preview instanceof HTMLElement)) {
+      return { ok: false, reason: 'preview-not-found', testId: ${JSON.stringify(testId)} };
+    }
+    preview.scrollIntoView({ block: 'center', inline: 'center' });
+    const rect = preview.getBoundingClientRect();
+    const currentX = Number(preview.getAttribute('data-focal-x') || 50);
+    const currentY = Number(preview.getAttribute('data-focal-y') || 50);
+    return {
+      ok: true,
+      startX: rect.left + rect.width * (currentX / 100),
+      startY: rect.top + rect.height * (currentY / 100),
+      targetX: rect.left + rect.width * (${Number(targetXPercent)} / 100),
+      targetY: rect.top + rect.height * (${Number(targetYPercent)} / 100),
+    };
+  })()`);
+  assert(geometry?.ok, `Unable to read focal preview geometry: ${JSON.stringify(geometry)}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: geometry.startX,
+    y: geometry.startY,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: geometry.startX,
+    y: geometry.startY,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: geometry.targetX,
+    y: geometry.targetY,
+    button: 'left',
+    buttons: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: geometry.targetX,
+    y: geometry.targetY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(250);
+
+  return evaluate(client, `(() => {
+    const preview = document.querySelector('[data-testid="${testId}"]');
+    return {
+      x: preview?.getAttribute('data-focal-x') || '',
+      y: preview?.getAttribute('data-focal-y') || '',
+      dragging: preview?.getAttribute('data-focal-dragging') || '',
+      hasCropBox: Boolean(document.querySelector('[data-testid="${testId}-crop-box"]')),
+      hasDragHandle: Boolean(document.querySelector('[data-testid="${testId}-drag-handle"]')),
+      hasNorthWestHandle: Boolean(document.querySelector('[data-testid="${testId}-crop-handle-nw"]')),
+      inputX: document.querySelector('[data-testid="${testId === 'media-upload-focal-preview' ? 'media-upload-focal-x' : 'media-library-focal-x'}"]')?.value || '',
+      inputY: document.querySelector('[data-testid="${testId === 'media-upload-focal-preview' ? 'media-upload-focal-y' : 'media-library-focal-y'}"]')?.value || '',
+    };
+  })()`);
+};
+
 const clickControlByTestId = async (client, testId) => {
   const clicked = await evaluate(client, `(() => {
     const control = document.querySelector('[data-testid="${testId}"]');
@@ -10499,6 +10565,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
 
     const opened = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const focalPreview = document.querySelector('[data-testid="media-upload-focal-preview"]');
       return {
         hasModal: Boolean(modal),
         activeTab: modal?.getAttribute('data-active-tab') || '',
@@ -10515,8 +10582,12 @@ const testMediaUploadModalControls = async (client, pageId) => {
         focalX: document.querySelector('[data-testid="media-upload-focal-x"]')?.value || '',
         focalY: document.querySelector('[data-testid="media-upload-focal-y"]')?.value || '',
         hasFocalPreview: Boolean(document.querySelector('[data-testid="media-upload-focal-preview"]')),
-        focalPreviewX: document.querySelector('[data-testid="media-upload-focal-preview"]')?.getAttribute('data-focal-x') || '',
-        focalPreviewY: document.querySelector('[data-testid="media-upload-focal-preview"]')?.getAttribute('data-focal-y') || '',
+        focalPreviewX: focalPreview?.getAttribute('data-focal-x') || '',
+        focalPreviewY: focalPreview?.getAttribute('data-focal-y') || '',
+        focalPreviewDragging: focalPreview?.getAttribute('data-focal-dragging') || '',
+        hasFocalCropBox: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-box"]')),
+        hasFocalDragHandle: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-drag-handle"]')),
+        hasFocalCropHandle: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-handle-se"]')),
       };
     })()`);
 
@@ -10537,8 +10608,25 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.focalY === '50' &&
         opened.hasFocalPreview &&
         opened.focalPreviewX === '50' &&
-        opened.focalPreviewY === '50',
+        opened.focalPreviewY === '50' &&
+        opened.focalPreviewDragging === 'false' &&
+        opened.hasFocalCropBox &&
+        opened.hasFocalDragHandle &&
+        opened.hasFocalCropHandle,
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
+    );
+
+    const draggedFocal = await dragFocalPreviewHandle(client, 'media-upload-focal-preview', 32, 68);
+    assert(
+      draggedFocal.x === '32' &&
+        draggedFocal.y === '68' &&
+        draggedFocal.inputX === '32' &&
+        draggedFocal.inputY === '68' &&
+        draggedFocal.dragging === 'false' &&
+        draggedFocal.hasCropBox &&
+        draggedFocal.hasDragHandle &&
+        draggedFocal.hasNorthWestHandle,
+      `Image upload focal preview did not support drag handles: ${JSON.stringify(draggedFocal)}`,
     );
 
     await setFormControlByTestId(client, 'media-upload-insert-preset', 'square');
@@ -10581,6 +10669,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
     const replacementComparison = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
       const comparison = document.querySelector('[data-testid="media-library-replace-comparison"]');
+      const binaryDiff = document.querySelector('[data-testid="media-library-replace-binary-diff"]');
       const replaceInput = document.querySelector('[data-testid="media-library-replace-input"]');
       const preview = document.querySelector('[data-testid="media-upload-focal-preview"]');
       return {
@@ -10590,8 +10679,14 @@ const testMediaUploadModalControls = async (client, pageId) => {
         currentMediaId: comparison?.getAttribute('data-current-media-id') || '',
         currentMediaName: comparison?.getAttribute('data-current-media-name') || '',
         currentMediaType: comparison?.getAttribute('data-current-media-type') || '',
+        currentMediaBytes: comparison?.getAttribute('data-current-media-bytes') || '',
+        hasBinaryDiff: Boolean(binaryDiff),
+        binaryDiffStatus: binaryDiff?.getAttribute('data-status') || '',
+        binaryCurrentBytes: binaryDiff?.getAttribute('data-current-bytes') || '',
+        binaryCandidateBytes: binaryDiff?.getAttribute('data-candidate-bytes') || '',
         hasReplaceInput: replaceInput instanceof HTMLInputElement,
         focalPreviewMediaId: preview?.getAttribute('data-preview-media-id') || '',
+        hasReplacementCropBox: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-box"]')),
       };
     })()`);
     assert(
@@ -10601,8 +10696,13 @@ const testMediaUploadModalControls = async (client, pageId) => {
         replacementComparison.currentMediaId === selected.id &&
         replacementComparison.currentMediaName === selected.name &&
         replacementComparison.currentMediaType === 'image' &&
+        replacementComparison.hasBinaryDiff &&
+        replacementComparison.binaryDiffStatus === 'waiting' &&
+        replacementComparison.binaryCurrentBytes === replacementComparison.currentMediaBytes &&
+        replacementComparison.binaryCandidateBytes === '' &&
         replacementComparison.hasReplaceInput &&
-        replacementComparison.focalPreviewMediaId === selected.id,
+        replacementComparison.focalPreviewMediaId === selected.id &&
+        replacementComparison.hasReplacementCropBox,
       `Image picker did not show replacement comparison for current asset: ${JSON.stringify(replacementComparison)}`,
     );
     await clickControlBySelector(client, 'button[aria-label="Close media library"]', 'close image replacement picker');
