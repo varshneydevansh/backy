@@ -388,6 +388,8 @@ assert(openapi.paths?.[manifest.data.endpoints.blogCategories]?.get, 'openapi() 
 assert(openapi.paths?.[manifest.data.endpoints.blogTags]?.get, 'openapi() missing manifest-advertised blog tags path');
 assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() missing manifest-advertised blog authors path');
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get, 'openapi() missing manifest-advertised blog RSS path');
+assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get?.['x-backy-feed']?.endpoint === manifest.data.endpoints.blogRss, 'openapi() missing blog RSS feed discovery extension');
+assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'openapi() missing blog feed discovery schema');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
 assert(openapi.components?.schemas?.GoneRoute, 'openapi() missing gone route schema');
 
@@ -423,6 +425,12 @@ assert(revalidatedPageDetail.notModified === true, 'pagesCached() did not return
 const blogList = await client.blog({ limit: 5 });
 assert(Array.isArray(blogList.data.posts), 'blog() missing posts array');
 assert(manifest.data.endpoints.blogRss === `/api/sites/${client.getSiteId()}/blog/rss`, 'manifest() missing blog RSS endpoint');
+const manifestBlogRssFeed = manifest.data.modules?.blog?.feeds?.find?.((feed) => feed.id === 'blog-rss');
+assert(manifestBlogRssFeed?.endpoint === manifest.data.endpoints.blogRss, 'manifest() missing structured blog RSS feed endpoint');
+assert(manifestBlogRssFeed?.hostedPath === '/blog/rss.xml', 'manifest() missing structured hosted blog RSS feed path');
+assert(manifestBlogRssFeed?.cache?.revisionHeader === 'x-backy-cache-revision', 'manifest() missing structured blog RSS cache metadata');
+const discoveredBlogFeeds = await client.blogFeeds();
+assert(discoveredBlogFeeds.some((feed) => feed.id === 'blog-rss' && feed.endpoint === manifest.data.endpoints.blogRss), 'blogFeeds() missing RSS feed discovery');
 const blogRssUrl = client.blogRssUrl({ limit: 5 });
 assert(blogRssUrl.includes(`/api/sites/${client.getSiteId()}/blog/rss?limit=5`), 'blogRssUrl() returned wrong URL');
 const blogRss = await client.blogRss({ limit: 5 });
@@ -904,6 +912,7 @@ console.log(JSON.stringify({
     'pages',
     'pagesCached',
     'blog',
+    'blogFeeds',
     'blogRss',
     'blogRssUrl',
     'blogCached',

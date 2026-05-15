@@ -17,6 +17,7 @@
     "dev:smoke:public": "npm run dev:smoke:public --workspace @backy-cms/admin",
     "test:smoke:admin": "npm run test:smoke:admin --workspace @backy-cms/admin",
     "test:smoke:public": "npm run test:smoke:public --workspace @backy-cms/admin",
+    "test:smoke:blog-api": "npm run test:blog-api --workspace @backy/public",
     "test:smoke:sdk": "npm run test:smoke --workspace @backy/sdk-js",
     "test:smoke:storage": "npm run test:smoke --workspace @backy/storage",
     "test:smoke:all": "npm run test:smoke:admin && npm run test:smoke:public && npm run test:smoke:sdk && npm run test:smoke:storage",

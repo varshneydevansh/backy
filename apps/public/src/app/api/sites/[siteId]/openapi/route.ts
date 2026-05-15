@@ -83,6 +83,31 @@ const queryParameter = (
   schema,
 });
 
+const blogFeedDiscovery = (site: { id: string; name: string }) => ({
+  id: 'blog-rss',
+  title: `${site.name} Blog RSS`,
+  format: 'rss',
+  version: '2.0',
+  rel: 'alternate',
+  contentType: 'application/rss+xml; charset=utf-8',
+  endpoint: `/api/sites/${site.id}/blog/rss`,
+  hostedPath: '/blog/rss.xml',
+  schemaVersion: 'rss.2.0',
+  scope: 'public-blog-posts',
+  visibility: 'published-and-past-scheduled',
+  cache: {
+    scope: 'discovery',
+    etag: true,
+    revisionHeader: 'x-backy-cache-revision',
+  },
+  limits: {
+    queryParam: 'limit',
+    default: 25,
+    min: 1,
+    max: 100,
+  },
+});
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -135,6 +160,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);
     const redirectRules = normalizeRedirectRules(site.settings?.redirectRules).filter((rule) => rule.enabled);
+    const blogFeed = blogFeedDiscovery(site);
 
     return publicContractJson({
       openapi: '3.1.0',
@@ -395,6 +421,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             tags: ['Content'],
             summary: 'Fetch the public blog RSS 2.0 feed',
             operationId: 'getBackyBlogRssFeed',
+            'x-backy-feed': blogFeed,
             parameters: [
               queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }, 'Maximum feed item count'),
             ],
@@ -2139,6 +2166,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               post: { $ref: '#/components/schemas/BlogPostResource' },
             },
           }),
+          BlogFeedDiscovery: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'format', 'contentType', 'endpoint'],
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              format: { type: 'string', enum: ['rss'] },
+              version: { type: 'string' },
+              rel: { type: 'string' },
+              contentType: { type: 'string' },
+              endpoint: { type: 'string' },
+              hostedPath: { type: 'string' },
+              schemaVersion: { type: 'string' },
+              scope: { type: 'string' },
+              visibility: { type: 'string' },
+              cache: {
+                type: 'object',
+                additionalProperties: true,
+                properties: {
+                  scope: { type: 'string' },
+                  etag: { type: 'boolean' },
+                  revisionHeader: { type: 'string' },
+                },
+              },
+              limits: {
+                type: 'object',
+                additionalProperties: true,
+                properties: {
+                  queryParam: { type: 'string' },
+                  default: { type: 'integer' },
+                  min: { type: 'integer' },
+                  max: { type: 'integer' },
+                },
+              },
+            },
+          },
           BlogPostResource: {
             type: 'object',
             additionalProperties: true,
@@ -2891,6 +2955,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         collectionIds,
         formIds,
         reusableSectionIds,
+        blogFeeds: [blogFeed],
         redirectRules: redirectRules.map((rule) => ({
           id: rule.id,
           from: rule.from,

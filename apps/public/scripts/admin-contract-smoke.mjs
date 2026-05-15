@@ -3253,6 +3253,12 @@ try {
     assert(blogFrontendManifest.json?.data?.endpoints?.blogRss === `/api/sites/${createdSiteId}/blog/rss`, `${blogFrontendManifest.url} missing blog RSS endpoint`);
     assert(blogFrontendManifest.json?.data?.modules?.blog?.rssUrl === `/api/sites/${createdSiteId}/blog/rss`, `${blogFrontendManifest.url} missing blog RSS module URL`);
     assert(blogFrontendManifest.json?.data?.modules?.blog?.hostedRssPath === '/blog/rss.xml', `${blogFrontendManifest.url} missing hosted RSS path`);
+    const blogRssFeedDiscovery = blogFrontendManifest.json?.data?.modules?.blog?.feeds?.find((feed) => feed.id === 'blog-rss');
+    assert(blogRssFeedDiscovery?.endpoint === `/api/sites/${createdSiteId}/blog/rss`, `${blogFrontendManifest.url} missing structured RSS feed endpoint`);
+    assert(blogRssFeedDiscovery?.hostedPath === '/blog/rss.xml', `${blogFrontendManifest.url} missing structured hosted RSS feed path`);
+    assert(blogRssFeedDiscovery?.contentType === 'application/rss+xml; charset=utf-8', `${blogFrontendManifest.url} missing RSS feed content type metadata`);
+    assert(blogRssFeedDiscovery?.limits?.queryParam === 'limit' && blogRssFeedDiscovery.limits.max === 100, `${blogFrontendManifest.url} missing RSS feed limit metadata`);
+    assert(blogRssFeedDiscovery?.cache?.scope === 'discovery' && blogRssFeedDiscovery.cache.revisionHeader === 'x-backy-cache-revision', `${blogFrontendManifest.url} missing RSS feed cache metadata`);
     assert(blogFrontendManifest.json?.data?.modules?.blog?.items?.some((post) => (
       post.id === createdPostId &&
       post.frontendDesign?.templateId === 'contract-blog-template' &&
@@ -4835,6 +4841,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages/{pageId}/comments/{commentId}`]?.patch, `${publicOpenApi.url} missing page comment update operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/{postId}/comments`]?.get, `${publicOpenApi.url} missing blog comments list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get, `${publicOpenApi.url} missing blog RSS operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get?.['x-backy-feed']?.endpoint === `/api/sites/${createdSiteId}/blog/rss`, `${publicOpenApi.url} missing blog RSS feed discovery extension`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.get, `${publicOpenApi.url} missing comment blocklist operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.delete, `${publicOpenApi.url} missing comment blocklist delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
@@ -4846,6 +4853,7 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.PageResource?.properties?.seo?.$ref === '#/components/schemas/PageSeoMetadata', `${publicOpenApi.url} missing page SEO schema reference`);
       assert(publicOpenApi.json?.components?.schemas?.PageSeoMetadata?.properties?.canonicalUrl?.type === 'string', `${publicOpenApi.url} missing page SEO canonical URL schema`);
       assert(publicOpenApi.json?.components?.schemas?.BlogPostResource?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing blog post frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.BlogFeedDiscovery?.properties?.limits, `${publicOpenApi.url} missing blog feed discovery schema`);
       assert(publicOpenApi.json?.components?.schemas?.PageListEnvelope?.properties?.data?.properties?.pages?.items?.$ref === '#/components/schemas/PageResource', `${publicOpenApi.url} missing page list resource schema`);
       assert(publicOpenApi.json?.components?.schemas?.BlogPostListEnvelope?.properties?.data?.properties?.posts?.items?.$ref === '#/components/schemas/BlogPostResource', `${publicOpenApi.url} missing blog list resource schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignEnvelope?.properties?.data?.properties?.frontendDesign?.$ref === '#/components/schemas/FrontendDesignContract', `${publicOpenApi.url} missing frontend design envelope schema`);

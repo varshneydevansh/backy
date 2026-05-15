@@ -293,6 +293,46 @@
                     }
                   }
                 },
+                "feeds": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "title": { "type": "string" },
+                      "format": { "type": "string" },
+                      "version": { "type": "string" },
+                      "rel": { "type": "string" },
+                      "contentType": { "type": "string" },
+                      "endpoint": { "type": "string", "minLength": 1 },
+                      "hostedPath": { "type": "string", "minLength": 1 },
+                      "schemaVersion": { "type": "string" },
+                      "scope": { "type": "string" },
+                      "visibility": { "type": "string" },
+                      "cache": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "scope": { "type": "string" },
+                          "etag": { "type": "boolean" },
+                          "revisionHeader": { "type": "string" }
+                        }
+                      },
+                      "limits": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "queryParam": { "type": "string" },
+                          "default": { "type": "number" },
+                          "min": { "type": "number" },
+                          "max": { "type": "number" }
+                        }
+                      }
+                    },
+                    "required": ["id", "format", "contentType", "endpoint"]
+                  }
+                },
                 "categories": { "type": "array" },
                 "tags": { "type": "array" },
                 "authors": { "type": "array" }

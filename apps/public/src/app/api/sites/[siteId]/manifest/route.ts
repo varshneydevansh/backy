@@ -191,6 +191,33 @@ const manifestRedirectRules = (
     resolveUrl: `/api/sites/${siteId}/resolve?path=${encodeURIComponent(rule.from)}`,
   }));
 
+const blogFeedDiscovery = (site: Pick<Site, 'id' | 'name'>) => [
+  {
+    id: 'blog-rss',
+    title: `${site.name} Blog RSS`,
+    format: 'rss',
+    version: '2.0',
+    rel: 'alternate',
+    contentType: 'application/rss+xml; charset=utf-8',
+    endpoint: `/api/sites/${site.id}/blog/rss`,
+    hostedPath: '/blog/rss.xml',
+    schemaVersion: 'rss.2.0',
+    scope: 'public-blog-posts',
+    visibility: 'published-and-past-scheduled',
+    cache: {
+      scope: 'discovery',
+      etag: true,
+      revisionHeader: 'x-backy-cache-revision',
+    },
+    limits: {
+      queryParam: 'limit',
+      default: 25,
+      min: 1,
+      max: 100,
+    },
+  },
+];
+
 const buildRepositoryManifest = (
   input: {
     requestId: string;
@@ -216,6 +243,7 @@ const buildRepositoryManifest = (
     !hasPublicOrderCollectionAccess(collection.permissions)
   ));
   const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
+  const blogFeeds = blogFeedDiscovery(input.site);
   const commerce = buildCommerceStorefrontContract({
     siteId: input.site.id,
     settings: input.commerceSettings,
@@ -359,6 +387,7 @@ const buildRepositoryManifest = (
           count: input.posts.length,
           rssUrl: `/api/sites/${input.site.id}/blog/rss`,
           hostedRssPath: '/blog/rss.xml',
+          feeds: blogFeeds,
           items: input.posts.map((post) => ({
             id: post.id,
             title: post.title,
@@ -527,6 +556,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const authors = listBlogAuthors(site.id);
     const fonts = media.media.filter((item) => item.type === 'font');
     const redirectRules = manifestRedirectRules(site.id, site.settings);
+    const blogFeeds = blogFeedDiscovery(site);
     const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG && collection.permissions.publicRead);
     const hasPrivateOrders = collections.some((collection) => (
       collection.slug === 'orders' &&
@@ -676,6 +706,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             count: posts.length,
             rssUrl: `/api/sites/${site.id}/blog/rss`,
             hostedRssPath: '/blog/rss.xml',
+            feeds: blogFeeds,
             items: posts.map((post) => ({
               id: post.id,
               title: post.title,

@@ -724,6 +724,34 @@ export interface BackyBlogAuthor {
   [key: string]: unknown;
 }
 
+export interface BackyBlogFeedDiscovery {
+  id: string;
+  title?: string;
+  format: 'rss' | string;
+  version?: string;
+  rel?: string;
+  contentType: string;
+  endpoint: string;
+  hostedPath?: string;
+  schemaVersion?: string;
+  scope?: string;
+  visibility?: string;
+  cache?: {
+    scope?: string;
+    etag?: boolean;
+    revisionHeader?: string;
+    [key: string]: unknown;
+  };
+  limits?: {
+    queryParam?: string;
+    default?: number;
+    min?: number;
+    max?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyReusableSection {
   id: string;
   siteId?: string;
@@ -1107,7 +1135,11 @@ export interface BackyFrontendManifest {
       [key: string]: unknown;
     };
     pages?: { count: number; items: BackyPageResource[] };
-    blog?: Record<string, unknown> & { count?: number; items?: BackyPostResource[] };
+    blog?: Record<string, unknown> & {
+      count?: number;
+      items?: BackyPostResource[];
+      feeds?: BackyBlogFeedDiscovery[];
+    };
     collections?: BackyCollectionSchema[];
     reusableSections?: {
       count?: number;
@@ -1344,6 +1376,11 @@ export class BackyClient {
       query: { limit: normalizeListLimit(options.limit) },
       requestId: options.requestId,
     });
+  }
+
+  async blogFeeds(options: { siteId?: string } = {}): Promise<BackyBlogFeedDiscovery[]> {
+    const manifest = await this.manifest(options.siteId ?? this.requireSiteId());
+    return Array.isArray(manifest.data.modules?.blog?.feeds) ? manifest.data.modules.blog.feeds : [];
   }
 
   blogCategories(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ categories: BackyBlogCategory[] } & Record<string, unknown>>> {
