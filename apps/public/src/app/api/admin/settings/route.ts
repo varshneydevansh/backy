@@ -305,13 +305,17 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
   const commerce = parseJsonObject(parseJsonObject(integrations.integrations)?.commerce) || {};
   const paymentProvider = stringValue(commerce.paymentProvider) === 'stripe' ? 'stripe' : stringValue(commerce.paymentProvider) || 'none';
   const taxProvider = stringValue(commerce.taxProvider) === 'stripe' ? 'stripe' : stringValue(commerce.taxProvider) || 'manual';
-  const shippingLabelProvider = stringValue(commerce.shippingLabelProvider) === 'easypost' ? 'easypost' : 'manual';
+  const shippingLabelProvider = ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
+    ? stringValue(commerce.shippingLabelProvider)
+    : 'manual';
   const stripeSecretKey = envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
   const stripeApiBaseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']);
   const stripeTaxApiBaseUrl = envValue(['BACKY_STRIPE_TAX_API_BASE_URL']);
   const stripeRefundApiBaseUrl = envValue(['BACKY_STRIPE_REFUND_API_BASE_URL']);
   const easyPostApiKey = envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']);
   const easyPostApiBaseUrl = envValue(['BACKY_EASYPOST_API_BASE_URL', 'EASYPOST_API_BASE_URL']);
+  const shippoApiKey = envValue(['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY']);
+  const shippoApiBaseUrl = envValue(['BACKY_SHIPPO_API_BASE_URL', 'SHIPPO_API_BASE_URL']);
   const stripeRequired = paymentProvider === 'stripe' || taxProvider === 'stripe';
   const missing = [
     resolution.reference && !resolution.secret
@@ -322,6 +326,9 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
       : '',
     shippingLabelProvider === 'easypost' && !easyPostApiKey
       ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'
+      : '',
+    shippingLabelProvider === 'shippo' && !shippoApiKey
+      ? 'BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY'
       : '',
   ].filter(Boolean);
 
@@ -338,6 +345,8 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
     taxProvider,
     easyPostApiKeyConfigured: Boolean(easyPostApiKey),
     easyPostApiBaseUrl: easyPostApiBaseUrl || 'https://api.easypost.com/v2',
+    shippoApiKeyConfigured: Boolean(shippoApiKey),
+    shippoApiBaseUrl: shippoApiBaseUrl || 'https://api.goshippo.com',
     shippingLabelProvider,
     missing,
   };
@@ -1139,7 +1148,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       shippingProviderUrl: stringValue(commerce.shippingProviderUrl),
       discountProvider: stringValue(commerce.discountProvider) === 'http' ? 'http' : 'manual',
       discountProviderUrl: stringValue(commerce.discountProviderUrl),
-      shippingLabelProvider: stringValue(commerce.shippingLabelProvider) === 'easypost' ? 'easypost' : 'manual',
+      shippingLabelProvider: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
+        ? stringValue(commerce.shippingLabelProvider)
+        : 'manual',
       shippingOriginAddress: stringValue(commerce.shippingOriginAddress),
       shippingDefaultParcel: stringValue(commerce.shippingDefaultParcel),
       shippingDefaultCarrier: stringValue(commerce.shippingDefaultCarrier),
@@ -1611,12 +1622,18 @@ const buildInfrastructureDiagnostics = ({
           : 'Set BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY before relying on Stripe execution.',
       },
       {
-        label: 'EasyPost label execution',
-        ready: stringValue(commerce.shippingLabelProvider) !== 'easypost' || Boolean(runtimeCommerce.easyPostApiKeyConfigured),
-        required: stringValue(commerce.shippingLabelProvider) === 'easypost',
-        detail: runtimeCommerce.easyPostApiKeyConfigured
-          ? 'EasyPost API key is available server-side for label purchase, void, and tracking refresh.'
-          : 'Set BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY before enabling EasyPost label execution.',
+        label: 'Shipping label execution',
+        ready: stringValue(commerce.shippingLabelProvider) === 'shippo'
+          ? Boolean(runtimeCommerce.shippoApiKeyConfigured)
+          : stringValue(commerce.shippingLabelProvider) !== 'easypost' || Boolean(runtimeCommerce.easyPostApiKeyConfigured),
+        required: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider)),
+        detail: stringValue(commerce.shippingLabelProvider) === 'shippo'
+          ? runtimeCommerce.shippoApiKeyConfigured
+            ? 'Shippo API key is available server-side for label purchase and refund requests.'
+            : 'Set BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY before enabling Shippo label execution.'
+          : runtimeCommerce.easyPostApiKeyConfigured
+            ? 'EasyPost API key is available server-side for label purchase, void, and tracking refresh.'
+            : 'Set BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY before enabling EasyPost label execution.',
       },
     ]),
   ];

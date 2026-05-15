@@ -960,14 +960,20 @@ function OrdersRoute() {
           : 'Manual discount rules are available from Settings.',
       },
       {
-        key: 'easypost-labels',
-        title: 'EasyPost labels/tracking',
+        key: 'carrier-labels',
+        title: 'Carrier labels/tracking',
         mode: shippingLabelProvider,
-        ready: shippingLabelProvider !== 'easypost' || Boolean(runtime?.easyPostApiKeyConfigured),
+        ready: shippingLabelProvider === 'shippo'
+          ? Boolean(runtime?.shippoApiKeyConfigured)
+          : shippingLabelProvider !== 'easypost' || Boolean(runtime?.easyPostApiKeyConfigured),
         detail: shippingLabelProvider === 'easypost'
           ? runtime?.easyPostApiKeyConfigured
             ? `EasyPost key is configured; API base ${runtime.easyPostApiBaseUrl || 'https://api.easypost.com/v2'}.`
             : 'EasyPost labels are selected but BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY is missing.'
+          : shippingLabelProvider === 'shippo'
+            ? runtime?.shippoApiKeyConfigured
+              ? `Shippo key is configured; API base ${runtime.shippoApiBaseUrl || 'https://api.goshippo.com'}.`
+              : 'Shippo labels are selected but BACKY_SHIPPO_API_KEY or SHIPPO_API_KEY is missing.'
           : 'Manual label handoff remains available.',
       },
       {

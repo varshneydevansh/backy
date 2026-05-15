@@ -158,6 +158,26 @@ interface EasyPostLabelResult {
   payload: Record<string, unknown>;
 }
 
+interface ShippoRatePayload {
+  id: string;
+  provider: string;
+  serviceLevel: string;
+  amount: number;
+}
+
+interface ShippoLabelResult {
+  ok: boolean;
+  label?: {
+    id: string;
+    status: ShippingLabelPayload['status'];
+    provider: string;
+    serviceLevel: string;
+    url: string;
+    cost: number;
+  };
+  payload: Record<string, unknown>;
+}
+
 type ShippingLabelVoidUpdateResult =
   | { label: ShippingLabelPayload; values: Record<string, unknown> }
   | { error: { status: number; code: string; message: string; details?: unknown } };
@@ -172,6 +192,18 @@ const easyPostApiBaseUrl = () => (
   process.env.BACKY_EASYPOST_API_BASE_URL?.trim()
   || process.env.EASYPOST_API_BASE_URL?.trim()
   || 'https://api.easypost.com/v2'
+).replace(/\/$/, '');
+
+const shippoApiKey = () => (
+  process.env.BACKY_SHIPPO_API_KEY?.trim()
+  || process.env.SHIPPO_API_KEY?.trim()
+  || ''
+);
+
+const shippoApiBaseUrl = () => (
+  process.env.BACKY_SHIPPO_API_BASE_URL?.trim()
+  || process.env.SHIPPO_API_BASE_URL?.trim()
+  || 'https://api.goshippo.com'
 ).replace(/\/$/, '');
 
 const normalizeProviderKey = (value: string): string => value.toLowerCase().replace(/[\s_-]+/g, '');
@@ -244,6 +276,7 @@ const resolveEasyPostShipmentInput = (
     || fallback.serviceLevel;
   const rateId = textValue(body.rateId)
     || textValue(body.easypostRateId)
+    || textValue(body.shippoRateId)
     || textValue(shippingAddress.rateId)
     || textValue(commerce.shippingDefaultRateId);
   const directToAddress = hasProviderRecordFields(shippingAddress) && !shippingAddress.toAddress && !shippingAddress.fromAddress && !shippingAddress.parcel
@@ -276,6 +309,14 @@ const resolveEasyPostShipmentInput = (
 const canExecuteEasyPostLabel = (input: ReturnType<typeof resolveEasyPostShipmentInput>): boolean => {
   if (normalizeProviderKey(input.executionProvider) !== 'easypost') return false;
   if (!easyPostApiKey()) return false;
+  return hasProviderRecordFields(input.fromAddress)
+    && hasProviderRecordFields(input.toAddress)
+    && hasProviderRecordFields(input.parcel);
+};
+
+const canExecuteShippoLabel = (input: ReturnType<typeof resolveEasyPostShipmentInput>): boolean => {
+  if (normalizeProviderKey(input.executionProvider) !== 'shippo') return false;
+  if (!shippoApiKey()) return false;
   return hasProviderRecordFields(input.fromAddress)
     && hasProviderRecordFields(input.toAddress)
     && hasProviderRecordFields(input.parcel);
@@ -371,6 +412,94 @@ const easyPostRequest = async (path: string, body: Record<string, unknown>) => {
   };
 };
 
+const shippoHeaders = () => ({
+  authorization: `ShippoToken ${shippoApiKey()}`,
+  'content-type': 'application/json',
+});
+
+const shippoRequest = async (path: string, body: Record<string, unknown>) => {
+  const response = await fetch(`${shippoApiBaseUrl()}${path}`, {
+    method: 'POST',
+    headers: shippoHeaders(),
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  return {
+    ok: response.ok,
+    payload: toRecord(payload),
+  };
+};
+
+const safeShippoErrorPayload = (value: Record<string, unknown>) => ({
+  code: textValue(value.code || value.error_code),
+  message: textValue(value.message || value.detail || value.error) || 'Shippo label purchase failed.',
+  messages: Array.isArray(value.messages) ? value.messages.slice(0, 5) : [],
+});
+
+const safeShippoRatePayload = (value: unknown): ShippoRatePayload | null => {
+  const rate = toRecord(value);
+  const serviceLevel = toRecord(rate.servicelevel);
+  const id = textValue(rate.object_id || rate.id);
+  if (!id) return null;
+  return {
+    id,
+    provider: textValue(rate.provider || rate.carrier || serviceLevel.provider),
+    serviceLevel: textValue(serviceLevel.token || serviceLevel.name || rate.servicelevel_token || rate.service || rate.serviceLevel),
+    amount: numberValue(rate.amount || rate.amount_local),
+  };
+};
+
+const safeShippoShipmentPayload = (value: Record<string, unknown>) => {
+  const rates = Array.isArray(value.rates)
+    ? value.rates.map(safeShippoRatePayload).filter((rate): rate is ShippoRatePayload => Boolean(rate))
+    : [];
+
+  return {
+    id: textValue(value.object_id || value.id),
+    objectState: textValue(value.object_state),
+    status: textValue(value.status),
+    test: typeof value.test === 'boolean' ? value.test : null,
+    ratesCount: rates.length,
+  };
+};
+
+const safeShippoTransactionPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.object_id || value.id),
+  objectState: textValue(value.object_state),
+  status: textValue(value.status),
+  test: typeof value.test === 'boolean' ? value.test : null,
+  labelUrl: textValue(value.label_url),
+  trackingNumber: textValue(value.tracking_number),
+  trackingStatus: textValue(value.tracking_status),
+  trackingUrlProvider: textValue(value.tracking_url_provider),
+});
+
+const pickShippoRate = (
+  shipment: Record<string, unknown>,
+  input: {
+    rateId: string;
+    carrier: string;
+    serviceLevel: string;
+  },
+): ShippoRatePayload | null => {
+  const rates = Array.isArray(shipment.rates)
+    ? shipment.rates.map(safeShippoRatePayload).filter((rate): rate is ShippoRatePayload => Boolean(rate))
+    : [];
+  if (rates.length === 0) return null;
+
+  const normalizedRateId = input.rateId.toLowerCase();
+  const normalizedCarrier = input.carrier.toLowerCase();
+  const normalizedServiceLevel = input.serviceLevel.toLowerCase();
+  return rates.find((rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId)
+    || rates.find((rate) => (
+      (!normalizedCarrier || rate.provider.toLowerCase() === normalizedCarrier) &&
+      (!normalizedServiceLevel || rate.serviceLevel.toLowerCase() === normalizedServiceLevel)
+    ))
+    || [...rates].sort((a, b) => a.amount - b.amount)[0]
+    || null;
+};
+
 const executeEasyPostVoid = async (shipmentId: string): Promise<EasyPostLabelResult> => {
   const refundResult = await easyPostRequest(`/shipments/${encodeURIComponent(shipmentId)}/refund`, {});
   if (!refundResult.ok) {
@@ -394,6 +523,39 @@ const executeEasyPostVoid = async (shipmentId: string): Promise<EasyPostLabelRes
       action: 'shipments.refund',
       executionMode: 'easypost-api',
       shipment: safeEasyPostShipmentPayload(refundResult.payload),
+    },
+  };
+};
+
+const executeShippoVoid = async (transactionId: string): Promise<ShippoLabelResult> => {
+  const refundResult = await shippoRequest('/refunds/', {
+    transaction: transactionId,
+  });
+  if (!refundResult.ok) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'shippo',
+        action: 'refunds.create',
+        executionMode: 'shippo-api',
+        error: safeShippoErrorPayload(refundResult.payload),
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      schemaVersion: 'backy.shipping-label.v1',
+      provider: 'shippo',
+      action: 'refunds.create',
+      executionMode: 'shippo-api',
+      refund: {
+        id: textValue(refundResult.payload.object_id || refundResult.payload.id),
+        status: textValue(refundResult.payload.status),
+        transaction: textValue(refundResult.payload.transaction),
+      },
     },
   };
 };
@@ -498,6 +660,119 @@ const executeEasyPostLabel = async (input: {
   };
 };
 
+const executeShippoLabel = async (input: {
+  orderId: string;
+  orderNumber: string;
+  labelId: string;
+  carrier: string;
+  serviceLevel: string;
+  rateId: string;
+  fromAddress: Record<string, unknown>;
+  toAddress: Record<string, unknown>;
+  parcel: Record<string, unknown>;
+}): Promise<ShippoLabelResult> => {
+  const shipmentResult = await shippoRequest('/shipments/', {
+    address_from: safeProviderRecord(input.fromAddress),
+    address_to: safeProviderRecord(input.toAddress),
+    parcels: [safeProviderRecord(input.parcel)],
+    metadata: input.orderNumber || input.orderId,
+    async: false,
+  });
+
+  if (!shipmentResult.ok) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'shippo',
+        action: 'shipments.create',
+        executionMode: 'shippo-api',
+        error: safeShippoErrorPayload(shipmentResult.payload),
+      },
+    };
+  }
+
+  const selectedRate = pickShippoRate(shipmentResult.payload, input);
+  if (!selectedRate) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'shippo',
+        action: 'transactions.create',
+        executionMode: 'shippo-api',
+        shipment: safeShippoShipmentPayload(shipmentResult.payload),
+        error: {
+          message: 'Shippo did not return a purchasable rate.',
+        },
+      },
+    };
+  }
+
+  const transactionResult = await shippoRequest('/transactions/', {
+    rate: selectedRate.id,
+    label_file_type: 'PDF_4x6',
+    async: false,
+    metadata: input.orderNumber || input.orderId,
+  });
+
+  if (!transactionResult.ok) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'shippo',
+        action: 'transactions.create',
+        executionMode: 'shippo-api',
+        shipment: safeShippoShipmentPayload(shipmentResult.payload),
+        selectedRate,
+        error: safeShippoErrorPayload(transactionResult.payload),
+      },
+    };
+  }
+
+  const transaction = safeShippoTransactionPayload(transactionResult.payload);
+  const status = transaction.status.toUpperCase();
+  if (status && status !== 'SUCCESS') {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'shippo',
+        action: 'transactions.create',
+        executionMode: 'shippo-api',
+        shipment: safeShippoShipmentPayload(shipmentResult.payload),
+        selectedRate,
+        transaction,
+        error: {
+          message: `Shippo transaction status was ${status}.`,
+        },
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    label: {
+      id: transaction.id || input.labelId,
+      status: 'purchased',
+      provider: selectedRate.provider || input.carrier || 'shippo',
+      serviceLevel: selectedRate.serviceLevel || input.serviceLevel || 'standard',
+      url: transaction.labelUrl,
+      cost: selectedRate.amount,
+    },
+    payload: {
+      schemaVersion: 'backy.shipping-label.v1',
+      provider: 'shippo',
+      action: 'transactions.create',
+      executionMode: 'shippo-api',
+      shipment: safeShippoShipmentPayload(shipmentResult.payload),
+      selectedRate,
+      transaction,
+    },
+  };
+};
+
 const buildShippingLabelVoidUpdate = async ({
   siteId,
   origin,
@@ -533,11 +808,14 @@ const buildShippingLabelVoidUpdate = async ({
     && existing.status === 'purchased'
     && existing.id.startsWith('shp_')
     && (!executionProvider || normalizeProviderKey(executionProvider) === 'easypost');
+  const shouldExecuteShippoVoid = Boolean(shippoApiKey())
+    && existing.status === 'purchased'
+    && normalizeProviderKey(executionProvider) === 'shippo';
   let providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.shipping-label.v1',
-    action: shouldExecuteEasyPostVoid ? 'shipments.refund' : 'provider.shipping_label.void',
-    provider: shouldExecuteEasyPostVoid ? 'easypost' : existing.provider,
-    executionMode: shouldExecuteEasyPostVoid ? 'easypost-api' : 'handoff',
+    action: shouldExecuteEasyPostVoid ? 'shipments.refund' : shouldExecuteShippoVoid ? 'refunds.create' : 'provider.shipping_label.void',
+    provider: shouldExecuteEasyPostVoid ? 'easypost' : shouldExecuteShippoVoid ? 'shippo' : existing.provider,
+    executionMode: shouldExecuteEasyPostVoid ? 'easypost-api' : shouldExecuteShippoVoid ? 'shippo-api' : 'handoff',
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
     labelId: existing.id,
@@ -552,6 +830,20 @@ const buildShippingLabelVoidUpdate = async ({
           status: 502,
           code: 'SHIPPING_LABEL_VOID_FAILED',
           message: 'EasyPost did not accept the shipping label void request.',
+          details: result.payload,
+        },
+      };
+    }
+  }
+  if (shouldExecuteShippoVoid) {
+    const result = await executeShippoVoid(existing.id);
+    providerPayload = result.payload;
+    if (!result.ok) {
+      return {
+        error: {
+          status: 502,
+          code: 'SHIPPING_LABEL_VOID_FAILED',
+          message: 'Shippo did not accept the shipping label refund request.',
           details: result.payload,
         },
       };
@@ -627,12 +919,17 @@ const buildShippingLabelUpdate = async ({
   const reusableExisting = existing?.status === 'voided' ? null : existing;
   const requestedProvider = textValue(body.provider) || textValue(values.fulfillmentcarrier) || 'manual';
   const requestedProviderIsEasyPost = normalizeProviderKey(requestedProvider) === 'easypost';
+  const requestedProviderIsShippo = normalizeProviderKey(requestedProvider) === 'shippo';
   const provider = requestedProviderIsEasyPost
     ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'easypost'
+    : requestedProviderIsShippo
+      ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'shippo'
     : requestedProvider;
   const serviceLevel = textValue(body.serviceLevel) || textValue(values.shippingservicelevel) || 'standard';
   const easyPostInput = resolveEasyPostShipmentInput(body, values, settings, { provider, serviceLevel });
   const executeEasyPost = canExecuteEasyPostLabel(easyPostInput);
+  const shippoInput = resolveEasyPostShipmentInput(body, values, settings, { provider: 'shippo', serviceLevel });
+  const executeShippo = canExecuteShippoLabel(shippoInput);
   const labelId = reusableExisting?.id || `lbl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const labelUrl = buildLabelUrl(origin, siteId, record.id);
   const cost = numberValue(body.cost, numberValue(values.shippinglabelcost, numberValue(values.shippingamount)));
@@ -643,9 +940,9 @@ const buildShippingLabelUpdate = async ({
   const createdAt = reusableExisting?.createdAt || now;
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.shipping-label.v1',
-    provider: executeEasyPost || requestedProviderIsEasyPost ? 'easypost' : provider,
-    action: executeEasyPost || requestedProviderIsEasyPost ? 'shipments.buy' : 'provider.shipping_label.create',
-    executionMode: executeEasyPost ? 'easypost-api' : 'handoff',
+    provider: executeEasyPost || requestedProviderIsEasyPost ? 'easypost' : executeShippo || requestedProviderIsShippo ? 'shippo' : provider,
+    action: executeEasyPost || requestedProviderIsEasyPost ? 'shipments.buy' : executeShippo || requestedProviderIsShippo ? 'transactions.create' : 'provider.shipping_label.create',
+    executionMode: executeEasyPost ? 'easypost-api' : executeShippo ? 'shippo-api' : 'handoff',
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
     requestedCarrier: provider,
@@ -675,6 +972,26 @@ const buildShippingLabelUpdate = async ({
       fromAddress: easyPostInput.fromAddress,
       toAddress: easyPostInput.toAddress,
       parcel: easyPostInput.parcel,
+    });
+    label = {
+      ...label,
+      ...(result.ok && result.label ? result.label : {}),
+      url: result.ok && result.label?.url ? result.label.url : label.url,
+      providerPayload: result.payload,
+    };
+    statusNote = result.ok ? 'purchased' : 'purchase failed; handoff retained';
+  }
+  if (executeShippo) {
+    const result = await executeShippoLabel({
+      orderId: record.id,
+      orderNumber: textValue(values.ordernumber),
+      labelId,
+      carrier: shippoInput.carrier,
+      serviceLevel: shippoInput.serviceLevel,
+      rateId: shippoInput.rateId,
+      fromAddress: shippoInput.fromAddress,
+      toAddress: shippoInput.toAddress,
+      parcel: shippoInput.parcel,
     });
     label = {
       ...label,

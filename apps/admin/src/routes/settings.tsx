@@ -3585,6 +3585,28 @@ const buildInfrastructureEnvContract = ({
     example: 'https://api.easypost.com/v2',
   },
   {
+    provider: 'commerce',
+    key: 'BACKY_SHIPPO_API_KEY',
+    aliases: ['SHIPPO_API_KEY'],
+    label: 'Shippo label API key',
+    description: 'Server-only Shippo key used by Orders to purchase labels and request label refunds.',
+    configured: Boolean(runtimeCommerce?.shippoApiKeyConfigured),
+    required: commerce?.shippingLabelProvider === 'shippo',
+    secret: true,
+    example: '<shippo-api-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_SHIPPO_API_BASE_URL',
+    aliases: ['SHIPPO_API_BASE_URL'],
+    label: 'Shippo API base URL',
+    description: 'Optional Shippo API base URL override for smoke tests, sandbox adapters, and private network routing.',
+    configured: Boolean(runtimeCommerce?.shippoApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.shippoApiBaseUrl,
+    example: 'https://api.goshippo.com',
+  },
+  {
     provider: 'vercel',
     key: 'VERCEL_TOKEN',
     aliases: ['BACKY_VERCEL_TOKEN'],
@@ -4113,8 +4135,8 @@ function InfrastructureSettings({
         <RuntimeCard
           title="Commerce runtime"
           description="Detected payment-provider webhook and shipping-label execution capability."
-          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
-          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
+          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
+          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured || runtimeCommerce?.shippoApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
           details={[
             { label: 'Secret ref', value: runtimeCommerce?.webhookSecretReference },
             { label: 'Secret source', value: runtimeCommerce?.webhookSecretSource },
@@ -4126,6 +4148,8 @@ function InfrastructureSettings({
             { label: 'Label provider', value: runtimeCommerce?.shippingLabelProvider },
             { label: 'EasyPost API key', value: runtimeCommerce?.easyPostApiKeyConfigured },
             { label: 'EasyPost base URL', value: runtimeCommerce?.easyPostApiBaseUrl },
+            { label: 'Shippo API key', value: runtimeCommerce?.shippoApiKeyConfigured },
+            { label: 'Shippo base URL', value: runtimeCommerce?.shippoApiBaseUrl },
           ]}
         />
       </div>
@@ -5104,11 +5128,12 @@ function CommerceSettings({
                   <span className="font-medium">Label provider</span>
                   <select
                     value={resolved.shippingLabelProvider || 'manual'}
-                    onChange={(event) => update({ shippingLabelProvider: event.target.value as 'manual' | 'easypost' })}
+                    onChange={(event) => update({ shippingLabelProvider: event.target.value as 'manual' | 'easypost' | 'shippo' })}
                     className={inputClassName}
                   >
                     <option value="manual">Manual handoff</option>
                     <option value="easypost">EasyPost</option>
+                    <option value="shippo">Shippo</option>
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-sm">

@@ -25,6 +25,8 @@ const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
+const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
+const SHIPPO_MOCK_BASE_URL = `http://127.0.0.1:${SHIPPO_MOCK_PORT}`;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -393,6 +395,78 @@ const createEasyPostMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(EASYPOST_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const shippoExecutionEnabled = () => {
+  const secret = process.env.BACKY_SHIPPO_API_KEY || process.env.SHIPPO_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_SHIPPO_API_BASE_URL || process.env.SHIPPO_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === SHIPPO_MOCK_BASE_URL);
+};
+
+const createShippoMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'POST' && request.url === '/shipments/') {
+        response.end(JSON.stringify({
+          object_id: 'shippo_shipment_smoke_1',
+          object_state: 'VALID',
+          status: 'SUCCESS',
+          test: true,
+          rates: [{
+            object_id: 'shippo_rate_smoke_priority',
+            provider: 'USPS',
+            amount: '8.55',
+            currency: 'USD',
+            servicelevel: {
+              token: 'usps_priority',
+              name: 'Priority Mail',
+            },
+          }],
+        }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/transactions/') {
+        response.end(JSON.stringify({
+          object_id: 'shippo_tx_smoke_1',
+          object_state: 'VALID',
+          status: 'SUCCESS',
+          test: true,
+          label_url: 'https://labels.shippo.test/shippo_tx_smoke_1.pdf',
+          tracking_number: 'SHIPPO1',
+          tracking_status: 'UNKNOWN',
+          tracking_url_provider: 'https://track.shippo.test/SHIPPO1',
+        }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/refunds/') {
+        response.end(JSON.stringify({
+          object_id: 'shippo_refund_smoke_1',
+          status: 'QUEUED',
+          transaction: body.transaction,
+        }));
+        return;
+      }
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ message: `Unhandled Shippo mock path ${request.method} ${request.url}` }));
+    });
+  });
+  await new Promise((resolve) => server.listen(SHIPPO_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1184,7 +1258,7 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Provider execution readiness') &&
         document.body?.innerText?.includes('Stripe checkout/refund') &&
         document.body?.innerText?.includes('Tax quote') &&
-        document.body?.innerText?.includes('EasyPost labels/tracking') &&
+        document.body?.innerText?.includes('Carrier labels/tracking') &&
         document.body?.innerText?.includes('Fulfillment dispatch') &&
         document.body?.innerText?.includes('Webhook settlement'),
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
@@ -1760,6 +1834,85 @@ const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyP
   );
 };
 
+const verifyShippoProviderExecution = async (collectionId, slug, shippoMockServer) => {
+  const expectedSecret = process.env.BACKY_SHIPPO_API_KEY || process.env.SHIPPO_API_KEY;
+  const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
+  const labelResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${beforeLabelRecord.id}/shipping-label`, {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'shippo',
+      executionProvider: 'shippo',
+      carrier: 'USPS',
+      serviceLevel: 'usps_priority',
+      rateId: 'shippo_rate_smoke_priority',
+      fromAddress: {
+        name: 'Backy Warehouse',
+        street1: '100 Fulfillment Way',
+        city: 'Austin',
+        state: 'TX',
+        zip: '78701',
+        country: 'US',
+        phone: '5555550100',
+      },
+      toAddress: {
+        name: 'Orders Smoke Customer',
+        street1: '200 Customer Lane',
+        city: 'San Francisco',
+        state: 'CA',
+        zip: '94105',
+        country: 'US',
+        phone: '5555550101',
+      },
+      parcel: {
+        length: 8,
+        width: 6,
+        height: 2,
+        distance_unit: 'in',
+        weight: 12,
+        mass_unit: 'oz',
+      },
+    }),
+  });
+  assert(labelResponse.data?.label?.status === 'purchased', `Shippo label purchase did not return a purchased label: ${JSON.stringify(labelResponse)}`);
+  assert(labelResponse.data?.label?.id === 'shippo_tx_smoke_1', `Shippo label purchase did not persist transaction id: ${JSON.stringify(labelResponse.data?.label)}`);
+  assert(labelResponse.data?.label?.url === 'https://labels.shippo.test/shippo_tx_smoke_1.pdf', `Shippo label purchase did not persist label URL: ${JSON.stringify(labelResponse.data?.label)}`);
+  assert(labelResponse.data?.label?.providerPayload?.executionMode === 'shippo-api', `Shippo label purchase did not expose execution metadata: ${JSON.stringify(labelResponse.data?.label)}`);
+
+  const shipmentRequest = shippoMockServer.requests.find((request) => request.url === '/shipments/');
+  const transactionRequest = shippoMockServer.requests.find((request) => request.url === '/transactions/');
+  assert(shipmentRequest?.headers.authorization === `ShippoToken ${expectedSecret}`, `Shippo shipment create did not receive token auth: ${JSON.stringify(shipmentRequest?.headers)}`);
+  assert(shipmentRequest?.body?.address_from?.name === 'Backy Warehouse', `Shippo shipment create did not include from address: ${JSON.stringify(shipmentRequest?.body)}`);
+  assert(transactionRequest?.body?.rate === 'shippo_rate_smoke_priority', `Shippo transaction did not select the expected rate: ${JSON.stringify(transactionRequest?.body)}`);
+
+  const purchasedRecord = await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => (
+      values.shippinglabelstatus === 'purchased' &&
+      values.shippinglabelid === 'shippo_tx_smoke_1' &&
+      values.shippinglabelurl === 'https://labels.shippo.test/shippo_tx_smoke_1.pdf' &&
+      values.shippingservicelevel === 'usps_priority' &&
+      Number(values.shippinglabelcost) === 8.55
+    ),
+    'Shippo label purchase did not persist purchased label fields',
+  );
+
+  const voidResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${purchasedRecord.id}/shipping-label`, {
+    method: 'DELETE',
+    body: JSON.stringify({ executionProvider: 'shippo' }),
+  });
+  assert(voidResponse.data?.label?.status === 'voided', `Shippo label void did not return a voided label: ${JSON.stringify(voidResponse)}`);
+  assert(voidResponse.data?.label?.providerPayload?.executionMode === 'shippo-api', `Shippo label void did not expose execution metadata: ${JSON.stringify(voidResponse.data?.label)}`);
+  assert(shippoMockServer.requests.some((request) => request.url === '/refunds/' && request.body?.transaction === 'shippo_tx_smoke_1'), `Shippo mock did not receive refund request: ${JSON.stringify(shippoMockServer.requests)}`);
+
+  await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => values.shippinglabelstatus === 'voided' && values.shippinglabelid === 'shippo_tx_smoke_1',
+    'Shippo label void did not persist voided label fields',
+  );
+};
+
 const clickReconcileProvider = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
@@ -1925,6 +2078,7 @@ const main = async () => {
   let stripeTaxMockServer;
   let stripeRefundMockServer;
   let easyPostMockServer;
+  let shippoMockServer;
   let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
@@ -2236,6 +2390,10 @@ const main = async () => {
     if (easyPostExecutionEnabled()) {
       await verifyEasyPostProviderExecution(collectionId, slug, suffix, easyPostMockServer);
     }
+    if (shippoExecutionEnabled()) {
+      shippoMockServer = await createShippoMockServer();
+      await verifyShippoProviderExecution(collectionId, slug, shippoMockServer);
+    }
 
     await clickOrderCardButton(client, orderNumber, 'Record Refund/Return');
     await waitForOrderValue(
@@ -2501,6 +2659,9 @@ const main = async () => {
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});
+    }
+    if (shippoMockServer) {
+      await shippoMockServer.close().catch(() => {});
     }
     if (fulfillmentProviderServer) {
       await fulfillmentProviderServer.close().catch(() => {});

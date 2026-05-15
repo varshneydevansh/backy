@@ -2023,7 +2023,7 @@ export interface SiteSettingsInput {
       shippingProviderUrl?: string;
       discountProvider?: 'manual' | 'http';
       discountProviderUrl?: string;
-      shippingLabelProvider?: 'manual' | 'easypost';
+      shippingLabelProvider?: 'manual' | 'easypost' | 'shippo';
       shippingOriginAddress?: string;
       shippingDefaultParcel?: string;
       shippingDefaultCarrier?: string;
@@ -2134,7 +2134,9 @@ export interface SiteSettingsInput {
     taxProvider?: 'manual' | 'http' | 'stripe';
     easyPostApiKeyConfigured?: boolean;
     easyPostApiBaseUrl?: string;
-    shippingLabelProvider?: 'manual' | 'easypost';
+    shippoApiKeyConfigured?: boolean;
+    shippoApiBaseUrl?: string;
+    shippingLabelProvider?: 'manual' | 'easypost' | 'shippo';
     missing: string[];
   };
   runtimeVercel?: {
@@ -6531,6 +6533,7 @@ export async function createOrderShippingLabel(
     carrier?: string;
     rateId?: string;
     easypostRateId?: string;
+    shippoRateId?: string;
     fromAddress?: Record<string, unknown>;
     toAddress?: Record<string, unknown>;
     parcel?: Record<string, unknown>;
