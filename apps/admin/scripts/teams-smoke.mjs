@@ -287,6 +287,16 @@ const setBrowserAuthStorage = async (client, sessionToken, user) => evaluate(
   authStorageScript(sessionToken, user),
 );
 
+const installBrowserAuthPreload = async (client, sessionToken, user) => client.send('Page.addScriptToEvaluateOnNewDocument', {
+  source: authStorageScript(sessionToken, user),
+});
+
+const removeBrowserPreload = async (client, preload) => {
+  if (preload?.identifier) {
+    await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: preload.identifier });
+  }
+};
+
 const setInputValue = async (client, selector, value) => {
   const result = await evaluate(client, `(() => {
     const input = document.querySelector(${JSON.stringify(selector)});
@@ -400,8 +410,11 @@ const main = async () => {
   const editedName = `Smoke Team Edited ${suffix}`;
   const editedSlug = `smoke-team-edited-${suffix}`;
   const inviteEmail = `teams-smoke-${suffix}@example.com`;
+  const adminEmail = `teams-admin-${suffix}@example.com`;
+  const adminFullName = `Teams Admin ${suffix}`;
   const readOnlyEmail = `teams-readonly-${suffix}@example.com`;
   const readOnlyFullName = `Teams Readonly ${suffix}`;
+  let activeAuthPreload = null;
 
   try {
     const adminSession = await loginAdminApi();
@@ -422,9 +435,7 @@ const main = async () => {
     await client.opened;
     await client.send('Runtime.enable');
     await client.send('Page.enable');
-    const adminAuthPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: authStorageScript(adminSession.session.token, adminSession.user),
-    });
+    activeAuthPreload = await installBrowserAuthPreload(client, adminSession.session.token, adminSession.user);
 
     await navigate(
       client,
@@ -570,6 +581,55 @@ const main = async () => {
       'Team delete notice',
     );
 
+    const adminAccount = await createUser({
+      fullName: adminFullName,
+      email: adminEmail,
+      role: 'admin',
+      status: 'invited',
+    });
+    temporaryUserIds.push(adminAccount.user.id);
+    assert(adminAccount.invite?.token, `Admin role invite token missing: ${JSON.stringify(adminAccount).slice(0, 500)}`);
+    const adminRoleSession = await acceptInvite(adminAccount.invite.token);
+    await removeBrowserPreload(client, activeAuthPreload);
+    activeAuthPreload = await installBrowserAuthPreload(client, adminRoleSession.session.token, adminRoleSession.user);
+    await setBrowserAuthStorage(client, adminRoleSession.session.token, adminRoleSession.user);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const createButton = document.querySelector('[data-testid="teams-create-button"]');
+        const editButton = document.querySelector('[data-testid="teams-edit-button"]');
+        const inviteButton = document.querySelector('[data-testid="teams-invite-button"]');
+        const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const auditPanel = document.querySelector('[data-testid="teams-audit-panel"]');
+        const auditRefresh = auditPanel ? Array.from(auditPanel.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').includes('Refresh audit')
+        )) : null;
+        return {
+          ready: window.location.pathname === '/teams' &&
+            body.includes('Team Management') &&
+            body.includes('Team activity') &&
+            !body.includes('Team permissions unavailable') &&
+            createButton instanceof HTMLButtonElement &&
+            createButton.disabled === false &&
+            (!(editButton instanceof HTMLButtonElement) || editButton.disabled === false) &&
+            (!(inviteButton instanceof HTMLButtonElement) || inviteButton.disabled === false) &&
+            (!(deleteButton instanceof HTMLButtonElement) || deleteButton.disabled === false) &&
+            auditRefresh instanceof HTMLButtonElement &&
+            auditRefresh.disabled === false,
+          path: window.location.pathname,
+          body: body.slice(0, 1600),
+          createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+          editDisabled: editButton instanceof HTMLButtonElement ? editButton.disabled : null,
+          inviteDisabled: inviteButton instanceof HTMLButtonElement ? inviteButton.disabled : null,
+          deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+          auditRefreshDisabled: auditRefresh instanceof HTMLButtonElement ? auditRefresh.disabled : null,
+        };
+      })()`,
+      'Admin Teams permission pass',
+    );
+
     const readOnlyAccount = await createUser({
       fullName: readOnlyFullName,
       email: readOnlyEmail,
@@ -584,12 +644,8 @@ const main = async () => {
       'activity.export': 'deny',
     });
     const readOnlySession = await acceptInvite(readOnlyAccount.invite.token);
-    if (adminAuthPreload?.identifier) {
-      await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: adminAuthPreload.identifier });
-    }
-    await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: authStorageScript(readOnlySession.session.token, readOnlySession.user),
-    });
+    await removeBrowserPreload(client, activeAuthPreload);
+    activeAuthPreload = await installBrowserAuthPreload(client, readOnlySession.session.token, readOnlySession.user);
     await setBrowserAuthStorage(client, readOnlySession.session.token, readOnlySession.user);
     await navigate(
       client,
@@ -643,6 +699,7 @@ const main = async () => {
       route: '/teams',
       createdSlug: editedSlug,
       invitedEmail: inviteEmail,
+      adminEmail,
       readOnlyEmail,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
