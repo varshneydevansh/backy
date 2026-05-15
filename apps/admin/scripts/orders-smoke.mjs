@@ -166,6 +166,40 @@ const createQuoteProviderServer = async () => {
   };
 };
 
+const createFulfillmentProviderServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `ful_http_smoke_${requests.length}`,
+        status: 'requested',
+        provider: 'orders-smoke-warehouse',
+        reference: `warehouse-${requests.length}`,
+        trackingNumber: `WHSMOKE${requests.length}`,
+        trackingUrl: `https://warehouse.example.test/track/WHSMOKE${requests.length}`,
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  return {
+    baseUrl,
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const stripeTaxExecutionEnabled = () => {
   const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
   const apiBaseUrl = process.env.BACKY_STRIPE_TAX_API_BASE_URL || process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
@@ -308,6 +342,19 @@ const enableCommerceQuoteProviders = async (settings, providerBaseUrl, options =
       shippingProviderUrl: `${providerBaseUrl}/shipping`,
       discountProvider: 'http',
       discountProviderUrl: `${providerBaseUrl}/discount`,
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
+const enableCommerceFulfillmentProvider = async (settings, providerBaseUrl) => {
+  const next = JSON.parse(JSON.stringify(settings));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      fulfillmentProvider: 'http',
+      fulfillmentProviderUrl: `${providerBaseUrl}/dispatch`,
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -1543,6 +1590,7 @@ const main = async () => {
   let customerFixture;
   let quoteProviderServer;
   let stripeTaxMockServer;
+  let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
@@ -1711,6 +1759,9 @@ const main = async () => {
       'Bulk processing action did not persist coherent fulfillment workflow fields',
     );
 
+    fulfillmentProviderServer = await createFulfillmentProviderServer();
+    const preFulfillmentSettings = await getSettings();
+    await enableCommerceFulfillmentProvider(preFulfillmentSettings, fulfillmentProviderServer.baseUrl);
     await clickOrderCardButton(client, orderNumber, 'Dispatch Fulfillment');
     const fulfillmentRecord = await waitForOrderValue(
       collectionId,
@@ -1719,17 +1770,24 @@ const main = async () => {
         values.orderstatus === 'paid' &&
         values.paymentstatus === 'paid' &&
         values.fulfillmentstatus === 'processing' &&
-        values.fulfillmentdispatchstatus === 'requires_action' &&
-        values.fulfillmentprovider === 'UPS' &&
-        Boolean(values.fulfillmentid) &&
+        values.fulfillmentdispatchstatus === 'requested' &&
+        values.fulfillmentprovider === 'orders-smoke-warehouse' &&
+        String(values.fulfillmentid || '').startsWith('ful_http_smoke_') &&
         Boolean(values.fulfillmentrequestedat) &&
         String(values.fulfillmentpayload || '').includes('backy.fulfillment-dispatch.v1') &&
-        /Fulfillment dispatch handoff prepared/.test(String(values.notes || ''))
+        String(values.fulfillmentpayload || '').includes('http-provider') &&
+        values.trackingnumber === 'WHSMOKE1' &&
+        String(values.trackingurl || '').includes('/track/WHSMOKE1') &&
+        /Fulfillment dispatch executed/.test(String(values.notes || ''))
       ),
-      'Dispatch Fulfillment did not persist fulfillment handoff fields',
+      'Dispatch Fulfillment did not persist HTTP provider execution fields',
     );
     const fulfillmentPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${fulfillmentRecord.id}/fulfillment`);
     assert(fulfillmentPayload.data?.fulfillment?.id === fulfillmentRecord.values.fulfillmentid, `Fulfillment endpoint did not return the prepared handoff: ${JSON.stringify(fulfillmentPayload)}`);
+    assert(fulfillmentPayload.data?.fulfillment?.providerPayload?.execution?.executionMode === 'http-provider', `Fulfillment endpoint did not expose HTTP provider execution metadata: ${JSON.stringify(fulfillmentPayload).slice(0, 500)}`);
+    assert(fulfillmentProviderServer.requests.length >= 1, `Fulfillment provider server did not receive a dispatch call: ${fulfillmentProviderServer.requests.length}`);
+    assert(fulfillmentProviderServer.requests[0]?.url === '/dispatch', `Fulfillment provider server received unexpected path: ${JSON.stringify(fulfillmentProviderServer.requests)}`);
+    assert(fulfillmentProviderServer.requests[0]?.body?.fulfillment?.schemaVersion === 'backy.fulfillment-dispatch.v1', `Fulfillment provider request did not include dispatch payload: ${JSON.stringify(fulfillmentProviderServer.requests[0]?.body).slice(0, 500)}`);
 
     await clickOrderCardButton(client, orderNumber, 'Prepare Label');
     await waitForOrderValue(
@@ -1792,7 +1850,7 @@ const main = async () => {
       slug,
       (values) => (
         values.fulfillmentstatus === 'processing' &&
-        values.trackingnumber === `1Z${suffix.toUpperCase()}` &&
+        values.trackingnumber === 'WHSMOKE1' &&
         values.trackingstatus === 'processing' &&
         Boolean(values.trackinglastcheckedat) &&
         /Tracking refreshed/.test(String(values.notes || ''))
@@ -2057,6 +2115,9 @@ const main = async () => {
     }
     if (stripeTaxMockServer) {
       await stripeTaxMockServer.close().catch(() => {});
+    }
+    if (fulfillmentProviderServer) {
+      await fulfillmentProviderServer.close().catch(() => {});
     }
     await cleanup({
       client,

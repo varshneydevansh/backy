@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyCollection, BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
 import {
+  getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
@@ -94,6 +95,11 @@ const textValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const numberValue = (value: unknown, fallback = 0): number => {
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const parseJsonRecord = (value: unknown): Record<string, unknown> => {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value !== 'string' || !value.trim()) return {};
@@ -160,6 +166,30 @@ const normalizeFulfillmentStatus = (value: string): FulfillmentDispatchPayload['
   return 'requires_action';
 };
 
+const fulfillmentProviderUrl = (): string => {
+  const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
+  if (textValue(commerce.fulfillmentProvider).toLowerCase() !== 'http') return '';
+  const url = textValue(commerce.fulfillmentProviderUrl);
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const safeProviderResponsePayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id || value.fulfillmentId || value.dispatchId),
+  status: textValue(value.status),
+  provider: textValue(value.provider),
+  reference: textValue(value.reference || value.providerReference),
+  trackingNumber: textValue(value.trackingNumber || value.tracking_number),
+  trackingUrl: textValue(value.trackingUrl || value.tracking_url),
+  cost: numberValue(value.cost ?? value.amount, Number.NaN),
+  message: textValue(value.message),
+});
+
 const buildDispatchPayload = (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
@@ -225,10 +255,89 @@ const existingFulfillmentPayload = (record: CollectionRecordAuditSource): Fulfil
   };
 };
 
-const buildFulfillmentDispatch = (
+const executeHttpFulfillmentProvider = async ({
+  url,
+  record,
+  payload,
+  requestId,
+}: {
+  url: string;
+  record: CollectionRecordAuditSource;
+  payload: Record<string, unknown>;
+  requestId: string;
+}): Promise<{
+  status: FulfillmentDispatchPayload['status'];
+  id?: string;
+  provider?: string;
+  completedAt?: string | null;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  payload: Record<string, unknown>;
+}> => {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-request-id': requestId,
+        'x-backy-provider-kind': 'fulfillment',
+      },
+      body: JSON.stringify({
+        schemaVersion: 'backy.fulfillment-provider-request.v1',
+        orderId: record.id,
+        orderSlug: record.slug,
+        fulfillment: payload,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const body = toRecord(await response.json().catch(() => ({})));
+    if (!response.ok) {
+      return {
+        status: 'failed',
+        payload: {
+          schemaVersion: 'backy.fulfillment-provider-response.v1',
+          provider: 'http',
+          executionMode: 'http-provider',
+          statusCode: response.status,
+          error: textValue(body.error) || textValue(toRecord(body.error).message) || `Provider returned HTTP ${response.status}.`,
+          response: safeProviderResponsePayload(body),
+        },
+      };
+    }
+    const status = normalizeFulfillmentStatus(textValue(body.status) || 'requested');
+    return {
+      status,
+      id: textValue(body.id || body.fulfillmentId || body.dispatchId),
+      provider: textValue(body.provider),
+      completedAt: textValue(body.completedAt) || (status === 'succeeded' ? new Date().toISOString() : null),
+      trackingNumber: textValue(body.trackingNumber || body.tracking_number),
+      trackingUrl: textValue(body.trackingUrl || body.tracking_url),
+      payload: {
+        schemaVersion: 'backy.fulfillment-provider-response.v1',
+        provider: 'http',
+        executionMode: 'http-provider',
+        statusCode: response.status,
+        response: safeProviderResponsePayload(body),
+      },
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      payload: {
+        schemaVersion: 'backy.fulfillment-provider-response.v1',
+        provider: 'http',
+        executionMode: 'http-provider',
+        error: error instanceof Error ? error.message : 'Fulfillment provider request failed.',
+      },
+    };
+  }
+};
+
+const buildFulfillmentDispatch = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
-): FulfillmentDispatchUpdateResult => {
+  requestId: string,
+): Promise<FulfillmentDispatchUpdateResult> => {
   const values = toRecord(record.values);
   const paymentStatus = textValue(values.paymentstatus) || 'pending';
   if (paymentStatus !== 'paid') {
@@ -266,13 +375,40 @@ const buildFulfillmentDispatch = (
     requestedAt: now,
     completedAt,
   };
-  const providerPayload = buildDispatchPayload(record, body, fulfillmentBase);
+  const providerPayload: Record<string, unknown> = buildDispatchPayload(record, body, fulfillmentBase);
+  const executionUrl = fulfillmentProviderUrl();
+  let fulfillmentStatus = status;
+  let fulfillmentId = id;
+  let fulfillmentProvider = provider;
+  let fulfillmentCompletedAt = completedAt;
+  if (executionUrl) {
+    const execution = await executeHttpFulfillmentProvider({
+      url: executionUrl,
+      record,
+      payload: providerPayload,
+      requestId,
+    });
+    providerPayload.executionMode = 'http-provider';
+    providerPayload.execution = execution.payload;
+    fulfillmentStatus = execution.status;
+    fulfillmentId = execution.id || fulfillmentId;
+    fulfillmentProvider = execution.provider || fulfillmentProvider;
+    fulfillmentCompletedAt = execution.completedAt ?? fulfillmentCompletedAt;
+    const tracking = toRecord(providerPayload.tracking);
+    if (execution.trackingNumber) tracking.number = execution.trackingNumber;
+    if (execution.trackingUrl) tracking.url = execution.trackingUrl;
+    providerPayload.tracking = tracking;
+  }
   const fulfillment: FulfillmentDispatchPayload = {
     ...fulfillmentBase,
+    id: fulfillmentId,
+    status: fulfillmentStatus,
+    provider: fulfillmentProvider,
+    completedAt: fulfillmentCompletedAt,
     providerPayload,
   };
-  const nextOrderStatus = status === 'succeeded' ? 'fulfilled' : textValue(values.orderstatus) || 'paid';
-  const nextFulfillmentStatus = status === 'succeeded' ? 'fulfilled' : 'processing';
+  const nextOrderStatus = fulfillment.status === 'succeeded' ? 'fulfilled' : textValue(values.orderstatus) || 'paid';
+  const nextFulfillmentStatus = fulfillment.status === 'succeeded' ? 'fulfilled' : 'processing';
 
   return {
     fulfillment,
@@ -286,9 +422,11 @@ const buildFulfillmentDispatch = (
       fulfillmentid: fulfillment.id,
       fulfillmentrequestedat: fulfillment.requestedAt,
       fulfillmentcompletedat: fulfillment.completedAt,
+      ...(textValue(toRecord(providerPayload.tracking).number) ? { trackingnumber: textValue(toRecord(providerPayload.tracking).number) } : {}),
+      ...(textValue(toRecord(providerPayload.tracking).url) ? { trackingurl: textValue(toRecord(providerPayload.tracking).url) } : {}),
       fulfillmentpayload: JSON.stringify(fulfillment.providerPayload, null, 2),
-      ...(status === 'succeeded' ? { fulfilledat: completedAt } : {}),
-      notes: appendNote(values.notes, `Fulfillment dispatch handoff prepared ${now} for ${fulfillment.provider} with id ${fulfillment.id}.`),
+      ...(fulfillment.status === 'succeeded' ? { fulfilledat: fulfillment.completedAt } : {}),
+      notes: appendNote(values.notes, `Fulfillment dispatch ${executionUrl ? 'executed' : 'handoff prepared'} ${now} for ${fulfillment.provider} with id ${fulfillment.id}.`),
     },
   };
 };
@@ -358,7 +496,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      const result = buildFulfillmentDispatch(record, body);
+      const result = await buildFulfillmentDispatch(record, body, requestId);
       if ('error' in result) {
         return errorResponse(result.error.status, result.error.code, result.error.message, requestId, result.error.details);
       }
@@ -414,7 +552,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    const result = buildFulfillmentDispatch(record, body);
+    const result = await buildFulfillmentDispatch(record, body, requestId);
     if ('error' in result) {
       return errorResponse(result.error.status, result.error.code, result.error.message, requestId, result.error.details);
     }

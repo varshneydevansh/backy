@@ -2625,6 +2625,8 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   shippingProviderUrl: '',
   discountProvider: 'manual',
   discountProviderUrl: '',
+  fulfillmentProvider: 'manual',
+  fulfillmentProviderUrl: '',
   inventoryReservations: true,
   reservationMinutes: 15,
   webhookEventsEnabled: false,
@@ -4955,6 +4957,28 @@ function CommerceSettings({
                   </div>
                 );
               })}
+            </div>
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Fulfillment dispatch provider</span>
+                <select
+                  value={resolved.fulfillmentProvider || 'manual'}
+                  onChange={(event) => update({ fulfillmentProvider: event.target.value as 'manual' | 'http' })}
+                  className={inputClassName}
+                >
+                  <option value="manual">Manual handoff</option>
+                  <option value="http">HTTP warehouse/3PL</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Fulfillment endpoint URL</span>
+                <input
+                  value={resolved.fulfillmentProviderUrl || ''}
+                  onChange={(event) => update({ fulfillmentProviderUrl: event.target.value })}
+                  placeholder="https://api.example.com/fulfillment-dispatch"
+                  className={inputClassName}
+                />
+              </label>
             </div>
           </div>
           <div className="mt-5 grid gap-3 border-t border-border pt-4">

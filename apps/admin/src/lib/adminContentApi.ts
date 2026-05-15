@@ -1953,6 +1953,8 @@ export interface SiteSettingsInput {
       shippingProviderUrl?: string;
       discountProvider?: 'manual' | 'http';
       discountProviderUrl?: string;
+      fulfillmentProvider?: 'manual' | 'http';
+      fulfillmentProviderUrl?: string;
       inventoryReservations?: boolean;
       reservationMinutes?: number;
       webhookEventsEnabled?: boolean;

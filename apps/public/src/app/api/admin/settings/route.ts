@@ -870,6 +870,8 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       shippingProviderUrl: stringValue(commerce.shippingProviderUrl),
       discountProvider: stringValue(commerce.discountProvider) === 'http' ? 'http' : 'manual',
       discountProviderUrl: stringValue(commerce.discountProviderUrl),
+      fulfillmentProvider: stringValue(commerce.fulfillmentProvider) === 'http' ? 'http' : 'manual',
+      fulfillmentProviderUrl: stringValue(commerce.fulfillmentProviderUrl),
       inventoryReservations: boolValue(commerce.inventoryReservations, true),
       reservationMinutes: Math.max(1, Math.min(1440, Math.round(numberValue(commerce.reservationMinutes, 15)))),
       webhookEventsEnabled: boolValue(commerce.webhookEventsEnabled),

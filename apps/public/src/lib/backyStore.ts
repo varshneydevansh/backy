@@ -811,6 +811,8 @@ let SETTINGS: StoreSettings = {
       shippingProviderUrl: '',
       discountProvider: 'manual',
       discountProviderUrl: '',
+      fulfillmentProvider: 'manual',
+      fulfillmentProviderUrl: '',
       inventoryReservations: true,
       reservationMinutes: 15,
       webhookEventsEnabled: false,
