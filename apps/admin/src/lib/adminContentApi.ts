@@ -2116,6 +2116,34 @@ export interface FormsAnalytics {
     routedToCollections: number;
     lastSubmittedAt: string | null;
   }>;
+  leads?: {
+    summary: {
+      contacts: number;
+      captureRate: number;
+      lifecycle: Record<ContactStatus, number>;
+      quality: {
+        missingEmail: number;
+        missingPhone: number;
+        needsNotes: number;
+        hasSourceValues: number;
+        readyToPromote: number;
+        duplicateEmail: number;
+        duplicateEmailGroups: number;
+      };
+      savedLists: number;
+    };
+    segments: ContactSegment[];
+    savedLists: ContactSavedList[];
+    forms: Array<{
+      formId: string;
+      name: string;
+      title: string | null;
+      contactShareEnabled: boolean;
+      contacts: number;
+      qualified: number;
+      readyToPromote: number;
+    }>;
+  };
 }
 
 export type ContactStatus = Contact['status'];

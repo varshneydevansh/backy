@@ -1749,15 +1749,22 @@ const assertFormsAnalytics = async (client, formId, submissionId) => {
     analytics.trend.some((point) => point.total >= 1),
     `Forms analytics trend did not include a submission: ${JSON.stringify(analytics.trend)}`,
   );
+  assert(analytics.leads?.summary, `Forms analytics did not include lead segmentation summary: ${JSON.stringify(analytics).slice(0, 700)}`);
+  assert(Array.isArray(analytics.leads?.segments), `Forms analytics did not include lead segments: ${JSON.stringify(analytics?.leads).slice(0, 700)}`);
+  assert(Array.isArray(analytics.leads?.savedLists), `Forms analytics did not include saved lead list analytics: ${JSON.stringify(analytics?.leads).slice(0, 700)}`);
 
   const state = await evaluate(client, `(() => ({
     panel: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')),
     trend: Boolean(document.querySelector('[data-testid="forms-analytics-trend"]')),
     topForms: Boolean(document.querySelector('[data-testid="forms-analytics-top-forms"]')),
+    leadAnalytics: Boolean(document.querySelector('[data-testid="forms-lead-analytics"]')),
+    savedListAnalytics: Boolean(document.querySelector('[data-testid="forms-saved-list-analytics"]')),
     body: document.body?.innerText || '',
   }))()`);
-  assert(state.panel && state.trend && state.topForms, `Forms analytics panel missing expected regions: ${JSON.stringify(state).slice(0, 800)}`);
+  assert(state.panel && state.trend && state.topForms && state.leadAnalytics && state.savedListAnalytics, `Forms analytics panel missing expected regions: ${JSON.stringify(state).slice(0, 800)}`);
   assert(state.body.includes('Submission analytics'), 'Forms analytics title is not rendered');
+  assert(state.body.includes('Lead segments'), 'Forms lead segments analytics are not rendered');
+  assert(state.body.includes('Saved lead lists'), 'Forms saved lead list analytics are not rendered');
   assert(state.body.includes(submissionId) || state.body.includes('Registration edited'), 'Forms analytics/top form context is not rendered');
 
   return analytics;

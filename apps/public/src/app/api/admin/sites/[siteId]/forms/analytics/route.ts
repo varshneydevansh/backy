@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { FormDefinition, FormSubmission } from '@backy-cms/core';
+import {
+  DEFAULT_SITE_SETTINGS,
+  type Contact,
+  type FormDefinition,
+  type FormSubmission,
+  type SiteContactSavedList,
+  type SiteContactSavedListFilters,
+  type SiteSettings,
+} from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { getSiteByIdOrSlug, listFormsBySite, listFormSubmissions } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, listFormContacts, listFormsBySite, listFormSubmissions } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -51,7 +59,20 @@ interface FormAnalyticsFormBreakdown {
   lastSubmittedAt: string | null;
 }
 
+interface FormAnalyticsContactSegment {
+  id: Contact['status'] | 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote' | 'duplicate-email';
+  label: string;
+  kind: 'system' | 'lifecycle' | 'quality';
+  count: number;
+  contactIds: string[];
+  formIds: string[];
+  description: string;
+}
+
 const STATUSES: FormSubmissionStatus[] = ['pending', 'approved', 'rejected', 'spam'];
+const CONTACT_STATUSES: Contact['status'][] = ['new', 'contacted', 'qualified', 'archived'];
+const CONTACT_LIST_STATUSES = ['all', 'new', 'contacted', 'qualified', 'archived'] as const;
+const CONTACT_LIST_QUALITIES = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote', 'duplicate-email'] as const;
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
 
@@ -109,6 +130,122 @@ const submissionTimestamp = (submission: FormSubmission): number => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value && typeof value === 'object' && !Array.isArray(value))
+);
+
+const textValue = (value: unknown) => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const normalizeIdentifier = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
+
+const uniqueSorted = (values: string[]) => Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+
+const siteSettings = (settings: SiteSettings | undefined): SiteSettings => (
+  (settings || DEFAULT_SITE_SETTINGS) as SiteSettings
+);
+
+const normalizeFilters = (value: unknown): SiteContactSavedListFilters => {
+  const record = isRecord(value) ? value : {};
+  const status = CONTACT_LIST_STATUSES.includes(record.status as (typeof CONTACT_LIST_STATUSES)[number])
+    ? record.status as SiteContactSavedListFilters['status']
+    : 'all';
+  const quality = CONTACT_LIST_QUALITIES.includes(record.quality as (typeof CONTACT_LIST_QUALITIES)[number])
+    ? record.quality as SiteContactSavedListFilters['quality']
+    : 'all';
+  const formId = textValue(record.formId) || 'all';
+  const query = textValue(record.query);
+
+  return {
+    formId,
+    status,
+    quality,
+    ...(query ? { query } : {}),
+  };
+};
+
+const normalizeSavedLists = (settings: SiteSettings): SiteContactSavedList[] => (
+  Array.isArray(settings.contacts?.savedLists)
+    ? settings.contacts.savedLists
+        .filter((list): list is SiteContactSavedList => isRecord(list) && typeof list.id === 'string' && typeof list.name === 'string')
+        .map((list) => ({
+          id: textValue(list.id),
+          name: textValue(list.name) || 'Saved lead list',
+          description: textValue(list.description) || null,
+          filters: normalizeFilters(list.filters),
+          createdAt: textValue(list.createdAt) || new Date().toISOString(),
+          updatedAt: textValue(list.updatedAt) || textValue(list.createdAt) || new Date().toISOString(),
+        }))
+    : []
+);
+
+const duplicateEmailSet = (contacts: Contact[]) => {
+  const groups = new Map<string, Contact[]>();
+  contacts.forEach((contact) => {
+    const email = normalizeIdentifier(contact.email);
+    if (!email || contact.status === 'archived') return;
+    groups.set(email, [...(groups.get(email) || []), contact]);
+  });
+
+  return new Set(Array.from(groups.entries()).filter(([, group]) => group.length > 1).map(([email]) => email));
+};
+
+const segmentFromContacts = (
+  id: FormAnalyticsContactSegment['id'],
+  label: string,
+  kind: FormAnalyticsContactSegment['kind'],
+  description: string,
+  contacts: Contact[],
+): FormAnalyticsContactSegment => ({
+  id,
+  label,
+  kind,
+  count: contacts.length,
+  contactIds: contacts.map((contact) => contact.id),
+  formIds: uniqueSorted(contacts.map((contact) => contact.formId)),
+  description,
+});
+
+const filterContactsForList = (
+  contacts: Contact[],
+  forms: FormDefinition[],
+  filters: SiteContactSavedListFilters,
+): Contact[] => {
+  const duplicates = duplicateEmailSet(contacts);
+  const formById = new Map(forms.map((form) => [form.id, form]));
+  const query = filters.query?.trim().toLowerCase() || '';
+
+  return contacts.filter((contact) => {
+    if (filters.formId && filters.formId !== 'all' && contact.formId !== filters.formId) return false;
+    if (filters.status && filters.status !== 'all' && contact.status !== filters.status) return false;
+
+    const hasEmail = Boolean(contact.email?.trim());
+    const hasPhone = Boolean(contact.phone?.trim());
+    const hasNotes = Boolean(contact.notes?.trim());
+    const hasSourceValues = Boolean(contact.sourceValues && Object.keys(contact.sourceValues).length > 0);
+    const quality = filters.quality || 'all';
+    if (quality === 'missing-email' && hasEmail) return false;
+    if (quality === 'missing-phone' && hasPhone) return false;
+    if (quality === 'needs-notes' && hasNotes) return false;
+    if (quality === 'has-source-values' && !hasSourceValues) return false;
+    if (quality === 'ready-to-promote' && (contact.status !== 'qualified' || !hasEmail)) return false;
+    if (quality === 'duplicate-email' && !duplicates.has(normalizeIdentifier(contact.email))) return false;
+
+    if (!query) return true;
+    const form = formById.get(contact.formId);
+    return [
+      contact.name,
+      contact.email,
+      contact.phone,
+      contact.notes,
+      contact.requestId,
+      form?.title,
+      form?.name,
+    ].some((entry) => String(entry || '').toLowerCase().includes(query));
+  });
+};
+
 const fetchAllSubmissions = async (
   fetchPage: (offset: number) => Promise<{ items: FormSubmission[]; total: number; hasMore: boolean }>,
 ): Promise<FormSubmission[]> => {
@@ -122,9 +259,101 @@ const fetchAllSubmissions = async (
   return submissions;
 };
 
+const fetchAllContacts = async (
+  fetchPage: (offset: number) => Promise<{ items: Contact[]; total: number; hasMore: boolean }>,
+): Promise<Contact[]> => {
+  const contacts: Contact[] = [];
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const offset = page * PAGE_LIMIT;
+    const result = await fetchPage(offset);
+    contacts.push(...result.items);
+    if (!result.hasMore || contacts.length >= result.total) break;
+  }
+  return contacts;
+};
+
+const buildLeadAnalytics = (
+  forms: FormDefinition[],
+  contacts: Contact[],
+  savedLists: SiteContactSavedList[],
+) => {
+  const duplicates = duplicateEmailSet(contacts);
+  const byStatus = Object.fromEntries(
+    CONTACT_STATUSES.map((status) => [status, contacts.filter((contact) => contact.status === status)]),
+  ) as Record<Contact['status'], Contact[]>;
+  const quality = {
+    missingEmail: contacts.filter((contact) => !contact.email?.trim()),
+    missingPhone: contacts.filter((contact) => !contact.phone?.trim()),
+    needsNotes: contacts.filter((contact) => !contact.notes?.trim()),
+    hasSourceValues: contacts.filter((contact) => Boolean(contact.sourceValues && Object.keys(contact.sourceValues).length > 0)),
+    readyToPromote: contacts.filter((contact) => contact.status === 'qualified' && Boolean(normalizeIdentifier(contact.email))),
+    duplicateEmail: contacts.filter((contact) => duplicates.has(normalizeIdentifier(contact.email))),
+  };
+  const segments: FormAnalyticsContactSegment[] = [
+    segmentFromContacts('all', 'All leads', 'system', 'Every form contact in this site.', contacts),
+    segmentFromContacts('new', 'New', 'lifecycle', 'Contacts captured but not yet reviewed.', byStatus.new),
+    segmentFromContacts('contacted', 'Contacted', 'lifecycle', 'Contacts that have received follow-up.', byStatus.contacted),
+    segmentFromContacts('qualified', 'Qualified', 'lifecycle', 'Contacts ready for sales, membership, or user promotion.', byStatus.qualified),
+    segmentFromContacts('archived', 'Archived', 'lifecycle', 'Closed, stale, rejected, or merged contact records.', byStatus.archived),
+    segmentFromContacts('missing-email', 'Missing email', 'quality', 'Contacts without email identity.', quality.missingEmail),
+    segmentFromContacts('missing-phone', 'Missing phone', 'quality', 'Contacts without phone identity.', quality.missingPhone),
+    segmentFromContacts('needs-notes', 'Needs notes', 'quality', 'Contacts without internal follow-up notes.', quality.needsNotes),
+    segmentFromContacts('has-source-values', 'Has source values', 'quality', 'Contacts retaining submitted form values.', quality.hasSourceValues),
+    segmentFromContacts('ready-to-promote', 'Ready to promote', 'quality', 'Qualified contacts with email identity.', quality.readyToPromote),
+    segmentFromContacts('duplicate-email', 'Duplicate email', 'quality', 'Active contacts sharing the same email identity.', quality.duplicateEmail),
+  ];
+
+  return {
+    summary: {
+      contacts: contacts.length,
+      captureRate: forms.length > 0 ? Math.round((contacts.length / forms.length) * 10) / 10 : 0,
+      lifecycle: {
+        new: byStatus.new.length,
+        contacted: byStatus.contacted.length,
+        qualified: byStatus.qualified.length,
+        archived: byStatus.archived.length,
+      },
+      quality: {
+        missingEmail: quality.missingEmail.length,
+        missingPhone: quality.missingPhone.length,
+        needsNotes: quality.needsNotes.length,
+        hasSourceValues: quality.hasSourceValues.length,
+        readyToPromote: quality.readyToPromote.length,
+        duplicateEmail: quality.duplicateEmail.length,
+        duplicateEmailGroups: duplicates.size,
+      },
+      savedLists: savedLists.length,
+    },
+    segments,
+    savedLists: savedLists.map((list) => {
+      const matched = filterContactsForList(contacts, forms, list.filters);
+      return {
+        ...list,
+        matchedCount: matched.length,
+        contactIds: matched.map((contact) => contact.id),
+        formIds: uniqueSorted(matched.map((contact) => contact.formId)),
+      };
+    }),
+    forms: forms.map((form) => {
+      const formContacts = contacts.filter((contact) => contact.formId === form.id);
+      return {
+        formId: form.id,
+        name: form.name,
+        title: form.title || null,
+        contactShareEnabled: form.contactShare?.enabled === true,
+        contacts: formContacts.length,
+        qualified: formContacts.filter((contact) => contact.status === 'qualified').length,
+        readyToPromote: formContacts.filter((contact) => contact.status === 'qualified' && Boolean(normalizeIdentifier(contact.email))).length,
+      };
+    }).sort((left, right) => right.contacts - left.contacts || left.name.localeCompare(right.name)),
+  };
+};
+
 const buildAnalytics = (
   forms: FormDefinition[],
   submissions: FormSubmission[],
+  contacts: Contact[],
+  savedLists: SiteContactSavedList[],
   days: number,
 ) => {
   const statusCounts = emptyStatusCounts();
@@ -190,6 +419,7 @@ const buildAnalytics = (
       (Date.parse(b.lastSubmittedAt || '') || 0) - (Date.parse(a.lastSubmittedAt || '') || 0) ||
       a.name.localeCompare(b.name)
     )),
+    leads: buildLeadAnalytics(forms, contacts, savedLists),
   };
 };
 
@@ -226,7 +456,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           hasMore: page.pagination.hasMore,
         };
       });
-      const analytics = buildAnalytics(forms, submissions, days);
+      const contacts = await fetchAllContacts(async (offset) => {
+        const page = await repositories.forms.listContacts({
+          siteId: site.id,
+          limit: PAGE_LIMIT,
+          offset,
+        });
+        return {
+          items: page.items,
+          total: page.pagination.total,
+          hasMore: page.pagination.hasMore,
+        };
+      });
+      const analytics = buildAnalytics(forms, submissions, contacts, normalizeSavedLists(siteSettings(site.settings)), days);
 
       return NextResponse.json({
         success: true,
@@ -248,7 +490,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const submissions = forms.flatMap((form) => (
       listFormSubmissions(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).data
     ));
-    const analytics = buildAnalytics(forms, submissions, days);
+    const contacts = forms.flatMap((form) => (
+      listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts
+    ));
+    const analytics = buildAnalytics(forms, submissions, contacts, normalizeSavedLists(siteSettings(site.settings)), days);
 
     return NextResponse.json({
       success: true,

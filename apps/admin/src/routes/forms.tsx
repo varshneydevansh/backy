@@ -809,6 +809,20 @@ function FormsRoute() {
     () => selectedForm ? formsAnalytics?.forms.find((entry) => entry.formId === selectedForm.id) || null : null,
     [formsAnalytics?.forms, selectedForm],
   );
+  const leadSegmentHighlights = useMemo(() => {
+    const priority = ['qualified', 'ready-to-promote', 'missing-email', 'duplicate-email'];
+    const segments = formsAnalytics?.leads?.segments || [];
+    return priority
+      .map((id) => segments.find((segment) => segment.id === id))
+      .filter((segment): segment is NonNullable<typeof segment> => Boolean(segment))
+      .slice(0, 4);
+  }, [formsAnalytics?.leads?.segments]);
+  const topSavedLeadLists = useMemo(
+    () => [...(formsAnalytics?.leads?.savedLists || [])]
+      .sort((left, right) => right.matchedCount - left.matchedCount || left.name.localeCompare(right.name))
+      .slice(0, 3),
+    [formsAnalytics?.leads?.savedLists],
+  );
   const formCommandReadiness = useMemo(() => {
     if (selectedForm) {
       return selectedFormReadiness;
@@ -2464,6 +2478,66 @@ function FormsRoute() {
               {(!formsAnalytics || formsAnalytics.forms.length === 0) && (
                 <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
                   No form analytics yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr_1fr]" data-testid="forms-lead-analytics">
+          <div className="rounded-lg border border-border bg-background p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Filter className="size-3.5" />
+                Lead segments
+              </div>
+              <span className="font-mono text-xs text-muted-foreground">
+                {formsAnalytics?.leads?.summary.contacts || 0} contacts
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {leadSegmentHighlights.map((segment) => (
+                <div key={segment.id} className="rounded border border-border px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-sm font-medium">{segment.label}</span>
+                    <span className="font-mono text-sm font-semibold">{segment.count}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {segment.formIds.length} form{segment.formIds.length === 1 ? '' : 's'} · {segment.kind}
+                  </div>
+                </div>
+              ))}
+              {leadSegmentHighlights.length === 0 && (
+                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground sm:col-span-2">
+                  No lead segments yet.
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3" data-testid="forms-saved-list-analytics">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Save className="size-3.5" />
+                Saved lead lists
+              </div>
+              <span className="font-mono text-xs text-muted-foreground">
+                {formsAnalytics?.leads?.summary.savedLists || 0} lists
+              </span>
+            </div>
+            <div className="grid gap-2">
+              {topSavedLeadLists.map((list) => (
+                <div key={list.id} className="rounded border border-border px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate text-sm font-medium">{list.name}</span>
+                    <span className="font-mono text-sm font-semibold">{list.matchedCount}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {list.filters.status || 'all'} · {list.filters.quality || 'all'} · {list.formIds.length} form{list.formIds.length === 1 ? '' : 's'}
+                  </div>
+                </div>
+              ))}
+              {topSavedLeadLists.length === 0 && (
+                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                  No saved lists yet.
                 </div>
               )}
             </div>
