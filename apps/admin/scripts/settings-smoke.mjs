@@ -228,8 +228,13 @@ const assertSettingsPermissionDenials = async (settings) => {
   const currentDeliveryMode = settings.deliveryMode || 'managed-hosting';
   const permissionDenials = [];
 
-  permissionDenials.push(await assertAdminKeyRotationDenied());
-  permissionDenials.push(await assertAdminApiKeyPatchDenied());
+  try {
+    await setAdminPermissionOverrides({ 'settings.manageKeys': 'deny' });
+    permissionDenials.push(await assertAdminKeyRotationDenied());
+    permissionDenials.push(await assertAdminApiKeyPatchDenied());
+  } finally {
+    await setAdminPermissionOverrides({ 'settings.manageKeys': null });
+  }
 
   try {
     await setAdminPermissionOverrides({ 'settings.view': 'deny' });
@@ -1120,6 +1125,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Monthly order limit', '5000');
   await setLabeledControl(client, 'Product limit', '750');
   await setLabeledControl(client, 'Site limit', '12');
+  await setLabeledControl(client, 'Team limit', '8');
   await setLabeledControl(client, 'Seat limit', '25');
   await setLabeledControl(client, 'Overage mode', 'manual-review');
   await setLabeledControl(client, 'Billing contact email', `billing+${suffix}@example.com`);
@@ -1293,6 +1299,7 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.monthlyOrderLimit === 5000, 'Commerce monthly order limit was not persisted');
   assert(settings.integrations?.commerce?.productLimit === 750, 'Commerce product limit was not persisted');
   assert(settings.integrations?.commerce?.siteLimit === 12, 'Commerce site limit was not persisted');
+  assert(settings.integrations?.commerce?.teamLimit === 8, 'Commerce team limit was not persisted');
   assert(settings.integrations?.commerce?.seatLimit === 25, 'Commerce seat limit was not persisted');
   assert(settings.integrations?.commerce?.overageMode === 'manual-review', 'Commerce overage mode was not persisted');
   assert(settings.integrations?.commerce?.billingContactEmail === `billing+${suffix}@example.com`, 'Commerce billing contact email was not persisted');
@@ -1838,6 +1845,7 @@ const main = async () => {
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
   const permissionDenials = await assertSettingsPermissionDenials(originalSettings);
+  await setAdminPermissionOverrides({ 'settings.manageKeys': 'deny' });
   let ownerUserId = '';
   let ownerSession = null;
   let ownerOriginalSettings = null;
@@ -1955,6 +1963,9 @@ const main = async () => {
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    await setAdminPermissionOverrides({ 'settings.manageKeys': null }).catch((error) => {
+      console.warn('Unable to restore default admin key-management permission:', error instanceof Error ? error.message : error);
+    });
     if (!restored) {
       await restoreSettings(ownerOriginalSettings || originalSettings, {
         sessionToken: ownerSession?.session?.token,

@@ -2640,6 +2640,7 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   monthlyOrderLimit: 100,
   productLimit: 100,
   siteLimit: 3,
+  teamLimit: 3,
   seatLimit: 3,
   overageMode: 'warn',
   billingContactEmail: '',
@@ -3211,6 +3212,15 @@ function validateSettingsDraft({
       tab: 'commerce',
       label: 'Site limit is invalid',
       detail: 'Use a site limit from 1 to 10000 sites.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.teamLimit ?? 0) < 1 || (commerce.teamLimit ?? 0) > 10000) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Team limit is invalid',
+      detail: 'Use a team limit from 1 to 10000 teams.',
       severity: 'error',
     });
   }
@@ -5254,6 +5264,17 @@ function CommerceSettings({
                   max={10000}
                   value={resolved.siteLimit}
                   onChange={(event) => update({ siteLimit: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Team limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={resolved.teamLimit}
+                  onChange={(event) => update({ teamLimit: Number(event.target.value) })}
                   className={inputClassName}
                 />
               </label>

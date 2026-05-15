@@ -2038,6 +2038,7 @@ export interface SiteSettingsInput {
       monthlyOrderLimit?: number;
       productLimit?: number;
       siteLimit?: number;
+      teamLimit?: number;
       seatLimit?: number;
       overageMode?: 'block' | 'warn' | 'manual-review';
       billingContactEmail?: string;

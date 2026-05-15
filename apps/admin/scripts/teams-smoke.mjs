@@ -301,6 +301,47 @@ const assertTeamInviteBillingSeatLimitEnforced = async (teamId, suffix) => {
   }
 };
 
+const assertTeamCreateBillingTeamLimitEnforced = async (suffix) => {
+  const settings = await getSettings();
+  const teams = await listTeams();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedName = `Team Limit Blocked ${suffix}`;
+  const blockedSlug = `team-limit-blocked-${suffix}`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        teamLimit: Math.max(1, teams.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/teams`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        name: blockedName,
+        slug: blockedSlug,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing team limit should reject team creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_TEAM_LIMIT', `Billing team-limited create should return BILLING_TEAM_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findTeamBySlug(blockedSlug)), 'Billing-limited team creation unexpectedly persisted a team.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) throw new Error(`${endpoint} returned ${response.status}`);
@@ -623,6 +664,7 @@ const main = async () => {
       apiAdminSessionToken = ownerPolicySessionToken;
     }
     await assertTeamInviteBillingSeatLimitEnforced(memberPolicyTeam.id, suffix);
+    await assertTeamCreateBillingTeamLimitEnforced(suffix);
     await deleteTeam(memberPolicyTeam.id);
     temporaryTeamIds.pop();
 

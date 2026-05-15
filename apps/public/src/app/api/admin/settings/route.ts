@@ -1167,6 +1167,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       monthlyOrderLimit: Math.max(0, Math.min(1000000, Math.round(numberValue(commerce.monthlyOrderLimit, 100)))),
       productLimit: Math.max(0, Math.min(1000000, Math.round(numberValue(commerce.productLimit, 100)))),
       siteLimit: Math.max(1, Math.min(10000, Math.round(numberValue(commerce.siteLimit, 3)))),
+      teamLimit: Math.max(1, Math.min(10000, Math.round(numberValue(commerce.teamLimit, 3)))),
       seatLimit: Math.max(1, Math.min(10000, Math.round(numberValue(commerce.seatLimit, 3)))),
       overageMode: ['block', 'warn', 'manual-review'].includes(overageMode)
         ? overageMode

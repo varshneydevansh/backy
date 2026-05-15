@@ -3,6 +3,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createAdminTeam,
+  getAdminSettings,
   getAdminTeamBySlug,
   getAdminUserById,
   getSites,
@@ -54,6 +55,44 @@ const normalizeSettings = (value: unknown) => (
     ? value as Record<string, unknown>
     : {}
 );
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const readBillingTeamPolicy = (settings: unknown) => {
+  const root = toRecord(settings);
+  const integrations = toRecord(root.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const limit = Number(commerce.teamLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    teamLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const enforceTeamBillingLimit = (
+  settings: unknown,
+  currentTeamCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingTeamPolicy(settings);
+  if (policy.overageMode === 'block' && currentTeamCount >= policy.teamLimit) {
+    return errorResponse(
+      402,
+      'BILLING_TEAM_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.teamLimit} team${policy.teamLimit === 1 ? '' : 's'}. Update Settings billing limits before creating another team.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const demoTeamWithMembers = (team: StoreTeam) => {
   const members = listAdminTeamMembers(team.id).map((member) => {
@@ -213,6 +252,11 @@ export async function POST(request: NextRequest) {
         return errorResponse(400, 'OWNER_NOT_FOUND', 'Team owner user was not found.', requestId);
       }
 
+      const billingLimitError = enforceTeamBillingLimit(getAdminSettings(), listAdminTeams().length, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const team = createAdminTeam({ name, slug, ownerId, settings });
       const responseTeam = demoTeamWithMembers(team);
 
@@ -245,6 +289,16 @@ export async function POST(request: NextRequest) {
 
     if (ownerId && !(await repositories.users.getById(ownerId))) {
       return errorResponse(400, 'OWNER_NOT_FOUND', 'Team owner user was not found.', requestId);
+    }
+
+    const currentTeams = await repositories.teams.list({ limit: 1, offset: 0 });
+    const billingLimitError = enforceTeamBillingLimit(
+      await repositories.settings.get(),
+      currentTeams.pagination.total,
+      requestId,
+    );
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const team = (await repositories.teams.create({
