@@ -678,6 +678,7 @@ const validateSecretReferencePolicy = (integrations: unknown): string | null => 
 const validateCommerceProviderEndpoints = (integrations: unknown): string | null => {
   const input = parseJsonObject(integrations);
   const commerce = parseJsonObject(input?.commerce) || {};
+  const notifications = parseJsonObject(input?.notifications) || {};
   const checks: Array<{ provider: string; url: string; label: string }> = [
     {
       provider: stringValue(commerce.taxProvider),
@@ -705,6 +706,23 @@ const validateCommerceProviderEndpoints = (integrations: unknown): string | null
     if (check.provider === 'http' && !check.url.trim()) {
       return `${check.label} is required when its provider is set to HTTP.`;
     }
+    if (check.url.trim() && !validateWebhookUrl(check.url).ok) {
+      return `${check.label} must be an http or https URL.`;
+    }
+  }
+
+  const callbackChecks = [
+    {
+      url: stringValue(commerce.providerWebhookUrl),
+      label: 'Commerce provider webhook URL',
+    },
+    {
+      url: stringValue(notifications.webhookUrl),
+      label: 'Notification webhook URL',
+    },
+  ];
+
+  for (const check of callbackChecks) {
     if (check.url.trim() && !validateWebhookUrl(check.url).ok) {
       return `${check.label} must be an http or https URL.`;
     }

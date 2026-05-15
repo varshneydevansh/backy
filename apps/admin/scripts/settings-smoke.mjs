@@ -1442,6 +1442,67 @@ const assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints = async (se
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidCallbackUrls = async (settings) => {
+  const commerceResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        commerce: {
+          ...(settings.integrations?.commerce || {}),
+          providerWebhookUrl: 'ftp://hooks.example.com/not-allowed',
+        },
+      },
+    }),
+  });
+  const commercePayload = await commerceResponse.json().catch(() => ({}));
+
+  assert(commerceResponse.status === 400, `Invalid commerce webhook URL should be rejected, got ${commerceResponse.status}: ${JSON.stringify(commercePayload).slice(0, 500)}`);
+  assert(commercePayload?.error?.code === 'VALIDATION_ERROR', `Invalid commerce webhook URL rejection should return VALIDATION_ERROR: ${JSON.stringify(commercePayload).slice(0, 500)}`);
+
+  const notificationResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        notifications: {
+          ...(settings.integrations?.notifications || {}),
+          webhookUrl: 'not-a-valid-url',
+        },
+      },
+    }),
+  });
+  const notificationPayload = await notificationResponse.json().catch(() => ({}));
+
+  assert(notificationResponse.status === 400, `Invalid notification webhook URL should be rejected, got ${notificationResponse.status}: ${JSON.stringify(notificationPayload).slice(0, 500)}`);
+  assert(notificationPayload?.error?.code === 'VALIDATION_ERROR', `Invalid notification webhook URL rejection should return VALIDATION_ERROR: ${JSON.stringify(notificationPayload).slice(0, 500)}`);
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.commerce?.providerWebhookUrl === settings.integrations?.commerce?.providerWebhookUrl,
+    `Rejected commerce webhook URL patch should not mutate persisted commerce URL: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.notifications?.webhookUrl === settings.integrations?.notifications?.webhookUrl,
+    `Rejected notification webhook URL patch should not mutate persisted notification URL: ${JSON.stringify(after.integrations?.notifications).slice(0, 500)}`,
+  );
+
+  return {
+    commerceStatus: commerceResponse.status,
+    notificationStatus: notificationResponse.status,
+    commerceCode: commercePayload.error?.code,
+    notificationCode: notificationPayload.error?.code,
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1543,6 +1604,7 @@ const main = async () => {
     const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
     const secretStorage = await assertDirectSettingsApiRejectsRawSecrets(await readSettings());
     const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
+    const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1573,6 +1635,7 @@ const main = async () => {
       apiNormalization,
       secretStorage,
       providerEndpointValidation,
+      callbackUrlValidation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,
