@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
@@ -240,6 +241,75 @@ const settingsApiKeys = (settings: AdminSettingsSource) => {
   return {
     publicApiKey: apiKeys.publicKey || apiKeys.publicApiKey || '',
     adminApiKey: apiKeys.secretKeyId || apiKeys.adminApiKey || '',
+  };
+};
+
+const keyFingerprint = (value: string | undefined): string | null => (
+  value ? createHash('sha256').update(value).digest('hex').slice(0, 16) : null
+);
+
+const normalizeRotationHistory = (value: unknown): BackyJsonObject[] => (
+  Array.isArray(value)
+    ? value
+      .filter((entry): entry is BackyJsonObject => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ))
+      .map((entry) => ({
+        id: stringValue(entry.id) || `key_rotation_${randomUUID().slice(0, 8)}`,
+        scope: entry.scope === 'public' || entry.scope === 'admin' ? entry.scope : 'all',
+        rotatedAt: stringValue(entry.rotatedAt) || new Date().toISOString(),
+        actorId: stringValue(entry.actorId) || null,
+        requestId: stringValue(entry.requestId) || null,
+        publicKeyChanged: entry.publicKeyChanged === true,
+        adminKeyChanged: entry.adminKeyChanged === true,
+        previousPublicKeyFingerprint: stringValue(entry.previousPublicKeyFingerprint) || null,
+        newPublicKeyFingerprint: stringValue(entry.newPublicKeyFingerprint) || null,
+        previousAdminKeyFingerprint: stringValue(entry.previousAdminKeyFingerprint) || null,
+        newAdminKeyFingerprint: stringValue(entry.newAdminKeyFingerprint) || null,
+      }))
+      .slice(0, 20)
+    : []
+);
+
+const appendRotationHistory = (
+  auth: BackyJsonObject | undefined,
+  entry: BackyJsonObject,
+): BackyJsonObject => ({
+  ...(auth || {}),
+  apiKeyRotationHistory: [
+    entry,
+    ...normalizeRotationHistory(auth?.apiKeyRotationHistory),
+  ].slice(0, 20),
+});
+
+const buildRotationHistoryEntry = ({
+  scope,
+  beforeSettings,
+  afterSettings,
+  access,
+  requestId,
+}: {
+  scope: 'all' | 'public' | 'admin';
+  beforeSettings: AdminSettingsSource;
+  afterSettings: AdminSettingsSource;
+  access: AdminAccessContext;
+  requestId: string;
+}): BackyJsonObject => {
+  const before = settingsApiKeys(beforeSettings);
+  const after = settingsApiKeys(afterSettings);
+
+  return {
+    id: `key_rotation_${randomUUID().slice(0, 8)}`,
+    scope,
+    rotatedAt: new Date().toISOString(),
+    actorId: access.session?.user.id || null,
+    requestId,
+    publicKeyChanged: before.publicApiKey !== after.publicApiKey,
+    adminKeyChanged: before.adminApiKey !== after.adminApiKey,
+    previousPublicKeyFingerprint: keyFingerprint(before.publicApiKey),
+    newPublicKeyFingerprint: keyFingerprint(after.publicApiKey),
+    previousAdminKeyFingerprint: keyFingerprint(before.adminApiKey),
+    newAdminKeyFingerprint: keyFingerprint(after.adminApiKey),
   };
 };
 
@@ -1029,6 +1099,12 @@ export async function PATCH(request: NextRequest) {
         : {};
       const storage = parseJsonObject(body.storage);
       const auth = normalizeAdminAuthSettings(body.auth);
+      const mergedAuth = auth
+        ? {
+            ...(beforeSettings.auth || {}),
+            ...auth,
+          }
+        : undefined;
       const integrations = mediaStoragePatch
         ? mergeMediaStorageIntegrations(beforeSettings.integrations, body.integrations)
         : normalizeInfrastructureIntegrations(body.integrations) || parseJsonObject(body.integrations);
@@ -1039,7 +1115,7 @@ export async function PATCH(request: NextRequest) {
           ...(typeof apiKeysInput.adminApiKey === 'string' ? { secretKeyId: apiKeysInput.adminApiKey.trim() } : {}),
         },
         ...(storage ? { storage } : {}),
-        ...(auth ? { auth } : {}),
+        ...(mergedAuth ? { auth: mergedAuth } : {}),
         ...(integrations ? { integrations } : {}),
       })).item;
       await recordAdminAudit({
@@ -1209,9 +1285,19 @@ export async function POST(request: NextRequest) {
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const beforeSettings = await repositories.settings.get();
-      const settings = (await repositories.settings.update({
+      const rotatedSettings = (await repositories.settings.update({
         rotatePublicKey: keyScope === 'all' || keyScope === 'public',
         rotateSecretKey: keyScope === 'all' || keyScope === 'admin',
+      })).item;
+      const rotationEntry = buildRotationHistoryEntry({
+        scope: keyScope,
+        beforeSettings,
+        afterSettings: rotatedSettings,
+        access,
+        requestId,
+      });
+      const settings = (await repositories.settings.update({
+        auth: appendRotationHistory(rotatedSettings.auth, rotationEntry),
       })).item;
       await recordAdminAudit({
         repositories,
@@ -1236,7 +1322,10 @@ export async function POST(request: NextRequest) {
     }
 
     const beforeSettings = getAdminSettings();
-    const settings = regenerateAdminApiKeys(keyScope);
+    const settings = regenerateAdminApiKeys(keyScope, {
+      actorId: access.session?.user.id || null,
+      requestId,
+    });
     await recordAdminAudit({
       entity: 'settings',
       entityId: 'platform',

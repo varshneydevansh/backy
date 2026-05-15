@@ -647,6 +647,17 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     after.apiKeys.adminApiKey === beforeAdminKey,
     `Public-key rotation should not rotate the admin key: ${JSON.stringify({ before: before.apiKeys, after: after.apiKeys })}`,
   );
+  const latestRotation = after.auth?.apiKeyRotationHistory?.[0];
+  assert(
+    latestRotation?.scope === 'public' &&
+      latestRotation.publicKeyChanged === true &&
+      latestRotation.adminKeyChanged === false &&
+      latestRotation.previousPublicKeyFingerprint &&
+      latestRotation.newPublicKeyFingerprint &&
+      latestRotation.previousPublicKeyFingerprint !== latestRotation.newPublicKeyFingerprint &&
+      latestRotation.previousAdminKeyFingerprint === latestRotation.newAdminKeyFingerprint,
+    `Public-key rotation history was not persisted correctly: ${JSON.stringify(after.auth?.apiKeyRotationHistory).slice(0, 1000)}`,
+  );
 
   let auditState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -654,13 +665,17 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
       const body = document.body?.innerText || '';
       return {
         hasAudit: body.includes('API keys regenerated') && body.includes('Regenerated public API key.'),
+        hasRotationHistory: body.includes('API key rotation history') &&
+          body.includes('public key') &&
+          body.includes(${JSON.stringify(latestRotation.newPublicKeyFingerprint)}),
         body: body.slice(0, 1800),
       };
     })()`);
-    if (auditState.hasAudit) break;
+    if (auditState.hasAudit && auditState.hasRotationHistory) break;
     await sleep(250);
   }
   assert(auditState?.hasAudit, `API key rotation audit event did not render: ${JSON.stringify(auditState)}`);
+  assert(auditState?.hasRotationHistory, `API key rotation history did not render: ${JSON.stringify(auditState)}`);
 
   assert(
     ownerOriginalSettings.apiKeys?.publicApiKey === beforePublicKey &&
@@ -671,6 +686,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   return {
     publicKeyRotated: after.apiKeys.publicApiKey !== beforePublicKey,
     adminKeyPreserved: after.apiKeys.adminApiKey === beforeAdminKey,
+    rotationHistoryPersisted: true,
     auditRendered: true,
   };
 };

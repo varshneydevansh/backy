@@ -4,7 +4,7 @@ import {
   isBackyContentDocument,
   type BackyContentDocument,
 } from '@backy-cms/core';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
@@ -264,6 +264,20 @@ interface StoreSettings {
   auth?: BackyJsonObject;
   integrations?: BackyJsonObject;
   updatedAt: string;
+}
+
+interface ApiKeyRotationHistoryEntry {
+  id: string;
+  scope: 'all' | 'public' | 'admin';
+  rotatedAt: string;
+  actorId: string | null;
+  requestId: string | null;
+  publicKeyChanged: boolean;
+  adminKeyChanged: boolean;
+  previousPublicKeyFingerprint?: string | null;
+  newPublicKeyFingerprint?: string | null;
+  previousAdminKeyFingerprint?: string | null;
+  newAdminKeyFingerprint?: string | null;
 }
 
 type CollectionFieldType =
@@ -618,6 +632,63 @@ const TEAM_MEMBERS: StoreTeamMember[] = [
 const createRuntimeApiKey = (kind: 'public' | 'admin') => (
   `${kind === 'public' ? 'pk' : 'sk'}_live_${randomUUID().replace(/-/g, '').slice(0, 24)}`
 );
+
+const keyFingerprint = (value: string | undefined): string | null => (
+  value ? createHash('sha256').update(value).digest('hex').slice(0, 16) : null
+);
+
+const apiKeyRotationHistory = (
+  value: unknown,
+): ApiKeyRotationHistoryEntry[] => (
+  Array.isArray(value)
+    ? value
+      .filter((entry): entry is Record<string, unknown> => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ))
+      .map<ApiKeyRotationHistoryEntry>((entry) => {
+        const scope: ApiKeyRotationHistoryEntry['scope'] = entry.scope === 'public' || entry.scope === 'admin' ? entry.scope : 'all';
+        return {
+          id: sanitizeString(entry.id) || createRuntimeId('key_rotation'),
+          scope,
+          rotatedAt: sanitizeString(entry.rotatedAt) || new Date().toISOString(),
+          actorId: sanitizeString(entry.actorId) || null,
+          requestId: sanitizeString(entry.requestId) || null,
+          publicKeyChanged: entry.publicKeyChanged === true,
+          adminKeyChanged: entry.adminKeyChanged === true,
+          previousPublicKeyFingerprint: sanitizeString(entry.previousPublicKeyFingerprint) || null,
+          newPublicKeyFingerprint: sanitizeString(entry.newPublicKeyFingerprint) || null,
+          previousAdminKeyFingerprint: sanitizeString(entry.previousAdminKeyFingerprint) || null,
+          newAdminKeyFingerprint: sanitizeString(entry.newAdminKeyFingerprint) || null,
+        };
+      })
+      .slice(0, 20)
+    : []
+);
+
+const apiKeyRotationHistoryEntryJson = (entry: ApiKeyRotationHistoryEntry): BackyJsonObject => ({
+  id: entry.id,
+  scope: entry.scope,
+  rotatedAt: entry.rotatedAt,
+  actorId: entry.actorId,
+  requestId: entry.requestId,
+  publicKeyChanged: entry.publicKeyChanged,
+  adminKeyChanged: entry.adminKeyChanged,
+  previousPublicKeyFingerprint: entry.previousPublicKeyFingerprint || null,
+  newPublicKeyFingerprint: entry.newPublicKeyFingerprint || null,
+  previousAdminKeyFingerprint: entry.previousAdminKeyFingerprint || null,
+  newAdminKeyFingerprint: entry.newAdminKeyFingerprint || null,
+});
+
+const appendApiKeyRotationHistory = (
+  auth: BackyJsonObject | undefined,
+  entry: ApiKeyRotationHistoryEntry,
+): BackyJsonObject => ({
+  ...(auth || {}),
+  apiKeyRotationHistory: [
+    apiKeyRotationHistoryEntryJson(entry),
+    ...apiKeyRotationHistory(auth?.apiKeyRotationHistory).map(apiKeyRotationHistoryEntryJson),
+  ].slice(0, 20),
+});
 
 let SETTINGS: StoreSettings = {
   deliveryMode: 'managed-hosting',
@@ -4977,20 +5048,41 @@ export function updateAdminSettings(input: Record<string, unknown>): StoreSettin
   return clone(SETTINGS);
 }
 
-export function regenerateAdminApiKeys(kind: 'all' | 'public' | 'admin' = 'all'): StoreSettings {
+export function regenerateAdminApiKeys(
+  kind: 'all' | 'public' | 'admin' = 'all',
+  metadata: { actorId?: string | null; requestId?: string | null } = {},
+): StoreSettings {
   ensurePersistedAdminContentLoaded();
+
+  const previousApiKeys = { ...SETTINGS.apiKeys };
+  const nextPublicApiKey = kind === 'all' || kind === 'public'
+    ? createRuntimeApiKey('public')
+    : SETTINGS.apiKeys.publicApiKey;
+  const nextAdminApiKey = kind === 'all' || kind === 'admin'
+    ? createRuntimeApiKey('admin')
+    : SETTINGS.apiKeys.adminApiKey;
+  const now = new Date().toISOString();
 
   SETTINGS = {
     ...SETTINGS,
     apiKeys: {
-      publicApiKey: kind === 'all' || kind === 'public'
-        ? createRuntimeApiKey('public')
-        : SETTINGS.apiKeys.publicApiKey,
-      adminApiKey: kind === 'all' || kind === 'admin'
-        ? createRuntimeApiKey('admin')
-        : SETTINGS.apiKeys.adminApiKey,
+      publicApiKey: nextPublicApiKey,
+      adminApiKey: nextAdminApiKey,
     },
-    updatedAt: new Date().toISOString(),
+    auth: appendApiKeyRotationHistory(SETTINGS.auth, {
+      id: createRuntimeId('key_rotation'),
+      scope: kind,
+      rotatedAt: now,
+      actorId: metadata.actorId || null,
+      requestId: metadata.requestId || null,
+      publicKeyChanged: previousApiKeys.publicApiKey !== nextPublicApiKey,
+      adminKeyChanged: previousApiKeys.adminApiKey !== nextAdminApiKey,
+      previousPublicKeyFingerprint: keyFingerprint(previousApiKeys.publicApiKey),
+      newPublicKeyFingerprint: keyFingerprint(nextPublicApiKey),
+      previousAdminKeyFingerprint: keyFingerprint(previousApiKeys.adminApiKey),
+      newAdminKeyFingerprint: keyFingerprint(nextAdminApiKey),
+    }),
+    updatedAt: now,
   };
 
   persistAdminContent();

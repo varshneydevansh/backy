@@ -2387,6 +2387,7 @@ function DeliveryModeSettings({
 
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type AuthSettingsConfig = NonNullable<SiteSettingsInput['auth']>;
+type AuthPolicySettingsConfig = Required<Omit<AuthSettingsConfig, 'apiKeyRotationHistory'>>;
 type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
 type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
 type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
@@ -2485,7 +2486,7 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   webhookEventsEnabled: false,
 };
 
-const DEFAULT_AUTH_SETTINGS: Required<AuthSettingsConfig> = {
+const DEFAULT_AUTH_SETTINGS: AuthPolicySettingsConfig = {
   requireTwoFactor: false,
   inviteOnly: false,
   minPasswordLength: 12,
@@ -2607,7 +2608,7 @@ function validateSettingsDraft({
 }): SettingsValidationIssue[] {
   const issues: SettingsValidationIssue[] = [];
   const appearance = resolveAppearanceSettings(appearanceSettings);
-  const policy: Required<AuthSettingsConfig> = {
+  const policy: AuthPolicySettingsConfig = {
     ...DEFAULT_AUTH_SETTINGS,
     ...(authSettings || {}),
   };
@@ -4482,7 +4483,7 @@ function SecuritySettings({
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
   const [rotatingKey, setRotatingKey] = useState<'all' | 'public' | 'admin' | null>(null);
   const [pendingRotateKey, setPendingRotateKey] = useState<'all' | 'public' | 'admin' | null>(null);
-  const policy: Required<AuthSettingsConfig> = {
+  const policy: AuthPolicySettingsConfig = {
     ...DEFAULT_AUTH_SETTINGS,
     ...(authSettings || {}),
     requireTwoFactor: false,
@@ -4535,6 +4536,7 @@ function SecuritySettings({
       : pendingRotateKey === 'admin'
         ? 'the admin API key'
         : '';
+  const rotationHistory = authSettings?.apiKeyRotationHistory || [];
 
   return (
     <div className="space-y-6">
@@ -4717,6 +4719,59 @@ function SecuritySettings({
             </p>
           ) : null}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border p-4" data-testid="settings-api-key-rotation-history">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">API key rotation history</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Non-secret fingerprints, actor, request id, and scope for recent key rotations.
+            </p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {rotationHistory.length} recorded
+          </span>
+        </div>
+        {rotationHistory.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+            No API key rotations have been recorded yet.
+          </p>
+        ) : (
+          <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+            {rotationHistory.slice(0, 6).map((entry) => (
+              <div key={entry.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1fr_1.5fr]">
+                <div>
+                  <p className="font-medium text-foreground">
+                    {entry.scope === 'all' ? 'Public and admin keys' : `${entry.scope} key`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatAuditTime(entry.rotatedAt)} by {entry.actorId || 'system'}
+                  </p>
+                  {entry.requestId ? (
+                    <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      {entry.requestId}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="font-medium text-foreground">Public</p>
+                    <p className="mt-1">Changed: {entry.publicKeyChanged ? 'yes' : 'no'}</p>
+                    <p className="mt-1 font-mono">Before {entry.previousPublicKeyFingerprint || 'n/a'}</p>
+                    <p className="font-mono">After {entry.newPublicKeyFingerprint || 'n/a'}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="font-medium text-foreground">Admin</p>
+                    <p className="mt-1">Changed: {entry.adminKeyChanged ? 'yes' : 'no'}</p>
+                    <p className="mt-1 font-mono">Before {entry.previousAdminKeyFingerprint || 'n/a'}</p>
+                    <p className="font-mono">After {entry.newAdminKeyFingerprint || 'n/a'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {pendingRotateKey && (

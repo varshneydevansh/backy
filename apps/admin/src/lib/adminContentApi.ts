@@ -1132,6 +1132,20 @@ interface ApiSettings {
   updatedAt?: string;
 }
 
+export interface ApiKeyRotationHistoryEntry {
+  id: string;
+  scope: 'all' | 'public' | 'admin';
+  rotatedAt: string;
+  actorId?: string | null;
+  requestId?: string | null;
+  publicKeyChanged?: boolean;
+  adminKeyChanged?: boolean;
+  previousPublicKeyFingerprint?: string | null;
+  newPublicKeyFingerprint?: string | null;
+  previousAdminKeyFingerprint?: string | null;
+  newAdminKeyFingerprint?: string | null;
+}
+
 interface ApiSettingsResponse {
   success: boolean;
   data?: {
@@ -1630,6 +1644,7 @@ export interface SiteSettingsInput {
     minPasswordLength?: number;
     sessionTimeoutMinutes?: number;
     allowedEmailDomains?: string;
+    apiKeyRotationHistory?: ApiKeyRotationHistoryEntry[];
   };
   integrations?: {
     general?: {
