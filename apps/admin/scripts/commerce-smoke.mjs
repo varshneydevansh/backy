@@ -1925,6 +1925,8 @@ const assertProductsLayout = async (client) => {
     layout = await evaluate(client, `(() => {
       const productPerformance = document.querySelector('[data-testid="products-product-performance"]');
       const productPerformanceText = productPerformance?.textContent || '';
+      const backendCommerceAnalytics = document.querySelector('[data-testid="products-backend-commerce-analytics"]');
+      const backendCommerceAnalyticsText = backendCommerceAnalytics?.textContent || '';
       const productAutomation = document.querySelector('[data-testid="products-notification-automation"]');
       const productAutomationText = productAutomation?.textContent || '';
       return {
@@ -1936,6 +1938,15 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
           document.body?.innerText?.includes('Paid revenue') &&
           document.body?.innerText?.includes('Customer profiles'),
+        hasBackendCommerceAnalytics: Boolean(backendCommerceAnalytics) &&
+          backendCommerceAnalyticsText.includes('Backend order analytics') &&
+          backendCommerceAnalyticsText.includes('Payment attention') &&
+          backendCommerceAnalyticsText.includes('Fulfillment backlog') &&
+          backendCommerceAnalyticsText.includes('Tax collected') &&
+          backendCommerceAnalyticsText.includes('Subscription operations') &&
+          backendCommerceAnalyticsText.includes('Renewals') &&
+          backendCommerceAnalyticsText.includes('Dunning'),
+        backendCommerceAnalyticsText,
         hasProductPerformance: Boolean(productPerformance) &&
           productPerformanceText.includes('Product performance') &&
           productPerformanceText.includes('ranked') &&
@@ -1970,14 +1981,14 @@ const assertProductsLayout = async (client) => {
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
     })()`);
-    if (layout.hasProductPerformance && layout.hasProductAutomation) {
+    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics) {
       break;
     }
     await sleep(250);
   }
 
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

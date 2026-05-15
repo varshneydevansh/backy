@@ -25,6 +25,7 @@ import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  getOrderAnalytics,
   getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
@@ -38,6 +39,7 @@ import {
   type CollectionRecord,
   type CollectionRecordPagination,
   type AdminUserPermissionMatrix,
+  type OrderAnalytics,
   type OrderDeliveryEvent,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
@@ -626,6 +628,9 @@ function ProductsRoute() {
   const [products, setProducts] = useState<CollectionRecord[]>([]);
   const [recentOrders, setRecentOrders] = useState<CollectionRecord[]>([]);
   const [customerProfiles, setCustomerProfiles] = useState<CollectionRecord[]>([]);
+  const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
+  const [isOrderAnalyticsLoading, setIsOrderAnalyticsLoading] = useState(false);
+  const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
   const [productNotificationEvents, setProductNotificationEvents] = useState<OrderDeliveryEvent[]>([]);
   const [productNotificationError, setProductNotificationError] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
@@ -1113,6 +1118,7 @@ function ProductsRoute() {
       recentOrders: orderSummaries.slice(0, 5),
     };
   }, [customerProfiles, products, recentOrders]);
+  const backendAnalyticsCurrency = orderAnalytics?.currencies[0]?.currency || commerceAnalytics.currency;
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
@@ -1356,6 +1362,17 @@ function ProductsRoute() {
             permissions: customersCollection.permissions,
           }
         : null,
+      backendOrderAnalytics: orderAnalytics ? {
+        schemaVersion: orderAnalytics.schemaVersion,
+        generatedAt: orderAnalytics.generatedAt,
+        recordLimit: orderAnalytics.recordLimit,
+        orderCount: orderAnalytics.orderCount,
+        revenue: orderAnalytics.revenue,
+        operations: orderAnalytics.operations,
+        sources: orderAnalytics.sources,
+        currencies: orderAnalytics.currencies,
+        trend: orderAnalytics.trend,
+      } : null,
     },
     notifications: {
       lowStockAutomation: 'Checkout inventory reservation emits commerce-product events when a physical product crosses its low-stock threshold.',
@@ -1452,6 +1469,7 @@ function ProductsRoute() {
     metrics,
     missingProductFields,
     orderIntakeReady,
+    orderAnalytics,
     ordersCollection,
     productApiReady,
     productPageTemplateBriefs,
@@ -1513,6 +1531,28 @@ function ProductsRoute() {
     }
   };
 
+  const loadCommerceOrderAnalytics = async () => {
+    if (!canViewCommerce) {
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(null);
+      return null;
+    }
+
+    setIsOrderAnalyticsLoading(true);
+    try {
+      const analytics = await getOrderAnalytics(activeSiteId);
+      setOrderAnalytics(analytics);
+      setOrderAnalyticsError(null);
+      return analytics;
+    } catch (loadError) {
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(loadError instanceof Error ? loadError.message : 'Unable to load backend order analytics');
+      return null;
+    } finally {
+      setIsOrderAnalyticsLoading(false);
+    }
+  };
+
   const loadProducts = async () => {
     if (isProductsBusy) return;
     if (isPermissionMatrixPending) return;
@@ -1523,6 +1563,8 @@ function ProductsRoute() {
       setProducts([]);
       setRecentOrders([]);
       setCustomerProfiles([]);
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(null);
       setProductNotificationEvents([]);
       setProductNotificationError(null);
       setSelectedCustomerProfileId(null);
@@ -1549,6 +1591,8 @@ function ProductsRoute() {
         setProducts([]);
         setRecentOrders([]);
         setCustomerProfiles([]);
+        setOrderAnalytics(null);
+        setOrderAnalyticsError(null);
         setProductNotificationEvents([]);
         setProductNotificationError(null);
         setSelectedCustomerProfileId(null);
@@ -1589,6 +1633,12 @@ function ProductsRoute() {
       const customerRecords = customersResult?.records || [];
       setCustomerProfiles(customerRecords);
       void loadProductNotificationEvents();
+      if (orderCollection) {
+        void loadCommerceOrderAnalytics();
+      } else {
+        setOrderAnalytics(null);
+        setOrderAnalyticsError(null);
+      }
       setSelectedCustomerProfileId((current) => (
         current && customerRecords.some((customer) => customer.id === current)
           ? current
@@ -2870,6 +2920,99 @@ function ProductsRoute() {
                   <Metric label="Paid orders" value={commerceAnalytics.paidOrderCount} icon={<CheckCircle2 className="size-4" />} />
                   <Metric label="Customers" value={commerceAnalytics.customerCount} icon={<Package className="size-4" />} />
                   <Metric label="Avg order" value={formatMoney(commerceAnalytics.averageOrderValue, commerceAnalytics.currency)} icon={<Boxes className="size-4" />} />
+                </div>
+                <div className="mt-4 rounded-lg border border-border bg-card p-3" data-testid="products-backend-commerce-analytics">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Backend order analytics</div>
+                      <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                        Pulls the private order analytics endpoint so product managers can see payment attention, fulfillment backlog, source mix, tax/shipping/discount totals, and subscription lifecycle signal from the catalog page.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void loadCommerceOrderAnalytics()}
+                      disabled={isProductsAccessBusy || !ordersCollection || !canViewCommerce}
+                      title={!canViewCommerce ? viewPermissionTitle : !ordersCollection ? 'Create the private orders queue first.' : undefined}
+                      iconStart={<RefreshCw className={cn('size-3.5', isOrderAnalyticsLoading && 'animate-spin')} />}
+                    >
+                      Refresh analytics
+                    </Button>
+                  </div>
+                  {orderAnalyticsError ? (
+                    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {orderAnalyticsError}
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(260px,0.7fr)]">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Metric label="Backend orders" value={orderAnalytics?.orderCount ?? 0} icon={<ShoppingBag className="size-4" />} />
+                        <Metric label="Payment attention" value={orderAnalytics?.operations.paymentAttentionCount ?? 0} icon={<AlertTriangle className="size-4" />} />
+                        <Metric label="Fulfillment backlog" value={orderAnalytics?.operations.fulfillmentBacklogCount ?? 0} icon={<Package className="size-4" />} />
+                        <Metric label="Paid avg order" value={formatMoney(orderAnalytics?.revenue.paidAverageOrderValue ?? 0, backendAnalyticsCurrency)} icon={<Boxes className="size-4" />} />
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Tax collected</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{formatMoney(orderAnalytics?.revenue.taxTotal ?? 0, backendAnalyticsCurrency)}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Shipping charged</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{formatMoney(orderAnalytics?.revenue.shippingTotal ?? 0, backendAnalyticsCurrency)}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Discount given</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{formatMoney(orderAnalytics?.revenue.discountTotal ?? 0, backendAnalyticsCurrency)}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Manual orders</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{orderAnalytics?.operations.manualOrderCount ?? 0}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Checkout orders</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{orderAnalytics?.operations.checkoutOrderCount ?? 0}</div>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <div className="text-xs font-medium text-muted-foreground">Refunds</div>
+                          <div className="mt-1 font-mono text-lg font-semibold">{orderAnalytics?.operations.refundCount ?? 0}</div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subscription operations</div>
+                          <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                            {orderAnalytics?.generatedAt ? formatDate(orderAnalytics.generatedAt) : 'No analytics'}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm">
+                          {[
+                            ['Active paid', orderAnalytics?.operations.subscriptionActivePaidCount ?? 0],
+                            ['Renewals', orderAnalytics?.operations.subscriptionRenewalCount ?? 0],
+                            ['Dunning', orderAnalytics?.operations.subscriptionDunningCount ?? 0],
+                            ['Paused', orderAnalytics?.operations.subscriptionPausedCount ?? 0],
+                            ['Trial ending', orderAnalytics?.operations.subscriptionTrialEndingCount ?? 0],
+                            ['Cancelled', orderAnalytics?.operations.subscriptionCancelledCount ?? 0],
+                          ].map(([label, value]) => (
+                            <div key={label} className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2">
+                              <span className="text-muted-foreground">{label}</span>
+                              <span className="font-mono font-semibold">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    {(orderAnalytics?.sources || []).slice(0, 4).map((source) => (
+                      <span key={source.source} className="rounded-full bg-muted px-2 py-1">
+                        {source.source}: {source.count} / {formatMoney(source.total, backendAnalyticsCurrency)}
+                      </span>
+                    ))}
+                    {(orderAnalytics?.sources || []).length === 0 ? (
+                      <span className="rounded-full bg-muted px-2 py-1">Source mix appears after orders are loaded.</span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="mt-4 grid gap-3 xl:grid-cols-3">
                   <div className="rounded-lg border border-border bg-card p-3">
