@@ -894,23 +894,39 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
     hasEnvContract: document.body?.innerText?.includes('Environment contract') || document.body?.innerText?.includes('Copy the environment contract'),
+    hasEnvValidationMatrix: Boolean(document.querySelector('[data-testid="settings-env-validation-matrix"]')),
+    hasMediaScannerRuntime: document.body?.innerText?.includes('Media scanner runtime') || false,
+    hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
+    hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
+    hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
   }))()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
   assert(infrastructureState.hasEnvContract, `Infrastructure env contract was not visible: ${JSON.stringify(infrastructureState)}`);
+  assert(
+    infrastructureState.hasEnvValidationMatrix &&
+    infrastructureState.hasMediaScannerRuntime &&
+    infrastructureState.hasNotificationRuntime &&
+    infrastructureState.hasCommerceRuntime &&
+    infrastructureState.hasCommerceWebhookSecretEnv,
+    `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
+  );
   assert(infrastructureState.hasInfrastructureCheck, `Infrastructure check control was not visible: ${JSON.stringify(infrastructureState)}`);
   await clickByText(client, 'Run infrastructure check');
   await waitForText(client, 'Infrastructure check results');
   const checkState = await evaluate(client, `(() => ({
     hasSupabase: document.body?.innerText?.includes('Supabase connection') || false,
     hasVercel: document.body?.innerText?.includes('Vercel deployment') || false,
+    hasMediaScanner: document.body?.innerText?.includes('Media scanner') || false,
+    hasNotificationDelivery: document.body?.innerText?.includes('Notification delivery') || false,
+    hasCommerceSecrets: document.body?.innerText?.includes('Commerce webhook secrets') || false,
     hasBlocked: document.body?.innerText?.includes('blocked') || false,
     hasDeploymentHistory: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('Deployment history') || false,
     hasRecordedDeploymentCheck: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('recorded') || false,
     body: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 1200) || '',
   }))()`);
   assert(
-    checkState.hasSupabase && checkState.hasVercel,
+    checkState.hasSupabase && checkState.hasVercel && checkState.hasMediaScanner && checkState.hasNotificationDelivery && checkState.hasCommerceSecrets,
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
   );
   assert(

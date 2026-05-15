@@ -666,7 +666,10 @@ function SettingsPage() {
   const [integrations, setIntegrations] = useState<NonNullable<SiteSettingsInput['integrations']>>({});
   const [runtimeDatabase, setRuntimeDatabase] = useState<SiteSettingsInput['runtimeDatabase']>();
   const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
+  const [runtimeMediaScanner, setRuntimeMediaScanner] = useState<SiteSettingsInput['runtimeMediaScanner']>();
   const [runtimeVercel, setRuntimeVercel] = useState<SiteSettingsInput['runtimeVercel']>();
+  const [runtimeNotifications, setRuntimeNotifications] = useState<SiteSettingsInput['runtimeNotifications']>();
+  const [runtimeCommerce, setRuntimeCommerce] = useState<SiteSettingsInput['runtimeCommerce']>();
   const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditNotice, setAuditNotice] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
@@ -713,7 +716,10 @@ function SettingsPage() {
     setIntegrations(snapshot.integrations);
     setRuntimeDatabase(backendSettings.runtimeDatabase);
     setRuntimeSupabase(backendSettings.runtimeSupabase);
+    setRuntimeMediaScanner(backendSettings.runtimeMediaScanner);
     setRuntimeVercel(backendSettings.runtimeVercel);
+    setRuntimeNotifications(backendSettings.runtimeNotifications);
+    setRuntimeCommerce(backendSettings.runtimeCommerce);
     setLastSavedSnapshot(cloneSettingsDraftSnapshot(snapshot));
   }, [updateSettings]);
 
@@ -1041,8 +1047,13 @@ function SettingsPage() {
     const databaseConfigured = runtimeDatabase?.configured === true;
     const supabaseConfigured = runtimeSupabase?.configured === true
       || Boolean(supabase?.databaseEnabled || supabase?.storageEnabled || supabase?.authEnabled);
+    const mediaScannerConfigured = runtimeMediaScanner?.configured !== false;
     const vercelConfigured = runtimeVercel?.configured === true
       || Boolean(vercel?.projectId || vercel?.productionDomain);
+    const notificationRuntimeConfigured = runtimeNotifications?.configured !== false;
+    const commerceRuntimeConfigured = !commerce?.webhookEventsEnabled
+      || commerce.paymentProvider === 'none'
+      || Boolean(runtimeCommerce?.webhookSecretConfigured);
     const securityConfigured = Boolean(publicApiKey && adminApiKey && (authSettings?.minPasswordLength || 0) >= 10);
     const checks = [
       {
@@ -1090,6 +1101,13 @@ function SettingsPage() {
         ready: vercelConfigured,
       },
       {
+        label: 'Media safety env',
+        detail: mediaScannerConfigured
+          ? 'Media scanner configuration is valid for the selected scanner mode.'
+          : `Missing ${runtimeMediaScanner?.missing?.join(', ') || 'media scanner configuration'}.`,
+        ready: mediaScannerConfigured,
+      },
+      {
         label: 'Design and SEO defaults',
         detail: savedGeneral || savedAppearance || savedSeo
           ? 'Global site metadata, design, or SEO defaults have been customized.'
@@ -1105,17 +1123,17 @@ function SettingsPage() {
       },
       {
         label: 'Notification routing',
-        detail: savedNotifications
-          ? 'Notification preferences are stored.'
-          : 'Review publish, form, registration, and system alerts.',
-        ready: Boolean(savedNotifications),
+        detail: savedNotifications && notificationRuntimeConfigured
+          ? 'Notification preferences and email delivery runtime are available.'
+          : 'Review notification preferences and email delivery environment.',
+        ready: Boolean(savedNotifications) && notificationRuntimeConfigured,
       },
       {
         label: 'Commerce controls',
-        detail: commerce
+        detail: commerce && commerceRuntimeConfigured
           ? `${commerce.currency || 'USD'} ${commerce.mode || 'catalog-only'} commerce settings are stored.`
-          : 'Review catalog, checkout, tax, shipping, discount, and reservation controls.',
-        ready: Boolean(commerce),
+          : 'Review catalog, checkout, tax, shipping, discount, reservation, and webhook secret controls.',
+        ready: Boolean(commerce) && commerceRuntimeConfigured,
       },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
@@ -1144,6 +1162,9 @@ function SettingsPage() {
     integrations.vercel,
     publicApiKey,
     runtimeDatabase,
+    runtimeCommerce,
+    runtimeMediaScanner,
+    runtimeNotifications,
     runtimeStorage,
     runtimeSupabase,
     runtimeVercel,
@@ -1154,15 +1175,25 @@ function SettingsPage() {
     runtimeDatabase,
     runtimeStorage,
     runtimeSupabase,
+    runtimeMediaScanner,
     runtimeVercel,
+    runtimeNotifications,
+    runtimeCommerce,
     storage: integrations.storage,
     supabase: integrations.supabase,
     vercel: integrations.vercel,
+    notifications: integrations.notifications,
+    commerce: integrations.commerce,
   }), [
+    integrations.commerce,
+    integrations.notifications,
     integrations.storage,
     integrations.supabase,
     integrations.vercel,
     runtimeDatabase,
+    runtimeCommerce,
+    runtimeMediaScanner,
+    runtimeNotifications,
     runtimeStorage,
     runtimeSupabase,
     runtimeVercel,
@@ -1202,6 +1233,17 @@ function SettingsPage() {
         metadata: integrations.vercel || null,
         note: 'Project ownership, domains, and preview-deploy preferences are tracked here; deploy tokens remain environment-managed.',
       },
+      mediaScanner: runtimeMediaScanner || null,
+      notifications: {
+        runtime: runtimeNotifications || null,
+        metadata: integrations.notifications || null,
+        note: 'Notification preferences live in Backy; SMTP, Resend, and endpoint credentials stay in deployment environment variables.',
+      },
+      commerce: {
+        runtime: runtimeCommerce || null,
+        metadata: integrations.commerce || null,
+        note: 'Commerce behavior lives in Backy; payment-provider API keys and webhook signing secrets stay in deployment environment variables.',
+      },
       envContract: infrastructureEnvContract,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
@@ -1240,6 +1282,8 @@ function SettingsPage() {
     commerceSettings,
     deliveryMode,
     generalSettings,
+    integrations.commerce,
+    integrations.notifications,
     integrations.storage,
     integrations.supabase,
     integrations.vercel,
@@ -1249,6 +1293,9 @@ function SettingsPage() {
     publicApiBase,
     publicApiKey,
     runtimeDatabase,
+    runtimeCommerce,
+    runtimeMediaScanner,
+    runtimeNotifications,
     runtimeStorage,
     runtimeSupabase,
     runtimeVercel,
@@ -1626,7 +1673,10 @@ function SettingsPage() {
             runtimeDatabase={runtimeDatabase}
             runtimeStorage={runtimeStorage}
             runtimeSupabase={runtimeSupabase}
+            runtimeMediaScanner={runtimeMediaScanner}
             runtimeVercel={runtimeVercel}
+            runtimeNotifications={runtimeNotifications}
+            runtimeCommerce={runtimeCommerce}
             envContract={infrastructureEnvContract}
             disabled={infrastructureFormDisabled}
             mediaOnly={isMediaOnlyInfrastructureEditor}
@@ -2482,7 +2532,7 @@ type StorageSettings = NonNullable<IntegrationSettings['storage']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type CommerceSettingsConfig = NonNullable<IntegrationSettings['commerce']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
-type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'vercel';
+type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce';
 type InfrastructureEnvContract = {
   provider: InfrastructureEnvProvider;
   key: string;
@@ -3141,18 +3191,28 @@ const buildInfrastructureEnvContract = ({
   runtimeDatabase,
   runtimeStorage,
   runtimeSupabase,
+  runtimeMediaScanner,
   runtimeVercel,
+  runtimeNotifications,
+  runtimeCommerce,
   storage,
   supabase,
   vercel,
+  notifications,
+  commerce,
 }: {
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeMediaScanner?: SiteSettingsInput['runtimeMediaScanner'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
+  runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   storage?: StorageSettings;
   supabase?: SupabaseSettings;
   vercel?: VercelSettings;
+  notifications?: NotificationSettingsConfig;
+  commerce?: CommerceSettingsConfig;
 }): InfrastructureEnvContract[] => [
   {
     provider: 'database',
@@ -3233,6 +3293,39 @@ const buildInfrastructureEnvContract = ({
     example: 'media',
   },
   {
+    provider: 'mediaScanner',
+    key: 'BACKY_MEDIA_SCAN_PROVIDER',
+    aliases: ['BACKY_MEDIA_SCANNER_PROVIDER'],
+    label: 'Media scanner provider',
+    description: 'Enables upload safety scanning with http, clamav, or none before files enter central media storage.',
+    configured: Boolean(runtimeMediaScanner?.enabled),
+    required: false,
+    valueHint: runtimeMediaScanner?.provider,
+    example: 'http',
+  },
+  {
+    provider: 'mediaScanner',
+    key: 'BACKY_MEDIA_SCAN_ENDPOINT',
+    aliases: ['BACKY_MEDIA_SCANNER_ENDPOINT'],
+    label: 'Media scanner endpoint',
+    description: 'HTTP scanner endpoint used when media scanning is enabled for uploads and replacements.',
+    configured: Boolean(runtimeMediaScanner?.endpointConfigured || runtimeMediaScanner?.host),
+    required: Boolean(runtimeMediaScanner?.enabled),
+    valueHint: runtimeMediaScanner?.host ? `${runtimeMediaScanner.host}${runtimeMediaScanner.port ? `:${runtimeMediaScanner.port}` : ''}` : undefined,
+    example: 'https://scanner.example.com/scan',
+  },
+  {
+    provider: 'mediaScanner',
+    key: 'BACKY_MEDIA_SCAN_API_KEY',
+    aliases: ['BACKY_MEDIA_SCANNER_API_KEY'],
+    label: 'Media scanner API key',
+    description: 'Optional bearer token sent only from Backy server routes to the configured media scanner.',
+    configured: Boolean(runtimeMediaScanner?.apiKeyConfigured),
+    required: false,
+    secret: true,
+    example: '<scanner-api-key>',
+  },
+  {
     provider: 'vercel',
     key: 'VERCEL_PROJECT_ID',
     aliases: ['BACKY_VERCEL_PROJECT_ID'],
@@ -3242,6 +3335,73 @@ const buildInfrastructureEnvContract = ({
     required: Boolean(vercel?.autoDeploy || vercel?.previewDeployments),
     valueHint: runtimeVercel?.projectId || vercel?.projectId,
     example: 'prj_xxxxxxxxxxxxxxxxxxxx',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_EMAIL_PROVIDER',
+    aliases: ['BACKY_TRANSACTIONAL_EMAIL_PROVIDER'],
+    label: 'Notification email provider',
+    description: 'Selects production email delivery for form, comment, invite, reset, and workflow notifications.',
+    configured: Boolean(runtimeNotifications?.productionReady),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.systemUpdates),
+    valueHint: runtimeNotifications?.emailProvider,
+    example: 'resend',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_EMAIL_FROM',
+    aliases: ['BACKY_NOTIFICATION_EMAIL_FROM', 'BACKY_SMTP_FROM', 'BACKY_RESEND_FROM'],
+    label: 'Notification sender',
+    description: 'Sender identity used by Backy notification emails.',
+    configured: Boolean(runtimeNotifications?.from),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.systemUpdates),
+    valueHint: runtimeNotifications?.from,
+    example: 'Backy <notifications@example.com>',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_RESEND_API_KEY',
+    aliases: ['RESEND_API_KEY'],
+    label: 'Resend API key',
+    description: 'Server-only API key used when Resend is selected for notification delivery.',
+    configured: Boolean(runtimeNotifications?.apiKeyConfigured),
+    required: runtimeNotifications?.emailProvider === 'resend',
+    secret: true,
+    example: '<resend-api-key>',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_SMTP_HOST',
+    aliases: ['SMTP_HOST'],
+    label: 'SMTP host',
+    description: 'SMTP host used when SMTP notification delivery is selected.',
+    configured: Boolean(runtimeNotifications?.smtpHostConfigured),
+    required: runtimeNotifications?.emailProvider === 'smtp',
+    valueHint: runtimeNotifications?.smtpHostConfigured ? 'configured' : undefined,
+    example: 'smtp.example.com',
+  },
+  {
+    provider: 'commerce',
+    key: runtimeCommerce?.webhookSecretEnvKeys?.[0] || 'BACKY_COMMERCE_WEBHOOK_SECRET_<REFERENCE>',
+    aliases: runtimeCommerce?.webhookSecretEnvKeys?.slice(1),
+    label: 'Commerce webhook signing secret',
+    description: 'Server-only provider signing secret used to verify checkout, payment, refund, and dispute webhooks.',
+    configured: Boolean(runtimeCommerce?.webhookSecretConfigured),
+    required: Boolean(commerce?.webhookEventsEnabled && commerce.paymentProvider !== 'none'),
+    secret: true,
+    valueHint: runtimeCommerce?.webhookSecretReference,
+    example: '<provider-webhook-secret>',
+  },
+  {
+    provider: 'commerce',
+    key: 'STRIPE_SECRET_KEY',
+    aliases: ['BACKY_STRIPE_SECRET_KEY'],
+    label: 'Payment provider API key',
+    description: 'Future provider-execution workflows will need a server-only payment API key; current Backy checkout handoff does not store it.',
+    configured: false,
+    required: false,
+    secret: true,
+    example: '<stripe-secret-key>',
   },
   {
     provider: 'vercel',
@@ -3351,7 +3511,21 @@ function InfrastructureEnvContractPanel({
     { label: 'all env' },
     { label: 'supabase', provider: 'supabase' },
     { label: 'vercel', provider: 'vercel' },
+    { label: 'media scanner', provider: 'mediaScanner' },
+    { label: 'notifications', provider: 'notifications' },
+    { label: 'commerce', provider: 'commerce' },
   ];
+  const providerSummary = profiles
+    .filter((profile): profile is { label: string; provider: InfrastructureEnvProvider } => Boolean(profile.provider))
+    .map((profile) => {
+      const providerContracts = contracts.filter((item) => item.provider === profile.provider);
+      return {
+        ...profile,
+        total: providerContracts.length,
+        configured: providerContracts.filter((item) => item.configured).length,
+        openRequired: providerContracts.filter((item) => item.required && !item.configured).length,
+      };
+    });
 
   return (
     <Panel>
@@ -3392,6 +3566,26 @@ function InfrastructureEnvContractPanel({
             {requiredOpenCount} required environment {requiredOpenCount === 1 ? 'variable is' : 'variables are'} still missing for the selected infrastructure options.
           </Notice>
         )}
+
+        <div className="mt-4 grid gap-2 md:grid-cols-3" data-testid="settings-env-validation-matrix">
+          {providerSummary.map((profile) => (
+            <div key={profile.provider} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold capitalize text-foreground">{profile.label}</span>
+                <span className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                  profile.openRequired === 0 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+                >
+                  {profile.openRequired === 0 ? 'OK' : `${profile.openRequired} missing`}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {profile.configured}/{profile.total} variables detected or supplied as non-secret metadata.
+              </p>
+            </div>
+          ))}
+        </div>
 
         <div className="mt-4 overflow-hidden rounded-lg border border-border">
           <div className="grid grid-cols-[minmax(180px,0.9fr)_minmax(180px,1fr)_120px] border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground max-lg:hidden">
@@ -3457,7 +3651,10 @@ function InfrastructureSettings({
   runtimeDatabase,
   runtimeStorage,
   runtimeSupabase,
+  runtimeMediaScanner,
   runtimeVercel,
+  runtimeNotifications,
+  runtimeCommerce,
   envContract,
   disabled = false,
   mediaOnly = false,
@@ -3468,7 +3665,10 @@ function InfrastructureSettings({
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeMediaScanner?: SiteSettingsInput['runtimeMediaScanner'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
+  runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   envContract: InfrastructureEnvContract[];
   disabled?: boolean;
   mediaOnly?: boolean;
@@ -3703,6 +3903,41 @@ function InfrastructureSettings({
             { label: 'Project ID', value: runtimeVercel?.projectId },
             { label: 'Environment', value: runtimeVercel?.environment },
             { label: 'Deploy token', value: runtimeVercel?.tokenConfigured },
+          ]}
+        />
+        <RuntimeCard
+          title="Media scanner runtime"
+          description="Detected upload safety scanning configuration."
+          status={runtimeMediaScanner?.configured ? 'Configured' : 'Needs env'}
+          configured={runtimeMediaScanner?.configured !== false}
+          details={[
+            { label: 'Provider', value: runtimeMediaScanner?.provider },
+            { label: 'Enabled', value: runtimeMediaScanner?.enabled },
+            { label: 'Endpoint', value: runtimeMediaScanner?.endpointConfigured || runtimeMediaScanner?.host },
+            { label: 'Fail open', value: runtimeMediaScanner?.failOpen },
+          ]}
+        />
+        <RuntimeCard
+          title="Notification runtime"
+          description="Detected transactional email delivery capability."
+          status={runtimeNotifications?.productionReady ? 'Production ready' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env'}
+          configured={Boolean(runtimeNotifications?.configured)}
+          details={[
+            { label: 'Email provider', value: runtimeNotifications?.emailProvider },
+            { label: 'From', value: runtimeNotifications?.from },
+            { label: 'Endpoint', value: runtimeNotifications?.endpointConfigured },
+            { label: 'API key', value: runtimeNotifications?.apiKeyConfigured },
+          ]}
+        />
+        <RuntimeCard
+          title="Commerce runtime"
+          description="Detected payment-provider webhook secret capability."
+          status={runtimeCommerce?.webhookSecretConfigured ? 'Webhook ready' : 'Needs env'}
+          configured={Boolean(runtimeCommerce?.webhookSecretConfigured) || !runtimeCommerce?.webhookSecretReference}
+          details={[
+            { label: 'Secret ref', value: runtimeCommerce?.webhookSecretReference },
+            { label: 'Secret source', value: runtimeCommerce?.webhookSecretSource },
+            { label: 'Env keys', value: runtimeCommerce?.webhookSecretEnvKeys?.join(', ') },
           ]}
         />
       </div>

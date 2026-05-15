@@ -1129,6 +1129,8 @@ interface ApiSettings {
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
   runtimeMediaScanner?: SiteSettingsInput['runtimeMediaScanner'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
+  runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   updatedAt?: string;
 }
 
@@ -1853,6 +1855,25 @@ export interface SiteSettingsInput {
     missing: string[];
     error?: string;
   };
+  runtimeNotifications?: {
+    emailProvider: string;
+    configured: boolean;
+    productionReady?: boolean;
+    from?: string;
+    endpointConfigured?: boolean;
+    apiKeyConfigured?: boolean;
+    smtpHostConfigured?: boolean;
+    smtpAuthConfigured?: boolean;
+    missing: string[];
+    error?: string;
+  };
+  runtimeCommerce?: {
+    webhookSecretReference?: string;
+    webhookSecretConfigured?: boolean;
+    webhookSecretSource?: 'none' | 'env' | 'development-direct' | 'unresolved';
+    webhookSecretEnvKeys?: string[];
+    missing: string[];
+  };
   runtimeVercel?: {
     configured: boolean;
     onVercel?: boolean;
@@ -1873,7 +1894,7 @@ export interface SettingsInfrastructureDiagnosticCheck {
 }
 
 export interface SettingsInfrastructureDiagnostic {
-  area: 'database' | 'storage' | 'supabase' | 'vercel';
+  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce';
   label: string;
   status: 'ready' | 'warning' | 'blocked';
   summary: string;
@@ -4058,6 +4079,8 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     runtimeSupabase: payload.data.settings.runtimeSupabase,
     runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
+    runtimeNotifications: payload.data.settings.runtimeNotifications,
+    runtimeCommerce: payload.data.settings.runtimeCommerce,
   };
 }
 
@@ -4085,6 +4108,8 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     runtimeSupabase: payload.data.settings.runtimeSupabase,
     runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
+    runtimeNotifications: payload.data.settings.runtimeNotifications,
+    runtimeCommerce: payload.data.settings.runtimeCommerce,
   };
 }
 
@@ -4112,6 +4137,8 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     runtimeSupabase: payload.data.settings.runtimeSupabase,
     runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
+    runtimeNotifications: payload.data.settings.runtimeNotifications,
+    runtimeCommerce: payload.data.settings.runtimeCommerce,
   };
 }
 
@@ -4143,6 +4170,8 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
       runtimeSupabase: payload.data.settings.runtimeSupabase,
       runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
       runtimeVercel: payload.data.settings.runtimeVercel,
+      runtimeNotifications: payload.data.settings.runtimeNotifications,
+      runtimeCommerce: payload.data.settings.runtimeCommerce,
     },
     issuedKey: payload.data.issuedKey,
   };
@@ -4172,6 +4201,8 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
     runtimeSupabase: payload.data.settings.runtimeSupabase,
     runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
     runtimeVercel: payload.data.settings.runtimeVercel,
+    runtimeNotifications: payload.data.settings.runtimeNotifications,
+    runtimeCommerce: payload.data.settings.runtimeCommerce,
   };
 }
 

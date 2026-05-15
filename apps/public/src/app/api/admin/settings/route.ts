@@ -14,6 +14,8 @@ import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
+import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
+import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
 import { getMediaStorageAdapter, getMediaStorageConfigSummary, resolveMediaStorageConfig } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import {
@@ -213,6 +215,59 @@ const getMediaScannerRuntimeSummary = () => {
       error: error instanceof Error ? error.message : 'Unable to resolve media scanner runtime.',
     };
   }
+};
+
+const getNotificationRuntimeSummary = () => {
+  try {
+    const config = getEmailDeliveryConfig();
+    const provider = config.provider;
+    const missing = [
+      provider === 'http-endpoint' && !config.endpoint ? 'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL' : '',
+      provider === 'resend' && !config.apiKey ? 'BACKY_RESEND_API_KEY or RESEND_API_KEY' : '',
+      provider === 'smtp' && !config.smtp?.host ? 'BACKY_SMTP_HOST or SMTP_HOST' : '',
+      provider === 'smtp' && config.smtp?.user && !config.smtp?.password ? 'BACKY_SMTP_PASSWORD or SMTP_PASSWORD' : '',
+    ].filter(Boolean);
+
+    return {
+      emailProvider: provider,
+      configured: missing.length === 0,
+      productionReady: provider !== 'local-outbox' && missing.length === 0,
+      from: config.from,
+      endpointConfigured: Boolean(config.endpoint),
+      apiKeyConfigured: Boolean(config.apiKey),
+      smtpHostConfigured: Boolean(config.smtp?.host),
+      smtpAuthConfigured: Boolean(config.smtp?.user && config.smtp?.password),
+      missing,
+    };
+  } catch (error) {
+    return {
+      emailProvider: 'unknown',
+      configured: false,
+      productionReady: false,
+      from: envValue(['BACKY_EMAIL_FROM', 'BACKY_NOTIFICATION_EMAIL_FROM', 'BACKY_SMTP_FROM', 'BACKY_RESEND_FROM']),
+      endpointConfigured: Boolean(envValue(['BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'])),
+      apiKeyConfigured: Boolean(envValue(['BACKY_RESEND_API_KEY', 'RESEND_API_KEY'])),
+      smtpHostConfigured: Boolean(envValue(['BACKY_SMTP_HOST', 'SMTP_HOST'])),
+      smtpAuthConfigured: Boolean(envValue(['BACKY_SMTP_USER', 'SMTP_USER']) && envValue(['BACKY_SMTP_PASSWORD', 'SMTP_PASSWORD'])),
+      missing: ['BACKY_EMAIL_PROVIDER configuration'],
+      error: error instanceof Error ? error.message : 'Unable to resolve notification email runtime.',
+    };
+  }
+};
+
+const getCommerceRuntimeSummary = (settings: unknown) => {
+  const resolution = resolveCommerceWebhookSecret(settings);
+  const missing = resolution.reference && !resolution.secret
+    ? [`${resolution.envKeys.join(' or ') || 'commerce webhook secret env'}`]
+    : [];
+
+  return {
+    webhookSecretReference: resolution.reference,
+    webhookSecretConfigured: Boolean(resolution.secret),
+    webhookSecretSource: resolution.source,
+    webhookSecretEnvKeys: resolution.envKeys,
+    missing,
+  };
 };
 
 const canExposeAdminApiKey = (access: AdminAccessContext) => {
@@ -477,6 +532,8 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeSupabase: getSupabaseRuntimeSummary(),
     runtimeMediaScanner: getMediaScannerRuntimeSummary(),
     runtimeVercel: getVercelRuntimeSummary(),
+    runtimeNotifications: getNotificationRuntimeSummary(),
+    runtimeCommerce: getCommerceRuntimeSummary(settings),
     updatedAt: settings.updatedAt,
   };
 };
@@ -789,7 +846,10 @@ interface InfrastructureCheckInput {
   runtimeDatabase: ReturnType<typeof getDatabaseRuntimeSummary>;
   runtimeStorage: ReturnType<typeof getMediaStorageConfigSummary>;
   runtimeSupabase: ReturnType<typeof getSupabaseRuntimeSummary>;
+  runtimeMediaScanner: ReturnType<typeof getMediaScannerRuntimeSummary>;
   runtimeVercel: ReturnType<typeof getVercelRuntimeSummary>;
+  runtimeNotifications: ReturnType<typeof getNotificationRuntimeSummary>;
+  runtimeCommerce: ReturnType<typeof getCommerceRuntimeSummary>;
 }
 
 type StorageProvisioningStatus = 'ready' | 'blocked';
@@ -816,7 +876,7 @@ const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModu
 };
 
 const makeInfrastructureDiagnostic = (
-  area: 'database' | 'storage' | 'supabase' | 'vercel',
+  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce',
   label: string,
   checks: Array<{ label: string; ready: boolean; required: boolean; detail: string }>,
 ) => {
@@ -848,11 +908,17 @@ const buildInfrastructureDiagnostics = ({
   runtimeDatabase,
   runtimeStorage,
   runtimeSupabase,
+  runtimeMediaScanner,
   runtimeVercel,
+  runtimeNotifications,
+  runtimeCommerce,
 }: InfrastructureCheckInput) => {
   const storage = parseJsonObject(integrations.storage) || {};
   const supabase = parseJsonObject(integrations.supabase) || {};
   const vercel = parseJsonObject(integrations.vercel) || {};
+  const commerce = parseJsonObject(integrations.commerce) || {};
+  const notifications = parseJsonObject(integrations.notifications) || {};
+  const notificationEmail = parseJsonObject(notifications.email) || {};
   const storageProvider = stringValue(storage.provider) || runtimeStorage.provider;
   const storageBucket = stringValue(storage.bucket) || runtimeStorage.bucket || runtimeSupabase.storageBucket;
   const storagePublicBaseUrl = stringValue(storage.publicBaseUrl) || runtimeStorage.publicUrl || '';
@@ -864,6 +930,12 @@ const buildInfrastructureDiagnostics = ({
     || storageProvider === 'supabase';
   const vercelProjectId = stringValue(vercel.projectId) || runtimeVercel.projectId || '';
   const vercelProductionDomain = stringValue(vercel.productionDomain) || runtimeVercel.url || '';
+  const notificationEmailEnabled = boolValue(notificationEmail.formSubmission)
+    || boolValue(notificationEmail.comments)
+    || boolValue(notificationEmail.systemUpdates)
+    || Boolean(stringValue(notificationEmail.recipient));
+  const commerceWebhookRequired = boolValue(commerce.webhookEventsEnabled)
+    && stringValue(commerce.paymentProvider) !== 'none';
 
   return [
     makeInfrastructureDiagnostic('database', 'Database runtime', [
@@ -936,6 +1008,24 @@ const buildInfrastructureDiagnostics = ({
           : 'Database/storage writes need a server-only Supabase service role key.',
       },
     ]),
+    makeInfrastructureDiagnostic('mediaScanner', 'Media scanner', [
+      {
+        label: 'Scanner runtime',
+        ready: Boolean(runtimeMediaScanner.configured),
+        required: Boolean(runtimeMediaScanner.enabled),
+        detail: runtimeMediaScanner.enabled
+          ? `${runtimeMediaScanner.provider} media scanning is enabled.`
+          : 'Media scanning is not enabled; uploads rely on file type and size policy only.',
+      },
+      {
+        label: 'Scanner endpoint',
+        ready: !runtimeMediaScanner.enabled || Boolean(runtimeMediaScanner.endpointConfigured || runtimeMediaScanner.host),
+        required: Boolean(runtimeMediaScanner.enabled),
+        detail: runtimeMediaScanner.endpointConfigured || runtimeMediaScanner.host
+          ? 'Scanner endpoint or host is configured.'
+          : 'Enable BACKY_MEDIA_SCAN_ENDPOINT or ClamAV host settings before requiring scan enforcement.',
+      },
+    ]),
     makeInfrastructureDiagnostic('vercel', 'Vercel deployment', [
       {
         label: 'Project metadata',
@@ -960,6 +1050,42 @@ const buildInfrastructureDiagnostics = ({
         detail: runtimeVercel.tokenConfigured
           ? 'Vercel deploy token is detected server-side.'
           : 'Auto deploy needs VERCEL_TOKEN or BACKY_VERCEL_TOKEN.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('notifications', 'Notification delivery', [
+      {
+        label: 'Email provider',
+        ready: !notificationEmailEnabled || Boolean(runtimeNotifications.configured),
+        required: notificationEmailEnabled,
+        detail: runtimeNotifications.configured
+          ? `${runtimeNotifications.emailProvider} email delivery is configured.`
+          : `Missing ${runtimeNotifications.missing.join(', ') || 'email delivery configuration'}.`,
+      },
+      {
+        label: 'Production email provider',
+        ready: !notificationEmailEnabled || Boolean(runtimeNotifications.productionReady),
+        required: false,
+        detail: runtimeNotifications.productionReady
+          ? 'A production email provider is selected.'
+          : 'Local outbox is useful for development, but production notification emails need SMTP, Resend, or an HTTP endpoint.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('commerce', 'Commerce webhook secrets', [
+      {
+        label: 'Provider webhook secret',
+        ready: !commerceWebhookRequired || Boolean(runtimeCommerce.webhookSecretConfigured),
+        required: commerceWebhookRequired,
+        detail: runtimeCommerce.webhookSecretConfigured
+          ? `Commerce webhook secret resolved from ${runtimeCommerce.webhookSecretSource}.`
+          : `Missing ${runtimeCommerce.missing.join(', ') || 'commerce webhook secret environment'}.`,
+      },
+      {
+        label: 'Provider webhook metadata',
+        ready: !commerceWebhookRequired || Boolean(stringValue(commerce.providerWebhookUrl)),
+        required: commerceWebhookRequired,
+        detail: stringValue(commerce.providerWebhookUrl)
+          ? 'Commerce provider webhook URL is configured in Settings.'
+          : 'Add the provider webhook URL before relying on automatic settlement.',
       },
     ]),
   ];
@@ -1862,6 +1988,8 @@ export async function POST(request: NextRequest) {
           runtimeSupabase: getSupabaseRuntimeSummary(),
           runtimeMediaScanner: getMediaScannerRuntimeSummary(),
           runtimeVercel: getVercelRuntimeSummary(),
+          runtimeNotifications: getNotificationRuntimeSummary(),
+          runtimeCommerce: getCommerceRuntimeSummary(getAdminSettings()),
         };
       const normalizedIntegrations = mediaStorageCheck
         ? mergeMediaStorageIntegrations(currentSettings.integrations, body.integrations)
@@ -1887,7 +2015,10 @@ export async function POST(request: NextRequest) {
         runtimeDatabase: currentSettings.runtimeDatabase,
         runtimeStorage: currentSettings.runtimeStorage,
         runtimeSupabase: currentSettings.runtimeSupabase,
+        runtimeMediaScanner: currentSettings.runtimeMediaScanner,
         runtimeVercel: currentSettings.runtimeVercel,
+        runtimeNotifications: currentSettings.runtimeNotifications,
+        runtimeCommerce: currentSettings.runtimeCommerce,
       });
       const historyEntry = body.recordHistory === true && !mediaStorageCheck
         ? buildDeploymentHistoryEntry({
