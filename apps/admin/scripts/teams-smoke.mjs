@@ -93,6 +93,44 @@ const createTeam = async (name) => {
   return team;
 };
 
+const createUser = async ({ fullName, email, role = 'viewer', status = 'invited' }) => {
+  const payload = await requestApi('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      fullName,
+      email,
+      role,
+      status,
+      createInvite: status === 'invited',
+    }),
+  });
+  const user = payload.data?.user;
+  assert(user?.id, `Create user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { user, invite: payload.data?.invite || null };
+};
+
+const setUserPermissionOverrides = async (userId, overrides) => {
+  const payload = await requestApi(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
+    method: 'PATCH',
+    body: JSON.stringify({ overrides }),
+  });
+  assert(payload.data?.permissions, `Permission override did not return a matrix: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data;
+};
+
+const acceptInvite = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/accept-invite`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to accept invite: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+  return payload.data;
+};
+
 const deleteTeam = async (teamId) => {
   if (!teamId) return;
   await requestApi(`/api/admin/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE' });
@@ -244,6 +282,11 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const setBrowserAuthStorage = async (client, sessionToken, user) => evaluate(
+  client,
+  authStorageScript(sessionToken, user),
+);
+
 const setInputValue = async (client, selector, value) => {
   const result = await evaluate(client, `(() => {
     const input = document.querySelector(${JSON.stringify(selector)});
@@ -357,6 +400,8 @@ const main = async () => {
   const editedName = `Smoke Team Edited ${suffix}`;
   const editedSlug = `smoke-team-edited-${suffix}`;
   const inviteEmail = `teams-smoke-${suffix}@example.com`;
+  const readOnlyEmail = `teams-readonly-${suffix}@example.com`;
+  const readOnlyFullName = `Teams Readonly ${suffix}`;
 
   try {
     const adminSession = await loginAdminApi();
@@ -377,7 +422,7 @@ const main = async () => {
     await client.opened;
     await client.send('Runtime.enable');
     await client.send('Page.enable');
-    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    const adminAuthPreload = await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(adminSession.session.token, adminSession.user),
     });
 
@@ -525,6 +570,70 @@ const main = async () => {
       'Team delete notice',
     );
 
+    const readOnlyAccount = await createUser({
+      fullName: readOnlyFullName,
+      email: readOnlyEmail,
+      role: 'viewer',
+      status: 'invited',
+    });
+    temporaryUserIds.push(readOnlyAccount.user.id);
+    assert(readOnlyAccount.invite?.token, `Read-only user invite token missing: ${JSON.stringify(readOnlyAccount).slice(0, 500)}`);
+    await setUserPermissionOverrides(readOnlyAccount.user.id, {
+      'users.view': 'allow',
+      'users.manage': 'deny',
+      'activity.export': 'deny',
+    });
+    const readOnlySession = await acceptInvite(readOnlyAccount.invite.token);
+    if (adminAuthPreload?.identifier) {
+      await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: adminAuthPreload.identifier });
+    }
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authStorageScript(readOnlySession.session.token, readOnlySession.user),
+    });
+    await setBrowserAuthStorage(client, readOnlySession.session.token, readOnlySession.user);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const createButton = document.querySelector('[data-testid="teams-create-button"]');
+        const editButton = document.querySelector('[data-testid="teams-edit-button"]');
+        const inviteButton = document.querySelector('[data-testid="teams-invite-button"]');
+        const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const auditPanel = document.querySelector('[data-testid="teams-audit-panel"]');
+        const auditRefresh = auditPanel ? Array.from(auditPanel.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').includes('Refresh audit')
+        )) : null;
+        const roleSelects = Array.from(document.querySelectorAll('[data-testid^="teams-member-role-"]'));
+        const removeButtons = Array.from(document.querySelectorAll('[data-testid^="teams-member-remove-"]'));
+        return {
+          ready: window.location.pathname === '/teams' &&
+            body.includes('Team Management') &&
+            body.includes('Team activity') &&
+            body.includes('activity.export') &&
+            body.includes('Explicit override denies this capability.') &&
+            createButton instanceof HTMLButtonElement &&
+            createButton.disabled === true &&
+            (!(editButton instanceof HTMLButtonElement) || editButton.disabled === true) &&
+            (!(inviteButton instanceof HTMLButtonElement) || inviteButton.disabled === true) &&
+            (!(deleteButton instanceof HTMLButtonElement) || deleteButton.disabled === true) &&
+            (!(auditRefresh instanceof HTMLButtonElement) || auditRefresh.disabled === true) &&
+            roleSelects.every((select) => select.disabled === true) &&
+            removeButtons.every((button) => button.disabled === true),
+          path: window.location.pathname,
+          body: body.slice(0, 1600),
+          createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+          editDisabled: editButton instanceof HTMLButtonElement ? editButton.disabled : null,
+          inviteDisabled: inviteButton instanceof HTMLButtonElement ? inviteButton.disabled : null,
+          deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+          auditRefreshDisabled: auditRefresh instanceof HTMLButtonElement ? auditRefresh.disabled : null,
+          roleDisabled: roleSelects.map((select) => select.disabled),
+          removeDisabled: removeButtons.map((button) => button.disabled),
+        };
+      })()`,
+      'Read-only Teams permission pass',
+    );
+
     await client.send('Page.captureScreenshot', { format: 'png' }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
     });
@@ -534,6 +643,7 @@ const main = async () => {
       route: '/teams',
       createdSlug: editedSlug,
       invitedEmail: inviteEmail,
+      readOnlyEmail,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

@@ -240,6 +240,12 @@ function TeamsPage() {
       throw new Error(managePermissionTitle || 'Your account cannot manage teams.');
     }
     const createdTeam = await createTeam({ name });
+    const createdUiTeam = toTeam(createdTeam);
+    setTeams((previousTeams) => [
+      createdUiTeam,
+      ...previousTeams.filter((team) => team.id !== createdUiTeam.id),
+    ]);
+    setCurrentTeamId(createdTeam.id);
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team created.');
     setCurrentTeamId(createdTeam.id);
