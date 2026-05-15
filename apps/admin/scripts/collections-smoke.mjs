@@ -149,6 +149,32 @@ const deleteSite = async (siteId) => {
   await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
 };
 
+const getSite = async (siteId = SITE_ID) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`);
+  return payload.data?.site || payload.site;
+};
+
+const updateSite = async (siteId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const tryDeleteSite = async (siteId) => {
   if (!siteId) return;
   try {
@@ -488,6 +514,63 @@ const fetchCollections = async () => {
 const fetchCollection = async (collectionId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`);
   return payload.data?.collection || payload.collection || null;
+};
+
+const assertCollectionBillingLimitEnforced = async (suffix) => {
+  const site = await getSite();
+  const settings = await getSettings();
+  const existingCollections = await fetchCollections();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedSlug = `blocked-collection-limit-${suffix}`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await updateSite(SITE_ID, {
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          collections: existingCollections.length,
+        },
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/collections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Blocked Collection Limit ${suffix}`,
+        slug: blockedSlug,
+        description: 'Temporary collection that should be blocked by billing quota.',
+        status: 'draft',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
+        ],
+      }),
+    });
+
+    assert(response.status === 402, `Billing collection limit should reject collection creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_COLLECTION_LIMIT', `Billing collection limit should return BILLING_COLLECTION_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const afterCollections = await fetchCollections();
+    assert(!afterCollections.some((collection) => collection.slug === blockedSlug), 'Billing-limited collection creation unexpectedly persisted a collection.');
+  } finally {
+    await updateSite(SITE_ID, { settings: originalSiteSettings });
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const waitForRecordStatus = async (collectionId, recordSlug, status) => {
@@ -2213,6 +2296,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await assertCollectionBillingLimitEnforced(suffix);
     const emptyCollectionsSite = await createSite({
       name: `Smoke empty collections ${suffix}`,
       slug: `smoke-empty-collections-${suffix}`,

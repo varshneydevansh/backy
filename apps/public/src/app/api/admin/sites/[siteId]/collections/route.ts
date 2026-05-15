@@ -6,9 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, type BackyCollectionPermissions, type BackyJsonObject, type PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollection,
+  getAdminSettings,
   getCollectionByIdOrSlug,
   getPageSummary,
   getSiteByIdOrSlug,
@@ -67,6 +68,12 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as TRecord
+    : undefined
+);
+
 const normalizeSlug = (value: unknown): string => (
   typeof value === 'string'
     ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -90,6 +97,45 @@ const parseStatus = (value: unknown): CollectionSchemaStatus | undefined => (
     ? value
     : undefined
 );
+
+const readCollectionBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
+  const siteRoot = parseRecord<Record<string, unknown>>(siteSettings) || {};
+  const workspaceRoot = parseRecord<Record<string, unknown>>(workspaceSettings) || {};
+  const integrations = parseRecord<Record<string, unknown>>(workspaceRoot.integrations) || {};
+  const commerce = parseRecord<Record<string, unknown>>(integrations.commerce) || {};
+  const billingQuota = parseRecord<Record<string, unknown>>(siteRoot.billingQuota) || {};
+  const limits = parseRecord<Record<string, unknown>>(billingQuota.limits) || {};
+  const limit = Number(limits.collections);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    collectionLimit: Number.isFinite(limit) && limit >= 0
+      ? Math.round(limit)
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.collections,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+const enforceCollectionBillingLimit = (
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  currentCollectionCount: number,
+  requestId: string,
+) => {
+  const policy = readCollectionBillingPolicy(siteSettings, workspaceSettings);
+  if (policy.overageMode === 'block' && currentCollectionCount >= policy.collectionLimit) {
+    return errorResponse(
+      402,
+      'BILLING_COLLECTION_LIMIT',
+      `The ${policy.billingPlan} site plan allows ${policy.collectionLimit} collection${policy.collectionLimit === 1 ? '' : 's'}. Update the site billing quota before creating another collection.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
   const parsed = Number(value);
@@ -277,6 +323,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
       }
 
+      const [settings, existingCollections] = await Promise.all([
+        repositories.settings.get(),
+        repositories.collections.list({
+          siteId: site.id,
+          includeUnpublished: true,
+          status: 'all',
+          limit: 1,
+          offset: 0,
+        }),
+      ]);
+      const billingLimitError = enforceCollectionBillingLimit(
+        site.settings,
+        settings,
+        existingCollections.pagination.total,
+        requestId,
+      );
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const collection = (await repositories.collections.create({
         siteId: site.id,
         name,
@@ -371,6 +437,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }, getPageSummary(site.id, { includeUnpublished: true }));
     if (routeConflict) {
       return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+    }
+
+    const existingCollections = listCollections(site.id, { includeUnpublished: true });
+    const billingLimitError = enforceCollectionBillingLimit(
+      site.settings,
+      getAdminSettings(),
+      existingCollections.length,
+      requestId,
+    );
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const collection = createAdminCollection(site.id, {
