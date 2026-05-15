@@ -7,6 +7,7 @@ import {
   type FontAsset,
   type PageContent,
 } from '../src/components/PageRenderer';
+import { buildBlogArchiveTemplateContent } from '../src/lib/blogArchiveTemplate';
 import { buildCollectionTemplateContent } from '../src/lib/renderPayload';
 
 const assert = (condition: unknown, message: string) => {
@@ -1113,6 +1114,102 @@ assert(dynamicTemplateContent.canvasSize.width === 1100, 'Authored dynamic templ
 assert(dynamicTemplateContent.elements.some((element) => element.id === 'authored-item-title'), 'Authored dynamic template element was not used');
 assert(!dynamicTemplateContent.elements.some((element) => element.id === 'generic-collection-root'), 'Generic frontend collection root overrode authored dynamic template');
 assert(dynamicTemplateContent.elements.some((element) => element.props.content === 'Authored Dynamic Record'), 'Authored dynamic template record binding was not resolved');
+
+const blogArchiveTemplateContent = buildBlogArchiveTemplateContent({
+  frontendDesign: {
+    schemaVersion: 'backy.frontend-design.v1',
+    status: 'captured',
+    source: { type: 'manual', label: 'Renderer smoke' },
+    tokens: {
+      customCss: '.blog-archive-template{color:#0f766e}',
+    },
+    chrome: {},
+    templates: [
+      {
+        id: 'blog-archive',
+        type: 'page',
+        name: 'Blog Archive',
+        routePattern: '/blog',
+        canvasSize: { width: 1180, height: 760 },
+        content: {
+          elements: [
+            {
+              id: 'blog-archive-heading',
+              type: 'heading',
+              x: 64,
+              y: 72,
+              width: 720,
+              height: 80,
+              props: {
+                content: '{{archive.activeTitle}} archive',
+              },
+            },
+            {
+              id: 'blog-archive-posts',
+              type: 'repeater',
+              x: 64,
+              y: 180,
+              width: 900,
+              height: 360,
+              props: {
+                binding: 'blogArchive.posts',
+                columns: 2,
+              },
+            },
+          ],
+        },
+      },
+    ],
+    editableMap: [],
+  },
+} as unknown as Parameters<typeof buildBlogArchiveTemplateContent>[0], {
+  siteName: 'Renderer Smoke',
+  basePath: '/sites/demo/blog',
+  title: 'Blog',
+  description: 'Latest articles from Renderer Smoke.',
+  activeTitle: 'All posts',
+  total: 1,
+  page: 1,
+  totalPages: 1,
+  filters: {
+    search: '',
+    category: '',
+    tag: '',
+    author: '',
+    year: 0,
+    month: 0,
+    page: 1,
+  },
+  posts: [
+    {
+      id: 'post_renderer_smoke',
+      title: 'Renderer Archive Post',
+      slug: 'renderer-archive-post',
+      excerpt: 'Archive template excerpt.',
+      href: '/sites/demo/blog/renderer-archive-post',
+      publishedAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      featuredImageUrl: '/uploads/sites/demo/archive.jpg',
+      authorName: 'Backy Team',
+      categoryNames: ['News'],
+      tagNames: ['Renderer'],
+    },
+  ],
+});
+if (!blogArchiveTemplateContent) {
+  throw new Error('Blog archive frontend design template content was not built');
+}
+type SmokeTemplateElement = { id: string; props: Record<string, unknown> };
+const blogArchiveElements = blogArchiveTemplateContent.elements as SmokeTemplateElement[];
+const blogArchiveHeadingElement = blogArchiveElements.find((element) => element.id === 'blog-archive-heading');
+const blogArchiveRepeaterElement = blogArchiveElements.find((element) => element.id === 'blog-archive-posts');
+assert(blogArchiveTemplateContent.canvasSize.width === 1180, 'Blog archive template canvas width was not preserved');
+assert(blogArchiveTemplateContent.customCSS === '.blog-archive-template{color:#0f766e}', 'Blog archive template token CSS was not preserved');
+assert(blogArchiveHeadingElement?.props.content === 'All posts archive', `Blog archive template heading was not hydrated: ${JSON.stringify(blogArchiveHeadingElement)}`);
+assert(Array.isArray(blogArchiveRepeaterElement?.props.records), `Blog archive template repeater records were not hydrated: ${JSON.stringify(blogArchiveRepeaterElement)}`);
+const blogArchiveRecords = blogArchiveRepeaterElement?.props.records as Array<Record<string, unknown>> | undefined;
+assert(blogArchiveRecords?.[0]?.title === 'Renderer Archive Post', 'Blog archive template post record title was not hydrated');
+assert(blogArchiveRecords?.[0]?.href === '/sites/demo/blog/renderer-archive-post', 'Blog archive template post record href was not hydrated');
 
 console.log(JSON.stringify({
   ok: true,

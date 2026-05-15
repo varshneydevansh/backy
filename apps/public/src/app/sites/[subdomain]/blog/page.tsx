@@ -23,6 +23,13 @@ import {
 } from '@/lib/backyStore';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { PageRenderer, type PageContent } from '@/components/PageRenderer';
+import AnimationHydrator from '@/components/AnimationHydrator';
+import {
+  buildBlogArchiveTemplateContent,
+  type BlogArchiveTemplateData,
+  type BlogArchiveTemplatePost,
+} from '@/lib/blogArchiveTemplate';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -51,7 +58,7 @@ type ArchiveTheme = {
     body?: string;
     mono?: string;
   };
-  spacing?: Record<string, string | number> | null;
+  spacing?: Record<string, string | number>;
   customCSS?: string;
 };
 
@@ -195,6 +202,31 @@ const filterHref = (basePath: string, params: Record<string, string | number | n
   const query = search.toString();
   return query ? `${basePath}?${query}` : basePath;
 };
+
+const templatePosts = (
+  siteId: string,
+  blogBasePath: string,
+  posts: ArchivePost[],
+  data: Awaited<ReturnType<typeof getArchiveData>>,
+): BlogArchiveTemplatePost[] => posts.map((post) => {
+  const author = post.authorId ? data.authors.find((item) => item.id === post.authorId) : undefined;
+  const categories = data.categories.filter((category) => post.categoryIds.includes(category.id));
+  const tags = data.tags.filter((tag) => post.tagIds.includes(tag.id));
+
+  return {
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt,
+    href: `${blogBasePath}/${post.slug}`,
+    publishedAt: post.publishedAt,
+    updatedAt: post.updatedAt,
+    ...(post.featuredImageId ? { featuredImageUrl: publicMediaFilePath(siteId, post.featuredImageId) } : {}),
+    ...(author ? { authorName: author.name } : {}),
+    categoryNames: categories.map((category) => category.name),
+    tagNames: tags.map((tag) => tag.name),
+  };
+});
 
 async function getArchiveData(hostedSite: HostedSite, rawParams: Record<string, string | string[] | undefined>) {
   const category = firstParam(rawParams.category).trim();
@@ -370,6 +402,41 @@ export default async function BlogArchivePage({ params, searchParams }: BlogArch
   const activeTitle = data.activeCategory?.name || data.activeTag?.name || data.activeAuthor?.name || 'All posts';
   const archiveSubtitle = archiveDescription(hostedSite.site.name, data.activeCategory, data.activeTag, data.activeAuthor);
   const blogBasePath = `/sites/${encodeURIComponent(subdomain)}/blog`;
+  const templateData: BlogArchiveTemplateData = {
+    siteName: hostedSite.site.name,
+    basePath: blogBasePath,
+    title: 'Blog',
+    description: archiveSubtitle,
+    activeTitle,
+    total: data.total,
+    page: data.filters.page,
+    totalPages,
+    filters: {
+      category: data.filters.category,
+      tag: data.filters.tag,
+      author: data.filters.author,
+      search: data.filters.search,
+      year: data.filters.year,
+      month: data.filters.month,
+      page: data.filters.page,
+    },
+    posts: templatePosts(hostedSite.site.id, blogBasePath, data.posts, data),
+  };
+  const customArchiveContent = buildBlogArchiveTemplateContent(hostedSite.site.settings, templateData);
+
+  if (customArchiveContent) {
+    return (
+      <>
+        <PageRenderer
+          content={customArchiveContent as PageContent}
+          theme={theme}
+          siteId={hostedSite.site.id}
+          pageSlug="blog"
+        />
+        <AnimationHydrator />
+      </>
+    );
+  }
 
   return (
     <>
