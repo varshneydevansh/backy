@@ -195,7 +195,7 @@ const toRenderableElements = (elements: CanvasElement[]): CanvasElement[] => (
   }))
 );
 
-const resolveBreakpoint = (width: number): RenderBreakpoint => {
+export const resolveRendererBreakpoint = (width: number): RenderBreakpoint => {
   if (width <= 639) {
     return 'mobile';
   }
@@ -207,7 +207,7 @@ const resolveBreakpoint = (width: number): RenderBreakpoint => {
 
 const RESPONSIVE_LAYOUT_FIELDS = ['x', 'y', 'width', 'height', 'rotation', 'zIndex', 'visible', 'locked'] as const;
 
-const applyResponsiveOverride = (
+export const applyResponsiveOverride = (
   element: CanvasElement,
   breakpoint: RenderBreakpoint,
 ): CanvasElement => {
@@ -236,7 +236,7 @@ const applyResponsiveOverride = (
   };
 };
 
-const applyResponsiveOverrides = (
+export const applyResponsiveOverrides = (
   elements: CanvasElement[],
   breakpoint: RenderBreakpoint,
 ): CanvasElement[] => elements.map((element) => applyResponsiveOverride(element, breakpoint));
@@ -4061,7 +4061,7 @@ export function PageRenderer({
       const windowViewportWidth = window.innerWidth || Number.POSITIVE_INFINITY;
       const viewportWidth = Math.floor(Math.min(visualViewportWidth, windowViewportWidth, container.clientWidth));
       const availableWidth = Math.max(320, Math.min(container.clientWidth, viewportWidth) - 24);
-      setActiveBreakpoint(resolveBreakpoint(availableWidth));
+      setActiveBreakpoint(resolveRendererBreakpoint(availableWidth));
       const ratio = availableWidth / Math.max(canvasSize.width, 1);
       const nextScale = Math.max(0.32, Math.min(1, ratio));
       setScale(nextScale);
@@ -4216,9 +4216,15 @@ export function PageRenderer({
         }}
       />
 
-      <div ref={viewportRef} className="backy-render-root" style={{ ...viewportStyle, ...themeVars }}>
-        <div className="backy-canvas-frame" style={canvasFrameStyle}>
-          <div className="backy-canvas" style={canvasStyle}>
+      <div
+        ref={viewportRef}
+        className="backy-render-root"
+        style={{ ...viewportStyle, ...themeVars }}
+        data-backy-render-breakpoint={activeBreakpoint}
+        data-backy-render-scale={scale.toFixed(3)}
+      >
+        <div className="backy-canvas-frame" style={canvasFrameStyle} data-backy-canvas-scale={scale.toFixed(3)}>
+          <div className="backy-canvas" style={canvasStyle} data-backy-active-breakpoint={activeBreakpoint}>
             {elements.map((element) => (
               element.visible === false ? null : (
                 <ElementRenderer

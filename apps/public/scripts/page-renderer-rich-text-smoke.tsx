@@ -1,6 +1,12 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PageRenderer, type FontAsset, type PageContent } from '../src/components/PageRenderer';
+import {
+  PageRenderer,
+  applyResponsiveOverrides,
+  resolveRendererBreakpoint,
+  type FontAsset,
+  type PageContent,
+} from '../src/components/PageRenderer';
 import { buildCollectionTemplateContent } from '../src/lib/renderPayload';
 
 const assert = (condition: unknown, message: string) => {
@@ -926,6 +932,67 @@ assert(html.includes('src="https://cdn.backy.test/repeater-record.jpg"'), `Repea
 assert(html.includes('alt="Repeater record title"'), `Repeater image alt was not rendered: ${html}`);
 assert(html.includes('Repeater record title'), `Repeater title was not rendered: ${html}`);
 assert(html.includes('Repeater record summary'), `Repeater summary was not rendered: ${html}`);
+assert(html.includes('data-backy-render-breakpoint="desktop"'), `Initial renderer breakpoint marker was not rendered: ${html}`);
+assert(html.includes('data-backy-render-scale="1.000"'), `Initial renderer scale marker was not rendered: ${html}`);
+
+assert(resolveRendererBreakpoint(390) === 'mobile', '390px did not resolve to mobile breakpoint');
+assert(resolveRendererBreakpoint(768) === 'tablet', '768px did not resolve to tablet breakpoint');
+assert(resolveRendererBreakpoint(1200) === 'desktop', '1200px did not resolve to desktop breakpoint');
+const responsiveElements = applyResponsiveOverrides([
+  {
+    id: 'responsive-root',
+    type: 'section',
+    x: 100,
+    y: 120,
+    width: 900,
+    height: 400,
+    props: { content: 'Desktop section' },
+    styles: { backgroundColor: '#ffffff' },
+    responsive: {
+      tablet: {
+        x: 40,
+        width: 700,
+        props: { content: 'Tablet section' },
+      },
+      mobile: {
+        x: 16,
+        y: 24,
+        width: 340,
+        height: 260,
+        visible: false,
+        props: { content: 'Mobile section' },
+        styles: { backgroundColor: '#f8fafc' },
+      },
+    },
+    children: [
+      {
+        id: 'responsive-child',
+        type: 'text',
+        x: 20,
+        y: 30,
+        width: 320,
+        height: 40,
+        props: { content: 'Desktop child' },
+        responsive: {
+          mobile: {
+            x: 8,
+            width: 300,
+            props: { content: 'Mobile child' },
+          },
+        },
+        children: [],
+      },
+    ],
+  },
+], 'mobile');
+const responsiveRoot = responsiveElements[0];
+assert(responsiveRoot.x === 16 && responsiveRoot.y === 24, `Mobile layout override was not applied: ${JSON.stringify(responsiveRoot)}`);
+assert(responsiveRoot.width === 340 && responsiveRoot.height === 260, `Mobile size override was not applied: ${JSON.stringify(responsiveRoot)}`);
+assert(responsiveRoot.visible === false, `Mobile visibility override was not applied: ${JSON.stringify(responsiveRoot)}`);
+assert(responsiveRoot.props.content === 'Mobile section', `Mobile props override was not applied: ${JSON.stringify(responsiveRoot.props)}`);
+assert(responsiveRoot.styles?.backgroundColor === '#f8fafc', `Mobile styles override was not applied: ${JSON.stringify(responsiveRoot.styles)}`);
+assert(responsiveRoot.children?.[0]?.x === 8, `Child mobile layout override was not applied: ${JSON.stringify(responsiveRoot.children?.[0])}`);
+assert(responsiveRoot.children?.[0]?.props.content === 'Mobile child', `Child mobile props override was not applied: ${JSON.stringify(responsiveRoot.children?.[0]?.props)}`);
 
 const dynamicTemplateSite = {
   id: 'site_renderer_smoke',
@@ -1073,6 +1140,7 @@ console.log(JSON.stringify({
     styledCheckbox: true,
     styledForm: true,
     styledRepeater: true,
+    responsiveBreakpoints: true,
     authoredDynamicTemplate: true,
   },
 }, null, 2));
