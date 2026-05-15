@@ -1606,7 +1606,12 @@ const assertProductsLayout = async (client) => {
         hasProductPageTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')) &&
           Boolean(document.querySelector('[data-testid="products-page-template-list"]')) &&
           Boolean(document.querySelector('[data-testid="products-page-template-item"]')) &&
-          document.body?.innerText?.includes('Product page templates'),
+          Boolean(document.querySelector('[data-testid="products-page-template-featured-collection"]')) &&
+          Boolean(document.querySelector('[data-testid="products-page-template-product-launch"]')) &&
+          document.body?.innerText?.includes('Product page templates') &&
+          document.body?.innerText?.includes('Featured collection') &&
+          document.body?.innerText?.includes('Product launch') &&
+          document.body?.innerText?.includes('Route model'),
         hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
@@ -1675,13 +1680,15 @@ const assertCustomerProfileManagement = async (client, customersCollection, cust
   throw new Error(`Customer profile management did not persist changes: ${JSON.stringify(current?.values)}`);
 };
 
-const assertProductPageTemplateShortcut = async (client, productCollection, mode) => {
+const assertProductPageTemplateShortcut = async (client, productCollection, template) => {
+  const mode = template.mode;
+  const testId = template.testId || `products-page-template-${mode}`;
   await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
 
   let clickState = null;
   for (let attempt = 0; attempt < 100; attempt += 1) {
     clickState = await evaluate(client, `(() => {
-      const button = document.querySelector('[data-testid="products-page-template-${mode}"]');
+      const button = document.querySelector('[data-testid="${testId}"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
         return {
           ok: false,
@@ -1732,18 +1739,14 @@ const assertProductPageTemplateShortcut = async (client, productCollection, mode
       };
     })()`);
 
-    const expectedTitle = mode === 'item' ? 'Product detail' : 'Product catalog';
-    const expectedSlug = mode === 'item' ? 'product-detail' : 'products-list';
-    const expectedNav = mode === 'item' ? 'none' : 'primary';
-
     if (
       state.path === '/pages/new' &&
       state.template === 'storefront' &&
       state.collectionId === productCollection.id &&
       state.datasetMode === mode &&
-      state.title === expectedTitle &&
-      state.slug === expectedSlug &&
-      state.nav === expectedNav &&
+      state.title === template.title &&
+      state.slug === template.slug &&
+      state.nav === template.nav &&
       state.payloadTemplate === 'storefront' &&
       state.payloadDatasetMode === mode &&
       state.payloadCollectionId === productCollection.id &&
@@ -1950,8 +1953,34 @@ const main = async () => {
     const layout = await assertProductsLayout(client);
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
-    const productListPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, 'list');
-    const productDetailPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, 'item');
+    const productListPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
+      mode: 'list',
+      testId: 'products-page-template-list',
+      title: 'Product catalog',
+      slug: 'products-list',
+      nav: 'primary',
+    });
+    const featuredProductPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
+      mode: 'list',
+      testId: 'products-page-template-featured-collection',
+      title: 'Featured products',
+      slug: 'featured-products',
+      nav: 'primary',
+    });
+    const productDetailPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
+      mode: 'item',
+      testId: 'products-page-template-item',
+      title: 'Product detail',
+      slug: 'product-detail',
+      nav: 'none',
+    });
+    const productLaunchPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, {
+      mode: 'item',
+      testId: 'products-page-template-product-launch',
+      title: 'Product launch',
+      slug: 'product-launch',
+      nav: 'none',
+    });
 
     const browserErrors = client.events
       .filter((event) => (
@@ -2029,6 +2058,16 @@ const main = async () => {
           collectionId: productDetailPageTemplate.collectionId,
           datasetMode: productDetailPageTemplate.datasetMode,
           slug: productDetailPageTemplate.slug,
+        },
+        featured: {
+          collectionId: featuredProductPageTemplate.collectionId,
+          datasetMode: featuredProductPageTemplate.datasetMode,
+          slug: featuredProductPageTemplate.slug,
+        },
+        launch: {
+          collectionId: productLaunchPageTemplate.collectionId,
+          datasetMode: productLaunchPageTemplate.datasetMode,
+          slug: productLaunchPageTemplate.slug,
         },
       },
       frontendProductCleaned,

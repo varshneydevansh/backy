@@ -729,19 +729,29 @@ function ProductsRoute() {
     if (!productCollection) return [];
 
     const buildBrief = ({
+      id,
       mode,
+      variant,
       title,
       slug,
       description,
       nav,
       navLabel,
+      focus,
+      routePattern,
+      sections,
     }: {
+      id: string;
       mode: ProductPageTemplateMode;
+      variant: string;
       title: string;
       slug: string;
       description: string;
       nav: 'primary' | 'none';
       navLabel: string;
+      focus: string;
+      routePattern: string;
+      sections: string[];
     }) => {
       const search = {
         siteId: activeSiteId,
@@ -757,23 +767,31 @@ function ProductsRoute() {
       const createRoute = `/pages/new?${new URLSearchParams(search).toString()}`;
 
       return {
+        id,
         mode,
+        variant,
         title,
         slug,
         description,
         nav,
         navLabel,
+        focus,
+        routePattern,
+        sections,
         createRoute,
         search,
         manifest: {
           schemaVersion: 'backy.product-page-template.v1',
+          id,
           mode,
+          variant,
           createRoute,
           page: {
             suggestedTitle: title,
             suggestedSlug: slug,
             navigationPlacement: nav,
             navigationLabel: navLabel,
+            routePattern,
           },
           dataset: {
             collectionId: productCollection.id,
@@ -783,6 +801,14 @@ function ProductsRoute() {
             descriptionField: productFieldKey('description'),
             imageField: productFieldKey('imageUrl'),
             detailHref: '/products/{recordSlug}',
+          },
+          storefrontSections: sections,
+          dynamicRoutePromotion: {
+            routePattern,
+            promotionTarget: mode === 'item' ? 'product-detail-route' : 'product-list-route',
+            requiredBindings: mode === 'item'
+              ? ['recordSlug', productFieldKey('title'), productFieldKey('price'), productFieldKey('imageUrl'), productFieldKey('variants'), productFieldKey('checkoutUrl')]
+              : [productFieldKey('title'), productFieldKey('price'), productFieldKey('imageUrl'), productFieldKey('category'), productFieldKey('featured'), productFieldKey('inventory')],
           },
           publicApis: {
             catalog: commerceCatalogUrl,
@@ -795,20 +821,56 @@ function ProductsRoute() {
 
     return [
       buildBrief({
+        id: 'catalog-grid',
         mode: 'list',
+        variant: 'Catalog grid',
         title: 'Product catalog',
         slug: 'products-list',
         description: 'A storefront product list page bound to the Backy products collection with product cards, filters, and checkout-ready links.',
         nav: 'primary',
         navLabel: 'Shop',
+        focus: 'Browseable product grid with merchandising filters and checkout-ready card links.',
+        routePattern: '/products',
+        sections: ['storefront hero', 'featured product', 'product grid', 'category filters', 'checkout CTA'],
       }),
       buildBrief({
+        id: 'featured-collection',
+        mode: 'list',
+        variant: 'Featured collection',
+        title: 'Featured products',
+        slug: 'featured-products',
+        description: 'A campaign-ready collection page for featured products, seasonal categories, and curated storefront launches.',
+        nav: 'primary',
+        navLabel: 'Featured',
+        focus: 'Curated landing-style storefront with featured, category, and promotion-ready sections.',
+        routePattern: '/collections/featured',
+        sections: ['campaign hero', 'featured repeater', 'category rail', 'promotion banner', 'order-intake CTA'],
+      }),
+      buildBrief({
+        id: 'product-detail',
         mode: 'item',
+        variant: 'Product detail',
         title: 'Product detail',
         slug: 'product-detail',
         description: 'A storefront product detail page bound to one Backy product record with title, description, media, variants, and checkout metadata.',
         nav: 'none',
         navLabel: 'Product',
+        focus: 'Single-record product route with complete media, variant, delivery, subscription, and checkout bindings.',
+        routePattern: '/products/:recordSlug',
+        sections: ['media gallery', 'title and price', 'variant selector', 'stock and delivery', 'checkout handoff'],
+      }),
+      buildBrief({
+        id: 'product-launch',
+        mode: 'item',
+        variant: 'Product launch',
+        title: 'Product launch',
+        slug: 'product-launch',
+        description: 'A launch page for one product with hero storytelling, social metadata, availability, subscription, and checkout actions.',
+        nav: 'none',
+        navLabel: 'Launch',
+        focus: 'Editorial product page with hero, benefit sections, return policy, subscription metadata, and checkout CTA.',
+        routePattern: '/launch/:recordSlug',
+        sections: ['launch hero', 'benefits', 'gallery', 'subscription offer', 'return policy', 'checkout CTA'],
       }),
     ];
   }, [activeSiteId, commerceCatalogUrl, commerceOrderContractUrl, commerceProductDetailUrl, productCollection]);
@@ -3161,10 +3223,11 @@ function ProductsRoute() {
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {productPageTemplateBriefs.map((brief) => (
-                    <div key={brief.mode} className="rounded-lg border border-border bg-card p-3">
+                    <div key={brief.id} className="rounded-lg border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-foreground">{brief.title}</div>
+                          <div className="mt-1 text-xs font-medium text-primary">{brief.variant}</div>
                           <div className="mt-1 text-xs leading-5 text-muted-foreground">{brief.description}</div>
                         </div>
                         <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 font-mono text-[10px] font-semibold text-primary">
@@ -3177,9 +3240,21 @@ function ProductsRoute() {
                           <span className="font-mono text-muted-foreground">{productCollection.id}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-2">
+                          <span className="font-medium text-foreground">Route model</span>
+                          <span className="font-mono text-muted-foreground">{brief.routePattern}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-2">
                           <span className="font-medium text-foreground">Route draft</span>
                           <span className="font-mono text-muted-foreground">/{brief.slug}</span>
                         </div>
+                      </div>
+                      <div className="mt-3 text-xs leading-5 text-muted-foreground">{brief.focus}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {brief.sections.slice(0, 5).map((section) => (
+                          <span key={section} className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                            {section}
+                          </span>
+                        ))}
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button
@@ -3189,7 +3264,7 @@ function ProductsRoute() {
                           disabled={isProductsAccessBusy || !canEditPages}
                           title={!canEditPages ? pagesEditPermissionTitle : undefined}
                           iconStart={<Sparkles className="size-4" />}
-                          data-testid={`products-page-template-${brief.mode}`}
+                          data-testid={brief.id === 'catalog-grid' ? 'products-page-template-list' : brief.id === 'product-detail' ? 'products-page-template-item' : `products-page-template-${brief.id}`}
                         >
                           Create {brief.mode === 'list' ? 'list page' : 'detail page'}
                         </Button>
