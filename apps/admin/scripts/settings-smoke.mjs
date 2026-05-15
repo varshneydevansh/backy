@@ -1660,6 +1660,79 @@ const assertDirectSettingsApiRejectsInvalidOperationalSettings = async (settings
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidBrandSeoSettings = async (settings) => {
+  const sendInvalidBrandPatch = async (label, integrationsPatch) => {
+    const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...(settings.integrations || {}),
+          ...integrationsPatch,
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 400, `${label} should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'VALIDATION_ERROR', `${label} rejection should return VALIDATION_ERROR: ${JSON.stringify(payload).slice(0, 500)}`);
+
+    return {
+      status: response.status,
+      code: payload.error?.code,
+    };
+  };
+
+  const general = await sendInvalidBrandPatch('Invalid default site name', {
+    general: {
+      ...(settings.integrations?.general || {}),
+      siteName: '   ',
+    },
+  });
+  const color = await sendInvalidBrandPatch('Invalid appearance color', {
+    appearance: {
+      ...(settings.integrations?.appearance || {}),
+      primaryColor: 'teal',
+    },
+  });
+  const typography = await sendInvalidBrandPatch('Invalid base font size', {
+    appearance: {
+      ...(settings.integrations?.appearance || {}),
+      baseFontSize: 99,
+    },
+  });
+  const seo = await sendInvalidBrandPatch('Invalid default OG image URL', {
+    seo: {
+      ...(settings.integrations?.seo || {}),
+      ogImageUrl: 'ftp://cdn.example.com/og.png',
+    },
+  });
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.general?.siteName === settings.integrations?.general?.siteName,
+    `Rejected general patch should not mutate persisted general settings: ${JSON.stringify(after.integrations?.general).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.appearance?.primaryColor === settings.integrations?.appearance?.primaryColor,
+    `Rejected appearance patch should not mutate persisted appearance settings: ${JSON.stringify(after.integrations?.appearance).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.seo?.ogImageUrl === settings.integrations?.seo?.ogImageUrl,
+    `Rejected SEO patch should not mutate persisted SEO settings: ${JSON.stringify(after.integrations?.seo).slice(0, 500)}`,
+  );
+
+  return {
+    general,
+    color,
+    typography,
+    seo,
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1764,6 +1837,7 @@ const main = async () => {
     const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
     const infrastructureProviderValidation = await assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings(await readSettings());
     const operationalSettingsValidation = await assertDirectSettingsApiRejectsInvalidOperationalSettings(await readSettings());
+    const brandSeoValidation = await assertDirectSettingsApiRejectsInvalidBrandSeoSettings(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1797,6 +1871,7 @@ const main = async () => {
       callbackUrlValidation,
       infrastructureProviderValidation,
       operationalSettingsValidation,
+      brandSeoValidation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,

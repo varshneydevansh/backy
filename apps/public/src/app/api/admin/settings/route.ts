@@ -84,6 +84,7 @@ const stringValue = (value: unknown): string => (
 );
 
 const EMAIL_ADDRESS_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
 const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
@@ -836,6 +837,57 @@ const validateAuthPolicySettings = (auth: unknown): string | null => {
 
   if (invalidDomains.length > 0) {
     return `Allowed email domains include invalid values: ${invalidDomains.slice(0, 3).join(', ')}.`;
+  }
+
+  return null;
+};
+
+const validateBrandSeoSettings = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const general = parseJsonObject(input?.general) || {};
+  const appearance = parseJsonObject(input?.appearance) || {};
+  const seo = parseJsonObject(input?.seo) || {};
+  const siteName = stringValue(general.siteName);
+
+  if (general.siteName !== undefined && !siteName) {
+    return 'Default site name is required.';
+  }
+
+  const colorChecks = [
+    { key: 'primaryColor', label: 'Primary color' },
+    { key: 'secondaryColor', label: 'Secondary color' },
+    { key: 'backgroundColor', label: 'Background color' },
+    { key: 'surfaceColor', label: 'Surface color' },
+    { key: 'textColor', label: 'Text color' },
+    { key: 'mutedTextColor', label: 'Muted text color' },
+  ];
+
+  for (const check of colorChecks) {
+    const value = stringValue(appearance[check.key]);
+    if (appearance[check.key] !== undefined && !HEX_COLOR_REGEX.test(value)) {
+      return `${check.label} must be a six-character hex color.`;
+    }
+  }
+
+  const numericChecks = [
+    { key: 'baseFontSize', label: 'Base font size', min: 12, max: 24, unit: 'pixels' },
+    { key: 'radius', label: 'Corner radius', min: 0, max: 32, unit: 'pixels' },
+    { key: 'spacingUnit', label: 'Spacing unit', min: 2, max: 16, unit: 'pixels' },
+  ];
+
+  for (const check of numericChecks) {
+    if (appearance[check.key] === undefined) {
+      continue;
+    }
+    const value = numberValue(appearance[check.key], Number.NaN);
+    if (!Number.isFinite(value) || value < check.min || value > check.max) {
+      return `${check.label} must be from ${check.min} to ${check.max} ${check.unit}.`;
+    }
+  }
+
+  const ogImageUrl = stringValue(seo.ogImageUrl);
+  if (ogImageUrl && !validateWebhookUrl(ogImageUrl).ok) {
+    return 'Default OG image URL must be an http or https URL.';
   }
 
   return null;
@@ -2561,6 +2613,10 @@ export async function PATCH(request: NextRequest) {
       if (infrastructureSettingsError) {
         return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
       }
+      const brandSeoSettingsError = validateBrandSeoSettings(integrations);
+      if (brandSeoSettingsError) {
+        return errorResponse(400, 'VALIDATION_ERROR', brandSeoSettingsError, requestId);
+      }
       const commerceSettingsError = validateCommerceOperationalSettings(integrations);
       if (commerceSettingsError) {
         return errorResponse(400, 'VALIDATION_ERROR', commerceSettingsError, requestId);
@@ -2629,6 +2685,10 @@ export async function PATCH(request: NextRequest) {
     const infrastructureSettingsError = validateInfrastructureProviderSettings(integrations);
     if (infrastructureSettingsError) {
       return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
+    }
+    const brandSeoSettingsError = validateBrandSeoSettings(integrations);
+    if (brandSeoSettingsError) {
+      return errorResponse(400, 'VALIDATION_ERROR', brandSeoSettingsError, requestId);
     }
     const commerceSettingsError = validateCommerceOperationalSettings(integrations);
     if (commerceSettingsError) {
