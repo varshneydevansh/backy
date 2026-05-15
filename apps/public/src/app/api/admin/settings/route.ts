@@ -542,6 +542,8 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   const paymentProvider = stringValue(commerce.paymentProvider);
   const providerMode = stringValue(commerce.providerMode);
   const reconciliationMode = stringValue(commerce.reconciliationMode);
+  const billingPlan = stringValue(commerce.billingPlan);
+  const overageMode = stringValue(commerce.overageMode);
   const notifications = normalizeNotificationIntegrations(input.notifications);
 
   return {
@@ -604,6 +606,17 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       inventoryReservations: boolValue(commerce.inventoryReservations, true),
       reservationMinutes: Math.max(1, Math.min(1440, Math.round(numberValue(commerce.reservationMinutes, 15)))),
       webhookEventsEnabled: boolValue(commerce.webhookEventsEnabled),
+      billingPlan: ['free', 'starter', 'pro', 'enterprise'].includes(billingPlan)
+        ? billingPlan
+        : 'free',
+      monthlyOrderLimit: Math.max(0, Math.min(1000000, Math.round(numberValue(commerce.monthlyOrderLimit, 100)))),
+      productLimit: Math.max(0, Math.min(1000000, Math.round(numberValue(commerce.productLimit, 100)))),
+      siteLimit: Math.max(1, Math.min(10000, Math.round(numberValue(commerce.siteLimit, 3)))),
+      seatLimit: Math.max(1, Math.min(10000, Math.round(numberValue(commerce.seatLimit, 3)))),
+      overageMode: ['block', 'warn', 'manual-review'].includes(overageMode)
+        ? overageMode
+        : 'warn',
+      billingContactEmail: stringValue(commerce.billingContactEmail),
     },
   };
 };

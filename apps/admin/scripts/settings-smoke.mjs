@@ -893,6 +893,13 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   await setLabeledControl(client, 'Shipping base', '11.5');
   await setLabeledControl(client, 'Shipping weight rate', '1.75');
   await setLabeledControl(client, 'Discount percent', '12.5');
+  await setLabeledControl(client, 'Billing plan', 'pro');
+  await setLabeledControl(client, 'Monthly order limit', '5000');
+  await setLabeledControl(client, 'Product limit', '750');
+  await setLabeledControl(client, 'Site limit', '12');
+  await setLabeledControl(client, 'Seat limit', '25');
+  await setLabeledControl(client, 'Overage mode', 'manual-review');
+  await setLabeledControl(client, 'Billing contact email', `billing+${suffix}@example.com`);
   await setLabeledControl(client, 'Webhook events', true);
   const commerceState = await evaluate(client, `(() => ({
     search: window.location.search,
@@ -993,6 +1000,13 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.commerce?.shippingWeightRate === 1.75, 'Commerce shipping weight rate was not persisted');
   assert(settings.integrations?.commerce?.discountPercent === 12.5, 'Commerce discount percent was not persisted');
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
+  assert(settings.integrations?.commerce?.billingPlan === 'pro', 'Commerce billing plan was not persisted');
+  assert(settings.integrations?.commerce?.monthlyOrderLimit === 5000, 'Commerce monthly order limit was not persisted');
+  assert(settings.integrations?.commerce?.productLimit === 750, 'Commerce product limit was not persisted');
+  assert(settings.integrations?.commerce?.siteLimit === 12, 'Commerce site limit was not persisted');
+  assert(settings.integrations?.commerce?.seatLimit === 25, 'Commerce seat limit was not persisted');
+  assert(settings.integrations?.commerce?.overageMode === 'manual-review', 'Commerce overage mode was not persisted');
+  assert(settings.integrations?.commerce?.billingContactEmail === `billing+${suffix}@example.com`, 'Commerce billing contact email was not persisted');
   assert(settings.integrations?.notifications?.email?.comments === false, 'Comment notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.email?.formSubmission === true, 'Form notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.email?.newUser !== true, 'Planned new-user notification email should not persist as enabled');

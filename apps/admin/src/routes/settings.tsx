@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Copy,
   Download,
+  CreditCard,
   ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -2527,6 +2528,13 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   inventoryReservations: true,
   reservationMinutes: 15,
   webhookEventsEnabled: false,
+  billingPlan: 'free',
+  monthlyOrderLimit: 100,
+  productLimit: 100,
+  siteLimit: 3,
+  seatLimit: 3,
+  overageMode: 'warn',
+  billingContactEmail: '',
 };
 
 const DEFAULT_AUTH_SETTINGS: AuthPolicySettingsConfig = {
@@ -2956,6 +2964,52 @@ function validateSettingsDraft({
       tab: 'commerce',
       label: 'Discount percent is invalid',
       detail: 'Use a discount percent from 0 to 100.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.monthlyOrderLimit ?? 0) < 0 || (commerce.monthlyOrderLimit ?? 0) > 1000000) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Monthly order limit is invalid',
+      detail: 'Use a monthly order limit from 0 to 1000000 orders.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.productLimit ?? 0) < 0 || (commerce.productLimit ?? 0) > 1000000) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Product limit is invalid',
+      detail: 'Use a product limit from 0 to 1000000 products.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.siteLimit ?? 0) < 1 || (commerce.siteLimit ?? 0) > 10000) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Site limit is invalid',
+      detail: 'Use a site limit from 1 to 10000 sites.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.seatLimit ?? 0) < 1 || (commerce.seatLimit ?? 0) > 10000) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Seat limit is invalid',
+      detail: 'Use a seat limit from 1 to 10000 users.',
+      severity: 'error',
+    });
+  }
+
+  const billingContactEmail = commerce.billingContactEmail?.trim();
+  if (billingContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingContactEmail)) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Billing contact email is invalid',
+      detail: 'Use a valid email address for billing notices and overage review.',
       severity: 'error',
     });
   }
@@ -4378,6 +4432,98 @@ function CommerceSettings({
               </label>
             </div>
           </div>
+          <div className="mt-5 grid gap-3 border-t border-border pt-4">
+            <div>
+              <h4 className="flex items-center gap-2 text-sm font-semibold">
+                <CreditCard className="size-4" />
+                Platform billing limits
+              </h4>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Non-secret plan and limit policy used by admin workflows before enabling new sites, products, seats, and order intake.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Billing plan</span>
+                <select
+                  value={resolved.billingPlan}
+                  onChange={(event) => update({ billingPlan: event.target.value as CommerceSettingsConfig['billingPlan'] })}
+                  className={inputClassName}
+                >
+                  <option value="free">Free</option>
+                  <option value="starter">Starter</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Overage mode</span>
+                <select
+                  value={resolved.overageMode}
+                  onChange={(event) => update({ overageMode: event.target.value as CommerceSettingsConfig['overageMode'] })}
+                  className={inputClassName}
+                >
+                  <option value="warn">Warn only</option>
+                  <option value="block">Block new usage</option>
+                  <option value="manual-review">Manual review</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Monthly order limit</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={resolved.monthlyOrderLimit}
+                  onChange={(event) => update({ monthlyOrderLimit: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Product limit</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={resolved.productLimit}
+                  onChange={(event) => update({ productLimit: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Site limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={resolved.siteLimit}
+                  onChange={(event) => update({ siteLimit: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Seat limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={resolved.seatLimit}
+                  onChange={(event) => update({ seatLimit: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                <span className="font-medium">Billing contact email</span>
+                <input
+                  type="email"
+                  value={resolved.billingContactEmail}
+                  onChange={(event) => update({ billingContactEmail: event.target.value })}
+                  placeholder="billing@example.com"
+                  className={inputClassName}
+                />
+              </label>
+            </div>
+          </div>
         </PanelContent>
       </Panel>
 
@@ -4392,6 +4538,7 @@ function CommerceSettings({
               ['Catalog', 'Products stay public through the product catalog and collection record APIs.'],
               ['Checkout', 'The selected mode tells a custom frontend whether to show cart-only, manual order, or provider checkout flows.'],
               ['Settlement', `${resolved.reconciliationMode} reconciliation with a ${resolved.reconciliationWindowHours}-hour review window is part of the handoff contract.`],
+              ['Billing policy', `${resolved.billingPlan} plan with ${resolved.monthlyOrderLimit} monthly orders and ${resolved.overageMode} overage handling.`],
               ['Private data', 'Orders, customer details, provider references, refunds, and fulfillment remain admin-only.'],
             ].map(([title, detail]) => (
               <div key={title} className="rounded-lg border border-border bg-card p-3">

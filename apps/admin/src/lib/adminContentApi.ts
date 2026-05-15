@@ -1765,6 +1765,13 @@ export interface SiteSettingsInput {
       inventoryReservations?: boolean;
       reservationMinutes?: number;
       webhookEventsEnabled?: boolean;
+      billingPlan?: 'free' | 'starter' | 'pro' | 'enterprise';
+      monthlyOrderLimit?: number;
+      productLimit?: number;
+      siteLimit?: number;
+      seatLimit?: number;
+      overageMode?: 'block' | 'warn' | 'manual-review';
+      billingContactEmail?: string;
     };
     notifications?: {
       email?: {
