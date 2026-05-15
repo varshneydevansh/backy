@@ -2056,6 +2056,12 @@ export interface SiteSettingsInput {
     webhookSecretConfigured?: boolean;
     webhookSecretSource?: 'none' | 'env' | 'development-direct' | 'unresolved';
     webhookSecretEnvKeys?: string[];
+    stripeSecretConfigured?: boolean;
+    stripeApiBaseUrl?: string;
+    stripeTaxApiBaseUrl?: string;
+    stripeRefundApiBaseUrl?: string;
+    paymentProvider?: 'none' | 'stripe' | 'manual';
+    taxProvider?: 'manual' | 'http' | 'stripe';
     easyPostApiKeyConfigured?: boolean;
     easyPostApiBaseUrl?: string;
     shippingLabelProvider?: 'manual' | 'easypost';

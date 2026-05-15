@@ -1027,6 +1027,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
+    hasStripeApiEnv: document.body?.innerText?.includes('Payment provider API key') || false,
+    hasStripeApiBaseEnv: document.body?.innerText?.includes('Stripe API base URL') || false,
     hasEasyPostLabelEnv: document.body?.innerText?.includes('EasyPost label API key') || false,
     hasStorageSecretRefs: document.body?.innerText?.includes('Storage credentials stay in deployment env') || false,
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
@@ -1039,6 +1041,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasNotificationRuntime &&
     infrastructureState.hasCommerceRuntime &&
     infrastructureState.hasCommerceWebhookSecretEnv &&
+    infrastructureState.hasStripeApiEnv &&
+    infrastructureState.hasStripeApiBaseEnv &&
     infrastructureState.hasEasyPostLabelEnv &&
     infrastructureState.hasStorageSecretRefs,
     `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
@@ -1052,6 +1056,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasMediaScanner: document.body?.innerText?.includes('Media scanner') || false,
     hasNotificationDelivery: document.body?.innerText?.includes('Notification delivery') || false,
     hasCommerceSecrets: document.body?.innerText?.includes('Commerce webhook secrets') || false,
+    hasStripeApiExecution: document.body?.innerText?.includes('Stripe API execution') || false,
     hasEasyPostLabelExecution: document.body?.innerText?.includes('EasyPost label execution') || false,
     hasBlocked: document.body?.innerText?.includes('blocked') || false,
     hasDeploymentHistory: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('Deployment history') || false,
@@ -1064,6 +1069,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       checkState.hasMediaScanner &&
       checkState.hasNotificationDelivery &&
       checkState.hasCommerceSecrets &&
+      checkState.hasStripeApiExecution &&
       checkState.hasEasyPostLabelExecution,
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
   );
@@ -1241,6 +1247,11 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.mode === 'checkout-provider', 'Commerce mode was not persisted');
   assert(settings.integrations?.commerce?.currency === 'EUR', 'Commerce currency was not persisted');
   assert(settings.integrations?.commerce?.paymentProvider === 'stripe', 'Commerce payment provider was not persisted');
+  assert(
+    settings.runtimeCommerce?.stripeSecretConfigured === Boolean(process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY),
+    `Commerce runtime Stripe secret readiness did not match env: ${JSON.stringify(settings.runtimeCommerce)}`,
+  );
+  assert(settings.runtimeCommerce?.stripeApiBaseUrl, `Commerce runtime Stripe API base URL was not reported: ${JSON.stringify(settings.runtimeCommerce)}`);
   assert(settings.integrations?.commerce?.providerAccountId === `acct_${suffix}`, 'Commerce provider account ID was not persisted');
   assert(settings.integrations?.commerce?.providerMode === 'live', 'Commerce provider mode was not persisted');
   assert(settings.integrations?.commerce?.providerWebhookUrl === `https://hooks.example.com/commerce/${suffix}`, 'Commerce provider webhook URL was not persisted');

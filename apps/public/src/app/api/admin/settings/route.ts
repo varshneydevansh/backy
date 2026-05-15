@@ -299,12 +299,22 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
   const resolution = resolveCommerceWebhookSecret(settings);
   const integrations = parseJsonObject(settings) || {};
   const commerce = parseJsonObject(parseJsonObject(integrations.integrations)?.commerce) || {};
+  const paymentProvider = stringValue(commerce.paymentProvider) === 'stripe' ? 'stripe' : stringValue(commerce.paymentProvider) || 'none';
+  const taxProvider = stringValue(commerce.taxProvider) === 'stripe' ? 'stripe' : stringValue(commerce.taxProvider) || 'manual';
   const shippingLabelProvider = stringValue(commerce.shippingLabelProvider) === 'easypost' ? 'easypost' : 'manual';
+  const stripeSecretKey = envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
+  const stripeApiBaseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']);
+  const stripeTaxApiBaseUrl = envValue(['BACKY_STRIPE_TAX_API_BASE_URL']);
+  const stripeRefundApiBaseUrl = envValue(['BACKY_STRIPE_REFUND_API_BASE_URL']);
   const easyPostApiKey = envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']);
   const easyPostApiBaseUrl = envValue(['BACKY_EASYPOST_API_BASE_URL', 'EASYPOST_API_BASE_URL']);
+  const stripeRequired = paymentProvider === 'stripe' || taxProvider === 'stripe';
   const missing = [
     resolution.reference && !resolution.secret
       ? `${resolution.envKeys.join(' or ') || 'commerce webhook secret env'}`
+      : '',
+    stripeRequired && !stripeSecretKey
+      ? 'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'
       : '',
     shippingLabelProvider === 'easypost' && !easyPostApiKey
       ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'
@@ -316,6 +326,12 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
     webhookSecretConfigured: Boolean(resolution.secret),
     webhookSecretSource: resolution.source,
     webhookSecretEnvKeys: resolution.envKeys,
+    stripeSecretConfigured: Boolean(stripeSecretKey),
+    stripeApiBaseUrl: stripeApiBaseUrl || 'https://api.stripe.com',
+    stripeTaxApiBaseUrl: stripeTaxApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
+    stripeRefundApiBaseUrl: stripeRefundApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
+    paymentProvider,
+    taxProvider,
     easyPostApiKeyConfigured: Boolean(easyPostApiKey),
     easyPostApiBaseUrl: easyPostApiBaseUrl || 'https://api.easypost.com/v2',
     shippingLabelProvider,
@@ -1345,6 +1361,14 @@ const buildInfrastructureDiagnostics = ({
         detail: stringValue(commerce.providerWebhookUrl)
           ? 'Commerce provider webhook URL is configured in Settings.'
           : 'Add the provider webhook URL before relying on automatic settlement.',
+      },
+      {
+        label: 'Stripe API execution',
+        ready: !(stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe') || Boolean(runtimeCommerce.stripeSecretConfigured),
+        required: stringValue(commerce.paymentProvider) === 'stripe' || stringValue(commerce.taxProvider) === 'stripe',
+        detail: runtimeCommerce.stripeSecretConfigured
+          ? 'Stripe API key is available server-side for checkout sessions, tax calculations, and provider refunds.'
+          : 'Set BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY before relying on Stripe execution.',
       },
       {
         label: 'EasyPost label execution',

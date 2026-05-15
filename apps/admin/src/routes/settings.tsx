@@ -3479,11 +3479,42 @@ const buildInfrastructureEnvContract = ({
     key: 'STRIPE_SECRET_KEY',
     aliases: ['BACKY_STRIPE_SECRET_KEY'],
     label: 'Payment provider API key',
-    description: 'Future provider-execution workflows will need a server-only payment API key; current Backy checkout handoff does not store it.',
-    configured: false,
-    required: false,
+    description: 'Server-only Stripe key used by checkout sessions, Stripe Tax calculations, and provider refund execution.',
+    configured: Boolean(runtimeCommerce?.stripeSecretConfigured),
+    required: commerce?.paymentProvider === 'stripe' || commerce?.taxProvider === 'stripe',
     secret: true,
     example: '<stripe-secret-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_STRIPE_API_BASE_URL',
+    aliases: ['STRIPE_API_BASE_URL'],
+    label: 'Stripe API base URL',
+    description: 'Optional Stripe API base URL override for smoke tests, sandbox adapters, and private network routing.',
+    configured: Boolean(runtimeCommerce?.stripeApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.stripeApiBaseUrl,
+    example: 'https://api.stripe.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_STRIPE_TAX_API_BASE_URL',
+    label: 'Stripe Tax API base URL',
+    description: 'Optional Stripe Tax base URL override used by Orders quote refresh when Stripe Tax is selected.',
+    configured: Boolean(runtimeCommerce?.stripeTaxApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.stripeTaxApiBaseUrl,
+    example: 'https://api.stripe.com',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_STRIPE_REFUND_API_BASE_URL',
+    label: 'Stripe Refund API base URL',
+    description: 'Optional Stripe refund base URL override used by Orders provider-refund execution.',
+    configured: Boolean(runtimeCommerce?.stripeRefundApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.stripeRefundApiBaseUrl,
+    example: 'https://api.stripe.com',
   },
   {
     provider: 'commerce',
@@ -4036,12 +4067,16 @@ function InfrastructureSettings({
         <RuntimeCard
           title="Commerce runtime"
           description="Detected payment-provider webhook and shipping-label execution capability."
-          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
-          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
+          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
+          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.stripeSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
           details={[
             { label: 'Secret ref', value: runtimeCommerce?.webhookSecretReference },
             { label: 'Secret source', value: runtimeCommerce?.webhookSecretSource },
             { label: 'Env keys', value: runtimeCommerce?.webhookSecretEnvKeys?.join(', ') },
+            { label: 'Payment provider', value: runtimeCommerce?.paymentProvider },
+            { label: 'Tax provider', value: runtimeCommerce?.taxProvider },
+            { label: 'Stripe API key', value: runtimeCommerce?.stripeSecretConfigured },
+            { label: 'Stripe API base URL', value: runtimeCommerce?.stripeApiBaseUrl },
             { label: 'Label provider', value: runtimeCommerce?.shippingLabelProvider },
             { label: 'EasyPost API key', value: runtimeCommerce?.easyPostApiKeyConfigured },
             { label: 'EasyPost base URL', value: runtimeCommerce?.easyPostApiBaseUrl },
