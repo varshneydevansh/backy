@@ -7,7 +7,7 @@ import {
   validateAdminInviteOnlyActivationPolicy,
   validateAdminInviteOnlyCreatePolicy,
 } from '@/lib/admin-auth/emailPolicy';
-import { createAdminUser, getAdminUserByEmail, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
+import { createAdminUser, getAdminSettings, getAdminUserByEmail, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -132,6 +132,50 @@ const isActiveAdminAuthority = (user: AdminUserForSafeguard) => (
   (user.role === 'owner' || user.role === 'admin') && user.status === 'active'
 );
 
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const readBillingSeatPolicy = (settings: unknown) => {
+  const root = toRecord(settings);
+  const integrations = toRecord(root.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const limit = Number(commerce.seatLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    seatLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const enforceImportSeatBillingLimit = (
+  settings: unknown,
+  currentUserCount: number,
+  requestedCreateCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingSeatPolicy(settings);
+  if (policy.overageMode === 'block' && currentUserCount + requestedCreateCount > policy.seatLimit) {
+    return errorResponse(
+      402,
+      'BILLING_SEAT_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.seatLimit} user seat${policy.seatLimit === 1 ? '' : 's'}. This import would create ${requestedCreateCount} new user${requestedCreateCount === 1 ? '' : 's'} and exceed the limit.`,
+      requestId,
+      {
+        seatLimit: policy.seatLimit,
+        currentUserCount,
+        requestedCreateCount,
+      },
+    );
+  }
+
+  return null;
+};
+
 const wouldRemoveLastAdminAuthority = (
   users: AdminUserForSafeguard[],
   existingUser: AdminUserForSafeguard,
@@ -239,6 +283,39 @@ export async function POST(request: NextRequest) {
     const errors = [...parsed.errors];
     const authPolicySettings = await getAdminAuthPolicySettings();
     let skipped = 0;
+
+    if (!dryRun) {
+      if (repositories) {
+        const [settings, existingUsers] = await Promise.all([
+          repositories.settings.get(),
+          repositories.users.list({ limit: 1, offset: 0 }),
+        ]);
+        const existingEmails = await Promise.all(parsed.rows.map((row) => repositories.users.getByEmail(row.email)));
+        const requestedCreateCount = existingEmails.filter((user) => !user).length;
+        const billingLimitError = enforceImportSeatBillingLimit(
+          settings,
+          existingUsers.pagination.total,
+          requestedCreateCount,
+          requestId,
+        );
+        if (billingLimitError) {
+          return billingLimitError;
+        }
+      } else {
+        const existingUsers = listAdminUsers();
+        const existingEmails = new Set(existingUsers.map((user) => user.email));
+        const requestedCreateCount = parsed.rows.filter((row) => !existingEmails.has(row.email)).length;
+        const billingLimitError = enforceImportSeatBillingLimit(
+          getAdminSettings(),
+          existingUsers.length,
+          requestedCreateCount,
+          requestId,
+        );
+        if (billingLimitError) {
+          return billingLimitError;
+        }
+      }
+    }
 
     for (const row of parsed.rows) {
       const existing = repositories

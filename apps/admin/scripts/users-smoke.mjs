@@ -369,6 +369,47 @@ const assertUserBillingSeatLimitEnforced = async (suffix) => {
   }
 };
 
+const assertUserImportBillingSeatLimitEnforced = async (suffix) => {
+  const settings = await getSettings();
+  const existingUsers = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedEmail = `blocked-import-seat-${suffix}@example.com`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: Math.max(1, existingUsers.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/users/import`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/csv',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: [
+        'full_name,email,role,status',
+        `Blocked Import Seat ${suffix},${blockedEmail},viewer,invited`,
+      ].join('\n'),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing seat limit should reject user import creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_SEAT_LIMIT', `Billing seat-limited import should return BILLING_SEAT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.details?.requestedCreateCount === 1, `Billing seat-limited import should report requestedCreateCount: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findUserByEmail(blockedEmail)), 'Billing-limited user import unexpectedly persisted a user.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
+};
+
 const waitForUser = async (email, predicate = () => true) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const user = await findUserByEmail(email);
@@ -1673,6 +1714,7 @@ const main = async () => {
     await assertUsersApiRequiresAuth();
     await assertUserPermissionOverridesAreEnforced();
     await assertUserBillingSeatLimitEnforced(suffix);
+    await assertUserImportBillingSeatLimitEnforced(suffix);
     const existing = await findUserByEmail(email);
     assert(!existing, `Temporary user already exists: ${email}`);
 
