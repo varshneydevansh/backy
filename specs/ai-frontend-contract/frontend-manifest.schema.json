@@ -494,6 +494,60 @@
           },
           "required": ["auth", "summary", "capabilities", "permissions", "endpoints"]
         },
+        "delivery": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "canonicalBaseUrl": { "type": "string", "minLength": 1 },
+            "managedBaseUrl": { "type": "string", "minLength": 1 },
+            "primaryDomain": { "type": "string", "minLength": 1 },
+            "customDomain": { "type": ["string", "null"] },
+            "defaultLocale": { "type": "string", "minLength": 2 },
+            "localeStrategy": { "type": "string" },
+            "locales": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "code": { "type": "string", "minLength": 2 },
+                  "label": { "type": "string" },
+                  "default": { "type": "boolean" },
+                  "direction": { "enum": ["ltr", "rtl"] },
+                  "pathPrefix": { "type": "string" }
+                },
+                "required": ["code", "default", "direction", "pathPrefix"]
+              }
+            },
+            "domains": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "type": { "type": "string" },
+                  "host": { "type": "string", "minLength": 1 },
+                  "baseUrl": { "type": "string", "minLength": 1 },
+                  "primary": { "type": "boolean" },
+                  "verified": { "type": "boolean" },
+                  "verificationStatus": { "type": "string" },
+                  "source": { "type": "string" }
+                },
+                "required": ["type", "host", "baseUrl", "primary", "verified"]
+              }
+            },
+            "urls": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "home": { "type": "string" },
+                "sitemap": { "type": "string" },
+                "robots": { "type": "string" }
+              }
+            }
+          },
+          "required": ["canonicalBaseUrl", "managedBaseUrl", "primaryDomain", "defaultLocale", "localeStrategy", "locales", "domains", "urls"]
+        },
         "navigation": { "type": "object" }
       },
       "required": [
@@ -505,6 +559,7 @@
         "routePatterns",
         "modules",
         "admin",
+        "delivery",
         "navigation"
       ]
     }

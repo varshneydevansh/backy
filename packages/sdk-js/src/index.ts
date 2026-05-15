@@ -1133,6 +1133,40 @@ export interface BackyManifestAdminDiscovery {
   [key: string]: unknown;
 }
 
+export interface BackyManifestDeliveryDiscovery {
+  canonicalBaseUrl: string;
+  managedBaseUrl: string;
+  primaryDomain: string;
+  customDomain?: string | null;
+  defaultLocale: string;
+  localeStrategy: string;
+  locales: Array<{
+    code: string;
+    label?: string;
+    default: boolean;
+    direction: 'ltr' | 'rtl';
+    pathPrefix: string;
+    [key: string]: unknown;
+  }>;
+  domains: Array<{
+    type: string;
+    host: string;
+    baseUrl: string;
+    primary: boolean;
+    verified: boolean;
+    verificationStatus?: string;
+    source?: string;
+    [key: string]: unknown;
+  }>;
+  urls: {
+    home?: string;
+    sitemap?: string;
+    robots?: string;
+    [key: string]: string | undefined;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
@@ -1179,6 +1213,7 @@ export interface BackyFrontendManifest {
     [key: string]: unknown;
   };
   admin: BackyManifestAdminDiscovery;
+  delivery: BackyManifestDeliveryDiscovery;
   navigation: { primary?: BackyNavigationItem[]; [key: string]: unknown };
 }
 

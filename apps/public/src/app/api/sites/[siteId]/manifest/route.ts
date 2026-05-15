@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyBlogAuthor, BackyBlogCategory, BackyBlogTag, BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site } from '@backy-cms/core';
+import type { BackyBlogAuthor, BackyBlogCategory, BackyBlogTag, BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site, SiteSettings } from '@backy-cms/core';
 import {
   getAdminSettings,
   getBlogPosts,
@@ -30,6 +30,7 @@ import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isOwnerOnlyAdminPermission, type AdminUserPermissionMatrix } from '@/lib/adminPermissions';
+import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
 
 interface RouteParams {
   params: Promise<{
@@ -74,6 +75,14 @@ type ManifestAdminUser = {
   status: 'active' | 'inactive' | 'invited' | 'suspended';
 };
 
+type ManifestDeliveryDiscovery = ReturnType<typeof buildDeliveryDiscovery>;
+
+type ManifestDeliverySite = {
+  slug: string;
+  customDomain?: string | null;
+  settings?: Pick<SiteSettings, 'domainVerification'> | null;
+};
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const hasPublicOrderCollectionAccess = (permissions: {
@@ -87,6 +96,78 @@ const hasPublicOrderCollectionAccess = (permissions: {
   permissions.publicUpdate === true ||
   permissions.publicDelete === true
 );
+
+const normalizeManifestDomain = (domain: string | null | undefined): string | null => {
+  if (typeof domain !== 'string' || domain.trim().length === 0) return null;
+  const hostname = domain.trim().replace(/^https?:\/\//i, '').split('/')[0]?.replace(/\/+$/, '').toLowerCase();
+  return hostname || null;
+};
+
+const buildDeliveryDiscovery = (
+  origin: string,
+  site: ManifestDeliverySite,
+) => {
+  const canonicalBaseUrl = getSiteCanonicalBaseUrl(origin, site);
+  const customDomain = normalizeManifestDomain(site.customDomain);
+  const verificationDomain = normalizeManifestDomain(site.settings?.domainVerification?.domain);
+  const domainVerification = site.settings?.domainVerification || null;
+  const managedBaseUrl = `${origin.replace(/\/$/, '')}/sites/${site.slug}`;
+  const domains = [
+    {
+      type: 'managed',
+      host: new URL(managedBaseUrl).host,
+      baseUrl: managedBaseUrl,
+      primary: !customDomain,
+      verified: true,
+    },
+    ...(customDomain ? [{
+      type: 'custom',
+      host: customDomain,
+      baseUrl: `https://${customDomain}`,
+      primary: true,
+      verified: domainVerification?.status === 'verified',
+      verificationStatus: domainVerification?.status || 'not_started',
+      source: 'site.customDomain',
+    }] : []),
+    ...(
+      verificationDomain && verificationDomain !== customDomain
+        ? [{
+            type: 'verification',
+            host: verificationDomain,
+            baseUrl: `https://${verificationDomain}`,
+            primary: false,
+            verified: domainVerification?.status === 'verified',
+            verificationStatus: domainVerification?.status || 'not_started',
+            source: 'settings.domainVerification.domain',
+          }]
+        : []
+    ),
+  ];
+
+  return {
+    canonicalBaseUrl,
+    managedBaseUrl,
+    primaryDomain: customDomain || new URL(managedBaseUrl).host,
+    customDomain,
+    defaultLocale: 'en',
+    localeStrategy: 'none',
+    locales: [
+      {
+        code: 'en',
+        label: 'English',
+        default: true,
+        direction: 'ltr',
+        pathPrefix: '',
+      },
+    ],
+    domains,
+    urls: {
+      home: getHostedRouteUrl(origin, site.slug, '/', site.customDomain),
+      sitemap: `${canonicalBaseUrl}/sitemap.xml`,
+      robots: `${canonicalBaseUrl}/robots.txt`,
+    },
+  };
+};
 
 const getBearerToken = (request: NextRequest) => {
   const authorization = request.headers.get('authorization') || '';
@@ -396,6 +477,7 @@ const buildRepositoryManifest = (
     media: MediaItem[];
     commerceSettings?: unknown;
     admin: ManifestAdminDiscovery;
+    delivery: ManifestDeliveryDiscovery;
   },
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
@@ -644,6 +726,7 @@ const buildRepositoryManifest = (
         commerce,
       },
       admin: input.admin,
+      delivery: input.delivery,
       navigation: buildSiteNavigation(input.site.settings, input.pages.filter(isPubliclyReadable).map((page) => ({
         ...page,
         meta: {
@@ -684,6 +767,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         configuredAdminKey: settings.apiKeys?.secretKeyId,
         getUserById: repositories.users.getById,
       });
+      const origin = new URL(request.url).origin;
       const manifest = buildRepositoryManifest({
         requestId,
         site,
@@ -698,6 +782,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         media: media.items,
         commerceSettings: settings.integrations?.commerce,
         admin,
+        delivery: buildDeliveryDiscovery(origin, site),
       });
 
       return publicContractJson(manifest, {
@@ -742,6 +827,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const admin = await buildAdminDiscovery(request, site.id, {
       configuredAdminKey: getAdminSettings().apiKeys?.adminApiKey,
     });
+    const origin = new URL(request.url).origin;
 
     const manifest = {
       success: true,
@@ -978,6 +1064,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           commerce,
         },
         admin,
+        delivery: buildDeliveryDiscovery(origin, site),
         navigation: getSiteNavigation(site.id),
       },
     };

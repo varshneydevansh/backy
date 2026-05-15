@@ -5,11 +5,13 @@
  */
 
 import { NextRequest } from 'next/server';
+import type { SiteSettings } from '@backy-cms/core';
 import { getSiteByIdOrSlug, listCollections, listFormsBySite, listReusableSections } from '@/lib/backyStore';
 import { PRODUCT_COLLECTION_SLUG } from '@/lib/commerceCatalog';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
+import { getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
 
 interface RouteParams {
   params: Promise<{
@@ -108,6 +110,68 @@ const blogFeedDiscovery = (site: { id: string; name: string }) => ({
   },
 });
 
+const normalizeOpenApiDomain = (domain: string | null | undefined): string | null => {
+  if (typeof domain !== 'string' || domain.trim().length === 0) return null;
+  const hostname = domain.trim().replace(/^https?:\/\//i, '').split('/')[0]?.replace(/\/+$/, '').toLowerCase();
+  return hostname || null;
+};
+
+const deliveryDiscovery = (
+  origin: string,
+  site: { slug: string; customDomain?: string | null; settings?: Pick<SiteSettings, 'domainVerification'> | null },
+) => {
+  const customDomain = normalizeOpenApiDomain(site.customDomain);
+  const verificationDomain = normalizeOpenApiDomain(site.settings?.domainVerification?.domain);
+  const domainVerification = site.settings?.domainVerification || null;
+  const managedBaseUrl = `${origin.replace(/\/$/, '')}/sites/${site.slug}`;
+  const canonicalBaseUrl = getSiteCanonicalBaseUrl(origin, site);
+  return {
+    canonicalBaseUrl,
+    managedBaseUrl,
+    primaryDomain: customDomain || new URL(managedBaseUrl).host,
+    customDomain,
+    defaultLocale: 'en',
+    localeStrategy: 'none',
+    locales: [{ code: 'en', default: true, direction: 'ltr', pathPrefix: '' }],
+    domains: [
+      {
+        type: 'managed',
+        host: new URL(managedBaseUrl).host,
+        baseUrl: managedBaseUrl,
+        primary: !customDomain,
+        verified: true,
+      },
+      ...(customDomain ? [{
+        type: 'custom',
+        host: customDomain,
+        baseUrl: `https://${customDomain}`,
+        primary: true,
+        verified: domainVerification?.status === 'verified',
+        verificationStatus: domainVerification?.status || 'not_started',
+        source: 'site.customDomain',
+      }] : []),
+      ...(
+        verificationDomain && verificationDomain !== customDomain
+          ? [{
+              type: 'verification',
+              host: verificationDomain,
+              baseUrl: `https://${verificationDomain}`,
+              primary: false,
+              verified: domainVerification?.status === 'verified',
+              verificationStatus: domainVerification?.status || 'not_started',
+              source: 'settings.domainVerification.domain',
+            }]
+          : []
+      ),
+    ],
+    urls: {
+      home: canonicalBaseUrl,
+      sitemap: `${canonicalBaseUrl}/sitemap.xml`,
+      robots: `${canonicalBaseUrl}/robots.txt`,
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -125,6 +189,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           slug: repositorySite.slug,
           name: repositorySite.name,
           isPublished: repositorySite.isPublished,
+          customDomain: repositorySite.customDomain,
           settings: repositorySite.settings,
         }
       : storeSite;
@@ -161,6 +226,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const reusableSectionIds = reusableSections.map((section) => section.id);
     const redirectRules = normalizeRedirectRules(site.settings?.redirectRules).filter((rule) => rule.enabled);
     const blogFeed = blogFeedDiscovery(site);
+    const delivery = deliveryDiscovery(origin, site);
 
     return publicContractJson({
       openapi: '3.1.0',
@@ -2956,6 +3022,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         formIds,
         reusableSectionIds,
         blogFeeds: [blogFeed],
+        delivery,
         redirectRules: redirectRules.map((rule) => ({
           id: rule.id,
           from: rule.from,

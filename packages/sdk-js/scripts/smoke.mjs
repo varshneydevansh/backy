@@ -362,6 +362,10 @@ assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing 
 assert(manifest.data.admin?.auth?.authenticated === false, 'manifest() should expose anonymous admin state by default');
 assert(manifest.data.admin?.permissions?.['sites.configure'] === false, 'manifest() should not expose site configure permission anonymously');
 assert(manifest.data.admin?.capabilities?.frontendDesignWrite === false, 'manifest() should not expose frontend design write anonymously');
+assert(manifest.data.delivery?.defaultLocale === 'en', 'manifest() missing default locale discovery');
+assert(manifest.data.delivery?.localeStrategy === 'none', 'manifest() missing locale strategy discovery');
+assert(manifest.data.delivery?.domains?.some?.((domain) => domain.type === 'managed' && typeof domain.baseUrl === 'string'), 'manifest() missing managed domain discovery');
+assert(typeof manifest.data.delivery?.urls?.sitemap === 'string', 'manifest() missing sitemap URL discovery');
 const smokePath = manifest.data.modules?.pages?.items?.find?.((page) => typeof page.path === 'string')?.path || '/';
 
 const cachedManifest = await client.manifestCached();
@@ -393,6 +397,8 @@ assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() mis
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get, 'openapi() missing manifest-advertised blog RSS path');
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get?.['x-backy-feed']?.endpoint === manifest.data.endpoints.blogRss, 'openapi() missing blog RSS feed discovery extension');
 assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'openapi() missing blog feed discovery schema');
+assert(openapi['x-backy']?.delivery?.defaultLocale === manifest.data.delivery.defaultLocale, 'openapi() missing delivery locale discovery extension');
+assert(openapi['x-backy']?.delivery?.canonicalBaseUrl === manifest.data.delivery.canonicalBaseUrl, 'openapi() missing delivery canonical base extension');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
 assert(openapi.components?.schemas?.GoneRoute, 'openapi() missing gone route schema');
 

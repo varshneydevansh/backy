@@ -4698,6 +4698,11 @@ try {
       assert(frontendManifest.json?.data?.admin?.auth?.mode === 'anonymous', `${frontendManifest.url} should expose anonymous admin mode by default`);
       assert(frontendManifest.json?.data?.admin?.permissions?.['sites.configure'] === false, `${frontendManifest.url} should not expose configure permission anonymously`);
       assert(frontendManifest.json?.data?.admin?.capabilities?.frontendDesignWrite === false, `${frontendManifest.url} should not expose frontend design write anonymously`);
+      assert(frontendManifest.json?.data?.delivery?.defaultLocale === 'en', `${frontendManifest.url} missing default locale discovery`);
+      assert(frontendManifest.json?.data?.delivery?.localeStrategy === 'none', `${frontendManifest.url} missing locale strategy discovery`);
+      assert(frontendManifest.json?.data?.delivery?.domains?.some((domain) => domain.type === 'managed' && domain.baseUrl.endsWith(`/sites/${siteSlug}`)), `${frontendManifest.url} missing managed domain discovery`);
+      assert(frontendManifest.json?.data?.delivery?.domains?.some((domain) => domain.type === 'custom' && domain.host === customDomain && domain.primary === true), `${frontendManifest.url} missing custom domain discovery`);
+      assert(frontendManifest.json?.data?.delivery?.urls?.sitemap === `https://${customDomain}/sitemap.xml`, `${frontendManifest.url} missing custom-domain sitemap discovery`);
       const revalidatedManifest = await request(`/api/sites/${createdSiteId}/manifest`, {
         headers: { 'if-none-match': manifestEtag },
       });
@@ -4856,6 +4861,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/{postId}/comments`]?.get, `${publicOpenApi.url} missing blog comments list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get, `${publicOpenApi.url} missing blog RSS operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/rss`]?.get?.['x-backy-feed']?.endpoint === `/api/sites/${createdSiteId}/blog/rss`, `${publicOpenApi.url} missing blog RSS feed discovery extension`);
+      assert(publicOpenApi.json?.['x-backy']?.delivery?.defaultLocale === 'en', `${publicOpenApi.url} missing delivery locale discovery extension`);
+      assert(publicOpenApi.json?.['x-backy']?.delivery?.domains?.some((domain) => domain.type === 'custom' && domain.host === customDomain), `${publicOpenApi.url} missing custom domain discovery extension`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.get, `${publicOpenApi.url} missing comment blocklist operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.delete, `${publicOpenApi.url} missing comment blocklist delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
