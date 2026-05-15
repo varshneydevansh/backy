@@ -1709,6 +1709,13 @@ const assertStripeCheckoutExecution = async ({
     assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription cancellation webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
     assert(String(orderRecord.values?.notes || '').includes('customer.subscription.deleted'), `Stripe subscription cancellation settlement note missing: ${JSON.stringify(orderRecord.values)}`);
 
+    const subscriptionAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
+    const subscriptionAnalytics = subscriptionAnalyticsPayload.data?.analytics;
+    assert(subscriptionAnalytics?.operations?.subscriptionOrderCount >= 1, `Order analytics did not count subscription orders: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionRenewalCount >= 1, `Order analytics did not count subscription renewals: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionDunningCount >= 1, `Order analytics did not count subscription dunning attention: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionCancelledCount >= 1, `Order analytics did not count subscription cancellations: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
       : null;

@@ -2823,6 +2823,22 @@ function OrdersRoute() {
                         <span className="font-mono font-semibold">{orderAnalytics?.operations.checkoutOrderCount ?? 0}</span>
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Subscription orders</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionOrderCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Renewal payments</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionRenewalCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Dunning attention</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionDunningCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Subscription cancelled</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionCancelledCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                         <span className="text-muted-foreground">Refund amount</span>
                         <span className="font-mono font-semibold">{formatMoney(orderAnalytics?.revenue.refundAmountTotal ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')}</span>
                       </div>

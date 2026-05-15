@@ -114,6 +114,11 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   let discountTotal = 0;
   let fulfillmentBacklogCount = 0;
   let paymentAttentionCount = 0;
+  let subscriptionOrderCount = 0;
+  let subscriptionRenewalCount = 0;
+  let subscriptionDunningCount = 0;
+  let subscriptionCancelledCount = 0;
+  let subscriptionActivePaidCount = 0;
 
   records.forEach((record) => {
     const values = record.values || {};
@@ -122,6 +127,9 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
     const fulfillmentStatus = normalizeFulfillmentStatus(values.fulfillmentstatus);
     const source = textValue(values.ordersource).toLowerCase() || 'unknown';
     const currency = normalizeCurrency(values.currency);
+    const paymentReference = textValue(values.paymentreference);
+    const notes = textValue(values.notes).toLowerCase();
+    const isSubscriptionOrder = paymentReference.startsWith('sub_') || notes.includes('customer.subscription.') || notes.includes('invoice.payment_');
 
     grossTotal += total;
     taxTotal += numberValue(values.taxamount);
@@ -134,6 +142,13 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
     }
     if (paymentStatus === 'pending' || paymentStatus === 'failed') {
       paymentAttentionCount += 1;
+    }
+    if (isSubscriptionOrder) {
+      subscriptionOrderCount += 1;
+      if (paymentStatus === 'paid' && fulfillmentStatus !== 'cancelled') subscriptionActivePaidCount += 1;
+      if (notes.includes('invoice.payment_succeeded') || notes.includes('invoice.paid')) subscriptionRenewalCount += 1;
+      if (notes.includes('customer.subscription.updated') || notes.includes('invoice.payment_failed')) subscriptionDunningCount += 1;
+      if (notes.includes('customer.subscription.deleted') || fulfillmentStatus === 'cancelled') subscriptionCancelledCount += 1;
     }
 
     payment[paymentStatus].count += 1;
@@ -197,6 +212,11 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
       refundCount: payment.refunded.count,
       manualOrderCount: sourceBuckets.get('manual')?.count || 0,
       checkoutOrderCount: sourceBuckets.get('web')?.count || 0,
+      subscriptionOrderCount,
+      subscriptionActivePaidCount,
+      subscriptionRenewalCount,
+      subscriptionDunningCount,
+      subscriptionCancelledCount,
     },
     sources,
     currencies,
@@ -214,6 +234,7 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
         paymentStatus: normalizePaymentStatus(values.paymentstatus),
         fulfillmentStatus: normalizeFulfillmentStatus(values.fulfillmentstatus),
         orderSource: textValue(values.ordersource).toLowerCase() || 'unknown',
+        subscriptionReference: textValue(values.paymentreference).startsWith('sub_') ? textValue(values.paymentreference) : '',
         updatedAt: record.updatedAt || null,
       };
     }),

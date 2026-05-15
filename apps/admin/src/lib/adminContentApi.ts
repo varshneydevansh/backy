@@ -6556,6 +6556,11 @@ export interface OrderAnalytics {
     refundCount: number;
     manualOrderCount: number;
     checkoutOrderCount: number;
+    subscriptionOrderCount?: number;
+    subscriptionActivePaidCount?: number;
+    subscriptionRenewalCount?: number;
+    subscriptionDunningCount?: number;
+    subscriptionCancelledCount?: number;
   };
   sources: Array<{ source: string; count: number; total: number }>;
   currencies: Array<{ currency: string; count: number; total: number }>;
@@ -6577,6 +6582,7 @@ export interface OrderAnalytics {
     paymentStatus: string;
     fulfillmentStatus: string;
     orderSource: string;
+    subscriptionReference?: string;
     updatedAt: string | null;
   }>;
 }
