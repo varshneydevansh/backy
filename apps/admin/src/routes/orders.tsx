@@ -184,10 +184,22 @@ interface OrderFormState {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_FILTERS: OrderFilter[] = ['all', 'open', 'paid', 'fulfilled', 'cancelled', 'refunded'];
 const PAYMENT_STATUS_FILTERS: PaymentStatusFilter[] = ['all', 'pending', 'paid', 'failed', 'refunded'];
 const FULFILLMENT_STATUS_FILTERS: FulfillmentStatusFilter[] = ['all', 'unfulfilled', 'processing', 'fulfilled', 'cancelled'];
 const ORDER_SOURCE_FILTERS: OrderSourceFilter[] = ['all', 'web', 'manual', 'api', 'import', 'pos'];
+const CUSTOMER_STATUS_OPTIONS = ['lead', 'customer', 'vip', 'inactive'] as const;
+
+type CustomerStatusOption = (typeof CUSTOMER_STATUS_OPTIONS)[number];
+
+interface CustomerProfileDraft {
+  name: string;
+  email: string;
+  phone: string;
+  status: CustomerStatusOption;
+  notes: string;
+}
 
 const isOrderFilter = (value: unknown): value is OrderFilter => (
   typeof value === 'string' && ORDER_FILTERS.includes(value as OrderFilter)
@@ -217,6 +229,19 @@ const normalizedSearchString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+};
+
+const customerProfileToDraft = (record: CollectionRecord | null): CustomerProfileDraft => {
+  const values = record?.values || {};
+  const status = String(values.status || 'customer').trim().toLowerCase();
+
+  return {
+    name: String(values.name || values.fullname || values.customername || values.email || ''),
+    email: String(values.email || ''),
+    phone: String(values.phone || ''),
+    status: CUSTOMER_STATUS_OPTIONS.includes(status as CustomerStatusOption) ? status as CustomerStatusOption : 'customer',
+    notes: String(values.notes || ''),
+  };
 };
 
 export const Route = createFileRoute('/orders')({
@@ -414,10 +439,14 @@ function OrdersRoute() {
   const routeSearch = Route.useSearch();
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
+  const [customersCollection, setCustomersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
+  const [customerProfiles, setCustomerProfiles] = useState<CollectionRecord[]>([]);
   const [orderPagination, setOrderPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(routeSearch.orderId || null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
+  const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
   const [itemDraft, setItemDraft] = useState<OrderLineItemDraft>({
     title: '',
@@ -433,10 +462,11 @@ function OrdersRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingCustomerProfile, setIsSavingCustomerProfile] = useState(false);
   const [isImportingOrders, setIsImportingOrders] = useState(false);
   const [isReconcilingOrders, setIsReconcilingOrders] = useState(false);
   const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
-  const isOrdersBusy = isLoading || isSaving || isImportingOrders || isReconcilingOrders;
+  const isOrdersBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingOrders || isReconcilingOrders;
   const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -503,6 +533,34 @@ function OrdersRoute() {
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
+  );
+  const linkedCustomerProfile = useMemo(() => {
+    if (!selectedOrder) return null;
+    const customerId = String(readOrderValue(selectedOrder.values, 'customerid', '') || '').trim();
+    const email = String(selectedOrder.values.email || '').trim().toLowerCase();
+
+    return customerProfiles.find((customer) => (
+      (customerId && customer.id === customerId) ||
+      (email && String(customer.values?.email || '').trim().toLowerCase() === email)
+    )) || null;
+  }, [customerProfiles, selectedOrder]);
+  const selectedCustomerProfile = useMemo(
+    () => customerProfiles.find((customer) => customer.id === selectedCustomerProfileId) || linkedCustomerProfile,
+    [customerProfiles, linkedCustomerProfile, selectedCustomerProfileId],
+  );
+  const selectedCustomerOrders = useMemo(() => {
+    if (!selectedCustomerProfile) return [];
+    const profileEmail = String(selectedCustomerProfile.values?.email || '').trim().toLowerCase();
+
+    return orders.filter((order) => {
+      const orderCustomerId = String(readOrderValue(order.values, 'customerid', '') || '').trim();
+      const orderEmail = String(order.values.email || '').trim().toLowerCase();
+      return orderCustomerId === selectedCustomerProfile.id || (profileEmail && orderEmail === profileEmail);
+    });
+  }, [orders, selectedCustomerProfile]);
+  const selectedCustomerTotalSpent = useMemo(
+    () => selectedCustomerOrders.reduce((sum, order) => sum + toNumber(order.values.total), 0),
+    [selectedCustomerOrders],
   );
   const orderLineItems = useMemo(() => parseOrderLineItems(formState.items, formState.currency), [formState.currency, formState.items]);
   const orderLineItemSubtotal = useMemo(
@@ -843,7 +901,9 @@ function OrdersRoute() {
     if (isPermissionMatrixPending) return;
     if (!canViewOrders) {
       setOrdersCollection(null);
+      setCustomersCollection(null);
       setOrders([]);
+      setCustomerProfiles([]);
       setOrderPagination(null);
       clearOrderEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
@@ -856,22 +916,36 @@ function OrdersRoute() {
     try {
       const collections = await listCollections(activeSiteId);
       const collection = collections.find((item) => item.slug === ORDERS_COLLECTION_SLUG) || null;
+      const customerCollection = collections.find((item) => item.slug === CUSTOMERS_COLLECTION_SLUG) || null;
       setOrdersCollection(collection);
+      setCustomersCollection(customerCollection);
 
       if (!collection) {
         setOrders([]);
+        setCustomerProfiles([]);
         setOrderPagination(null);
         clearOrderEditorState();
         return;
       }
 
-      const result = await listCollectionRecords(activeSiteId, collection.id, {
-        limit: ORDER_RECORD_PAGE_SIZE,
-        offset: 0,
-        sortBy: 'updatedAt',
-        sortDirection: 'desc',
-      });
+      const [result, customersResult] = await Promise.all([
+        listCollectionRecords(activeSiteId, collection.id, {
+          limit: ORDER_RECORD_PAGE_SIZE,
+          offset: 0,
+          sortBy: 'updatedAt',
+          sortDirection: 'desc',
+        }),
+        customerCollection
+          ? listCollectionRecords(activeSiteId, customerCollection.id, {
+              limit: 100,
+              offset: 0,
+              sortBy: 'updatedAt',
+              sortDirection: 'desc',
+            })
+          : Promise.resolve(null),
+      ]);
       setOrders(result.records);
+      setCustomerProfiles(customersResult?.records || []);
       setOrderPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load orders');
@@ -992,12 +1066,19 @@ function OrdersRoute() {
   }, [selectedOrder]);
 
   useEffect(() => {
+    setSelectedCustomerProfileId(linkedCustomerProfile?.id || null);
+    setCustomerProfileDraft(customerProfileToDraft(linkedCustomerProfile));
+  }, [linkedCustomerProfile]);
+
+  useEffect(() => {
     const orderIds = new Set(orders.map((order) => order.id));
     setSelectedOrderIds((current) => current.filter((orderId) => orderIds.has(orderId)));
   }, [orders]);
 
   const clearOrderEditorState = (nextFormState: OrderFormState = EMPTY_ORDER_FORM) => {
     setSelectedOrderId(null);
+    setSelectedCustomerProfileId(null);
+    setCustomerProfileDraft(customerProfileToDraft(null));
     setFormState(nextFormState);
     setItemDraft({
       title: '',
@@ -1303,6 +1384,64 @@ function OrdersRoute() {
       setError(workflowError instanceof Error ? workflowError.message : 'Unable to update order');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const selectCustomerProfile = (customer: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canViewOrders) {
+      setError(viewPermissionTitle || 'Your account cannot view customer profiles.');
+      return;
+    }
+
+    setSelectedCustomerProfileId(customer.id);
+    setCustomerProfileDraft(customerProfileToDraft(customer));
+  };
+
+  const saveCustomerProfile = async () => {
+    if (!customersCollection || !selectedCustomerProfile) return;
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot update customer profiles.');
+      return;
+    }
+
+    const name = customerProfileDraft.name.trim();
+    const email = customerProfileDraft.email.trim().toLowerCase();
+    if (!name || !email) {
+      setError('Customer name and email are required before saving a profile.');
+      setNotice(null);
+      return;
+    }
+
+    setIsSavingCustomerProfile(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateCollectionRecord(activeSiteId, customersCollection.id, selectedCustomerProfile.id, {
+        slug: selectedCustomerProfile.slug,
+        status: selectedCustomerProfile.status,
+        scheduledAt: selectedCustomerProfile.scheduledAt || null,
+        values: {
+          ...selectedCustomerProfile.values,
+          name,
+          email,
+          phone: customerProfileDraft.phone.trim(),
+          status: customerProfileDraft.status,
+          notes: customerProfileDraft.notes.trim(),
+        },
+      });
+
+      setCustomerProfiles((current) => current.map((customer) => (
+        customer.id === updated.id ? updated : customer
+      )));
+      setSelectedCustomerProfileId(updated.id);
+      setNotice('Customer profile updated.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update customer profile');
+    } finally {
+      setIsSavingCustomerProfile(false);
     }
   };
 
@@ -2462,6 +2601,126 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-customer-profile-manager">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Order customer profile</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Manage private customer contact status and support notes linked to this order.
+                      </div>
+                    </div>
+                    {selectedCustomerProfile ? (
+                      <span className="rounded-full bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                        {selectedCustomerProfile.slug}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                        {customersCollection ? 'No linked profile' : 'Customers collection unavailable'}
+                      </span>
+                    )}
+                  </div>
+
+                  {customerProfiles.length > 0 ? (
+                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+                      <Field label="Linked profile">
+                        <select
+                          aria-label="Order customer profile"
+                          value={selectedCustomerProfile?.id || ''}
+                          onChange={(event) => {
+                            const profile = customerProfiles.find((item) => item.id === event.target.value);
+                            if (profile) selectCustomerProfile(profile);
+                          }}
+                          disabled={isOrdersAccessBusy || !canViewOrders}
+                          className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {customerProfiles.map((customer) => (
+                            <option key={customer.id} value={customer.id}>
+                              {String(customer.values?.email || customer.values?.name || customer.slug)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                        <div className="font-semibold text-foreground">{selectedCustomerOrders.length}</div>
+                        <div>orders</div>
+                      </div>
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                        <div className="font-semibold text-foreground">{formatMoney(selectedCustomerTotalSpent, formState.currency)}</div>
+                        <div>spent</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                      Customer profiles are created by checkout intake or contact promotion, then linked by customer ID or email.
+                    </div>
+                  )}
+
+                  {selectedCustomerProfile ? (
+                    <>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <Field label="Profile name">
+                          <input
+                            value={customerProfileDraft.name}
+                            onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, name: event.target.value }))}
+                            disabled={isOrdersAccessBusy || !canEditOrders}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </Field>
+                        <Field label="Profile email">
+                          <input
+                            type="email"
+                            value={customerProfileDraft.email}
+                            onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, email: event.target.value }))}
+                            disabled={isOrdersAccessBusy || !canEditOrders}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </Field>
+                        <Field label="Profile phone">
+                          <input
+                            value={customerProfileDraft.phone}
+                            onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, phone: event.target.value }))}
+                            disabled={isOrdersAccessBusy || !canEditOrders}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </Field>
+                        <Field label="Profile status">
+                          <select
+                            value={customerProfileDraft.status}
+                            onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, status: event.target.value as CustomerStatusOption }))}
+                            disabled={isOrdersAccessBusy || !canEditOrders}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm capitalize disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {CUSTOMER_STATUS_OPTIONS.map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+                      <Field label="Profile notes" className="mt-3">
+                        <textarea
+                          value={customerProfileDraft.notes}
+                          onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, notes: event.target.value }))}
+                          rows={3}
+                          disabled={isOrdersAccessBusy || !canEditOrders}
+                          className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          placeholder="Private support notes"
+                        />
+                      </Field>
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          onClick={() => void saveCustomerProfile()}
+                          disabled={isOrdersAccessBusy || !canEditOrders}
+                          title={!canEditOrders ? editPermissionTitle : undefined}
+                          iconStart={<ClipboardCheck className="size-4" />}
+                          data-testid="orders-customer-profile-save"
+                        >
+                          {isSavingCustomerProfile ? 'Saving...' : 'Save profile'}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Provider">
                     <input
@@ -2828,9 +3087,9 @@ function OrderWorkflowStep({ index, label, detail }: { index: number; label: str
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <label className="block space-y-2">
+    <label className={cn('block space-y-2', className)}>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>

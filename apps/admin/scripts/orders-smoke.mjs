@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,8 +14,57 @@ const PORT = Number(process.env.BACKY_ORDERS_CDP_PORT || 9389);
 const SCREENSHOT_PATH = process.env.BACKY_ORDERS_SCREENSHOT || path.join(os.tmpdir(), 'backy-orders-smoke.png');
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const CUSTOMERS_COLLECTION_SLUG = 'customers';
+const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const ORDER_REQUIRED_FIELD_COUNT = 29;
 let apiAdminSessionToken = '';
+
+const ORDER_FIELDS = [
+  { key: 'ordernumber', label: 'Order Number', type: 'text', required: true, unique: true, sortOrder: 10 },
+  { key: 'customername', label: 'Customer Name', type: 'text', required: true, unique: false, sortOrder: 20 },
+  { key: 'email', label: 'Email', type: 'email', required: true, unique: false, sortOrder: 30 },
+  { key: 'phone', label: 'Phone', type: 'text', required: false, unique: false, sortOrder: 40 },
+  { key: 'total', label: 'Total', type: 'number', required: true, unique: false, sortOrder: 50 },
+  { key: 'subtotal', label: 'Subtotal', type: 'number', required: false, unique: false, sortOrder: 55 },
+  { key: 'taxamount', label: 'Tax Amount', type: 'number', required: false, unique: false, sortOrder: 56 },
+  { key: 'shippingamount', label: 'Shipping Amount', type: 'number', required: false, unique: false, sortOrder: 57 },
+  { key: 'discountamount', label: 'Discount Amount', type: 'number', required: false, unique: false, sortOrder: 58 },
+  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 60, defaultValue: 'USD' },
+  { key: 'items', label: 'Items', type: 'richText', required: true, unique: false, sortOrder: 70 },
+  { key: 'ordersource', label: 'Order Source', type: 'select', required: false, unique: false, sortOrder: 75, options: ['web', 'manual', 'api', 'import', 'pos'], defaultValue: 'web' },
+  { key: 'checkoutsessionid', label: 'Checkout Session ID', type: 'text', required: false, unique: false, sortOrder: 76 },
+  { key: 'customerid', label: 'Customer ID', type: 'text', required: false, unique: false, sortOrder: 77 },
+  { key: 'orderstatus', label: 'Order Status', type: 'select', required: true, unique: false, sortOrder: 80, options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
+  { key: 'paymentstatus', label: 'Payment Status', type: 'select', required: true, unique: false, sortOrder: 90, options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
+  { key: 'paymentprovider', label: 'Payment Provider', type: 'text', required: false, unique: false, sortOrder: 100 },
+  { key: 'paymentreference', label: 'Payment Reference', type: 'text', required: false, unique: false, sortOrder: 110 },
+  { key: 'paidat', label: 'Paid At', type: 'date', required: false, unique: false, sortOrder: 120 },
+  { key: 'fulfillmentstatus', label: 'Fulfillment Status', type: 'select', required: true, unique: false, sortOrder: 130, options: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'], defaultValue: 'unfulfilled' },
+  { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text', required: false, unique: false, sortOrder: 140 },
+  { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
+  { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
+  { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
+  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
+  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 210 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
+];
+
+const CUSTOMER_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true, unique: false, sortOrder: 10 },
+  { key: 'email', label: 'Email', type: 'email', required: true, unique: true, sortOrder: 20 },
+  { key: 'phone', label: 'Phone', type: 'text', required: false, unique: false, sortOrder: 30 },
+  { key: 'status', label: 'Status', type: 'select', required: false, unique: false, sortOrder: 40, options: ['lead', 'customer', 'vip', 'inactive'], defaultValue: 'customer' },
+  { key: 'source', label: 'Source', type: 'text', required: false, unique: false, sortOrder: 50 },
+  { key: 'lastorderid', label: 'Last Order ID', type: 'text', required: false, unique: false, sortOrder: 60 },
+  { key: 'lastordernumber', label: 'Last Order Number', type: 'text', required: false, unique: false, sortOrder: 70 },
+  { key: 'lastorderat', label: 'Last Order At', type: 'date', required: false, unique: false, sortOrder: 80 },
+  { key: 'ordercount', label: 'Order Count', type: 'number', required: false, unique: false, sortOrder: 90 },
+  { key: 'totalspent', label: 'Total Spent', type: 'number', required: false, unique: false, sortOrder: 100 },
+  { key: 'notes', label: 'Notes', type: 'richText', required: false, unique: false, sortOrder: 110 },
+  { key: 'sourcevalues', label: 'Source Values', type: 'json', required: false, unique: false, sortOrder: 120 },
+];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -73,6 +123,20 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const commerceWebhookSignature = (body) => `sha256=${createHmac('sha256', COMMERCE_WEBHOOK_SECRET).update(body, 'utf8').digest('hex')}`;
+
+const postCommerceWebhook = async (body, headers = {}) => {
+  const rawBody = JSON.stringify(body);
+  return requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'x-backy-webhook-signature': commerceWebhookSignature(rawBody),
+    },
+    body: rawBody,
+  });
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -101,7 +165,17 @@ const listCollections = async () => {
 
 const findCollection = async (slug) => {
   const collections = await listCollections();
-  return collections.find((collection) => collection.slug === slug) || null;
+  const listedCollection = collections.find((collection) => collection.slug === slug) || null;
+  if (listedCollection) return listedCollection;
+
+  try {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${encodeURIComponent(slug)}`);
+    return payload.data?.collection || payload.collection || null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || '');
+    if (/COLLECTION_NOT_FOUND|404/.test(message)) return null;
+    throw error;
+  }
 };
 
 const snapshotCollection = (collection) => (
@@ -129,7 +203,7 @@ const restoreCollection = async (snapshot, currentCollection) => {
         slug: snapshot.slug,
         description: snapshot.description,
         status: snapshot.status,
-        fields: snapshot.fields,
+        fields: sanitizeCollectionFields(snapshot.fields),
         permissions: snapshot.permissions,
         routePattern: snapshot.routePattern,
         listRoutePattern: snapshot.listRoutePattern,
@@ -145,6 +219,31 @@ const restoreCollection = async (snapshot, currentCollection) => {
   }
 };
 
+const sanitizeCollectionFields = (fields = []) => fields.map((field) => {
+  if (field.type === 'select' || field.type === 'tags') {
+    return field;
+  }
+
+  const { options, ...rest } = field;
+  return rest;
+});
+
+const createCollection = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.collection || payload.collection;
+};
+
+const updateCollection = async (collectionId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.collection || payload.collection;
+};
+
 const listCollectionRecords = async (collectionId, query = '') => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records${query}`);
   return payload.data?.records || payload.records || [];
@@ -153,6 +252,14 @@ const listCollectionRecords = async (collectionId, query = '') => {
 const getCollectionRecordBySlug = async (collectionId, slug) => {
   const records = await listCollectionRecords(collectionId, `?slug=${encodeURIComponent(slug)}`);
   return records[0] || null;
+};
+
+const createCollectionRecord = async (collectionId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.record || payload.record;
 };
 
 const deleteCollectionRecord = async (collectionId, recordId) => {
@@ -186,7 +293,110 @@ const waitForOrderValue = async (collectionId, slug, predicate, description) => 
   }
 
   const order = await getCollectionRecordBySlug(collectionId, slug);
-  throw new Error(`${description}: ${JSON.stringify(order?.values || order).slice(0, 1000)}`);
+  const values = order?.values || {};
+  throw new Error(`${description}: ${JSON.stringify({
+    orderstatus: values.orderstatus,
+    paymentstatus: values.paymentstatus,
+    fulfillmentstatus: values.fulfillmentstatus,
+    refundamount: values.refundamount,
+    refundreason: values.refundreason,
+    notes: values.notes,
+    ordernumber: values.ordernumber,
+    slug: order?.slug,
+  }).slice(0, 1200)}`);
+};
+
+const ensureCustomerSmokeProfile = async (suffix) => {
+  const existing = await findCollection(CUSTOMERS_COLLECTION_SLUG);
+  const collection = existing?.id
+    ? await updateCollection(existing.id, {
+        name: existing.name || 'Customers',
+        slug: CUSTOMERS_COLLECTION_SLUG,
+        description: existing.description || 'Private customer profiles promoted from Backy contacts and commerce workflows.',
+        status: existing.status || 'published',
+        listRoutePattern: existing.listRoutePattern || '/customers',
+        routePattern: existing.routePattern || '/customers/:recordSlug',
+        fields: sanitizeCollectionFields(CUSTOMER_FIELDS),
+        permissions: {
+          ...existing.permissions,
+          publicRead: false,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      })
+    : await createCollection({
+        name: 'Customers',
+        slug: CUSTOMERS_COLLECTION_SLUG,
+        description: 'Private customer profiles promoted from Backy contacts and commerce workflows.',
+        status: 'published',
+        listRoutePattern: '/customers',
+        routePattern: '/customers/:recordSlug',
+        fields: CUSTOMER_FIELDS,
+        permissions: {
+          publicRead: false,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      });
+
+  const slug = `orders-smoke-customer-${suffix}`;
+  const record = await createCollectionRecord(collection.id, {
+    slug,
+    status: 'published',
+    values: {
+      name: 'Order Smoke Buyer',
+      email: 'orders-smoke@example.com',
+      phone: '+1 555 0202',
+      status: 'customer',
+      source: 'orders-smoke',
+      ordercount: 0,
+      totalspent: 0,
+      notes: 'Created by orders smoke.',
+      sourcevalues: { smoke: true, suffix },
+    },
+  });
+
+  return { collection, record };
+};
+
+const ensureOrdersSmokeCollection = async () => {
+  const existing = await findCollection(ORDERS_COLLECTION_SLUG);
+  if (existing?.id) {
+    return updateCollection(existing.id, {
+      name: existing.name || 'Orders',
+      slug: ORDERS_COLLECTION_SLUG,
+      description: existing.description || 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
+      status: 'published',
+      listRoutePattern: existing.listRoutePattern || '/orders',
+      routePattern: existing.routePattern || '/orders/:recordSlug',
+      fields: sanitizeCollectionFields(ORDER_FIELDS),
+      permissions: {
+        ...existing.permissions,
+        publicRead: false,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+    });
+  }
+
+  return createCollection({
+    name: 'Orders',
+    slug: ORDERS_COLLECTION_SLUG,
+    description: 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
+    status: 'published',
+    listRoutePattern: '/orders',
+    routePattern: '/orders/:recordSlug',
+    fields: ORDER_FIELDS,
+    permissions: {
+      publicRead: false,
+      publicCreate: false,
+      publicUpdate: false,
+      publicDelete: false,
+    },
+  });
 };
 
 const fetchJson = async (endpoint) => {
@@ -515,6 +725,7 @@ const assertOrdersLayout = async (client) => {
     metrics: Boolean(document.querySelector('#orders-metrics')),
     queue: Boolean(document.querySelector('#orders-queue')),
     editor: Boolean(document.querySelector('#orders-editor')),
+    hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
     checkout: document.body?.innerText?.includes('/commerce/orders') || false,
     privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
@@ -527,7 +738,7 @@ const assertOrdersLayout = async (client) => {
     })(),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -641,15 +852,16 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   return record;
 };
 
-const fillOrderEditor = async (client, suffix) => {
+const fillOrderEditor = async (client, suffix, customerRecord) => {
   const orderNumber = `ORD-SMOKE-${suffix.toUpperCase()}`;
   const slug = orderNumber.toLowerCase();
+  const customerValues = customerRecord?.values || {};
 
   await clickByText(client, 'New order', { exact: true });
   await setLabeledControl(client, 'Order number', orderNumber, { exact: true });
-  await setLabeledControl(client, 'Customer', 'Order Smoke Buyer', { exact: true });
-  await setLabeledControl(client, 'Email', 'orders-smoke@example.com', { exact: true });
-  await setLabeledControl(client, 'Phone', '+1 555 0202', { exact: true });
+  await setLabeledControl(client, 'Customer', String(customerValues.name || 'Order Smoke Buyer'), { exact: true });
+  await setLabeledControl(client, 'Email', String(customerValues.email || 'orders-smoke@example.com'), { exact: true });
+  await setLabeledControl(client, 'Phone', String(customerValues.phone || '+1 555 0202'), { exact: true });
   await setLabeledControl(client, 'Total', '85', { exact: true });
   await setLabeledControl(client, 'Currency', 'USD', { exact: true });
   await setLabeledControl(client, 'Subtotal', '80', { exact: true });
@@ -658,12 +870,12 @@ const fillOrderEditor = async (client, suffix) => {
   await setLabeledControl(client, 'Discount', '7', { exact: true });
   await setNthEditorSelect(client, 1, 'manual', 'Source');
   await setLabeledControl(client, 'Checkout session', `cs_orders_${suffix}`, { exact: true });
-  await setLabeledControl(client, 'Customer ID', `cus_orders_${suffix}`, { exact: true });
+  await setLabeledControl(client, 'Customer ID', customerRecord?.id || `cus_orders_${suffix}`, { exact: true });
   await setLabeledControl(client, 'Provider', 'manual', { exact: true });
   await setLabeledControl(client, 'Payment ref', `pi_orders_${suffix}`, { exact: true });
-  await setNthEditorSelect(client, 2, 'open', 'Order');
-  await setNthEditorSelect(client, 3, 'pending', 'Payment');
-  await setNthEditorSelect(client, 4, 'unfulfilled', 'Fulfillment');
+  await setLabeledControl(client, 'Order', 'open', { exact: true });
+  await setLabeledControl(client, 'Payment', 'pending', { exact: true });
+  await setLabeledControl(client, 'Fulfillment', 'unfulfilled', { exact: true });
   await setLabeledControl(client, 'Carrier', 'UPS', { exact: true });
   await setLabeledControl(client, 'Tracking number', `1Z${suffix.toUpperCase()}`, { exact: true });
   await setLabeledControl(client, 'Tracking URL', `https://carrier.example/track/${suffix}`, { exact: true });
@@ -699,6 +911,58 @@ const fillOrderEditor = async (client, suffix) => {
   }
 
   return { orderNumber, slug };
+};
+
+const assertOrderCustomerProfileManagement = async (client, customersCollection, customerRecord) => {
+  assert(customersCollection?.id, 'Customers collection is required for order profile management smoke coverage');
+  assert(customerRecord?.id, 'Customer record is required for order profile management smoke coverage');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const manager = document.querySelector('[data-testid="orders-customer-profile-manager"]');
+      const selector = document.querySelector('[aria-label="Order customer profile"]');
+      return {
+        hasManager: Boolean(manager),
+        hasSelector: selector instanceof HTMLSelectElement,
+        hasCustomerOption: selector instanceof HTMLSelectElement
+          ? Array.from(selector.options).some((option) => option.value === ${JSON.stringify(customerRecord.id)})
+          : false,
+        hasSave: Boolean(document.querySelector('[data-testid="orders-customer-profile-save"]')),
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+    if (state.hasManager && state.hasSelector && state.hasCustomerOption && state.hasSave) {
+      break;
+    }
+    if (attempt === 99) {
+      throw new Error(`Order customer profile manager did not load linked customer: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await setAriaControl(client, 'Order customer profile', customerRecord.id);
+  await setLabeledControl(client, 'Profile name', 'Order Smoke VIP Buyer', { exact: true });
+  await setLabeledControl(client, 'Profile phone', '+1 555 0299', { exact: true });
+  await setLabeledControl(client, 'Profile status', 'vip', { exact: true });
+  await setLabeledControl(client, 'Profile notes', 'Managed from orders smoke profile panel.', { exact: true });
+  await clickByText(client, 'Save profile', { exact: true, rootSelector: '#orders-editor' });
+  await waitUntilIdle(client, '/orders customer profile');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const updated = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
+    if (
+      updated?.values?.name === 'Order Smoke VIP Buyer' &&
+      updated.values?.status === 'vip' &&
+      updated.values?.phone === '+1 555 0299' &&
+      String(updated.values?.notes || '').includes('orders smoke profile panel')
+    ) {
+      return updated;
+    }
+    await sleep(250);
+  }
+
+  const current = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
+  throw new Error(`Order customer profile management did not persist changes: ${JSON.stringify(current?.values)}`);
 };
 
 const assertOrderVisible = async (client, orderNumber, message) => {
@@ -869,7 +1133,18 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, collectionId, orderRecordId, importedOrderRecordId, originalOrdersCollection }) => {
+const cleanup = async ({
+  client,
+  childProcess,
+  userDataDir,
+  collectionId,
+  orderRecordId,
+  importedOrderRecordId,
+  customerCollectionId,
+  customerRecordId,
+  originalOrdersCollection,
+  originalCustomerCollection,
+}) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -906,9 +1181,24 @@ const cleanup = async ({ client, childProcess, userDataDir, collectionId, orderR
     }
   }
 
+  if (customerCollectionId && customerRecordId) {
+    try {
+      await deleteCollectionRecord(customerCollectionId, customerRecordId);
+    } catch {
+      // Customer collection restore below is the authoritative cleanup path.
+    }
+  }
+
   try {
     const current = await findCollection(ORDERS_COLLECTION_SLUG);
     await restoreCollection(originalOrdersCollection, current);
+  } catch {
+    // Schema restore is best-effort because the smoke snapshots before mutation.
+  }
+
+  try {
+    const current = await findCollection(CUSTOMERS_COLLECTION_SLUG);
+    await restoreCollection(originalCustomerCollection, current);
   } catch {
     // Schema restore is best-effort because the smoke snapshots before mutation.
   }
@@ -921,12 +1211,21 @@ const main = async () => {
   let collectionId;
   let orderRecordId;
   let importedOrderRecordId;
+  let customerCollectionId;
+  let customerRecordId;
+  let customerFixture;
   assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
+  const originalCustomerCollection = snapshotCollection(await findCollection(CUSTOMERS_COLLECTION_SLUG));
   const suffix = Date.now().toString(36);
 
   try {
+    await ensureOrdersSmokeCollection();
+    customerFixture = await ensureCustomerSmokeProfile(suffix);
+    customerCollectionId = customerFixture.collection.id;
+    customerRecordId = customerFixture.record.id;
+
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
     client = connectCdp(target.webSocketDebuggerUrl);
@@ -952,14 +1251,21 @@ const main = async () => {
     importedOrderRecordId = null;
 
     await assertOrdersLayout(client);
-    const { orderNumber, slug } = await fillOrderEditor(client, suffix);
+    const { orderNumber, slug } = await fillOrderEditor(client, suffix, customerFixture.record);
     const createdOrder = await waitForOrderValue(
       collectionId,
       slug,
-      (values) => values.ordernumber === orderNumber && values.paymentstatus === 'pending' && values.fulfillmentstatus === 'unfulfilled',
+      (values) => (
+        values.ordernumber === orderNumber &&
+        values.paymentstatus === 'pending' &&
+        values.fulfillmentstatus === 'unfulfilled' &&
+        values.customerid === customerFixture.record.id
+      ),
       'Created order did not persist expected initial values',
     );
     orderRecordId = createdOrder.id;
+
+    await assertOrderCustomerProfileManagement(client, customerFixture.collection, customerFixture.record);
 
     await exerciseFilters(client, orderNumber);
 
@@ -1082,9 +1388,9 @@ const main = async () => {
         values.orderstatus === 'cancelled' &&
         values.paymentstatus === 'failed' &&
         values.fulfillmentstatus === 'cancelled' &&
-        (values.refundamount === null || values.refundamount === undefined) &&
-        values.refundreason === '' &&
-        /marked payment failed before fulfillment/.test(String(values.notes || ''))
+        (values.refundamount === null || values.refundamount === undefined || Number(values.refundamount) === 0) &&
+        (values.refundreason === '' || values.refundreason === null || values.refundreason === undefined) &&
+        /marked failed before fulfillment/.test(String(values.notes || ''))
       ),
       'Unpaid cancel did not clear stale refund fields and mark payment failed',
     );
@@ -1100,10 +1406,8 @@ const main = async () => {
         notes: 'Order smoke reset to pending before reconciliation.',
       },
     });
-    await requestApi(`/api/sites/${SITE_ID}/commerce/webhook`, {
-      method: 'POST',
-      headers: { 'x-request-id': `orders-reconcile-event-${suffix}` },
-      body: JSON.stringify({
+    await postCommerceWebhook(
+      {
         id: `evt_orders_reconcile_${suffix}`,
         type: 'checkout.session.completed',
         data: {
@@ -1116,8 +1420,9 @@ const main = async () => {
             },
           },
         },
-      }),
-    });
+      },
+      { 'x-request-id': `orders-reconcile-event-${suffix}` },
+    );
     await updateCollectionRecord(collectionId, orderRecordId, {
       status: 'published',
       values: {
@@ -1155,10 +1460,22 @@ const main = async () => {
       orderNumber,
       slug,
       ordersReady: readyState,
+      managedCustomerStatus: 'vip',
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, collectionId, orderRecordId, importedOrderRecordId, originalOrdersCollection });
+    await cleanup({
+      client,
+      childProcess,
+      userDataDir,
+      collectionId,
+      orderRecordId,
+      importedOrderRecordId,
+      customerCollectionId,
+      customerRecordId,
+      originalOrdersCollection,
+      originalCustomerCollection,
+    });
   }
 };
 
