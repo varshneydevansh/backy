@@ -1771,6 +1771,15 @@ export interface SettingsStorageProvisioningResult {
   status: 'ready' | 'blocked';
   summary: string;
   probePath: string;
+  automation?: {
+    provider: string;
+    action: 'create-or-verify-container';
+    status: 'ready' | 'blocked';
+    created: boolean;
+    checked: boolean;
+    target: string;
+    detail: string;
+  };
   checks: SettingsStorageProvisioningCheck[];
   rotation: {
     fields: SettingsStorageProvisioningField[];

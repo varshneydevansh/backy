@@ -7,12 +7,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { mkdir } from 'node:fs/promises';
 import { listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
-import { getMediaStorageAdapter, getMediaStorageConfigSummary } from '@/lib/mediaStorage';
+import { getMediaStorageAdapter, getMediaStorageConfigSummary, resolveMediaStorageConfig } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import {
   getRequiredDatabaseRepositories,
@@ -387,7 +388,11 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
 
 const isMediaStorageSettingsPatch = (body: Record<string, unknown>): boolean => {
   const bodyKeys = Object.keys(body);
-  if (bodyKeys.length === 0 || bodyKeys.some((key) => key !== 'integrations')) {
+  if (
+    bodyKeys.length === 0 ||
+    !bodyKeys.includes('integrations') ||
+    bodyKeys.some((key) => key !== 'integrations' && key !== 'deliveryMode')
+  ) {
     return false;
   }
 
@@ -458,6 +463,21 @@ interface StorageProvisioningCheck {
   ready: boolean;
   detail: string;
 }
+
+interface StorageProvisioningAutomation {
+  provider: string;
+  action: 'create-or-verify-container';
+  status: StorageProvisioningStatus;
+  created: boolean;
+  checked: boolean;
+  target: string;
+  detail: string;
+}
+
+const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
+  const runtimeImport = new Function('specifier', 'return import(specifier)') as (value: string) => Promise<TModule>;
+  return runtimeImport(specifier);
+};
 
 const makeInfrastructureDiagnostic = (
   area: 'database' | 'storage' | 'supabase' | 'vercel',
@@ -635,8 +655,158 @@ const storageRotationFields = (provider: string) => {
   ];
 };
 
+const runStorageContainerAutomation = async (): Promise<StorageProvisioningAutomation> => {
+  const resolved = resolveMediaStorageConfig();
+  const { config, summary } = resolved;
+  const provider = summary.provider;
+  const target = provider === 'local'
+    ? summary.basePath || 'local uploads directory'
+    : summary.bucket || 'storage bucket';
+
+  if (!config) {
+    return {
+      provider,
+      action: 'create-or-verify-container',
+      status: 'blocked',
+      created: false,
+      checked: false,
+      target,
+      detail: summary.error || `Missing ${summary.missing.join(', ') || 'storage configuration'}.`,
+    };
+  }
+
+  if (config.provider === 'local') {
+    await mkdir(config.basePath, { recursive: true });
+    return {
+      provider,
+      action: 'create-or-verify-container',
+      status: 'ready',
+      created: true,
+      checked: true,
+      target: config.basePath,
+      detail: 'Local media storage directory is present and ready for file writes.',
+    };
+  }
+
+  if (config.provider === 'supabase') {
+    try {
+      const { createClient } = await optionalRuntimeImport<{
+        createClient: typeof import('@supabase/supabase-js').createClient;
+      }>('@supabase/supabase-js');
+      const supabase = createClient(config.url, config.key);
+      const existing = await supabase.storage.getBucket(config.bucket);
+      if (!existing.error) {
+        return {
+          provider,
+          action: 'create-or-verify-container',
+          status: 'ready',
+          created: false,
+          checked: true,
+          target: config.bucket,
+          detail: `Supabase Storage bucket "${config.bucket}" already exists.`,
+        };
+      }
+
+      const created = await supabase.storage.createBucket(config.bucket, {
+        public: false,
+        fileSizeLimit: undefined,
+      });
+      if (created.error) {
+        return {
+          provider,
+          action: 'create-or-verify-container',
+          status: 'blocked',
+          created: false,
+          checked: true,
+          target: config.bucket,
+          detail: `Supabase bucket automation failed: ${created.error.message}`,
+        };
+      }
+
+      return {
+        provider,
+        action: 'create-or-verify-container',
+        status: 'ready',
+        created: true,
+        checked: true,
+        target: config.bucket,
+        detail: `Supabase Storage bucket "${config.bucket}" was created.`,
+      };
+    } catch (error) {
+      return {
+        provider,
+        action: 'create-or-verify-container',
+        status: 'blocked',
+        created: false,
+        checked: false,
+        target: config.bucket,
+        detail: error instanceof Error ? error.message : 'Supabase bucket automation failed.',
+      };
+    }
+  }
+
+  try {
+    const s3Module = await optionalRuntimeImport<{
+      S3Client: new (input: Record<string, unknown>) => { send: (command: unknown) => Promise<unknown> };
+      CreateBucketCommand: new (input: Record<string, unknown>) => unknown;
+      HeadBucketCommand: new (input: Record<string, unknown>) => unknown;
+    }>('@aws-sdk/client-s3');
+    const { S3Client, CreateBucketCommand, HeadBucketCommand } = s3Module;
+    const client = new S3Client({
+      region: config.region,
+      endpoint: config.endpoint,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle: config.forcePathStyle,
+    });
+
+    try {
+      await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
+      return {
+        provider,
+        action: 'create-or-verify-container',
+        status: 'ready',
+        created: false,
+        checked: true,
+        target: config.bucket,
+        detail: `S3-compatible bucket "${config.bucket}" already exists and is accessible.`,
+      };
+    } catch {
+      await client.send(new CreateBucketCommand({
+        Bucket: config.bucket,
+        ...(config.region && config.region !== 'us-east-1'
+          ? { CreateBucketConfiguration: { LocationConstraint: config.region } }
+          : {}),
+      }));
+      await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
+      return {
+        provider,
+        action: 'create-or-verify-container',
+        status: 'ready',
+        created: true,
+        checked: true,
+        target: config.bucket,
+        detail: `S3-compatible bucket "${config.bucket}" was created and verified.`,
+      };
+    }
+  } catch (error) {
+    return {
+      provider,
+      action: 'create-or-verify-container',
+      status: 'blocked',
+      created: false,
+      checked: false,
+      target: config.bucket,
+      detail: error instanceof Error ? error.message : 'S3 bucket automation failed.',
+    };
+  }
+};
+
 const runMediaStorageProvisioningProbe = async (requestId: string) => {
   const summary = getMediaStorageConfigSummary();
+  const automation = await runStorageContainerAutomation();
   const checks: StorageProvisioningCheck[] = [
     {
       label: 'Runtime configuration',
@@ -656,6 +826,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
       summary: 'Storage runtime is not configured enough to run a provisioning probe.',
       runtimeStorage: summary,
       probePath,
+      automation,
       checks,
       rotation: {
         fields: storageRotationFields(summary.provider),
@@ -736,12 +907,15 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
   const blocked = checks.some((check) => !check.ready);
   return {
     provider: summary.provider,
-    status: blocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
+    status: blocked || automation.status === 'blocked' ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
     summary: blocked
       ? 'Storage provisioning probe found an operation that needs attention.'
-      : 'Storage bucket/path accepts upload, readback, metadata, listing, and cleanup operations.',
+      : automation.status === 'blocked'
+        ? 'Storage container automation needs attention before accepting production uploads.'
+        : 'Storage container is provisioned and the bucket/path accepts upload, readback, metadata, listing, and cleanup operations.',
     runtimeStorage: summary,
     probePath,
+    automation,
     checks,
     rotation: {
       fields: storageRotationFields(summary.provider),

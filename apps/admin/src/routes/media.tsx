@@ -5149,6 +5149,7 @@ function MediaPage() {
                     disabled={isMediaLibraryBusy || allVisibleSelected || !canBulkSelectMedia}
                     title={!canBulkSelectMedia ? bulkSelectionPermissionTitle : undefined}
                     onClick={handleSelectVisibleMedia}
+                    data-testid="media-bulk-add-visible-button"
                   >
                     Add visible loaded
                   </Button>
@@ -5410,10 +5411,11 @@ function MediaPage() {
           ))}
         </div>
       ) : displayedFiles.length > 0 ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4" data-testid="media-library-grid">
           {displayedFiles.map((file) => (
             <div
               key={file.id}
+              data-testid="media-library-card"
               className={cn(
                 'group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md',
                 selectedMediaSet.has(file.id) ? 'border-primary ring-2 ring-primary/20' : 'border-border',
@@ -5532,7 +5534,7 @@ function MediaPage() {
               }`}
             </style>
           )}
-          <div className="w-full max-w-5xl rounded-xl border border-border bg-background shadow-xl">
+          <div className="w-full max-w-5xl rounded-xl border border-border bg-background shadow-xl" data-testid="media-details-dialog">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold">Media details</h2>
@@ -7280,6 +7282,27 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
           <dd className="break-all font-mono">{result.probePath}</dd>
         </div>
       </dl>
+      {result.automation && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-container-automation">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Bucket automation</h4>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', result.automation.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+              {result.automation.created ? 'created' : result.automation.checked ? 'verified' : 'blocked'}
+            </span>
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Target</dt>
+              <dd className="break-all font-mono">{result.automation.target}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Action</dt>
+              <dd className="font-mono">{result.automation.action}</dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.automation.detail}</p>
+        </div>
+      )}
       <div className="mt-4 grid gap-2 md:grid-cols-2">
         {result.checks.map((check) => (
           <div key={check.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">

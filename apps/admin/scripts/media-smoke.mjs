@@ -738,14 +738,16 @@ const assertTagFilterShowsOnlyExactMatches = async (client, { searchText, tag, i
     const state = await evaluate(client, `(() => {
       const params = new URLSearchParams(window.location.search);
       const tagInput = document.querySelector('[data-testid="media-tag-filter"]');
-      const body = document.body?.innerText || '';
+      const grid = document.querySelector('[data-testid="media-library-grid"]');
+      const gridText = grid?.textContent || '';
       return {
         ready: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
         tagParam: params.get('tag'),
         tagValue: tagInput instanceof HTMLInputElement ? tagInput.value : null,
-        hasIncluded: body.includes(${JSON.stringify(includedName)}),
-        hasExcluded: body.includes(${JSON.stringify(excludedName)}),
-        body: body.slice(0, 1600),
+        hasIncluded: gridText.includes(${JSON.stringify(includedName)}),
+        hasExcluded: gridText.includes(${JSON.stringify(excludedName)}),
+        cardCount: document.querySelectorAll('[data-testid="media-library-card"]').length,
+        body: gridText.slice(0, 1600),
       };
     })()`);
     if (state.ready && state.tagParam === tag && state.tagValue === tag && state.hasIncluded && !state.hasExcluded) {
@@ -773,6 +775,43 @@ const waitForMediaPageAsset = async (client, name) => {
     }
     if (attempt === 119) {
       throw new Error(`Media page did not show ${name}: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const waitForMediaGridFilter = async (client, { searchText, tag = null, assetName }) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const searchInput = document.querySelector('input[aria-label="Search media"]');
+      const tagInput = document.querySelector('[data-testid="media-tag-filter"]');
+      const grid = document.querySelector('[data-testid="media-library-grid"]');
+      const gridText = grid?.textContent || '';
+      return {
+        ready: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
+        qParam: params.get('q'),
+        tagParam: params.get('tag'),
+        qValue: searchInput instanceof HTMLInputElement ? searchInput.value : null,
+        tagValue: tagInput instanceof HTMLInputElement ? tagInput.value : null,
+        hasAsset: gridText.includes(${JSON.stringify(assetName)}),
+        cardCount: document.querySelectorAll('[data-testid="media-library-card"]').length,
+        gridText: gridText.slice(0, 1200),
+      };
+    })()`);
+    if (
+      state.ready &&
+      state.qParam === searchText &&
+      state.qValue === searchText &&
+      (tag === null ? !state.tagParam && !state.tagValue : state.tagParam === tag && state.tagValue === tag) &&
+      state.hasAsset
+    ) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Media grid did not settle on expected filters: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -834,7 +873,7 @@ const assertMediaPaginationControls = async (client) => {
         hasLoadMore: buttons.some((button) => button.text.includes('Load more')),
         hasLoadAll: buttons.some((button) => button.text.includes('Load all matching')),
         hasRefresh: buttons.some((button) => button.text.includes('Refresh')),
-        hasBulkLoadedCopy: document.body?.innerText?.includes('Select visible loaded') || false,
+        hasBulkLoadedCopy: /Bulk actions apply to selected loaded assets/.test(text),
         body: text.slice(0, 1200),
       };
     })()`);
@@ -853,18 +892,32 @@ const assertMediaPaginationControls = async (client) => {
 const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, options = {}) => {
   const mode = options.mode || 'file';
   const acceptIncludes = options.acceptIncludes || '.txt';
-  const modeResult = await evaluate(client, `(() => {
-    const modeButton = document.querySelector(${JSON.stringify(`[data-testid="media-upload-mode-${mode}"]`)});
-    if (!(modeButton instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'mode-button-not-found' };
+  let modeResult = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    modeResult = await evaluate(client, `(() => {
+      const modeButton = document.querySelector(${JSON.stringify(`[data-testid="media-upload-mode-${mode}"]`)});
+      if (!(modeButton instanceof HTMLButtonElement)) {
+        return { ok: false, retry: true, reason: 'mode-button-not-found' };
+      }
+      if (modeButton.disabled) {
+        return {
+          ok: false,
+          retry: true,
+          reason: 'mode-button-disabled',
+          text: modeButton.textContent || '',
+          uploading: document.body?.innerText?.includes('Uploading files') || false,
+          body: document.body?.innerText?.slice(0, 1400) || '',
+        };
+      }
+      modeButton.click();
+      return { ok: true };
+    })()`);
+    if (modeResult.ok) break;
+    if (!modeResult.retry || attempt === 79) {
+      assert(false, `Unable to select central ${mode} upload mode: ${JSON.stringify(modeResult)}`);
     }
-    if (modeButton.disabled) {
-      return { ok: false, reason: 'mode-button-disabled', text: modeButton.textContent || '' };
-    }
-    modeButton.click();
-    return { ok: true };
-  })()`);
-  assert(modeResult.ok, `Unable to select central ${mode} upload mode: ${JSON.stringify(modeResult)}`);
+    await sleep(250);
+  }
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -1085,6 +1138,7 @@ const runMediaStorageProvisioningProbe = async (client) => {
       return {
         ready: Boolean(panel) &&
           text.includes('Provisioning and rotation probe') &&
+          text.includes('Bucket automation') &&
           text.includes('Probe upload') &&
           text.includes('Readback') &&
           text.includes('Probe cleanup') &&
@@ -1217,8 +1271,12 @@ const setDetailsField = async (client, labelText, value) => {
     const labelText = ${JSON.stringify(labelText)};
     const value = ${JSON.stringify(value)};
     const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
-    const labels = Array.from(document.querySelectorAll('label'));
-    const label = labels.find((candidate) => normalized(candidate.textContent) === labelText);
+    const scope = document.querySelector('[data-testid="media-details-dialog"]') || document;
+    const labels = Array.from(scope.querySelectorAll('label'));
+    const label = labels.find((candidate) => {
+      const text = normalized(candidate.textContent);
+      return text === labelText || text.startsWith(labelText);
+    });
     if (!(label instanceof HTMLLabelElement)) {
       return { ok: false, reason: 'label-not-found', labels: labels.map((item) => normalized(item.textContent)).slice(0, 80) };
     }
@@ -1799,9 +1857,7 @@ const selectVisibleMedia = async (client) => {
   let result;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     result = await evaluate(client, `(() => {
-      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').includes('Select visible')
-      ));
+      const button = document.querySelector('[data-testid="media-bulk-add-visible-button"]');
       if (!(button instanceof HTMLButtonElement)) {
         return { ok: false, retry: true, reason: 'button-not-found' };
       }
@@ -2115,7 +2171,7 @@ const assertPrivateFontPreview = async (client, { fontId, fontName, family }) =>
     item.visibility === 'private'
   ));
   await navigateToMedia(client, fontName);
-  await waitForMediaPageAsset(client, fontName);
+  await waitForMediaGridFilter(client, { searchText: fontName, assetName: fontName });
   await openMediaDetails(client, fontName);
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -2410,6 +2466,7 @@ const main = async () => {
       excludedName: privateName,
     });
     await navigateToMedia(client, marker);
+    await waitForMediaGridFilter(client, { searchText: marker, assetName: imageName });
     await assertMediaLayout(client, imageName);
     await assertMediaPaginationControls(client);
     await applySingleAssetBulkUpdate(client, bulkName, { folderId });
@@ -2491,6 +2548,8 @@ const main = async () => {
     await runMediaStorageCheck(client);
     await runMediaStorageProvisioningProbe(client);
 
+    await navigateToMedia(client, marker);
+    await waitForMediaGridFilter(client, { searchText: marker, assetName: imageName });
     await openMediaDetails(client, imageName);
     await replaceAssetThroughDetails(client, replacementPath, replacementName);
     const replacedImage = await waitForMedia(marker, (item) => (
@@ -2583,9 +2642,14 @@ const main = async () => {
     const updatedImage = await waitForMedia(marker, (item) => (
       item.id === publicImage.id &&
       item.originalName === renamedImageName &&
-      item.altText === updatedAltText &&
       item.visibility === 'private'
     ));
+    assert(updatedImage.altText === updatedAltText, `Media metadata save did not persist alt text: ${JSON.stringify({
+      expected: updatedAltText,
+      actual: updatedImage.altText,
+      id: updatedImage.id,
+      originalName: updatedImage.originalName,
+    })}`);
     assert(updatedImage.folderId === folderId, 'Media metadata save lost the folder assignment.');
     assert(updatedImage.filename === publicImage.filename, 'Media metadata rename should not rewrite the stored file path.');
     assert(Array.isArray(updatedImage.metadata?.replacementVersions) && updatedImage.metadata.replacementVersions.length === 1, 'Media metadata save lost replacement history.');
