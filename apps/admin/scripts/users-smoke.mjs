@@ -132,6 +132,19 @@ const listUsers = async () => {
   return payload.data?.users || payload.users || [];
 };
 
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const listUsersPage = async (params = {}) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -312,6 +325,48 @@ const deleteUser = async (userId) => {
 const findUserByEmail = async (email) => {
   const users = await listUsers();
   return users.find((user) => user.email === email) || null;
+};
+
+const assertUserBillingSeatLimitEnforced = async (suffix) => {
+  const settings = await getSettings();
+  const existingUsers = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedEmail = `blocked-seat-${suffix}@example.com`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: Math.max(1, existingUsers.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        fullName: `Blocked Seat ${suffix}`,
+        email: blockedEmail,
+        role: 'viewer',
+        status: 'invited',
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing seat limit should reject user creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_SEAT_LIMIT', `Billing seat limit should return BILLING_SEAT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findUserByEmail(blockedEmail)), 'Billing-limited user creation unexpectedly persisted a user.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const waitForUser = async (email, predicate = () => true) => {
@@ -1617,6 +1672,7 @@ const main = async () => {
     await updateUser('user-admin', { role: 'owner', status: 'active' });
     await assertUsersApiRequiresAuth();
     await assertUserPermissionOverridesAreEnforced();
+    await assertUserBillingSeatLimitEnforced(suffix);
     const existing = await findUserByEmail(email);
     assert(!existing, `Temporary user already exists: ${email}`);
 
