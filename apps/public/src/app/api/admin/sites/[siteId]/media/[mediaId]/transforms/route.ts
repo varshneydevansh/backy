@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { getMediaById, getMediaList, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
+import { getAdminSettings, getMediaById, getMediaList, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import {
   DEFAULT_IMAGE_VARIANT_QUALITY,
@@ -13,11 +13,10 @@ import {
   generateImageTransformManifest,
   MediaTransformGenerationError,
 } from '@/lib/mediaTransformGeneration';
+import { mediaQuotaPayload, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
-
-const DEFAULT_SITE_MEDIA_QUOTA_BYTES = 500 * 1024 * 1024;
 
 interface RouteParams {
   params: Promise<{
@@ -72,21 +71,6 @@ const normalizeQuality = (value: unknown): number => {
 
   return Math.max(1, Math.min(100, Math.floor(quality)));
 };
-
-const configuredSiteMediaQuotaBytes = () => {
-  const configured = Number(process.env.BACKY_SITE_MEDIA_QUOTA_BYTES);
-  if (!Number.isFinite(configured) || configured <= 0) {
-    return DEFAULT_SITE_MEDIA_QUOTA_BYTES;
-  }
-
-  return Math.floor(configured);
-};
-
-const mediaQuotaPayload = (limitBytes: number, usedBytes: number) => ({
-  limitBytes,
-  usedBytes,
-  remainingBytes: Math.max(0, limitBytes - usedBytes),
-});
 
 const replacementVersionBytes = (metadata: unknown): number => {
   const record = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
@@ -168,7 +152,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       preparedAt,
       preparedBy,
     });
-    const siteMediaQuotaBytes = configuredSiteMediaQuotaBytes();
+    const settings = repositories ? await repositories.settings.get() : getAdminSettings();
+    const uploadPolicy = resolveMediaUploadPolicy(settings);
+    const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
     const currentMedia = repositories
       ? (await repositories.media.list({
           siteId: site.id,
@@ -193,7 +179,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         'SITE_MEDIA_QUOTA_EXCEEDED',
         'Preparing responsive variants would exceed the site media storage quota.',
         requestId,
-        mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes),
+        mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes, uploadPolicy),
       );
     }
 

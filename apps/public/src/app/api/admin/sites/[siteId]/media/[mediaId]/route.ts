@@ -11,7 +11,7 @@ import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
+import { deleteMediaItem, getAdminSettings, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getMediaSecurityPolicy, MediaSafetyError, scanMediaUploadWithProviders } from '@/lib/mediaSafety';
 import {
@@ -24,6 +24,7 @@ import {
   generatedTransformBytes,
   generatedTransformStoragePaths,
 } from '@/lib/mediaTransformGeneration';
+import { isUploadAllowedByFileType, mediaQuotaPayload, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
 
@@ -37,8 +38,6 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-const MAX_REPLACEMENT_BYTES = 50 * 1024 * 1024;
-const DEFAULT_SITE_MEDIA_QUOTA_BYTES = 500 * 1024 * 1024;
 const MAX_REPLACEMENT_VERSIONS = 20;
 
 const buildMediaBinaryFingerprint = (buffer: Buffer) => {
@@ -154,15 +153,6 @@ const mediaFolderForType = (type: MediaItem['type']) => {
   return 'files';
 };
 
-const configuredSiteMediaQuotaBytes = () => {
-  const configured = Number(process.env.BACKY_SITE_MEDIA_QUOTA_BYTES);
-  if (!Number.isFinite(configured) || configured <= 0) {
-    return DEFAULT_SITE_MEDIA_QUOTA_BYTES;
-  }
-
-  return Math.floor(configured);
-};
-
 const replacementVersionBytes = (metadata: MediaItem['metadata'] | undefined): number => {
   const versions = metadata && Array.isArray(metadata.replacementVersions)
     ? metadata.replacementVersions
@@ -185,12 +175,6 @@ const mediaUsageBytes = (items: MediaItem[]) => (
     + generatedTransformBytes(item.metadata)
   ), 0)
 );
-
-const mediaQuotaPayload = (limitBytes: number, usedBytes: number) => ({
-  limitBytes,
-  usedBytes,
-  remainingBytes: Math.max(0, limitBytes - usedBytes),
-});
 
 const replacementVersionsFromMetadata = (metadata: MediaItem['metadata'] | undefined): Record<string, unknown>[] => (
   metadata && Array.isArray(metadata.replacementVersions)
@@ -536,13 +520,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'EMPTY_FILE', 'Replacement file is empty', requestId);
     }
 
-    if (file.size > MAX_REPLACEMENT_BYTES) {
-      return errorResponse(413, 'FILE_TOO_LARGE', 'Replacement file exceeds the 50 MB limit', requestId);
-    }
-
     const originalName = file.name || 'replacement.bin';
     const mimeType = file.type || 'application/octet-stream';
+    const extension = extname(originalName).toLowerCase();
     const mediaType = getMediaType(mimeType, originalName);
+    const settings = repositories ? await repositories.settings.get() : getAdminSettings();
+    const uploadPolicy = resolveMediaUploadPolicy(settings);
+
+    if (file.size > uploadPolicy.maxUploadBytes) {
+      return errorResponse(
+        413,
+        'FILE_TOO_LARGE',
+        `Replacement file exceeds the configured ${Math.floor(uploadPolicy.maxUploadBytes / (1024 * 1024))} MB limit.`,
+        requestId,
+        { maxUploadBytes: uploadPolicy.maxUploadBytes },
+      );
+    }
+
+    if (!isUploadAllowedByFileType(uploadPolicy, { filename: originalName, mimeType })) {
+      return errorResponse(
+        415,
+        'FILE_TYPE_NOT_ALLOWED',
+        'Replacement file type is not allowed by the configured storage policy.',
+        requestId,
+        {
+          allowedFileTypes: uploadPolicy.allowedFileTypes,
+          mimeType,
+          extension,
+        },
+      );
+    }
 
     if (mediaType !== beforeMedia.type) {
       return errorResponse(
@@ -557,7 +564,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const siteMediaQuotaBytes = configuredSiteMediaQuotaBytes();
+    const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
     const currentMedia = repositories
       ? (await repositories.media.list({
           siteId: site.id,
@@ -579,11 +586,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         'SITE_MEDIA_QUOTA_EXCEEDED',
         'Replacing this file would exceed the site media storage quota because previous versions are retained.',
         requestId,
-        mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes),
+        mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes, uploadPolicy),
       );
     }
 
-    const extension = extname(originalName).toLowerCase();
     const safeName = safePathSegment(extension ? originalName.slice(0, -extension.length) : originalName);
     const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
     const storagePath = getMediaStoragePath({
