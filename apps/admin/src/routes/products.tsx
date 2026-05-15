@@ -70,6 +70,11 @@ const PRODUCT_CONTROL_AREAS = [
     href: '#products-metrics',
   },
   {
+    title: 'Commerce signal',
+    detail: 'Revenue, order, and customer profile handoff from private commerce records.',
+    href: '#products-commerce-analytics',
+  },
+  {
     title: 'Catalog grid',
     detail: 'Search, filter, publish, archive, edit, and delete products.',
     href: '#products-catalog',
@@ -82,6 +87,7 @@ const PRODUCT_CONTROL_AREAS = [
 ] as const;
 
 const PRODUCT_RECORD_PAGE_SIZE = 100;
+const COMMERCE_SIGNAL_RECORD_LIMIT = 100;
 
 type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
@@ -160,6 +166,7 @@ interface ProductFormState {
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
+const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const PRODUCT_STATUS_FILTERS: ProductStatusFilter[] = ['all', 'published', 'draft', 'scheduled', 'archived'];
 const PRODUCT_TYPE_FILTERS: ProductTypeFilter[] = ['all', 'physical', 'digital', 'service'];
 const PRODUCT_STOCK_FILTERS: ProductStockFilter[] = ['all', 'in-stock', 'low-stock', 'out-of-stock', 'featured', 'checkout-missing'];
@@ -548,7 +555,10 @@ function ProductsRoute() {
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
+  const [customersCollection, setCustomersCollection] = useState<Collection | null>(null);
   const [products, setProducts] = useState<CollectionRecord[]>([]);
+  const [recentOrders, setRecentOrders] = useState<CollectionRecord[]>([]);
+  const [customerProfiles, setCustomerProfiles] = useState<CollectionRecord[]>([]);
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
@@ -632,6 +642,10 @@ function ProductsRoute() {
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const customerCollectionSearch = useMemo(() => ({
+    siteId: activeSiteId,
+    ...(customersCollection?.id ? { collectionId: customersCollection.id } : {}),
+  }), [activeSiteId, customersCollection?.id]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const commerceCatalogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`;
   const commerceProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?slug={productSlug}`;
@@ -747,6 +761,62 @@ function ProductsRoute() {
     digital: products.filter((product) => readProductValue(product.values, 'productType') === 'digital').length,
     categories: new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean)).size,
   }), [products, totalProductCount]);
+  const commerceAnalytics = useMemo(() => {
+    const orderSummaries = recentOrders.map((order) => {
+      const values = order.values || {};
+      const total = toNumber(values.total);
+      const paymentStatus = String(values.paymentstatus || values.paymentStatus || '').trim().toLowerCase();
+      const orderStatus = String(values.orderstatus || values.orderStatus || order.status || '').trim().toLowerCase();
+      const isPaid = paymentStatus === 'paid' || orderStatus === 'paid' || orderStatus === 'fulfilled';
+      const isRefunded = paymentStatus === 'refunded' || orderStatus === 'refunded';
+
+      return {
+        id: order.id,
+        slug: order.slug,
+        orderNumber: String(values.ordernumber || values.orderNumber || order.slug || ''),
+        customerName: String(values.customername || values.customerName || values.email || 'Unknown customer'),
+        email: String(values.email || ''),
+        total,
+        currency: normalizeCurrency(String(values.currency || 'USD')),
+        paymentStatus: paymentStatus || 'unknown',
+        orderStatus: orderStatus || 'unknown',
+        isPaid,
+        isRefunded,
+        updatedAt: order.updatedAt || order.createdAt || '',
+      };
+    });
+    const paidOrders = orderSummaries.filter((order) => order.isPaid);
+    const refundedOrders = orderSummaries.filter((order) => order.isRefunded);
+    const revenue = paidOrders.reduce((sum, order) => sum + order.total, 0);
+    const averageOrderValue = paidOrders.length > 0 ? revenue / paidOrders.length : 0;
+    const customerSummaries = customerProfiles.map((customer) => {
+      const values = customer.values || {};
+      return {
+        id: customer.id,
+        slug: customer.slug,
+        name: String(values.name || values.fullname || values.customername || values.email || customer.slug),
+        email: String(values.email || ''),
+        orderCount: toNumber(values.ordercount || values.orderCount),
+        totalSpent: toNumber(values.totalspent || values.totalSpent),
+        lastOrderNumber: String(values.lastordernumber || values.lastOrderNumber || ''),
+      };
+    });
+
+    return {
+      orderCount: orderSummaries.length,
+      paidOrderCount: paidOrders.length,
+      refundedOrderCount: refundedOrders.length,
+      revenue,
+      averageOrderValue,
+      currency: orderSummaries[0]?.currency || 'USD',
+      customerCount: customerSummaries.length,
+      repeatCustomerCount: customerSummaries.filter((customer) => customer.orderCount > 1).length,
+      topCustomers: [...customerSummaries]
+        .sort((first, second) => second.totalSpent - first.totalSpent)
+        .slice(0, 3),
+      recentOrders: orderSummaries.slice(0, 5),
+    };
+  }, [customerProfiles, recentOrders]);
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
@@ -950,6 +1020,24 @@ function ProductsRoute() {
       checks: catalogReadiness.checks,
     },
     metrics,
+    commerceAnalytics: {
+      ordersLoaded: commerceAnalytics.orderCount,
+      paidOrders: commerceAnalytics.paidOrderCount,
+      refundedOrders: commerceAnalytics.refundedOrderCount,
+      revenue: commerceAnalytics.revenue,
+      averageOrderValue: commerceAnalytics.averageOrderValue,
+      currency: commerceAnalytics.currency,
+      customerProfilesLoaded: commerceAnalytics.customerCount,
+      repeatCustomers: commerceAnalytics.repeatCustomerCount,
+      customersCollection: customersCollection
+        ? {
+            id: customersCollection.id,
+            slug: customersCollection.slug,
+            status: customersCollection.status,
+            permissions: customersCollection.permissions,
+          }
+        : null,
+    },
     filters: {
       search: searchQuery,
       status: statusFilter,
@@ -1012,12 +1100,14 @@ function ProductsRoute() {
     catalogReadiness.score,
     categoryFilter,
     commerceCatalogUrl,
+    commerceAnalytics,
     commerceProductDetailUrl,
     commerceOrderContractUrl,
     commerceOrderCreateUrl,
     filteredProducts.length,
     frontendDesign,
     frontendProductTemplates,
+    customersCollection,
     hasMoreProducts,
     loadedProductCount,
     metrics,
@@ -1070,7 +1160,10 @@ function ProductsRoute() {
     if (!canViewProducts) {
       setProductCollection(null);
       setOrdersCollection(null);
+      setCustomersCollection(null);
       setProducts([]);
+      setRecentOrders([]);
+      setCustomerProfiles([]);
       setProductPagination(null);
       clearProductEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce products.');
@@ -1083,11 +1176,16 @@ function ProductsRoute() {
     try {
       const collections = await listCollections(activeSiteId);
       const collection = collections.find((item) => item.slug === PRODUCT_COLLECTION_SLUG) || null;
-      setOrdersCollection(collections.find((item) => item.slug === ORDERS_COLLECTION_SLUG) || null);
+      const orderCollection = collections.find((item) => item.slug === ORDERS_COLLECTION_SLUG) || null;
+      const customerCollection = collections.find((item) => item.slug === CUSTOMERS_COLLECTION_SLUG) || null;
+      setOrdersCollection(orderCollection);
+      setCustomersCollection(customerCollection);
       setProductCollection(collection);
 
       if (!collection) {
         setProducts([]);
+        setRecentOrders([]);
+        setCustomerProfiles([]);
         setProductPagination(null);
         clearProductEditorState();
         return;
@@ -1101,6 +1199,27 @@ function ProductsRoute() {
       });
       setProducts(result.records.map(normalizeProductRecord));
       setProductPagination(result.pagination);
+
+      const [ordersResult, customersResult] = await Promise.all([
+        orderCollection
+          ? listCollectionRecords(activeSiteId, orderCollection.id, {
+              limit: COMMERCE_SIGNAL_RECORD_LIMIT,
+              offset: 0,
+              sortBy: 'updatedAt',
+              sortDirection: 'desc',
+            }).catch(() => null)
+          : Promise.resolve(null),
+        customerCollection
+          ? listCollectionRecords(activeSiteId, customerCollection.id, {
+              limit: COMMERCE_SIGNAL_RECORD_LIMIT,
+              offset: 0,
+              sortBy: 'updatedAt',
+              sortDirection: 'desc',
+            }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      setRecentOrders(ordersResult?.records || []);
+      setCustomerProfiles(customersResult?.records || []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load products');
     } finally {
@@ -2265,6 +2384,100 @@ function ProductsRoute() {
                   </div>
                 </div>
               </div>
+              <div id="products-commerce-analytics" data-testid="products-commerce-analytics" className="scroll-mt-24 rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Commerce analytics and customer profiles</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Read private order and customer records so the catalog page can show revenue signal without exposing those records to public storefront APIs.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      to="/orders"
+                      search={activeSiteSearch}
+                      aria-disabled={isProductsBusy}
+                      className={cn(
+                        'inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-accent',
+                        isProductsBusy && 'pointer-events-none opacity-60',
+                      )}
+                    >
+                      Orders
+                    </Link>
+                    <Link
+                      to="/collections"
+                      search={customerCollectionSearch}
+                      aria-disabled={!customersCollection || isProductsBusy}
+                      className={cn(
+                        'inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-accent',
+                        (!customersCollection || isProductsBusy) && 'pointer-events-none opacity-60',
+                      )}
+                    >
+                      Customer profiles
+                    </Link>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Metric label="Paid revenue" value={formatMoney(commerceAnalytics.revenue, commerceAnalytics.currency)} icon={<ShoppingBag className="size-4" />} />
+                  <Metric label="Paid orders" value={commerceAnalytics.paidOrderCount} icon={<CheckCircle2 className="size-4" />} />
+                  <Metric label="Customers" value={commerceAnalytics.customerCount} icon={<Package className="size-4" />} />
+                  <Metric label="Avg order" value={formatMoney(commerceAnalytics.averageOrderValue, commerceAnalytics.currency)} icon={<Boxes className="size-4" />} />
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent order signal</div>
+                      <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                        {commerceAnalytics.orderCount} loaded
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {commerceAnalytics.recentOrders.length > 0 ? commerceAnalytics.recentOrders.map((order) => (
+                        <div key={order.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">{order.orderNumber || order.slug}</div>
+                            <div className="truncate text-xs text-muted-foreground">{order.customerName} · {order.paymentStatus}/{order.orderStatus}</div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="font-semibold">{formatMoney(order.total, order.currency)}</div>
+                            <div className="text-[11px] text-muted-foreground">{order.updatedAt ? formatDate(order.updatedAt) : 'No date'}</div>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                          No private order records loaded yet. Public checkout intake will populate this signal after the first order.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top customer profiles</div>
+                      <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                        {commerceAnalytics.repeatCustomerCount} repeat
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {commerceAnalytics.topCustomers.length > 0 ? commerceAnalytics.topCustomers.map((customer) => (
+                        <div key={customer.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">{customer.name}</div>
+                            <div className="truncate text-xs text-muted-foreground">{customer.email || customer.slug}</div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="font-semibold">{formatMoney(customer.totalSpent, commerceAnalytics.currency)}</div>
+                            <div className="text-[11px] text-muted-foreground">{customer.orderCount} orders</div>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                          Customer profiles are created automatically from checkout intake and stay in the private customers collection.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -3191,7 +3404,7 @@ function ProductsRoute() {
   );
 }
 
-function Metric({ label, value, icon }: { label: string; value: number; icon: ReactNode }) {
+function Metric({ label, value, icon }: { label: string; value: number | string; icon: ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3">
       <div className="flex items-center justify-between gap-3">
