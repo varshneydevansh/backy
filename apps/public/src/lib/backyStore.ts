@@ -287,7 +287,7 @@ interface ApiKeyRevocationHistoryEntry {
   revokedAt: string;
   actorId: string | null;
   requestId: string | null;
-  reason: 'rotated' | 'replaced';
+  reason: 'rotated' | 'replaced' | 'manual';
   revokedKeyFingerprint: string | null;
   replacementKeyFingerprint: string | null;
 }
@@ -702,7 +702,7 @@ const apiKeyRevocationHistory = (
       .map<ApiKeyRevocationHistoryEntry>((entry) => {
         const scope: ApiKeyRevocationHistoryEntry['scope'] = entry.scope === 'public' || entry.scope === 'admin' ? entry.scope : 'all';
         const keyType: ApiKeyRevocationHistoryEntry['keyType'] = entry.keyType === 'admin' ? 'admin' : 'public';
-        const reason: ApiKeyRevocationHistoryEntry['reason'] = entry.reason === 'replaced' ? 'replaced' : 'rotated';
+        const reason: ApiKeyRevocationHistoryEntry['reason'] = entry.reason === 'manual' || entry.reason === 'replaced' ? entry.reason : 'rotated';
         return {
           id: sanitizeString(entry.id) || createRuntimeId('key_revocation'),
           scope,

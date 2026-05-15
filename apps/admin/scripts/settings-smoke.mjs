@@ -627,6 +627,69 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   const beforeAdminKey = before.apiKeys?.adminApiKey || '';
   assert(beforePublicKey && beforeAdminKey, `Owner should be able to read both keys before rotation: ${JSON.stringify(before.apiKeys)}`);
 
+  const serviceKeyLabel = `Settings smoke server key ${Date.now()}`;
+  await setLabeledControl(client, 'New key label', serviceKeyLabel);
+  await clickByTestId(client, 'settings-admin-service-key-issue');
+  await waitForText(client, 'Copy this key now');
+  const issuedServiceKeyState = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="settings-admin-service-key-issued"]');
+    const text = panel?.innerText || '';
+    const match = text.match(/sk_srv_[a-z0-9]+/i);
+    return {
+      rawKey: match?.[0] || '',
+      text,
+      hasHashNotice: text.includes('stores only the hash'),
+    };
+  })()`);
+  assert(
+    issuedServiceKeyState.rawKey && issuedServiceKeyState.hasHashNotice,
+    `Issued service key was not rendered once with hash notice: ${JSON.stringify(issuedServiceKeyState).slice(0, 1000)}`,
+  );
+
+  const afterIssue = await readSettings(ownerSession.session.token);
+  const issuedGrant = (afterIssue.auth?.apiKeyServiceKeys || []).find((entry) => entry.label === serviceKeyLabel);
+  assert(
+    issuedGrant?.id &&
+      issuedGrant.status === 'active' &&
+      issuedGrant.keyFingerprint &&
+      !JSON.stringify(issuedGrant).includes('keyHash'),
+    `Issued service key metadata was not persisted safely: ${JSON.stringify(afterIssue.auth?.apiKeyServiceKeys).slice(0, 1000)}`,
+  );
+  const serviceKeyAccepted = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    headers: {
+      'x-backy-admin-key': issuedServiceKeyState.rawKey,
+    },
+  });
+  const serviceKeyAcceptedPayload = await serviceKeyAccepted.json().catch(() => ({}));
+  assert(
+    serviceKeyAccepted.ok && serviceKeyAcceptedPayload?.data?.settings,
+    `Issued service key should authenticate admin settings reads: ${serviceKeyAccepted.status} ${JSON.stringify(serviceKeyAcceptedPayload).slice(0, 500)}`,
+  );
+
+  await clickByTestId(client, `settings-admin-service-key-revoke-${issuedGrant.id}`);
+  await waitForText(client, 'Admin API key revoked.');
+  const afterServiceRevoke = await readSettings(ownerSession.session.token);
+  const revokedGrant = (afterServiceRevoke.auth?.apiKeyServiceKeys || []).find((entry) => entry.id === issuedGrant.id);
+  const serviceRevocation = afterServiceRevoke.auth?.apiKeyRevocationHistory?.find((entry) => (
+    entry.reason === 'manual' && entry.revokedKeyFingerprint === issuedGrant.keyFingerprint
+  ));
+  assert(
+    revokedGrant?.status === 'revoked' &&
+      revokedGrant.revokedAt &&
+      serviceRevocation?.keyType === 'admin' &&
+      serviceRevocation.reason === 'manual',
+    `Issued service key was not revoked with history: ${JSON.stringify({ revokedGrant, serviceRevocation }).slice(0, 1000)}`,
+  );
+  const serviceKeyRejected = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    headers: {
+      'x-backy-admin-key': issuedServiceKeyState.rawKey,
+    },
+  });
+  assert(
+    serviceKeyRejected.status === 401,
+    `Revoked service key should stop authenticating admin settings reads, got ${serviceKeyRejected.status}`,
+  );
+
   await clickByTestId(client, 'settings-api-key-regenerate-public');
   await waitForText(client, 'Regenerate the public API key?');
   await clickByTestId(client, 'settings-api-key-rotation-confirm');
@@ -699,6 +762,8 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   return {
     publicKeyRotated: after.apiKeys.publicApiKey !== beforePublicKey,
     adminKeyPreserved: after.apiKeys.adminApiKey === beforeAdminKey,
+    serviceKeyIssued: true,
+    serviceKeyRevoked: true,
     rotationHistoryPersisted: true,
     revocationHistoryPersisted: true,
     auditRendered: true,

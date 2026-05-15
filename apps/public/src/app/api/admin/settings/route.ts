@@ -248,6 +248,70 @@ const keyFingerprint = (value: string | undefined): string | null => (
   value ? createHash('sha256').update(value).digest('hex').slice(0, 16) : null
 );
 
+const keyHash = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+const createAdminServiceApiKey = (): string => (
+  `sk_srv_${randomUUID().replace(/-/g, '')}${randomUUID().replace(/-/g, '').slice(0, 16)}`
+);
+
+const normalizeServiceKeyGrants = (value: unknown): BackyJsonObject[] => (
+  Array.isArray(value)
+    ? value
+      .filter((entry): entry is BackyJsonObject => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ))
+      .map((entry) => {
+        const revokedAt = stringValue(entry.revokedAt) || null;
+        return {
+          id: stringValue(entry.id) || `key_service_${randomUUID().slice(0, 8)}`,
+          label: stringValue(entry.label) || 'Server API key',
+          keyPrefix: stringValue(entry.keyPrefix) || 'sk_srv_',
+          keyFingerprint: stringValue(entry.keyFingerprint) || null,
+          keyHash: stringValue(entry.keyHash) || null,
+          createdAt: stringValue(entry.createdAt) || new Date().toISOString(),
+          createdBy: stringValue(entry.createdBy) || null,
+          requestId: stringValue(entry.requestId) || null,
+          lastUsedAt: stringValue(entry.lastUsedAt) || null,
+          revokedAt,
+          revokedBy: stringValue(entry.revokedBy) || null,
+          revokedRequestId: stringValue(entry.revokedRequestId) || null,
+          status: revokedAt || entry.status === 'revoked' ? 'revoked' : 'active',
+        };
+      })
+      .slice(0, 50)
+    : []
+);
+
+const sanitizeServiceKeyGrant = (entry: BackyJsonObject): BackyJsonObject => {
+  const {
+    keyHash: _keyHash,
+    ...safeEntry
+  } = entry;
+  return safeEntry;
+};
+
+const sanitizeAuthForResponse = (value: unknown): BackyJsonObject | undefined => {
+  const input = parseJsonObject(value);
+  if (!input) {
+    return undefined;
+  }
+
+  const {
+    passwordResetTokens: _passwordResetTokens,
+    inviteTokens: _inviteTokens,
+    ...auth
+  } = input;
+
+  if (!auth) {
+    return undefined;
+  }
+
+  return {
+    ...auth,
+    apiKeyServiceKeys: normalizeServiceKeyGrants(auth.apiKeyServiceKeys).map(sanitizeServiceKeyGrant),
+  };
+};
+
 const normalizeRotationHistory = (value: unknown): BackyJsonObject[] => (
   Array.isArray(value)
     ? value
@@ -295,7 +359,7 @@ const normalizeRevocationHistory = (value: unknown): BackyJsonObject[] => (
         revokedAt: stringValue(entry.revokedAt) || new Date().toISOString(),
         actorId: stringValue(entry.actorId) || null,
         requestId: stringValue(entry.requestId) || null,
-        reason: entry.reason === 'replaced' ? 'replaced' : 'rotated',
+        reason: entry.reason === 'manual' || entry.reason === 'replaced' ? entry.reason : 'rotated',
         revokedKeyFingerprint: stringValue(entry.revokedKeyFingerprint) || null,
         replacementKeyFingerprint: stringValue(entry.replacementKeyFingerprint) || null,
       }))
@@ -400,19 +464,19 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
 
   return {
     deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
-  apiKeys: {
-    publicApiKey: apiKeys.publicApiKey,
-    adminApiKey: options.includeAdminApiKey ? apiKeys.adminApiKey : '',
-  },
-  storage: 'storage' in settings ? settings.storage || {} : {},
-  runtimeStorage: getMediaStorageConfigSummary(),
-  auth: normalizeAdminAuthSettings(settings.auth) || {},
-  integrations: settings.integrations || {},
-  runtimeDatabase: getDatabaseRuntimeSummary(),
-  runtimeSupabase: getSupabaseRuntimeSummary(),
-  runtimeMediaScanner: getMediaScannerRuntimeSummary(),
-  runtimeVercel: getVercelRuntimeSummary(),
-  updatedAt: settings.updatedAt,
+    apiKeys: {
+      publicApiKey: apiKeys.publicApiKey,
+      adminApiKey: options.includeAdminApiKey ? apiKeys.adminApiKey : '',
+    },
+    storage: 'storage' in settings ? settings.storage || {} : {},
+    runtimeStorage: getMediaStorageConfigSummary(),
+    auth: sanitizeAuthForResponse(settings.auth) || {},
+    integrations: settings.integrations || {},
+    runtimeDatabase: getDatabaseRuntimeSummary(),
+    runtimeSupabase: getSupabaseRuntimeSummary(),
+    runtimeMediaScanner: getMediaScannerRuntimeSummary(),
+    runtimeVercel: getVercelRuntimeSummary(),
+    updatedAt: settings.updatedAt,
   };
 };
 
@@ -428,6 +492,7 @@ const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined
   const {
     passwordResetTokens: _passwordResetTokens,
     inviteTokens: _inviteTokens,
+    apiKeyServiceKeys: _apiKeyServiceKeys,
     ...safeInput
   } = input;
 
@@ -1096,6 +1161,7 @@ const sanitizeSettingsAuditSnapshot = (settings: unknown): BackyJsonObject | und
       adminConfigured: Boolean(apiKeys?.secretKeyId || apiKeys?.adminApiKey),
       redacted: true,
     },
+    auth: sanitizeAuthForResponse(snapshot.auth) || {},
   };
 };
 
@@ -1279,11 +1345,13 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody(request);
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
     const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
-    const keyRegeneration = body.action === 'regenerate-api-keys';
+    const keyManagementAction = body.action === 'regenerate-api-keys' ||
+      body.action === 'issue-admin-api-key' ||
+      body.action === 'revoke-admin-api-key';
     const access = await requireAdminAccess(request, requestId, {
       permission: mediaStorageCheck || mediaStorageProvisioningProbe
         ? 'media.configure'
-        : keyRegeneration
+        : keyManagementAction
           ? 'settings.manageKeys'
           : 'settings.configure',
     });
@@ -1310,6 +1378,221 @@ export async function POST(request: NextRequest) {
         success: true,
         requestId,
         data: result,
+      });
+    }
+
+    if (body.action === 'issue-admin-api-key') {
+      const label = stringValue(body.label).trim();
+      if (!label || label.length > 80) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Service key label is required and must be 80 characters or less.', requestId);
+      }
+
+      const issuedKey = createAdminServiceApiKey();
+      const now = new Date().toISOString();
+      const grant: BackyJsonObject = {
+        id: `key_service_${randomUUID().slice(0, 8)}`,
+        label,
+        keyPrefix: `${issuedKey.slice(0, 10)}...`,
+        keyFingerprint: keyFingerprint(issuedKey),
+        keyHash: keyHash(issuedKey),
+        createdAt: now,
+        createdBy: access.session?.user.id || null,
+        requestId,
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null,
+        revokedRequestId: null,
+        status: 'active',
+      };
+
+      if (!shouldUseDemoStoreFallback()) {
+        const repositories = await getRequiredDatabaseRepositories();
+        const beforeSettings = await repositories.settings.get();
+        const settings = (await repositories.settings.update({
+          auth: {
+            ...(beforeSettings.auth || {}),
+            apiKeyServiceKeys: [
+              grant,
+              ...normalizeServiceKeyGrants(beforeSettings.auth?.apiKeyServiceKeys),
+            ].slice(0, 50),
+          },
+        })).item;
+        await recordAdminAudit({
+          repositories,
+          entity: 'settings',
+          entityId: 'platform',
+          action: 'settings.api_keys.issue',
+          before: sanitizeSettingsAuditSnapshot(beforeSettings),
+          after: sanitizeSettingsAuditSnapshot(settings),
+          metadata: {
+            keyId: grant.id,
+            label,
+            keyFingerprint: grant.keyFingerprint,
+          },
+          requestId,
+        });
+
+        return NextResponse.json({
+          success: true,
+          requestId,
+          data: {
+            settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+            issuedKey: {
+              id: grant.id,
+              label,
+              adminApiKey: issuedKey,
+              keyFingerprint: grant.keyFingerprint,
+              keyPrefix: grant.keyPrefix,
+            },
+          },
+        });
+      }
+
+      const beforeSettings = getAdminSettings();
+      const settings = updateAdminSettings({
+        auth: {
+          ...(beforeSettings.auth || {}),
+          apiKeyServiceKeys: [
+            grant,
+            ...normalizeServiceKeyGrants(beforeSettings.auth?.apiKeyServiceKeys),
+          ].slice(0, 50),
+        },
+      });
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'platform',
+        action: 'settings.api_keys.issue',
+        before: sanitizeSettingsAuditSnapshot(beforeSettings),
+        after: sanitizeSettingsAuditSnapshot(settings),
+        metadata: {
+          keyId: grant.id,
+          label,
+          keyFingerprint: grant.keyFingerprint,
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+          issuedKey: {
+            id: grant.id,
+            label,
+            adminApiKey: issuedKey,
+            keyFingerprint: grant.keyFingerprint,
+            keyPrefix: grant.keyPrefix,
+          },
+        },
+      });
+    }
+
+    if (body.action === 'revoke-admin-api-key') {
+      const keyId = stringValue(body.keyId).trim();
+      if (!keyId) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Service key id is required.', requestId);
+      }
+
+      const revokeGrant = async (currentSettings: AdminSettingsSource) => {
+        const grants = normalizeServiceKeyGrants(currentSettings.auth?.apiKeyServiceKeys);
+        const target = grants.find((grant) => grant.id === keyId);
+        if (!target) {
+          return { error: errorResponse(404, 'API_KEY_NOT_FOUND', 'Service key was not found.', requestId) };
+        }
+        if (target.revokedAt || target.status === 'revoked') {
+          return { error: errorResponse(409, 'API_KEY_ALREADY_REVOKED', 'Service key is already revoked.', requestId) };
+        }
+
+        const now = new Date().toISOString();
+        const nextGrants = grants.map((grant) => (
+          grant.id === keyId
+            ? {
+                ...grant,
+                revokedAt: now,
+                revokedBy: access.session?.user.id || null,
+                revokedRequestId: requestId,
+                status: 'revoked',
+              }
+            : grant
+        ));
+        const revocationEntry: BackyJsonObject = {
+          id: `key_revocation_${randomUUID().slice(0, 8)}`,
+          scope: 'admin',
+          keyType: 'admin',
+          revokedAt: now,
+          actorId: access.session?.user.id || null,
+          requestId,
+          reason: 'manual',
+          revokedKeyFingerprint: stringValue(target.keyFingerprint) || null,
+          replacementKeyFingerprint: null,
+        };
+        return {
+          target,
+          auth: appendRevocationHistory(
+            {
+              ...(currentSettings.auth || {}),
+              apiKeyServiceKeys: nextGrants,
+            },
+            [revocationEntry],
+          ),
+        };
+      };
+
+      if (!shouldUseDemoStoreFallback()) {
+        const repositories = await getRequiredDatabaseRepositories();
+        const beforeSettings = await repositories.settings.get();
+        const result = await revokeGrant(beforeSettings);
+        if (result.error) return result.error;
+        const settings = (await repositories.settings.update({ auth: result.auth })).item;
+        await recordAdminAudit({
+          repositories,
+          entity: 'settings',
+          entityId: 'platform',
+          action: 'settings.api_keys.revoke',
+          before: sanitizeSettingsAuditSnapshot(beforeSettings),
+          after: sanitizeSettingsAuditSnapshot(settings),
+          metadata: {
+            keyId,
+            label: result.target?.label,
+            keyFingerprint: result.target?.keyFingerprint,
+          },
+          requestId,
+        });
+
+        return NextResponse.json({
+          success: true,
+          requestId,
+          data: {
+            settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+          },
+        });
+      }
+
+      const beforeSettings = getAdminSettings();
+      const result = await revokeGrant(beforeSettings);
+      if (result.error) return result.error;
+      const settings = updateAdminSettings({ auth: result.auth });
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'platform',
+        action: 'settings.api_keys.revoke',
+        before: sanitizeSettingsAuditSnapshot(beforeSettings),
+        after: sanitizeSettingsAuditSnapshot(settings),
+        metadata: {
+          keyId,
+          label: result.target?.label,
+          keyFingerprint: result.target?.keyFingerprint,
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+        },
       });
     }
 

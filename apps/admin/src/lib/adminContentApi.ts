@@ -1153,15 +1153,39 @@ export interface ApiKeyRevocationHistoryEntry {
   revokedAt: string;
   actorId?: string | null;
   requestId?: string | null;
-  reason?: 'rotated' | 'replaced';
+  reason?: 'rotated' | 'replaced' | 'manual';
   revokedKeyFingerprint?: string | null;
   replacementKeyFingerprint?: string | null;
+}
+
+export interface ApiKeyServiceKeyEntry {
+  id: string;
+  label: string;
+  keyPrefix?: string | null;
+  keyFingerprint?: string | null;
+  createdAt: string;
+  createdBy?: string | null;
+  requestId?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  revokedBy?: string | null;
+  revokedRequestId?: string | null;
+  status?: 'active' | 'revoked';
+}
+
+export interface IssuedAdminApiKey {
+  id: string;
+  label: string;
+  adminApiKey: string;
+  keyFingerprint?: string | null;
+  keyPrefix?: string | null;
 }
 
 interface ApiSettingsResponse {
   success: boolean;
   data?: {
     settings: ApiSettings;
+    issuedKey?: IssuedAdminApiKey;
   };
   error?: {
     message?: string;
@@ -1656,6 +1680,7 @@ export interface SiteSettingsInput {
     minPasswordLength?: number;
     sessionTimeoutMinutes?: number;
     allowedEmailDomains?: string;
+    apiKeyServiceKeys?: ApiKeyServiceKeyEntry[];
     apiKeyRotationHistory?: ApiKeyRotationHistoryEntry[];
     apiKeyRevocationHistory?: ApiKeyRevocationHistoryEntry[];
   };
@@ -4032,6 +4057,66 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to regenerate API keys');
+  }
+
+  return {
+    deliveryMode: payload.data.settings.deliveryMode,
+    apiKeys: payload.data.settings.apiKeys,
+    auth: payload.data.settings.auth,
+    runtimeStorage: payload.data.settings.runtimeStorage,
+    integrations: payload.data.settings.integrations,
+    runtimeDatabase: payload.data.settings.runtimeDatabase,
+    runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
+    runtimeVercel: payload.data.settings.runtimeVercel,
+  };
+}
+
+export async function issueSettingsAdminApiKey(label: string): Promise<{
+  settings: SiteSettingsInput;
+  issuedKey: IssuedAdminApiKey;
+}> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'issue-admin-api-key', label }),
+  });
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.issuedKey) {
+    throw new Error(payload.error?.message || 'Unable to issue admin API key');
+  }
+
+  return {
+    settings: {
+      deliveryMode: payload.data.settings.deliveryMode,
+      apiKeys: payload.data.settings.apiKeys,
+      auth: payload.data.settings.auth,
+      runtimeStorage: payload.data.settings.runtimeStorage,
+      integrations: payload.data.settings.integrations,
+      runtimeDatabase: payload.data.settings.runtimeDatabase,
+      runtimeSupabase: payload.data.settings.runtimeSupabase,
+      runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
+      runtimeVercel: payload.data.settings.runtimeVercel,
+    },
+    issuedKey: payload.data.issuedKey,
+  };
+}
+
+export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSettingsInput> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'revoke-admin-api-key', keyId }),
+  });
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to revoke admin API key');
   }
 
   return {

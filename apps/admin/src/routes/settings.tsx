@@ -45,12 +45,15 @@ import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
   getUserPermissions,
+  issueSettingsAdminApiKey,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
+  revokeSettingsAdminApiKey,
   runSettingsStorageProvisioningProbe,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
+  type IssuedAdminApiKey,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
   type SettingsStorageProvisioningResult,
@@ -875,6 +878,44 @@ function SettingsPage() {
     }
   };
 
+  const handleIssueAdminApiKey = async (label: string): Promise<IssuedAdminApiKey | null> => {
+    setNotice(null);
+    if (!canManageApiKeys) {
+      setNotice(manageKeysPermissionTitle || 'Your account cannot issue admin API keys.');
+      return null;
+    }
+
+    try {
+      const result = await issueSettingsAdminApiKey(label);
+      applyBackendSettings(result.settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await loadSettingsAuditLogs();
+      return result.issuedKey;
+    } catch {
+      setNotice('Backend key issue failed. No new admin API key was created.');
+      return null;
+    }
+  };
+
+  const handleRevokeAdminApiKey = async (keyId: string) => {
+    setNotice(null);
+    if (!canManageApiKeys) {
+      setNotice(manageKeysPermissionTitle || 'Your account cannot revoke admin API keys.');
+      return;
+    }
+
+    try {
+      const backendSettings = await revokeSettingsAdminApiKey(keyId);
+      applyBackendSettings(backendSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await loadSettingsAuditLogs();
+    } catch {
+      setNotice('Backend key revoke failed. The admin API key was not changed.');
+    }
+  };
+
   const discardUnsavedChanges = () => {
     if (isSaving) return;
 
@@ -1573,6 +1614,8 @@ function SettingsPage() {
             authSettings={authSettings}
             onAuthSettingsChange={setAuthSettings}
             onRegenerateKeys={handleRegenerateKeys}
+            onIssueAdminApiKey={handleIssueAdminApiKey}
+            onRevokeAdminApiKey={handleRevokeAdminApiKey}
             canManageApiKeys={canManageApiKeys}
             canConfigureSettings={canConfigureSettings}
             manageKeysPermissionTitle={manageKeysPermissionTitle}
@@ -2387,7 +2430,7 @@ function DeliveryModeSettings({
 
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type AuthSettingsConfig = NonNullable<SiteSettingsInput['auth']>;
-type AuthPolicySettingsConfig = Required<Omit<AuthSettingsConfig, 'apiKeyRotationHistory' | 'apiKeyRevocationHistory'>>;
+type AuthPolicySettingsConfig = Required<Omit<AuthSettingsConfig, 'apiKeyServiceKeys' | 'apiKeyRotationHistory' | 'apiKeyRevocationHistory'>>;
 type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
 type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
 type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
@@ -4453,6 +4496,8 @@ function SecuritySettings({
   authSettings,
   onAuthSettingsChange,
   onRegenerateKeys,
+  onIssueAdminApiKey,
+  onRevokeAdminApiKey,
   canManageApiKeys,
   canConfigureSettings,
   manageKeysPermissionTitle,
@@ -4469,6 +4514,8 @@ function SecuritySettings({
   authSettings?: SiteSettingsInput['auth'];
   onAuthSettingsChange: Dispatch<SetStateAction<SiteSettingsInput['auth']>>;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
+  onIssueAdminApiKey: (label: string) => Promise<IssuedAdminApiKey | null>;
+  onRevokeAdminApiKey: (keyId: string) => Promise<void> | void;
   canManageApiKeys: boolean;
   canConfigureSettings: boolean;
   manageKeysPermissionTitle?: string;
@@ -4481,6 +4528,12 @@ function SecuritySettings({
   onRefreshAudit: () => void;
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
+  const [serviceKeyLabel, setServiceKeyLabel] = useState('');
+  const [issuedServiceKey, setIssuedServiceKey] = useState<IssuedAdminApiKey | null>(null);
+  const [copiedIssuedServiceKey, setCopiedIssuedServiceKey] = useState(false);
+  const [issuingServiceKey, setIssuingServiceKey] = useState(false);
+  const [revokingServiceKeyId, setRevokingServiceKeyId] = useState<string | null>(null);
+  const [serviceKeyNotice, setServiceKeyNotice] = useState<string | null>(null);
   const [rotatingKey, setRotatingKey] = useState<'all' | 'public' | 'admin' | null>(null);
   const [pendingRotateKey, setPendingRotateKey] = useState<'all' | 'public' | 'admin' | null>(null);
   const policy: AuthPolicySettingsConfig = {
@@ -4538,6 +4591,55 @@ function SecuritySettings({
         : '';
   const rotationHistory = authSettings?.apiKeyRotationHistory || [];
   const revocationHistory = authSettings?.apiKeyRevocationHistory || [];
+  const serviceKeys = authSettings?.apiKeyServiceKeys || [];
+  const activeServiceKeys = serviceKeys.filter((entry) => !entry.revokedAt && entry.status !== 'revoked');
+
+  const issueServiceKey = async () => {
+    const label = serviceKeyLabel.trim();
+    if (!canManageApiKeys || issuingServiceKey) return;
+    if (!label) {
+      setServiceKeyNotice('Add a label before issuing a key.');
+      return;
+    }
+
+    setIssuingServiceKey(true);
+    setServiceKeyNotice(null);
+    try {
+      const issued = await onIssueAdminApiKey(label);
+      if (issued) {
+        setIssuedServiceKey(issued);
+        setServiceKeyLabel('');
+        setServiceKeyNotice('Admin API key issued. Copy it now; Backy stores only a hash.');
+      }
+    } finally {
+      setIssuingServiceKey(false);
+    }
+  };
+
+  const revokeServiceKey = async (keyId: string) => {
+    if (!canManageApiKeys || revokingServiceKeyId) return;
+
+    setRevokingServiceKeyId(keyId);
+    setServiceKeyNotice(null);
+    try {
+      await onRevokeAdminApiKey(keyId);
+      setServiceKeyNotice('Admin API key revoked.');
+    } finally {
+      setRevokingServiceKeyId(null);
+    }
+  };
+
+  const copyIssuedServiceKey = async () => {
+    if (!issuedServiceKey?.adminApiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(issuedServiceKey.adminApiKey);
+      setCopiedIssuedServiceKey(true);
+      setTimeout(() => setCopiedIssuedServiceKey(false), 1200);
+    } catch {
+      setCopiedIssuedServiceKey(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -4720,6 +4822,116 @@ function SecuritySettings({
             </p>
           ) : null}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border p-4" data-testid="settings-admin-service-keys">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Admin service keys</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Issue named server keys for trusted integrations and revoke them without rotating the primary admin key.
+            </p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {activeServiceKeys.length} active
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">New key label</span>
+            <input
+              value={serviceKeyLabel}
+              maxLength={80}
+              disabled={!canManageApiKeys || issuingServiceKey}
+              title={manageKeysPermissionTitle}
+              onChange={(event) => setServiceKeyLabel(event.target.value)}
+              placeholder="Production frontend server"
+              className={inputClassName}
+              data-testid="settings-admin-service-key-label"
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              onClick={() => void issueServiceKey()}
+              disabled={!canManageApiKeys || issuingServiceKey || !serviceKeyLabel.trim()}
+              title={manageKeysPermissionTitle}
+              data-testid="settings-admin-service-key-issue"
+            >
+              {issuingServiceKey ? 'Issuing...' : 'Issue key'}
+            </Button>
+          </div>
+        </div>
+        {issuedServiceKey ? (
+          <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3 text-sm" data-testid="settings-admin-service-key-issued">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-medium text-foreground">Copy this key now</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Backy stores only the hash and fingerprint after this response.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => void copyIssuedServiceKey()}>
+                {copiedIssuedServiceKey ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+            <p className="mt-3 break-all rounded border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+              {issuedServiceKey.adminApiKey}
+            </p>
+          </div>
+        ) : null}
+        {serviceKeyNotice ? (
+          <p className="mt-3 text-sm text-muted-foreground">{serviceKeyNotice}</p>
+        ) : null}
+        {serviceKeys.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+            No service keys have been issued yet.
+          </p>
+        ) : (
+          <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+            {serviceKeys.slice(0, 10).map((entry) => {
+              const revoked = Boolean(entry.revokedAt || entry.status === 'revoked');
+              return (
+                <div key={entry.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-foreground">{entry.label}</p>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        revoked ? 'bg-muted text-muted-foreground' : 'bg-success/10 text-success',
+                      )}>
+                        {revoked ? 'Revoked' : 'Active'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Created {formatAuditTime(entry.createdAt)} by {entry.createdBy || 'system'}
+                    </p>
+                    <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      {entry.keyPrefix || 'sk_srv_...'} / {entry.keyFingerprint || 'fingerprint unavailable'}
+                    </p>
+                    {revoked ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Revoked {formatAuditTime(entry.revokedAt || '')} by {entry.revokedBy || 'system'}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center">
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => void revokeServiceKey(entry.id)}
+                      disabled={!canManageApiKeys || revoked || revokingServiceKeyId !== null}
+                      title={manageKeysPermissionTitle}
+                      data-testid={`settings-admin-service-key-revoke-${entry.id}`}
+                    >
+                      {revokingServiceKeyId === entry.id ? 'Revoking...' : 'Revoke'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-border p-4" data-testid="settings-api-key-rotation-history">
