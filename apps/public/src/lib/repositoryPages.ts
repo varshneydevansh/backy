@@ -1,5 +1,9 @@
 import type { BackyPage, BackyRepositories } from '@backy-cms/core';
 
+type RepositoryPageReader = {
+  pages: Pick<BackyRepositories['pages'], 'getBySlug' | 'list'>;
+};
+
 export const normalizePageRouteSlug = (value: string | null | undefined): string => (
   (value || 'index').trim().replace(/^\/+|\/+$/g, '') || 'index'
 );
@@ -18,7 +22,7 @@ export const repositoryPagePublicPath = (page: Pick<BackyPage, 'isHomepage' | 's
 };
 
 export async function getRepositoryPageByPublicPath(
-  repositories: BackyRepositories,
+  repositories: RepositoryPageReader,
   siteId: string,
   rawPath: string | null | undefined,
 ): Promise<BackyPage | null> {

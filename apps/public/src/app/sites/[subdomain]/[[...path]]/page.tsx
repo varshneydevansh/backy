@@ -33,15 +33,15 @@ import {
 } from '@/lib/renderPayload';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import {
-    buildCollectionItemPath,
-    buildCollectionListPath,
-    matchCollectionItemRoute,
-    matchCollectionListRoute,
-} from '@/lib/collectionRoutes';
-import { resolveRedirectRoute } from '@/lib/redirectRules';
+import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 import { resolveSiteRoute, type ResolvedSiteRoute } from '@/lib/routeResolver';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import {
+    canonicalPathForRepositoryPage,
+    isRepositoryContentPubliclyReadable,
+    repositoryCollectionRecordTitle,
+    resolveRepositorySiteRoute,
+} from '@/lib/repositoryRouteResolver';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -58,10 +58,6 @@ type HostedSite =
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
-);
-
-const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-    item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
 );
 
 async function getSite(subdomain: string) {
@@ -184,7 +180,7 @@ async function getRepositoryPage(hostedSite: Extract<HostedSite, { mode: 'databa
         ? await hostedSite.repositories.contentWorkflows.validatePreviewToken(hostedSite.site.id, 'page', page.id, previewToken)
         : false;
 
-    return isPubliclyReadable(page) || canPreview ? page : null;
+    return isRepositoryContentPubliclyReadable(page) || canPreview ? page : null;
 }
 
 function repositoryTheme(site: Site) {
@@ -222,16 +218,6 @@ function repositoryPageContentWithContext(page: BackyPage, dataSource?: RenderDa
         customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
         contentDocument: page.content,
     };
-}
-
-function canonicalPathForRepositoryPage(page: Pick<BackyPage, 'isHomepage' | 'slug' | 'meta'>) {
-    if (page.isHomepage || page.slug === 'index') {
-        return '/';
-    }
-
-    return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
-        ? page.meta.canonical
-        : `/${page.slug}`;
 }
 
 const repositoryCollectionToStoreCollection = (collection: BackyCollection): StoreCollection => ({
@@ -304,7 +290,7 @@ async function buildRepositoryRenderDataSource(
             limit: 1000,
             offset: 0,
         });
-        recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+        recordsByCollection.set(collection.id, records.items.filter(isRepositoryContentPubliclyReadable).map(repositoryRecordToStoreRecord));
     }));
 
     const media = await hostedSite.repositories.media.list({
@@ -357,54 +343,43 @@ async function buildRepositoryRenderDataSource(
     };
 }
 
-async function getRepositoryDynamicCollectionRoute(
+async function getResolvedRepositoryDynamicCollectionRoute(
     hostedSite: Extract<HostedSite, { mode: 'database' }>,
-    pathParts: string[] | undefined,
+    route: Extract<ResolvedSiteRoute, { type: 'dynamicList' | 'dynamicItem' }>,
 ): Promise<HostedDynamicCollectionRoute | null> {
-    const path = pathParts && pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
-    const collections = await hostedSite.repositories.collections.list({
-        siteId: hostedSite.site.id,
-        status: 'published',
-        includeUnpublished: false,
-        limit: 100,
-        offset: 0,
-    });
-    const publicCollections = collections.items.filter((collection) => (
-        collection.status === 'published' && collection.permissions.publicRead
-    ));
-    const dynamicListMatch = matchCollectionListRoute(path, publicCollections);
-    if (dynamicListMatch) {
-        const { collection, canonical } = dynamicListMatch;
+    const collection = await hostedSite.repositories.collections.getById(
+        hostedSite.site.id,
+        route.resource.collectionId,
+    );
+    if (!collection || collection.status !== 'published' || !collection.permissions.publicRead) {
+        return null;
+    }
+
+    if (route.type === 'dynamicList') {
         const records = await hostedSite.repositories.collections.listRecords({
             siteId: hostedSite.site.id,
             collectionId: collection.id,
             status: 'published',
             includeUnpublished: false,
-            limit: 100,
+            limit: 1000,
             offset: 0,
         });
 
         return {
             type: 'list',
             collection: repositoryCollectionToStoreCollection(collection),
-            records: records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
-            canonical,
+            records: records.items.filter(isRepositoryContentPubliclyReadable).map(repositoryRecordToStoreRecord),
+            canonical: route.canonical,
         };
     }
 
-    const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
-    if (!dynamicItemMatch) {
-        return null;
-    }
-
-    const { collection, recordSlug, canonical } = dynamicItemMatch;
     const record = await hostedSite.repositories.collections.getRecordBySlug(
         hostedSite.site.id,
         collection.id,
-        recordSlug,
+        route.resource.slug,
     );
 
-    if (!record || !isPubliclyReadable(record)) {
+    if (!record || !isRepositoryContentPubliclyReadable(record)) {
         return null;
     }
 
@@ -412,7 +387,7 @@ async function getRepositoryDynamicCollectionRoute(
         type: 'item',
         collection: repositoryCollectionToStoreCollection(collection),
         record: repositoryRecordToStoreRecord(record),
-        canonical,
+        canonical: route.canonical,
     };
 }
 
@@ -438,23 +413,6 @@ const routePathFromParts = (path: string[] | undefined): string => (
     path && path.length > 0 ? `/${path.join('/')}` : '/'
 );
 
-function applyHostedRedirects(site: Pick<Site, 'settings'> | StoreSite, path: string) {
-    const redirectRoute = resolveRedirectRoute(site.settings, path);
-    if (!redirectRoute) {
-        return;
-    }
-
-    if (redirectRoute.type === 'gone') {
-        notFound();
-    }
-
-    if (redirectRoute.resource.statusCode === 301 || redirectRoute.resource.statusCode === 308) {
-        permanentRedirect(redirectRoute.resource.to);
-    }
-
-    redirect(redirectRoute.resource.to);
-}
-
 function applyResolvedHostedRouteRedirect(route: ResolvedSiteRoute | null) {
     if (!route || (route.type !== 'redirect' && route.type !== 'gone')) {
         return;
@@ -474,7 +432,6 @@ function applyResolvedHostedRouteRedirect(route: ResolvedSiteRoute | null) {
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { subdomain, path } = await params;
     const previewToken = firstParam((await searchParams)?.previewToken);
-    const pageSlug = path?.join('/') || 'index';
     const routePath = routePathFromParts(path);
 
     const hostedSite = await getSite(subdomain);
@@ -482,10 +439,15 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
-        applyHostedRedirects(site, routePath);
-        const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
-        if (!page) {
-            const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
+        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken });
+        applyResolvedHostedRouteRedirect(route);
+
+        if (!route) {
+            return { title: 'Page Not Found' };
+        }
+
+        if (route.type === 'dynamicList' || route.type === 'dynamicItem') {
+            const dynamicRoute = await getResolvedRepositoryDynamicCollectionRoute(hostedSite, route);
             if (!dynamicRoute) return { title: 'Page Not Found' };
 
             if (dynamicRoute.type === 'list') {
@@ -509,7 +471,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 };
             }
 
-            const title = getCollectionRecordTitle(dynamicRoute.record);
+            const title = repositoryCollectionRecordTitle(dynamicRoute.record);
             const descriptionValue = dynamicRoute.record.values.summary
                 || dynamicRoute.record.values.description
                 || dynamicRoute.collection.description
@@ -532,6 +494,15 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                     siteName: site.name,
                 },
             };
+        }
+
+        if (route.type !== 'page') {
+            return { title: 'Page Not Found' };
+        }
+
+        const page = await getRepositoryPage(hostedSite, route.resource.slug, previewToken);
+        if (!page) {
+            return { title: 'Page Not Found' };
         }
 
         const canonicalPath = canonicalPathForRepositoryPage(page);
@@ -651,7 +622,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 export default async function SitePage({ params, searchParams }: PageProps) {
     const { subdomain, path } = await params;
     const previewToken = firstParam((await searchParams)?.previewToken);
-    const pageSlug = path?.join('/') || 'index';
+    const routePath = routePathFromParts(path);
 
     // Fetch site and page data
     const hostedSite = await getSite(subdomain);
@@ -661,10 +632,16 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
+        const route = await resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken });
+        applyResolvedHostedRouteRedirect(route);
+
+        if (!route) {
+            notFound();
+        }
+
         const dataSource = await buildRepositoryRenderDataSource(hostedSite);
-        const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
-        if (!page) {
-            const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
+        if (route.type === 'dynamicList' || route.type === 'dynamicItem') {
+            const dynamicRoute = await getResolvedRepositoryDynamicCollectionRoute(hostedSite, route);
             if (!dynamicRoute) {
                 notFound();
             }
@@ -692,6 +669,15 @@ export default async function SitePage({ params, searchParams }: PageProps) {
             );
         }
 
+        if (route.type !== 'page') {
+            notFound();
+        }
+
+        const page = await getRepositoryPage(hostedSite, route.resource.slug, previewToken);
+        if (!page) {
+            notFound();
+        }
+
         return (
             <>
                 <PageRenderer
@@ -708,7 +694,6 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const { site } = hostedSite;
-    const routePath = routePathFromParts(path);
     const route = resolveSiteRoute(site, routePath, { previewToken });
     applyResolvedHostedRouteRedirect(route);
 

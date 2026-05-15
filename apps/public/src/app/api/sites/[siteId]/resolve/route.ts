@@ -5,16 +5,19 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
+import type { Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
-import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
-import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
-import { resolveRedirectRoute, type ResolvedRedirectRoute } from '@/lib/redirectRules';
-import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import type { ResolvedRedirectRoute } from '@/lib/redirectRules';
+import {
+  canonicalPathForRepositoryPage,
+  isRepositoryContentPubliclyReadable,
+  repositorySiteStatus,
+  resolveRepositorySiteRoute,
+} from '@/lib/repositoryRouteResolver';
 
 interface RouteParams {
   params: Promise<{
@@ -89,62 +92,6 @@ const redirectRouteResponse = (
   );
 };
 
-const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
-  item.status === 'published'
-  || (
-    item.status === 'scheduled'
-    && Boolean(item.scheduledAt)
-    && Number.isFinite(Date.parse(item.scheduledAt || ''))
-    && Date.parse(item.scheduledAt || '') <= Date.now()
-  )
-);
-
-const siteStatus = (site: Site) => (site.isPublished ? 'published' : 'draft');
-
-const canonicalPathForRepositoryPage = (page: Pick<BackyPage, 'isHomepage' | 'slug' | 'meta'>) => {
-  if (page.isHomepage || page.slug === 'index') {
-    return '/';
-  }
-
-  return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
-    ? page.meta.canonical
-    : `/${page.slug}`;
-};
-
-const collectionRecordTitle = (record: BackyCollectionRecord): string => {
-  const title = record.values.title;
-  if (typeof title === 'string' && title.length > 0) {
-    return title;
-  }
-
-  const name = record.values.name;
-  if (typeof name === 'string' && name.length > 0) {
-    return name;
-  }
-
-  return record.slug;
-};
-
-const dynamicListResource = (
-  siteId: string,
-  collection: BackyCollection,
-  canonical: string,
-  recordCount?: number,
-) => ({
-  id: collection.id,
-  kind: 'dynamicList' as const,
-  title: collection.name,
-  slug: collection.slug,
-  collectionId: collection.id,
-  collectionSlug: collection.slug,
-  collectionName: collection.name,
-  recordsUrl: `/api/sites/${siteId}/collections/${collection.id}/records`,
-  renderUrl: `/api/sites/${siteId}/render?path=${encodeURIComponent(canonical)}`,
-  hostedPath: canonical,
-  frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
-  ...(typeof recordCount === 'number' ? { recordCount } : {}),
-});
-
 const repositoryNavigation = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   site: Site,
@@ -157,7 +104,7 @@ const repositoryNavigation = async (
     offset: 0,
   });
 
-  return buildSiteNavigation(site.settings, result.items.filter(isPubliclyReadable).map((page) => ({
+  return buildSiteNavigation(site.settings, result.items.filter(isRepositoryContentPubliclyReadable).map((page) => ({
     ...page,
     meta: {
       ...page.meta,
@@ -186,187 +133,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         ? undefined
         : await repositories.cacheInvalidations.latestRevision({ siteId: site.id }) || undefined;
 
-      const redirectRoute = resolveRedirectRoute(site.settings, path);
-      if (redirectRoute) {
-        return redirectRouteResponse(request, redirectRoute, {
+      const route = await resolveRepositorySiteRoute(repositories, site, path, { previewToken });
+      if (!route) {
+        return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
+      }
+
+      if (route.type === 'redirect' || route.type === 'gone') {
+        return redirectRouteResponse(request, route, {
           id: site.id,
           slug: site.slug,
           name: site.name,
-          status: siteStatus(site),
+          status: repositorySiteStatus(site),
         }, requestId, { previewToken, cacheRevision });
       }
 
-      const blogMatch = path.match(/^\/blog\/([^/]+)$/);
-      if (blogMatch) {
-        const slug = decodeURIComponent(blogMatch[1]);
-        const post = await repositories.posts.getBySlug(site.id, slug);
-        const canPreview = post && previewToken
-          ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'post', post.id, previewToken)
-          : false;
-
-        if (!post || (!isPubliclyReadable(post) && !canPreview)) {
-          return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
-        }
-
-        const canonical = typeof post.meta?.canonical === 'string' && post.meta.canonical.length > 0
-          ? post.meta.canonical
-          : `/blog/${post.slug}`;
-
-        return publicContractJson({
-          success: true,
-          requestId,
-          data: {
-            site: {
-              id: site.id,
-              slug: site.slug,
-              name: site.name,
-              status: siteStatus(site),
-            },
-            route: {
-              type: 'post',
-              path,
-              status: post.status,
-              canonical,
-              params: { slug: post.slug },
-              resource: {
-                id: post.id,
-                kind: 'post',
-                title: post.title,
-                slug: post.slug,
-                apiUrl: `/api/sites/${site.id}/blog?slug=${encodeURIComponent(post.slug)}`,
-                hostedPath: canonical,
-              },
-            },
-            navigation: await repositoryNavigation(repositories, site),
-          },
-        }, {
-          requestId,
-          request,
-          cache: previewToken ? 'private' : 'discovery',
-          siteId: site.id,
-          cacheRevision,
-        });
-      }
-
-      const pagePath = path === '/' ? 'index' : path.slice(1);
-      const page = await getRepositoryPageByPublicPath(repositories, site.id, pagePath);
-      const canPreviewPage = page && previewToken
-        ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
-        : false;
-      if (!page || (!isPubliclyReadable(page) && !canPreviewPage)) {
-        const collections = await repositories.collections.list({
-          siteId: site.id,
-          status: 'published',
-          includeUnpublished: false,
-          limit: 100,
-          offset: 0,
-        });
-        const publicCollections = collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead);
-        const dynamicListMatch = matchCollectionListRoute(path, publicCollections);
-        if (dynamicListMatch) {
-          const { collection, params, canonical } = dynamicListMatch;
-          const records = await repositories.collections.listRecords({
-            siteId: site.id,
-            collectionId: collection.id,
-            status: 'published',
-            includeUnpublished: false,
-            limit: 100,
-            offset: 0,
-          });
-          const recordCount = records.items.filter(isPubliclyReadable).length;
-
-          return publicContractJson({
-            success: true,
-            requestId,
-            data: {
-              site: {
-                id: site.id,
-                slug: site.slug,
-                name: site.name,
-                status: siteStatus(site),
-              },
-              route: {
-                type: 'dynamicList',
-                path,
-                status: collection.status,
-                canonical,
-                params,
-                resource: dynamicListResource(site.id, collection, canonical, recordCount),
-              },
-              navigation: await repositoryNavigation(repositories, site),
-            },
-          }, {
-            requestId,
-            request,
-            cache: previewToken ? 'private' : 'discovery',
-            siteId: site.id,
-            cacheRevision,
-          });
-        }
-
-        const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
-        if (!dynamicItemMatch) {
-          return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
-        }
-
-        const { collection, recordSlug, params, canonical } = dynamicItemMatch;
-        const record = await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug);
-
-        if (
-          !record
-          || collection.status !== 'published'
-          || !collection.permissions.publicRead
-          || !isPubliclyReadable(record)
-        ) {
-          return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
-        }
-
-        return publicContractJson({
-          success: true,
-          requestId,
-          data: {
-            site: {
-              id: site.id,
-              slug: site.slug,
-              name: site.name,
-              status: siteStatus(site),
-            },
-            route: {
-              type: 'dynamicItem',
-              path,
-              status: record.status,
-              canonical,
-              params: {
-                ...params,
-                recordSlug: record.slug,
-              },
-              resource: {
-                id: record.id,
-                kind: 'dynamicItem',
-                title: collectionRecordTitle(record),
-                slug: record.slug,
-                collectionId: collection.id,
-                collectionSlug: collection.slug,
-                collectionName: collection.name,
-                apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
-                renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
-                hostedPath: canonical,
-                frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
-                collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
-              },
-            },
-            navigation: await repositoryNavigation(repositories, site),
-          },
-        }, {
-          requestId,
-          request,
-          cache: previewToken ? 'private' : 'discovery',
-          siteId: site.id,
-          cacheRevision,
-        });
-      }
-
-      const canonical = canonicalPathForRepositoryPage(page);
       return publicContractJson({
         success: true,
         requestId,
@@ -375,23 +155,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             id: site.id,
             slug: site.slug,
             name: site.name,
-            status: siteStatus(site),
+            status: repositorySiteStatus(site),
           },
-          route: {
-            type: 'page',
-            path,
-            status: page.status,
-            canonical,
-            params: {},
-            resource: {
-              id: page.id,
-              kind: 'page',
-              title: page.title,
-              slug: page.slug,
-              apiUrl: `/api/sites/${site.id}/pages?path=${encodeURIComponent(path)}`,
-              renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(path)}`,
-            },
-          },
+          route,
           navigation: await repositoryNavigation(repositories, site),
         },
       }, {

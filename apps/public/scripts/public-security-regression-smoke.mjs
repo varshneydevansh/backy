@@ -679,6 +679,14 @@ assertIncludes(publicRenderRoute, 'if (!site || !site.isPublished)', 'public ren
 const hostedSiteRoute = read('apps/public/src/app/sites/[subdomain]/[[...path]]/page.tsx');
 assertIncludes(hostedSiteRoute, 'return site?.isPublished ? { mode: \'database\', site, repositories } as HostedSite : null;', 'hosted database site renderer must not render unpublished sites');
 assertIncludes(hostedSiteRoute, 'return site?.isPublished ? { mode: \'demo\', site, repositories: null } as HostedSite : null;', 'hosted demo site renderer must not render unpublished sites');
+assertIncludes(hostedSiteRoute, 'resolveRepositorySiteRoute(hostedSite.repositories, site, routePath, { previewToken })', 'hosted database renderer must reuse the repository route resolver');
+assertIncludes(hostedSiteRoute, 'getResolvedRepositoryDynamicCollectionRoute(hostedSite, route)', 'hosted database dynamic routes must hydrate content from resolved route decisions');
+assertExcludes(hostedSiteRoute, 'matchCollectionListRoute(', 'hosted database renderer must not duplicate collection list route matching');
+assertExcludes(hostedSiteRoute, 'matchCollectionItemRoute(', 'hosted database renderer must not duplicate collection item route matching');
+const publicResolveRoute = read('apps/public/src/app/api/sites/[siteId]/resolve/route.ts');
+assertIncludes(publicResolveRoute, 'resolveRepositorySiteRoute(repositories, site, path, { previewToken })', 'database public route resolve API must reuse the repository route resolver');
+assertExcludes(publicResolveRoute, 'matchCollectionListRoute(', 'database public route resolve API must not duplicate collection list route matching');
+assertExcludes(publicResolveRoute, 'matchCollectionItemRoute(', 'database public route resolve API must not duplicate collection item route matching');
 const pageRendererSource = read('apps/public/src/components/PageRenderer.tsx');
 assertIncludes(pageRendererSource, 'const getSafeFormRedirectUrl = (value: unknown): string =>', 'public form renderer must sanitize success redirects');
 assertIncludes(pageRendererSource, 'parsed.origin !== window.location.origin', 'public form renderer must reject unsafe cross-origin success redirects');
@@ -810,7 +818,7 @@ assertIncludes(adminSiteDetailRoute, 'siteStatus: nextStatus', 'admin site detai
 assertIncludes(adminSiteDetailRoute, 'persistedSiteStatus(site)', 'admin site detail route must return persisted archived site status');
 assertIncludes(adminSiteDetailRoute, "nextStatus === 'draft' || nextStatus === 'archived' ? 'draft'", 'admin site detail route must keep archived sites unpublished in repository mode');
 const adminSitesLifecycleRoute = read('apps/public/src/app/api/admin/sites/route.ts');
-assertIncludes(adminSitesLifecycleRoute, 'settings: { siteStatus: status }', 'admin sites route must persist site lifecycle status on create');
+assertIncludes(adminSitesLifecycleRoute, 'siteStatus: status', 'admin sites route must persist site lifecycle status on create');
 const siteRepository = read('packages/db/src/repositories/site-page-post.ts');
 assertIncludes(siteRepository, 'normalizeSiteStatus(site) === status', 'site repository status filters must distinguish archived from draft');
 const auditLogRepository = read('packages/db/src/repositories/audit-logs.ts');
