@@ -83,6 +83,62 @@ const assertEditorCanReadOwnPermissionMatrix = async () => {
   );
 };
 
+const assertHttpOnlySessionCookieFlow = async () => {
+  const loginResponse = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const loginPayload = await loginResponse.json().catch(() => ({}));
+  const setCookie = loginResponse.headers.get('set-cookie') || '';
+  assert(
+    loginResponse.ok && loginPayload.success !== false && loginPayload.data?.session?.token,
+    `Admin login for cookie flow failed: ${JSON.stringify(loginPayload).slice(0, 500)}`,
+  );
+  assert(
+    setCookie.includes('backy_admin_session=') &&
+      /HttpOnly/i.test(setCookie) &&
+      /SameSite=Lax/i.test(setCookie),
+    `Login response did not set an httpOnly lax session cookie: ${setCookie}`,
+  );
+  const cookieHeader = setCookie.split(';')[0];
+
+  const sessionResponse = await fetch(`${API_BASE_URL}/api/admin/auth/session`, {
+    headers: { cookie: cookieHeader },
+  });
+  const sessionPayload = await sessionResponse.json().catch(() => ({}));
+  assert(
+    sessionResponse.ok &&
+      sessionPayload.success !== false &&
+      sessionPayload.data?.user?.email === 'admin@backy.io' &&
+      sessionPayload.data?.session?.token === loginPayload.data.session.token,
+    `Cookie-only session lookup failed: ${sessionResponse.status} ${JSON.stringify(sessionPayload).slice(0, 500)}`,
+  );
+
+  const logoutResponse = await fetch(`${API_BASE_URL}/api/admin/auth/logout`, {
+    method: 'POST',
+    headers: { cookie: cookieHeader },
+  });
+  const logoutPayload = await logoutResponse.json().catch(() => ({}));
+  const logoutCookie = logoutResponse.headers.get('set-cookie') || '';
+  assert(
+    logoutResponse.ok && logoutPayload.data?.revoked === true && /Max-Age=0/i.test(logoutCookie),
+    `Cookie logout did not revoke and clear the session: ${JSON.stringify({ logoutPayload, logoutCookie }).slice(0, 500)}`,
+  );
+
+  const revokedSessionResponse = await fetch(`${API_BASE_URL}/api/admin/auth/session`, {
+    headers: { cookie: cookieHeader },
+  });
+  const revokedPayload = await revokedSessionResponse.json().catch(() => ({}));
+  assert(
+    revokedSessionResponse.status === 401 && revokedPayload.error?.code === 'UNAUTHORIZED',
+    `Revoked cookie session should be unauthorized, got ${revokedSessionResponse.status}: ${JSON.stringify(revokedPayload).slice(0, 500)}`,
+  );
+};
+
 const waitForCdp = async () => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
@@ -294,6 +350,7 @@ const main = async () => {
 
   try {
     await assertEditorCanReadOwnPermissionMatrix();
+    await assertHttpOnlySessionCookieFlow();
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();

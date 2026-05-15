@@ -1,25 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revokeAdminSession } from '@/lib/admin-auth/sessionStore';
+import { clearAdminSessionCookie, getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 
 export const runtime = 'nodejs';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const getBearerToken = (request: NextRequest) => {
-  const authorization = request.headers.get('authorization') || '';
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
-};
-
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const revoked = revokeAdminSession(getBearerToken(request));
+  const revoked = revokeAdminSession(getAdminSessionTokenFromRequest(request));
 
-  return NextResponse.json({
+  return clearAdminSessionCookie(NextResponse.json({
     success: true,
     requestId,
     data: {
       revoked,
     },
-  });
+  }));
 }

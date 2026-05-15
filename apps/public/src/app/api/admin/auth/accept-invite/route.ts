@@ -5,6 +5,7 @@ import {
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
 } from '@/lib/admin-auth/productionPolicy';
+import { attachAdminSessionCookie } from '@/lib/admin-auth/sessionCookie';
 import {
   getPersistedInviteToken,
   removePersistedInviteToken,
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
     requestId,
   });
 
-  return NextResponse.json({
+  return attachAdminSessionCookie(NextResponse.json({
     success: true,
     requestId,
     data: {
@@ -136,5 +137,5 @@ export async function POST(request: NextRequest) {
         deliveryConfigured: result.invite.deliveryConfigured,
       },
     },
-  });
+  }), result.session);
 }

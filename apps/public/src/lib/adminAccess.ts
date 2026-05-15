@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
+import { getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import { getAdminSettings, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -10,12 +11,6 @@ type AdminRole = AdminSession['user']['role'];
 export type AdminAccessContext = {
   type: 'session' | 'api-key';
   session: AdminSession | null;
-};
-
-const getBearerToken = (request: NextRequest) => {
-  const authorization = request.headers.get('authorization') || '';
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
 };
 
 const getProvidedAdminKey = (request: NextRequest) => {
@@ -205,7 +200,7 @@ export async function requireAdminAccess(
     ? await getRequiredDatabaseRepositories()
     : null;
   const session = await getAdminSessionWithPersistence(
-    getBearerToken(request),
+    getAdminSessionTokenFromRequest(request),
     repositories ? { getUserById: repositories.users.getById } : {},
   );
   if (!session) {

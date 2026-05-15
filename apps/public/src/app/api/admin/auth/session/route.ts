@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, getAdminSessionWithPersistence } from '@/lib/admin-auth/sessionStore';
+import { attachAdminSessionCookie, getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const getBearerToken = (request: NextRequest) => {
-  const authorization = request.headers.get('authorization') || '';
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
-};
-
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const token = getBearerToken(request);
+  const token = getAdminSessionTokenFromRequest(request);
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
@@ -38,7 +33,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({
+  return attachAdminSessionCookie(NextResponse.json({
     success: true,
     requestId,
     data: {
@@ -50,5 +45,5 @@ export async function GET(request: NextRequest) {
         authMode: session.authMode,
       },
     },
-  });
+  }), session);
 }

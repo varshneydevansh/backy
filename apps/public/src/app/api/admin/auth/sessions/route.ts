@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import {
   listAdminSessions,
   revokeAdminSessionById,
@@ -8,12 +9,6 @@ import {
 export const runtime = 'nodejs';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-const getBearerToken = (request: NextRequest) => {
-  const authorization = request.headers.get('authorization') || '';
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
-};
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
@@ -42,7 +37,7 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const currentToken = getBearerToken(request);
+  const currentToken = getAdminSessionTokenFromRequest(request);
   const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
   if (access instanceof NextResponse) {
@@ -72,7 +67,7 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const currentToken = getBearerToken(request);
+  const currentToken = getAdminSessionTokenFromRequest(request);
   const access = await requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
   if (access instanceof NextResponse) {

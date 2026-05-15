@@ -8,6 +8,7 @@ import {
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
 } from '@/lib/admin-auth/productionPolicy';
+import { attachAdminSessionCookie } from '@/lib/admin-auth/sessionCookie';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
-  return NextResponse.json({
+  return attachAdminSessionCookie(NextResponse.json({
     success: true,
     requestId,
     data: {
@@ -90,5 +91,5 @@ export async function POST(request: NextRequest) {
         authMode: session.authMode,
       },
     },
-  });
+  }), session);
 }
