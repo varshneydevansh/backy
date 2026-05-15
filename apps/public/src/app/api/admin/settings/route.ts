@@ -862,7 +862,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       shippingBaseAmount: Math.max(0, numberValue(commerce.shippingBaseAmount, 8)),
       shippingWeightRate: Math.max(0, numberValue(commerce.shippingWeightRate, 1.25)),
       discountPercent: Math.max(0, Math.min(100, numberValue(commerce.discountPercent, 10))),
-      taxProvider: stringValue(commerce.taxProvider) === 'http' ? 'http' : 'manual',
+      taxProvider: ['http', 'stripe'].includes(stringValue(commerce.taxProvider))
+        ? stringValue(commerce.taxProvider)
+        : 'manual',
       taxProviderUrl: stringValue(commerce.taxProviderUrl),
       shippingProvider: stringValue(commerce.shippingProvider) === 'http' ? 'http' : 'manual',
       shippingProviderUrl: stringValue(commerce.shippingProviderUrl),

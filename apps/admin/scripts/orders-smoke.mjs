@@ -19,6 +19,8 @@ const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 const ORDER_REQUIRED_FIELD_COUNT = 57;
+const STRIPE_TAX_MOCK_PORT = Number(process.env.BACKY_STRIPE_TAX_MOCK_PORT || 45679);
+const STRIPE_TAX_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_TAX_MOCK_PORT}`;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -164,6 +166,51 @@ const createQuoteProviderServer = async () => {
   };
 };
 
+const stripeTaxExecutionEnabled = () => {
+  const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
+  const apiBaseUrl = process.env.BACKY_STRIPE_TAX_API_BASE_URL || process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === STRIPE_TAX_MOCK_BASE_URL);
+};
+
+const createStripeTaxMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const form = Object.fromEntries(new URLSearchParams(bodyText).entries());
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        form,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `taxcalc_smoke_${requests.length}`,
+        object: 'tax.calculation',
+        currency: form.currency || 'usd',
+        amount_total: 9111,
+        tax_amount_exclusive: 1111,
+        line_items: {
+          data: [{
+            id: `tax_li_smoke_${requests.length}`,
+            reference: form['line_items[0][reference]'] || 'orders-smoke-line',
+            amount: form['line_items[0][amount]'] || 8000,
+            amount_tax: 1111,
+          }],
+        },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(STRIPE_TAX_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const requestApi = async (endpoint, options = {}) => {
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('content-type')) {
@@ -246,7 +293,7 @@ const enableCommerceWebhookSettings = async (settings) => {
   return patchSettingsFromSnapshot(next);
 };
 
-const enableCommerceQuoteProviders = async (settings, providerBaseUrl) => {
+const enableCommerceQuoteProviders = async (settings, providerBaseUrl, options = {}) => {
   const next = JSON.parse(JSON.stringify(settings));
   next.integrations = {
     ...(next.integrations || {}),
@@ -255,8 +302,8 @@ const enableCommerceQuoteProviders = async (settings, providerBaseUrl) => {
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
-      taxProvider: 'http',
-      taxProviderUrl: `${providerBaseUrl}/tax`,
+      taxProvider: options.stripeTax ? 'stripe' : 'http',
+      taxProviderUrl: options.stripeTax ? '' : `${providerBaseUrl}/tax`,
       shippingProvider: 'http',
       shippingProviderUrl: `${providerBaseUrl}/shipping`,
       discountProvider: 'http',
@@ -1495,6 +1542,8 @@ const main = async () => {
   let customerRecordId;
   let customerFixture;
   let quoteProviderServer;
+  let stripeTaxMockServer;
+  let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
   const originalSettings = await getSettings();
@@ -1607,6 +1656,37 @@ const main = async () => {
     assert(providerQuote?.providerAdjustments?.length === 3, `Quote endpoint did not expose provider adjustments: ${JSON.stringify(providerQuotePayload).slice(0, 500)}`);
     assert(providerQuote.providerAdjustments.every((item) => item.status === 'succeeded'), `Quote provider adjustments were not all successful: ${JSON.stringify(providerQuote).slice(0, 500)}`);
     assert(quoteProviderServer.requests.length >= 6, `Quote provider server did not receive tax/shipping/discount calls from POST and GET: ${quoteProviderServer.requests.length}`);
+
+    if (stripeTaxExecutionEnabled()) {
+      stripeTaxMockServer = await createStripeTaxMockServer();
+      const httpProviderSettings = await getSettings();
+      await enableCommerceQuoteProviders(httpProviderSettings, quoteProviderServer.baseUrl, { stripeTax: true });
+      await clickOrderCardButton(client, orderNumber, 'Refresh Quote');
+      expectedProviderTotal = 92.46;
+      const stripeTaxQuotedOrder = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.subtotal === 80 &&
+          values.discountamount === 6.54 &&
+          values.taxamount === 11.11 &&
+          values.shippingamount === 7.89 &&
+          values.total === expectedProviderTotal &&
+          /Provider adjustments: tax:succeeded, shipping:succeeded, discount:succeeded/.test(String(values.notes || ''))
+        ),
+        'Refresh Quote did not persist Stripe Tax provider totals',
+      );
+      const stripeTaxQuotePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${stripeTaxQuotedOrder.id}/quote`);
+      const stripeTaxQuote = stripeTaxQuotePayload.data?.quote;
+      const stripeTaxAdjustment = stripeTaxQuote?.providerAdjustments?.find((item) => item.kind === 'tax');
+      assert(stripeTaxAdjustment?.provider === 'stripe' && stripeTaxAdjustment.status === 'succeeded' && stripeTaxAdjustment.amount === 11.11, `Quote endpoint did not expose the Stripe Tax adjustment: ${JSON.stringify(stripeTaxQuote).slice(0, 500)}`);
+      assert(stripeTaxMockServer.requests.length >= 2, `Stripe Tax mock did not receive POST and GET calculation calls: ${stripeTaxMockServer.requests.length}`);
+      const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+      assert(stripeTaxMockServer.requests[0]?.url === '/v1/tax/calculations', `Stripe Tax mock received unexpected URL: ${JSON.stringify(stripeTaxMockServer.requests)}`);
+      assert(stripeTaxMockServer.requests[0]?.headers.authorization === `Bearer ${expectedSecret}`, `Stripe Tax mock did not receive bearer auth: ${JSON.stringify(stripeTaxMockServer.requests[0]?.headers)}`);
+      assert(stripeTaxMockServer.requests[0]?.form.currency === 'usd', `Stripe Tax calculation did not send quote currency: ${JSON.stringify(stripeTaxMockServer.requests[0]?.form)}`);
+      assert(stripeTaxMockServer.requests[0]?.form['customer_details[address][country]'] === 'US', `Stripe Tax calculation did not send customer country: ${JSON.stringify(stripeTaxMockServer.requests[0]?.form)}`);
+    }
 
     await selectOrderForBulk(client, orderNumber);
     await clickByText(client, 'Mark Paid', { exact: true, rootSelector: '#orders-queue' });
@@ -1748,7 +1828,7 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 93.69 &&
+        Number(values.refundamount) === expectedProviderTotal &&
         values.refundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         /Manual refund\/return state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1769,7 +1849,7 @@ const main = async () => {
         Boolean(values.providerrefundid) &&
         String(values.providerrefundreference || '').includes(String(values.paymentreference || '')) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
-        Number(values.providerrefundamount) === 93.69 &&
+        Number(values.providerrefundamount) === expectedProviderTotal &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
@@ -1812,7 +1892,7 @@ const main = async () => {
         values.orderstatus === 'cancelled' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        Number(values.refundamount) === 93.69 &&
+        Number(values.refundamount) === expectedProviderTotal &&
         values.refundreason === 'Order cancellation manually recorded from Backy order workflow.' &&
         /Manual cancellation state recorded in Backy/.test(String(values.notes || '')) &&
         /Provider cancellation\/refund, if required, must be completed in the payment provider/.test(String(values.notes || ''))
@@ -1938,7 +2018,7 @@ const main = async () => {
     const reconciledAnalytics = reconciledAnalyticsPayload.data?.analytics;
     assert(reconciledAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Reconciled order analytics returned wrong schema: ${JSON.stringify(reconciledAnalyticsPayload).slice(0, 500)}`);
     assert(reconciledAnalytics.payment?.paid?.count >= 1, `Order analytics did not report paid orders after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
-    assert(reconciledAnalytics.revenue?.paidTotal >= 93.69, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.revenue?.paidTotal >= expectedProviderTotal, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
     assert(reconciledAnalytics.operations?.fulfillmentBacklogCount >= 1, `Order analytics did not report fulfillment backlog after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
 
     await clickReconcileProvider(client);
@@ -1974,6 +2054,9 @@ const main = async () => {
   } finally {
     if (quoteProviderServer) {
       await quoteProviderServer.close().catch(() => {});
+    }
+    if (stripeTaxMockServer) {
+      await stripeTaxMockServer.close().catch(() => {});
     }
     await cleanup({
       client,

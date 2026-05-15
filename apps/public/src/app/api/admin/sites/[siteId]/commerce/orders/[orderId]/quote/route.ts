@@ -85,7 +85,7 @@ interface OrderQuotePayload {
 
 interface QuoteProviderAdjustment {
   kind: 'tax' | 'shipping' | 'discount';
-  provider: 'http';
+  provider: 'http' | 'stripe';
   status: 'succeeded' | 'failed' | 'skipped';
   url?: string;
   amount?: number;
@@ -136,6 +136,52 @@ const numberValue = (value: unknown, fallback = 0): number => {
 const moneyValue = (value: number): number => (
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 );
+
+const stripeSecretKey = () => (
+  process.env.BACKY_STRIPE_SECRET_KEY?.trim()
+  || process.env.STRIPE_SECRET_KEY?.trim()
+  || ''
+);
+
+const stripeApiBaseUrl = () => (
+  process.env.BACKY_STRIPE_TAX_API_BASE_URL?.trim()
+  || process.env.BACKY_STRIPE_API_BASE_URL?.trim()
+  || process.env.STRIPE_API_BASE_URL?.trim()
+  || 'https://api.stripe.com'
+).replace(/\/$/, '');
+
+const zeroDecimalCurrencies = new Set([
+  'BIF',
+  'CLP',
+  'DJF',
+  'GNF',
+  'JPY',
+  'KMF',
+  'KRW',
+  'MGA',
+  'PYG',
+  'RWF',
+  'UGX',
+  'VND',
+  'VUV',
+  'XAF',
+  'XOF',
+  'XPF',
+]);
+
+const toProviderAmount = (amount: number, currency: string): number => {
+  const normalizedCurrency = currency.trim().toUpperCase();
+  return zeroDecimalCurrencies.has(normalizedCurrency)
+    ? Math.max(0, Math.round(moneyValue(amount)))
+    : Math.max(0, Math.round(moneyValue(amount) * 100));
+};
+
+const fromProviderAmount = (amount: unknown, currency: string): number | null => {
+  const parsed = numberValue(amount, Number.NaN);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  const normalizedCurrency = currency.trim().toUpperCase();
+  return moneyValue(zeroDecimalCurrencies.has(normalizedCurrency) ? parsed : parsed / 100);
+};
 
 const boolValue = (value: unknown, fallback = false): boolean => {
   if (typeof value === 'boolean') return value;
@@ -214,8 +260,15 @@ const discountPercentFromCode = (code: string, rules: CommerceStorefrontContract
   return Math.max(0, Math.min(90, Number(match[1]))) / 100;
 };
 
-const providerUrlForKind = (settings: Record<string, unknown>, kind: QuoteProviderAdjustment['kind']): string => {
+const providerModeForKind = (settings: Record<string, unknown>, kind: QuoteProviderAdjustment['kind']): 'manual' | 'http' | 'stripe' => {
   const mode = textValue(settings[`${kind}Provider`]).toLowerCase();
+  if (mode === 'http') return 'http';
+  if (kind === 'tax' && mode === 'stripe') return 'stripe';
+  return 'manual';
+};
+
+const providerUrlForKind = (settings: Record<string, unknown>, kind: QuoteProviderAdjustment['kind']): string => {
+  const mode = providerModeForKind(settings, kind);
   const url = textValue(settings[`${kind}ProviderUrl`]);
   if (mode !== 'http' || !url) return '';
   try {
@@ -223,6 +276,176 @@ const providerUrlForKind = (settings: Record<string, unknown>, kind: QuoteProvid
     return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
   } catch {
     return '';
+  }
+};
+
+const parseAddressForStripeTax = (values: Record<string, unknown>, body: Record<string, unknown>) => {
+  const addressText = textValue(body.shippingAddress)
+    || textValue(values.shippingaddress)
+    || textValue(body.billingAddress)
+    || textValue(values.billingaddress);
+  const stateMatch = addressText.match(/(?:^|,\s*)([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?(?:,|$)/);
+  const postalMatch = addressText.match(/\b\d{5}(?:-\d{4})?\b/);
+  const country = (textValue(body.taxCountry) || textValue(body.country) || textValue(values.taxcountry) || 'US').toUpperCase();
+  return {
+    country,
+    state: textValue(body.taxState) || textValue(values.taxstate) || stateMatch?.[1] || '',
+    postalCode: textValue(body.taxPostalCode) || textValue(values.taxpostalcode) || postalMatch?.[0] || '',
+    line1: addressText.split(',')[0]?.trim() || '',
+  };
+};
+
+const stripeTaxLines = (
+  lineItems: QuoteLineItem[],
+  quote: OrderQuotePayload,
+): Array<QuoteLineItem & { taxableAmount: number }> => {
+  const discountByProduct = new Map(quote.discountLines.map((line) => [String(line.productId), numberValue(line.amount)]));
+  return lineItems
+    .filter((item) => item.taxable && item.lineTotal > 0)
+    .map((item) => ({
+      ...item,
+      taxableAmount: moneyValue(Math.max(0, item.lineTotal - (discountByProduct.get(item.productId) || 0))),
+    }))
+    .filter((item) => item.taxableAmount > 0);
+};
+
+const safeStripeTaxLines = (payload: Record<string, unknown>, currency: string): Array<Record<string, unknown>> => {
+  const lineItems = toRecord(payload.line_items);
+  const data = Array.isArray(lineItems.data) ? lineItems.data.map(toRecord) : [];
+  if (data.length > 0) {
+    return data.map((item) => ({
+      provider: 'stripe',
+      id: textValue(item.id),
+      reference: textValue(item.reference),
+      amount: fromProviderAmount(item.amount, currency) ?? null,
+      taxAmount: fromProviderAmount(item.amount_tax, currency) ?? null,
+    }));
+  }
+  const breakdown = Array.isArray(payload.tax_breakdown) ? payload.tax_breakdown.map(toRecord) : [];
+  return breakdown.map((item) => ({
+    provider: 'stripe',
+    taxabilityReason: textValue(item.taxability_reason),
+    amount: fromProviderAmount(item.taxable_amount, currency) ?? null,
+    taxAmount: fromProviderAmount(item.amount, currency) ?? null,
+  }));
+};
+
+const callStripeTaxProvider = async ({
+  record,
+  body,
+  lineItems,
+  quote,
+  requestId,
+}: {
+  record: CollectionRecordAuditSource;
+  body: Record<string, unknown>;
+  lineItems: QuoteLineItem[];
+  quote: OrderQuotePayload;
+  requestId: string;
+}): Promise<QuoteProviderAdjustment> => {
+  const secretKey = stripeSecretKey();
+  if (!secretKey) {
+    return {
+      kind: 'tax',
+      provider: 'stripe',
+      status: 'skipped',
+      error: 'Stripe Tax is selected, but BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY is not configured.',
+    };
+  }
+
+  const taxableLines = stripeTaxLines(lineItems, quote);
+  if (taxableLines.length === 0 && quote.shippingAmount <= 0) {
+    return {
+      kind: 'tax',
+      provider: 'stripe',
+      status: 'skipped',
+      error: 'No taxable line items or shipping amount were available for Stripe Tax.',
+    };
+  }
+
+  const values = toRecord(record.values);
+  const currency = quote.currency.toUpperCase();
+  const form = new URLSearchParams();
+  const address = parseAddressForStripeTax(values, body);
+  form.set('currency', currency.toLowerCase());
+  form.set('customer_details[address][country]', address.country || 'US');
+  if (address.state) form.set('customer_details[address][state]', address.state);
+  if (address.postalCode) form.set('customer_details[address][postal_code]', address.postalCode);
+  if (address.line1) form.set('customer_details[address][line1]', address.line1);
+  form.set('customer_details[address_source]', 'shipping');
+  form.set('expand[0]', 'line_items');
+
+  taxableLines.forEach((item, index) => {
+    const prefix = `line_items[${index}]`;
+    form.set(`${prefix}[amount]`, String(toProviderAmount(item.taxableAmount, currency)));
+    form.set(`${prefix}[reference]`, item.productId || item.slug || `line-${index + 1}`);
+    if (item.taxClass.startsWith('txcd_')) {
+      form.set(`${prefix}[tax_code]`, item.taxClass);
+    }
+  });
+  if (quote.shippingAmount > 0) {
+    form.set('shipping_cost[amount]', String(toProviderAmount(quote.shippingAmount, currency)));
+  }
+
+  try {
+    const response = await fetch(`${stripeApiBaseUrl()}/v1/tax/calculations`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secretKey}`,
+        'content-type': 'application/x-www-form-urlencoded',
+        'idempotency-key': `${requestId}-tax-${record.id}`,
+        ...(process.env.BACKY_STRIPE_API_VERSION?.trim() || process.env.STRIPE_API_VERSION?.trim()
+          ? { 'stripe-version': process.env.BACKY_STRIPE_API_VERSION?.trim() || process.env.STRIPE_API_VERSION?.trim() || '' }
+          : {}),
+      },
+      body: form.toString(),
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const payloadRecord = toRecord(payload);
+    if (!response.ok) {
+      const error = toRecord(payloadRecord.error);
+      return {
+        kind: 'tax',
+        provider: 'stripe',
+        status: 'failed',
+        statusCode: response.status,
+        error: textValue(error.message) || textValue(payloadRecord.message) || `Stripe Tax returned HTTP ${response.status}.`,
+        reference: textValue(payloadRecord.id),
+      };
+    }
+
+    const amount = fromProviderAmount(
+      payloadRecord.tax_amount_exclusive ?? payloadRecord.tax_amount_inclusive ?? payloadRecord.tax_amount,
+      currency,
+    );
+    if (amount === null) {
+      return {
+        kind: 'tax',
+        provider: 'stripe',
+        status: 'failed',
+        statusCode: response.status,
+        error: 'Stripe Tax response did not include a tax amount.',
+        reference: textValue(payloadRecord.id),
+      };
+    }
+
+    return {
+      kind: 'tax',
+      provider: 'stripe',
+      status: 'succeeded',
+      statusCode: response.status,
+      amount,
+      lines: safeStripeTaxLines(payloadRecord, currency),
+      reference: textValue(payloadRecord.id),
+    };
+  } catch (error) {
+    return {
+      kind: 'tax',
+      provider: 'stripe',
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Stripe Tax request failed.',
+    };
   }
 };
 
@@ -475,8 +698,19 @@ const calculateQuote = async (
     ['shipping', commerce.pricing.shipping],
     ['discount', commerce.pricing.discounts],
   ] as Array<[QuoteProviderAdjustment['kind'], boolean]>).map(async ([kind, enabled]) => {
+    const mode = providerModeForKind(commerceSettings, kind);
+    if (!enabled || mode === 'manual') return null;
+    if (kind === 'tax' && mode === 'stripe') {
+      return callStripeTaxProvider({
+        record,
+        body,
+        lineItems,
+        quote: localQuote,
+        requestId,
+      });
+    }
     const url = providerUrlForKind(commerceSettings, kind);
-    if (!enabled || !url) {
+    if (!url) {
       return null;
     }
     return callQuoteProvider({

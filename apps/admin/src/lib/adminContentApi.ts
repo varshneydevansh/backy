@@ -1481,7 +1481,7 @@ export interface AdminOrderQuote {
   discountRate: number;
   providerAdjustments?: Array<{
     kind: 'tax' | 'shipping' | 'discount';
-    provider: 'http';
+    provider: 'http' | 'stripe';
     status: 'succeeded' | 'failed' | 'skipped';
     url?: string;
     amount?: number;
@@ -1947,7 +1947,7 @@ export interface SiteSettingsInput {
       shippingBaseAmount?: number;
       shippingWeightRate?: number;
       discountPercent?: number;
-      taxProvider?: 'manual' | 'http';
+      taxProvider?: 'manual' | 'http' | 'stripe';
       taxProviderUrl?: string;
       shippingProvider?: 'manual' | 'http';
       shippingProviderUrl?: string;

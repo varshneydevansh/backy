@@ -4927,17 +4927,19 @@ function CommerceSettings({
               ] as const).map(([key, label]) => {
                 const providerKey = `${key}Provider` as keyof CommerceSettingsConfig;
                 const urlKey = `${key}ProviderUrl` as keyof CommerceSettingsConfig;
+                const providerValue = String(resolved[providerKey] || 'manual');
                 return (
                   <div key={key} className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3">
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="font-medium">{label}</span>
                       <select
-                        value={String(resolved[providerKey] || 'manual')}
-                        onChange={(event) => update({ [providerKey]: event.target.value as 'manual' | 'http' } as Partial<CommerceSettingsConfig>)}
+                        value={providerValue}
+                        onChange={(event) => update({ [providerKey]: event.target.value as 'manual' | 'http' | 'stripe' } as Partial<CommerceSettingsConfig>)}
                         className={inputClassName}
                       >
                         <option value="manual">Built-in rules</option>
                         <option value="http">HTTP calculator</option>
+                        {key === 'tax' ? <option value="stripe">Stripe Tax</option> : null}
                       </select>
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
@@ -4945,7 +4947,8 @@ function CommerceSettings({
                       <input
                         value={String(resolved[urlKey] || '')}
                         onChange={(event) => update({ [urlKey]: event.target.value } as Partial<CommerceSettingsConfig>)}
-                        placeholder={`https://api.example.com/${key}-quote`}
+                        placeholder={providerValue === 'stripe' ? 'Uses Stripe env configuration' : `https://api.example.com/${key}-quote`}
+                        disabled={providerValue === 'stripe'}
                         className={inputClassName}
                       />
                     </label>
