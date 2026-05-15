@@ -19,7 +19,7 @@ const STRIPE_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_MOCK_PORT}`;
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
-const PRODUCT_REQUIRED_FIELD_COUNT = 30;
+const PRODUCT_REQUIRED_FIELD_COUNT = 31;
 const ORDER_REQUIRED_FIELD_COUNT = 57;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
@@ -59,6 +59,7 @@ const PRODUCT_VALUE_KEYS = {
   seoTitle: 'seotitle',
   featured: 'featured',
   taxable: 'taxable',
+  providerSync: 'providersync',
 };
 
 const productFieldKey = (key) => PRODUCT_VALUE_KEYS[key] || key;
@@ -99,6 +100,7 @@ const PRODUCT_SCHEMA_FIELDS = [
   { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 280 },
   { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 290, defaultValue: false },
   { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 300, defaultValue: true },
+  { key: productFieldKey('providerSync'), label: 'Provider Sync', type: 'json', required: false, unique: false, sortOrder: 310 },
 ];
 
 const ORDER_SCHEMA_FIELDS = [
@@ -257,6 +259,38 @@ const startStripeCheckoutMock = async () => {
       body,
       form: Object.fromEntries(new URLSearchParams(body).entries()),
     });
+
+    if (request.method === 'POST' && request.url === '/v1/products') {
+      const form = new URLSearchParams(body);
+      const id = `prod_mock_${requests.length}`;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id,
+        object: 'product',
+        active: form.get('active') !== 'false',
+        name: form.get('name'),
+        description: form.get('description'),
+        livemode: false,
+        url: `${STRIPE_MOCK_BASE_URL}/products/${id}`,
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/v1/prices') {
+      const form = new URLSearchParams(body);
+      const id = `price_mock_${requests.length}`;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id,
+        object: 'price',
+        active: true,
+        currency: form.get('currency'),
+        unit_amount: Number(form.get('unit_amount') || 0),
+        product: form.get('product'),
+        livemode: false,
+      }));
+      return;
+    }
 
     if (request.method !== 'POST' || request.url !== '/v1/checkout/sessions') {
       response.writeHead(404, { 'content-type': 'application/json' });
@@ -1714,6 +1748,46 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   return { productRecord, updatedProduct, order, orderRecord: settledOrderRecord, customersCollection, customerRecord, stripeCheckoutExecution };
 };
 
+const assertProductProviderSync = async ({ productCollection, productRecord }) => {
+  const beforeRequests = stripeCheckoutMock?.requests.length || 0;
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
+    method: 'POST',
+    body: JSON.stringify({ provider: 'stripe' }),
+  });
+  const sync = payload.data?.sync || payload.sync;
+  const updated = payload.data?.product || payload.product;
+  assert(sync?.provider === 'stripe', `Product provider sync did not return Stripe metadata: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(['handoff', 'synced', 'failed'].includes(sync.status), `Product provider sync returned unexpected status: ${JSON.stringify(sync)}`);
+  assert(updated?.id === productRecord.id, `Product provider sync did not return the updated product: ${JSON.stringify(updated)}`);
+
+  const refreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
+  const persisted = readProductValue(refreshed.values, 'providerSync');
+  assert(persisted?.requestId === sync.requestId, `Product provider sync was not persisted: ${JSON.stringify(refreshed.values)}`);
+  assert(persisted.status === sync.status, `Persisted provider sync status differed: ${JSON.stringify({ persisted, sync })}`);
+
+  if (stripeCheckoutExecutionEnabled()) {
+    assert(sync.status === 'synced', `Stripe product provider sync did not execute against the mock provider: ${JSON.stringify(sync)}`);
+    assert(/^prod_mock_/.test(sync.product?.id || ''), `Stripe product id was not returned: ${JSON.stringify(sync)}`);
+    assert(/^price_mock_/.test(sync.price?.id || ''), `Stripe price id was not returned: ${JSON.stringify(sync)}`);
+    const productRequest = stripeCheckoutMock.requests.slice(beforeRequests).find((request) => request.url === '/v1/products');
+    const priceRequest = stripeCheckoutMock.requests.slice(beforeRequests).find((request) => request.url === '/v1/prices');
+    const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    assert(productRequest?.headers.authorization === `Bearer ${expectedSecret}`, `Stripe product sync did not use bearer auth: ${JSON.stringify(productRequest)}`);
+    assert(productRequest.form.name === readProductValue(productRecord.values, 'title'), `Stripe product form did not include product name: ${JSON.stringify(productRequest.form)}`);
+    assert(productRequest.form['metadata[backyProductId]'] === productRecord.id, `Stripe product form did not include Backy product metadata: ${JSON.stringify(productRequest.form)}`);
+    assert(priceRequest?.form.product === sync.product.id, `Stripe price form did not target the created product: ${JSON.stringify(priceRequest?.form)}`);
+    assert(priceRequest.form.currency === String(readProductValue(productRecord.values, 'currency')).toLowerCase(), `Stripe price form currency was unexpected: ${JSON.stringify(priceRequest.form)}`);
+    assert(Number(priceRequest.form.unit_amount) === 4900, `Stripe price form amount was unexpected: ${JSON.stringify(priceRequest.form)}`);
+    assert(priceRequest.form['recurring[interval]'] === 'month', `Stripe price form did not include subscription recurrence: ${JSON.stringify(priceRequest.form)}`);
+  } else {
+    assert(sync.status === 'handoff', `Product provider sync should fall back to handoff without Stripe mock env: ${JSON.stringify(sync)}`);
+    assert(sync.executionMode === 'handoff', `Product provider sync handoff mode was unexpected: ${JSON.stringify(sync)}`);
+    assert(String(sync.reason || '').includes('STRIPE_SECRET_KEY'), `Product provider sync did not explain missing Stripe credentials: ${JSON.stringify(sync)}`);
+  }
+
+  return refreshed;
+};
+
 const assertStripeCheckoutExecution = async ({
   productCollection,
   ordersCollection,
@@ -2121,6 +2195,9 @@ const assertProductsLayout = async (client) => {
         hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
           document.body?.innerText?.includes('Subscription metadata') &&
           document.body?.innerText?.includes('Trial days'),
+        hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
+          document.body?.innerText?.includes('Provider catalog sync') &&
+          document.body?.innerText?.includes('Sync Stripe catalog'),
         hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
           document.body?.innerText?.includes('Page and editor binding contract') &&
           document.body?.innerText?.includes('Product card blocks') &&
@@ -2145,7 +2222,7 @@ const assertProductsLayout = async (client) => {
   }
 
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasProviderSync && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -2475,6 +2552,10 @@ const main = async () => {
       slug,
     });
     productRecordId = publicCommerce.productRecord.id;
+    await assertProductProviderSync({
+      productCollection: finalProductCollection,
+      productRecord: publicCommerce.productRecord,
+    });
     orderRecordId = publicCommerce.orderRecord.id;
     finalCustomerCollection = publicCommerce.customersCollection;
     customerRecordId = publicCommerce.customerRecord.id;

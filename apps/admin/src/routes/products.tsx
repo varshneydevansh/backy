@@ -32,12 +32,14 @@ import {
   listProductNotificationEvents,
   listCollectionRecords,
   listCollections,
+  syncCommerceProductProvider,
   updateCollection,
   updateCollectionRecord,
   type Collection,
   type CollectionField,
   type CollectionRecord,
   type CollectionRecordPagination,
+  type CommerceProductProviderSyncResult,
   type AdminUserPermissionMatrix,
   type OrderAnalytics,
   type OrderDeliveryEvent,
@@ -309,7 +311,8 @@ const PRODUCT_VALUE_KEYS = {
   seoTitle: 'seotitle',
   featured: 'featured',
   taxable: 'taxable',
-} satisfies Record<Exclude<keyof ProductFormState, 'slug' | 'status' | 'scheduledAt'>, string>;
+  providerSync: 'providersync',
+} satisfies Record<Exclude<keyof ProductFormState, 'slug' | 'status' | 'scheduledAt'>, string> & Record<'providerSync', string>;
 
 type ProductValueKey = keyof typeof PRODUCT_VALUE_KEYS;
 
@@ -392,6 +395,7 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: productFieldKey('seoTitle'), label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 280 },
   { key: productFieldKey('featured'), label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 290, defaultValue: false },
   { key: productFieldKey('taxable'), label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 300, defaultValue: true },
+  { key: productFieldKey('providerSync'), label: 'Provider Sync', type: 'json', required: false, unique: false, sortOrder: 310 },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -436,6 +440,11 @@ const PRODUCT_EXPORT_COLUMNS = [
   'public_render_url',
   'public_resolve_url',
   'checkout_mode',
+  'provider_sync_status',
+  'provider_sync_execution_mode',
+  'provider_sync_product_id',
+  'provider_sync_price_id',
+  'provider_sync_at',
   'scheduled_at',
   'frontend_systems',
   'created_at',
@@ -648,7 +657,8 @@ function ProductsRoute() {
   const [isSavingCustomerProfile, setIsSavingCustomerProfile] = useState(false);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
-  const isProductsBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingProducts || Boolean(isCreatingTemplateId);
+  const [isSyncingProviderProduct, setIsSyncingProviderProduct] = useState(false);
+  const isProductsBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingProducts || isSyncingProviderProduct || Boolean(isCreatingTemplateId);
   const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
@@ -895,6 +905,10 @@ function ProductsRoute() {
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
+  );
+  const selectedProductProviderSync = useMemo(
+    () => productProviderSync(selectedProduct),
+    [selectedProduct],
   );
   const selectedCustomerProfile = useMemo(
     () => customerProfiles.find((customer) => customer.id === selectedCustomerProfileId) || null,
@@ -2137,6 +2151,7 @@ function ProductsRoute() {
         [productFieldKey('featured')]: formState.featured,
         [productFieldKey('taxable')]: formState.taxable,
         ...getPersistedFrontendProductValues(selectedProduct),
+        ...getPersistedProductProviderValues(selectedProduct),
       },
     };
 
@@ -2158,6 +2173,40 @@ function ProductsRoute() {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const syncSelectedProductProvider = async () => {
+    if (!selectedProduct) {
+      setError('Save the product before syncing a provider catalog.');
+      setNotice(null);
+      return;
+    }
+    if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot sync product providers.');
+      setNotice(null);
+      return;
+    }
+
+    setIsSyncingProviderProduct(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await syncCommerceProductProvider(activeSiteId, selectedProduct.id, { provider: 'stripe' });
+      const saved = normalizeProductRecord(result.product);
+      setProducts((current) => current.map((product) => (product.id === saved.id ? saved : product)));
+      setFormState(productToForm(saved));
+      setNotice(result.sync.status === 'synced'
+        ? 'Stripe catalog product and price synced.'
+        : result.sync.status === 'failed'
+          ? 'Stripe sync failed; provider handoff metadata was saved.'
+          : 'Stripe handoff metadata saved. Add a Stripe secret key to execute the provider sync.');
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync product provider catalog');
+    } finally {
+      setIsSyncingProviderProduct(false);
     }
   };
 
@@ -4018,6 +4067,46 @@ function ProductsRoute() {
                     </Field>
                   </div>
                 </div>
+                <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-provider-sync">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Provider catalog sync</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Stripe product and price metadata for provider checkout catalogs.</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void syncSelectedProductProvider()}
+                      disabled={!selectedProduct || isProductsAccessBusy || !canEditProducts}
+                      title={!selectedProduct ? 'Save the product before syncing.' : (!canEditProducts ? editPermissionTitle : undefined)}
+                      iconStart={<RefreshCw className={cn('size-4', isSyncingProviderProduct && 'animate-spin')} />}
+                    >
+                      {isSyncingProviderProduct ? 'Syncing...' : 'Sync Stripe catalog'}
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Status</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">{formatProviderSyncStatus(selectedProductProviderSync)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Mode</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">{selectedProductProviderSync?.executionMode || 'Not run'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Product</div>
+                      <div className="mt-1 truncate text-sm font-medium text-foreground">{selectedProductProviderSync?.product?.id || 'Pending'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Price</div>
+                      <div className="mt-1 truncate text-sm font-medium text-foreground">{selectedProductProviderSync?.price?.id || 'Pending'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    {selectedProductProviderSync?.syncedAt ? `Last run ${formatDate(selectedProductProviderSync.syncedAt)}` : 'No provider catalog run recorded.'}
+                    {selectedProductProviderSync?.reason ? ` ${selectedProductProviderSync.reason}` : ''}
+                  </div>
+                </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Tax class">
                     <input
@@ -4830,6 +4919,18 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+const productProviderSync = (product: CollectionRecord | null): CommerceProductProviderSyncResult | null => {
+  const value = product ? readProductValue(product.values, 'providerSync') : null;
+  return isPlainRecord(value) ? value as unknown as CommerceProductProviderSyncResult : null;
+};
+
+const formatProviderSyncStatus = (sync: CommerceProductProviderSyncResult | null): string => {
+  if (!sync) return 'Not synced';
+  if (sync.status === 'synced') return 'Synced';
+  if (sync.status === 'failed') return 'Failed';
+  return 'Ready for handoff';
+};
+
 const optionalStringFromRecord = (record: Record<string, unknown> | undefined, key: string): string | undefined => {
   const value = record?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -4950,11 +5051,25 @@ const FRONTEND_PRODUCT_VALUE_KEYS = [
   'frontendDesignCustomCss',
 ] as const;
 
+const PRODUCT_PROVIDER_METADATA_KEYS = [
+  productFieldKey('providerSync'),
+] as const;
+
 const getPersistedFrontendProductValues = (product: CollectionRecord | null): Record<string, unknown> => {
   if (!product) return {};
 
   return Object.fromEntries(
     FRONTEND_PRODUCT_VALUE_KEYS
+      .filter((key) => product.values[key] !== undefined)
+      .map((key) => [key, product.values[key]]),
+  );
+};
+
+const getPersistedProductProviderValues = (product: CollectionRecord | null): Record<string, unknown> => {
+  if (!product) return {};
+
+  return Object.fromEntries(
+    PRODUCT_PROVIDER_METADATA_KEYS
       .filter((key) => product.values[key] !== undefined)
       .map((key) => [key, product.values[key]]),
   );
@@ -5119,6 +5234,7 @@ const productToExportRecord = (
 ): Record<ProductExportColumn, string | number | boolean | null> => {
   const storefrontPath = `/products/${product.slug}`;
   const detailApiUrl = `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug=${encodeURIComponent(product.slug)}`;
+  const sync = productProviderSync(product);
 
   return {
   product_id: product.id,
@@ -5164,6 +5280,11 @@ const productToExportRecord = (
   public_render_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/render?path=${encodeURIComponent(storefrontPath)}`,
   public_resolve_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/resolve?path=${encodeURIComponent(storefrontPath)}`,
   checkout_mode: String(readProductValue(product.values, 'checkoutUrl', '') || '').trim() ? 'external checkout URL' : 'not configured',
+  provider_sync_status: sync?.status || '',
+  provider_sync_execution_mode: sync?.executionMode || '',
+  provider_sync_product_id: sync?.product?.id || '',
+  provider_sync_price_id: sync?.price?.id || '',
+  provider_sync_at: sync?.syncedAt || '',
   scheduled_at: product.scheduledAt || '',
   frontend_systems: PRODUCT_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
   created_at: product.createdAt || '',

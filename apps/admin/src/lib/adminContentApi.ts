@@ -1411,6 +1411,56 @@ interface ApiCollectionRecordResponse {
   };
 }
 
+export interface CommerceProductProviderSyncResult {
+  provider: string;
+  status: 'handoff' | 'synced' | 'failed';
+  executionMode: 'handoff' | 'stripe-api';
+  syncedAt: string;
+  requestId: string;
+  reason?: string;
+  product?: {
+    id: string | null;
+    name?: string;
+    active?: boolean | null;
+    object?: string;
+    livemode?: boolean | null;
+    url?: string;
+  };
+  price?: {
+    id: string | null;
+    currency?: string;
+    unitAmount?: number;
+    recurring?: {
+      interval: string;
+      trialDays: number;
+    } | null;
+    object?: string;
+    active?: boolean | null;
+    livemode?: boolean | null;
+    url?: string;
+  };
+  error?: {
+    type?: string;
+    code?: string;
+    message?: string;
+  };
+}
+
+interface ApiCommerceProductProviderSyncResponse {
+  success: boolean;
+  data?: {
+    sync: CommerceProductProviderSyncResult;
+    product: ApiCollectionRecord;
+  };
+  sync?: CommerceProductProviderSyncResult;
+  product?: ApiCollectionRecord;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface AdminOrderShippingLabel {
   id: string;
   status: 'draft' | 'purchased' | 'voided';
@@ -6441,6 +6491,32 @@ export async function updateCollectionRecord(
   }
 
   return toCollectionRecord(payload.data.record);
+}
+
+export async function syncCommerceProductProvider(
+  siteId: string,
+  productId: string,
+  input: { provider?: string } = {},
+): Promise<{ sync: CommerceProductProviderSyncResult; product: CollectionRecord }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/products/${productId}/provider-sync`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCommerceProductProviderSyncResponse>(response);
+  const sync = payload.data?.sync || payload.sync;
+  const product = payload.data?.product || payload.product;
+
+  if (!response.ok || !payload.success || !sync || !product) {
+    throw adminContentApiError(payload, 'Unable to sync product provider catalog');
+  }
+
+  return {
+    sync,
+    product: toCollectionRecord(product),
+  };
 }
 
 export async function createOrderShippingLabel(
