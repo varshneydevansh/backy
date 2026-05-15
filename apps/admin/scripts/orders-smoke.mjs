@@ -1180,6 +1180,13 @@ const assertOrdersLayout = async (client) => {
       editor: Boolean(document.querySelector('#orders-editor')),
       shippingLabelControls: Boolean(document.querySelector('[data-testid="orders-shipping-label-controls"]')),
       providerRefundControls: Boolean(document.querySelector('[data-testid="orders-provider-refund-controls"]')),
+      providerReadiness: Boolean(document.querySelector('[data-testid="orders-provider-readiness"]')) &&
+        document.body?.innerText?.includes('Provider execution readiness') &&
+        document.body?.innerText?.includes('Stripe checkout/refund') &&
+        document.body?.innerText?.includes('Tax quote') &&
+        document.body?.innerText?.includes('EasyPost labels/tracking') &&
+        document.body?.innerText?.includes('Fulfillment dispatch') &&
+        document.body?.innerText?.includes('Webhook settlement'),
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
@@ -1198,7 +1205,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);

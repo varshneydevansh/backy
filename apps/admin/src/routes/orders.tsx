@@ -33,6 +33,7 @@ import {
   createOrderShippingLabel,
   deleteCollectionRecord,
   dispatchOrderFulfillment,
+  getSettings,
   getUserPermissions,
   getCommerceReconciliationReadiness,
   getOrderAnalytics,
@@ -53,6 +54,7 @@ import {
   type CollectionField,
   type CollectionRecord,
   type CollectionRecordPagination,
+  type SiteSettingsInput,
   type OrderAnalytics,
   type OrderDeliveryEvent,
   type AdminUserPermissionMatrix,
@@ -117,6 +119,8 @@ type ProviderRefundStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'req
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
+type CommerceProviderSettings = NonNullable<NonNullable<SiteSettingsInput['integrations']>['commerce']>;
+type RuntimeCommerceSettings = NonNullable<SiteSettingsInput['runtimeCommerce']>;
 type OrderPermissionKey =
   | 'commerce.view'
   | 'commerce.edit'
@@ -636,6 +640,10 @@ function OrdersRoute() {
   const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
   const [cronReadiness, setCronReadiness] = useState<CommerceCronReadiness | null>(null);
   const [cronReadinessError, setCronReadinessError] = useState<string | null>(null);
+  const [commerceSettings, setCommerceSettings] = useState<CommerceProviderSettings | null>(null);
+  const [runtimeCommerce, setRuntimeCommerce] = useState<RuntimeCommerceSettings | null>(null);
+  const [isProviderReadinessLoading, setIsProviderReadinessLoading] = useState(false);
+  const [providerReadinessError, setProviderReadinessError] = useState<string | null>(null);
   const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
   const [isOrderAnalyticsLoading, setIsOrderAnalyticsLoading] = useState(false);
   const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
@@ -896,6 +904,106 @@ function OrdersRoute() {
     ordersApiReady,
     ordersCollection,
   ]);
+  const providerReadinessChecks = useMemo(() => {
+    const commerce = commerceSettings;
+    const runtime = runtimeCommerce;
+    const paymentProvider = commerce?.paymentProvider || runtime?.paymentProvider || 'none';
+    const taxProvider = commerce?.taxProvider || runtime?.taxProvider || 'manual';
+    const shippingProvider = commerce?.shippingProvider || 'manual';
+    const discountProvider = commerce?.discountProvider || 'manual';
+    const shippingLabelProvider = commerce?.shippingLabelProvider || runtime?.shippingLabelProvider || 'manual';
+    const fulfillmentProvider = commerce?.fulfillmentProvider || 'manual';
+    const reconciliationMode = commerce?.reconciliationMode || 'manual';
+    const webhookRequired = Boolean(commerce?.webhookEventsEnabled && paymentProvider !== 'none');
+
+    return [
+      {
+        key: 'stripe-checkout-refund',
+        title: 'Stripe checkout/refund',
+        mode: paymentProvider === 'stripe' ? 'stripe-api' : 'manual/off',
+        ready: paymentProvider !== 'stripe' || Boolean(runtime?.stripeSecretConfigured),
+        detail: paymentProvider === 'stripe'
+          ? runtime?.stripeSecretConfigured
+            ? `Stripe secret is configured; API base ${runtime.stripeApiBaseUrl || 'https://api.stripe.com'}.`
+            : 'Stripe is selected but BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY is missing.'
+          : 'Manual or disabled payment provider; provider refund actions keep a handoff payload.',
+      },
+      {
+        key: 'tax-quote',
+        title: 'Tax quote',
+        mode: taxProvider,
+        ready: taxProvider === 'manual'
+          || (taxProvider === 'http' && Boolean(commerce?.taxProviderUrl))
+          || (taxProvider === 'stripe' && Boolean(runtime?.stripeSecretConfigured)),
+        detail: taxProvider === 'http'
+          ? commerce?.taxProviderUrl ? 'HTTP tax quote endpoint is configured.' : 'HTTP tax provider selected without a URL.'
+          : taxProvider === 'stripe'
+            ? runtime?.stripeSecretConfigured ? `Stripe Tax can use ${runtime.stripeTaxApiBaseUrl || runtime.stripeApiBaseUrl || 'Stripe API'}.` : 'Stripe Tax selected without a Stripe secret.'
+            : 'Manual tax rules are available from Settings.',
+      },
+      {
+        key: 'shipping-quote',
+        title: 'Shipping quote',
+        mode: shippingProvider,
+        ready: shippingProvider === 'manual' || Boolean(commerce?.shippingProviderUrl),
+        detail: shippingProvider === 'http'
+          ? commerce?.shippingProviderUrl ? 'HTTP shipping quote endpoint is configured.' : 'HTTP shipping provider selected without a URL.'
+          : 'Manual shipping rules are available from Settings.',
+      },
+      {
+        key: 'discount-quote',
+        title: 'Discount quote',
+        mode: discountProvider,
+        ready: discountProvider === 'manual' || Boolean(commerce?.discountProviderUrl),
+        detail: discountProvider === 'http'
+          ? commerce?.discountProviderUrl ? 'HTTP discount quote endpoint is configured.' : 'HTTP discount provider selected without a URL.'
+          : 'Manual discount rules are available from Settings.',
+      },
+      {
+        key: 'easypost-labels',
+        title: 'EasyPost labels/tracking',
+        mode: shippingLabelProvider,
+        ready: shippingLabelProvider !== 'easypost' || Boolean(runtime?.easyPostApiKeyConfigured),
+        detail: shippingLabelProvider === 'easypost'
+          ? runtime?.easyPostApiKeyConfigured
+            ? `EasyPost key is configured; API base ${runtime.easyPostApiBaseUrl || 'https://api.easypost.com/v2'}.`
+            : 'EasyPost labels are selected but BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY is missing.'
+          : 'Manual label handoff remains available.',
+      },
+      {
+        key: 'fulfillment-dispatch',
+        title: 'Fulfillment dispatch',
+        mode: fulfillmentProvider,
+        ready: fulfillmentProvider === 'manual' || Boolean(commerce?.fulfillmentProviderUrl),
+        detail: fulfillmentProvider === 'http'
+          ? commerce?.fulfillmentProviderUrl ? 'HTTP warehouse/3PL dispatch endpoint is configured.' : 'HTTP fulfillment provider selected without a URL.'
+          : 'Manual warehouse/3PL handoff remains available.',
+      },
+      {
+        key: 'webhook-settlement',
+        title: 'Webhook settlement',
+        mode: webhookRequired ? 'signed-webhook' : 'not-required',
+        ready: !webhookRequired || Boolean(runtime?.webhookSecretConfigured),
+        detail: webhookRequired
+          ? runtime?.webhookSecretConfigured
+            ? `Webhook signing secret resolves from ${runtime.webhookSecretSource || 'environment'}.`
+            : 'Provider webhooks are enabled but the referenced commerce webhook secret is not resolved.'
+          : 'Provider webhook signing is not required for the current payment mode.',
+      },
+      {
+        key: 'scheduled-reconciliation',
+        title: 'Scheduled reconciliation',
+        mode: reconciliationMode,
+        ready: reconciliationMode !== 'scheduled' || Boolean(cronReadiness?.ready),
+        detail: reconciliationMode === 'scheduled'
+          ? cronReadiness?.ready
+            ? 'Cron readiness confirms scheduled reconciliation can call the platform endpoint.'
+            : 'Scheduled reconciliation needs Vercel cron, CRON_SECRET, and an admin key match.'
+          : 'Manual or webhook reconciliation mode does not require cron readiness.',
+      },
+    ];
+  }, [commerceSettings, cronReadiness?.ready, runtimeCommerce]);
+  const providerReadinessReadyCount = providerReadinessChecks.filter((check) => check.ready).length;
   const orderHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -961,6 +1069,13 @@ function OrdersRoute() {
     },
     metrics,
     analytics: orderAnalytics,
+    providerReadiness: {
+      loaded: Boolean(commerceSettings || runtimeCommerce),
+      readyCount: providerReadinessReadyCount,
+      total: providerReadinessChecks.length,
+      runtimeCommerce,
+      checks: providerReadinessChecks,
+    },
     deliveryEvents: orderDeliveryEvents.map((event) => ({
       id: event.id,
       status: event.status,
@@ -1058,6 +1173,7 @@ function OrdersRoute() {
     activeSiteId,
     adminOrderDetailApiUrl,
     adminOrdersApiUrl,
+    commerceSettings,
     filter,
     filteredOrders.length,
     fulfillmentFilter,
@@ -1074,9 +1190,12 @@ function OrdersRoute() {
     ordersApiReady,
     ordersCollection,
     paymentFilter,
+    providerReadinessChecks,
+    providerReadinessReadyCount,
     publicBaseUrl,
     publicOrderIntakeUrl,
     publicOrdersApiUrl,
+    runtimeCommerce,
     searchQuery,
     sourceFilter,
     totalOrderCount,
@@ -1168,6 +1287,31 @@ function OrdersRoute() {
     }
   };
 
+  const loadProviderReadiness = async () => {
+    if (!canViewCommerce) {
+      setCommerceSettings(null);
+      setRuntimeCommerce(null);
+      setProviderReadinessError(null);
+      return null;
+    }
+
+    setIsProviderReadinessLoading(true);
+    try {
+      const settings = await getSettings();
+      setCommerceSettings(settings.integrations?.commerce || null);
+      setRuntimeCommerce(settings.runtimeCommerce || null);
+      setProviderReadinessError(null);
+      return settings;
+    } catch (loadError) {
+      setCommerceSettings(null);
+      setRuntimeCommerce(null);
+      setProviderReadinessError(loadError instanceof Error ? loadError.message : 'Unable to load commerce provider readiness');
+      return null;
+    } finally {
+      setIsProviderReadinessLoading(false);
+    }
+  };
+
   const loadOrders = async () => {
     if (isOrdersBusy) return;
     if (isPermissionMatrixPending) return;
@@ -1183,6 +1327,9 @@ function OrdersRoute() {
       setOrderDeliveryError(null);
       setCronReadiness(null);
       setCronReadinessError(null);
+      setCommerceSettings(null);
+      setRuntimeCommerce(null);
+      setProviderReadinessError(null);
       clearOrderEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
       return;
@@ -1208,6 +1355,9 @@ function OrdersRoute() {
         setOrderDeliveryError(null);
         setCronReadiness(null);
         setCronReadinessError(null);
+        setCommerceSettings(null);
+        setRuntimeCommerce(null);
+        setProviderReadinessError(null);
         clearOrderEditorState();
         return;
       }
@@ -1234,6 +1384,7 @@ function OrdersRoute() {
       void loadOrderAnalytics();
       void loadOrderDeliveryEvents();
       void loadCronReadiness();
+      void loadProviderReadiness();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load orders');
     } finally {
@@ -2344,6 +2495,9 @@ function OrdersRoute() {
     setOrderAnalyticsError(null);
     setOrderDeliveryEvents([]);
     setOrderDeliveryError(null);
+    setCommerceSettings(null);
+    setRuntimeCommerce(null);
+    setProviderReadinessError(null);
     navigate({ to: '/orders', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -2632,6 +2786,48 @@ function OrdersRoute() {
                   </div>
                 </div>
               )}
+              <div className="rounded-lg border border-border bg-background p-3 text-sm" data-testid="orders-provider-readiness">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 font-medium">
+                      {providerReadinessReadyCount === providerReadinessChecks.length ? (
+                        <CheckCircle2 className="size-4 text-success" />
+                      ) : (
+                        <AlertTriangle className="size-4 text-warning" />
+                      )}
+                      Provider execution readiness
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Reads non-secret commerce settings/runtime diagnostics so operators know whether quote, label, fulfillment, refund, webhook, and reconciliation actions will execute or fall back to manual handoff.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void loadProviderReadiness()}
+                    disabled={isProviderReadinessLoading || isPermissionMatrixPending || !canViewCommerce}
+                    title={!canViewCommerce ? viewPermissionTitle : undefined}
+                    iconStart={<RefreshCw className={cn('size-4', isProviderReadinessLoading && 'animate-spin')} />}
+                  >
+                    Refresh providers
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {providerReadinessChecks.map((check) => (
+                    <ProviderReadinessPill key={check.key} title={check.title} mode={check.mode} ready={check.ready} detail={check.detail} />
+                  ))}
+                </div>
+                {runtimeCommerce?.missing?.length ? (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Missing runtime commerce env: {runtimeCommerce.missing.join(', ')}.
+                  </div>
+                ) : null}
+                {providerReadinessError ? (
+                  <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {providerReadinessError}
+                  </div>
+                ) : null}
+              </div>
               <div className="rounded-lg border border-border bg-background p-3 text-sm" data-testid="orders-cron-readiness">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -4469,6 +4665,25 @@ function CronReadinessPill({ label, ready }: { label: string; ready: boolean }) 
       {label}
       <span>{ready ? 'Ready' : 'Missing'}</span>
     </span>
+  );
+}
+
+function ProviderReadinessPill({ title, mode, ready, detail }: { title: string; mode: string; ready: boolean; detail: string }) {
+  return (
+    <div className={cn(
+      'rounded-md border px-3 py-2 text-xs',
+      ready
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-amber-200 bg-amber-50 text-amber-900',
+    )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold">{title}</span>
+        <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px]">{ready ? 'Ready' : 'Needs env'}</span>
+      </div>
+      <div className="mt-1 font-mono text-[11px]">{mode}</div>
+      <div className="mt-1 leading-5 opacity-90">{detail}</div>
+    </div>
   );
 }
 
