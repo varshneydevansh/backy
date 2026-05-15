@@ -665,6 +665,13 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     serviceKeyAccepted.ok && serviceKeyAcceptedPayload?.data?.settings,
     `Issued service key should authenticate admin settings reads: ${serviceKeyAccepted.status} ${JSON.stringify(serviceKeyAcceptedPayload).slice(0, 500)}`,
   );
+  const afterServiceUse = await readSettings(ownerSession.session.token);
+  const usedGrant = (afterServiceUse.auth?.apiKeyServiceKeys || []).find((entry) => entry.id === issuedGrant.id);
+  assert(
+    usedGrant?.lastUsedAt &&
+      (usedGrant.permissionScope === 'non-owner-admin' || !usedGrant.permissionScope),
+    `Issued service key usage metadata was not persisted: ${JSON.stringify(usedGrant).slice(0, 1000)}`,
+  );
 
   await clickByTestId(client, `settings-admin-service-key-revoke-${issuedGrant.id}`);
   await waitForText(client, 'Admin API key revoked.');

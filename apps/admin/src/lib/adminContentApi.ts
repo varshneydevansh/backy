@@ -1163,6 +1163,7 @@ export interface ApiKeyServiceKeyEntry {
   label: string;
   keyPrefix?: string | null;
   keyFingerprint?: string | null;
+  permissionScope?: string | null;
   createdAt: string;
   createdBy?: string | null;
   requestId?: string | null;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
-import { getAdminSettings, listAdminUserPermissionOverrides } from '@/lib/backyStore';
+import { getAdminSettings, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 type AdminRole = AdminSession['user']['role'];
@@ -34,50 +34,120 @@ const uniqueKeys = (keys: string[]) => (
 );
 
 const getEnvironmentAdminKeys = () => uniqueKeys([
-    process.env.BACKY_ADMIN_API_KEY?.trim() || '',
-    process.env.BACKY_ADMIN_SECRET_KEY?.trim() || '',
+  process.env.BACKY_ADMIN_API_KEY?.trim() || '',
+  process.env.BACKY_ADMIN_SECRET_KEY?.trim() || '',
 ]);
 
 const keyHash = (value: string) => createHash('sha256').update(value).digest('hex');
 
-const isActiveServiceAdminKey = (auth: unknown, providedKey: string) => {
+type ConfiguredAdminKeyMatch = {
+  kind: 'primary' | 'service';
+  touchLastUsed?: () => Promise<void>;
+};
+
+type ServiceAdminKeyGrant = {
+  id?: unknown;
+  keyHash?: unknown;
+  revokedAt?: unknown;
+  status?: unknown;
+};
+
+const serviceKeyGrants = (auth: unknown) => {
   if (!auth || typeof auth !== 'object' || Array.isArray(auth)) {
-    return false;
+    return [];
   }
 
   const grants = (auth as { apiKeyServiceKeys?: unknown }).apiKeyServiceKeys;
   if (!Array.isArray(grants)) {
-    return false;
+    return [];
   }
 
-  const providedHash = keyHash(providedKey);
-  return grants.some((grant) => {
-    if (!grant || typeof grant !== 'object' || Array.isArray(grant)) {
-      return false;
-    }
-
-    const candidate = grant as {
-      keyHash?: unknown;
-      revokedAt?: unknown;
-      status?: unknown;
-    };
-    return candidate.keyHash === providedHash && !candidate.revokedAt && candidate.status !== 'revoked';
-  });
+  return grants;
 };
 
-const isConfiguredAdminKey = async (providedKey: string) => {
+const findActiveServiceAdminKey = (auth: unknown, providedKey: string) => {
+  const grants = serviceKeyGrants(auth);
+  const providedHash = keyHash(providedKey);
+  for (const grant of grants) {
+    if (!grant || typeof grant !== 'object' || Array.isArray(grant)) {
+      continue;
+    }
+
+    const candidate = grant as ServiceAdminKeyGrant;
+    if (
+      typeof candidate.id === 'string' &&
+      candidate.keyHash === providedHash &&
+      !candidate.revokedAt &&
+      candidate.status !== 'revoked'
+    ) {
+      return candidate.id;
+    }
+  }
+
+  return null;
+};
+
+const withTouchedServiceKey = (auth: unknown, serviceKeyId: string, lastUsedAt: string) => {
+  const grants = serviceKeyGrants(auth);
+  if (grants.length === 0) {
+    return null;
+  }
+
+  return {
+    ...(auth && typeof auth === 'object' && !Array.isArray(auth) ? auth : {}),
+    apiKeyServiceKeys: grants.map((grant) => (
+      grant && typeof grant === 'object' && !Array.isArray(grant) && (grant as ServiceAdminKeyGrant).id === serviceKeyId
+        ? { ...grant, lastUsedAt }
+        : grant
+    )),
+  };
+};
+
+const resolveConfiguredAdminKey = async (providedKey: string): Promise<ConfiguredAdminKeyMatch | null> => {
   if (!providedKey) {
-    return false;
+    return null;
   }
 
   if (shouldUseDemoStoreFallback()) {
     const settings = getAdminSettings();
-    return settings.apiKeys?.adminApiKey?.trim() === providedKey || isActiveServiceAdminKey(settings.auth, providedKey);
+    if (settings.apiKeys?.adminApiKey?.trim() === providedKey) {
+      return { kind: 'primary' };
+    }
+
+    const serviceKeyId = findActiveServiceAdminKey(settings.auth, providedKey);
+    return serviceKeyId
+      ? {
+          kind: 'service',
+          touchLastUsed: async () => {
+            const currentSettings = getAdminSettings();
+            const auth = withTouchedServiceKey(currentSettings.auth, serviceKeyId, new Date().toISOString());
+            if (auth) {
+              updateAdminSettings({ auth });
+            }
+          },
+        }
+      : null;
   }
 
   const repositories = await getRequiredDatabaseRepositories();
   const settings = await repositories.settings.get();
-  return settings.apiKeys?.secretKeyId?.trim() === providedKey || isActiveServiceAdminKey(settings.auth, providedKey);
+  if (settings.apiKeys?.secretKeyId?.trim() === providedKey) {
+    return { kind: 'primary' };
+  }
+
+  const serviceKeyId = findActiveServiceAdminKey(settings.auth, providedKey);
+  return serviceKeyId
+    ? {
+        kind: 'service',
+        touchLastUsed: async () => {
+          const currentSettings = await repositories.settings.get();
+          const auth = withTouchedServiceKey(currentSettings.auth, serviceKeyId, new Date().toISOString());
+          if (auth) {
+            await repositories.settings.update({ auth });
+          }
+        },
+      }
+    : null;
 };
 
 const hasRequiredRole = (role: AdminRole, allowedRoles: AdminRole[]) => allowedRoles.includes(role);
@@ -110,13 +180,20 @@ export async function requireAdminAccess(
   }
   const providedKey = getProvidedAdminKey(request);
   const environmentKeys = getEnvironmentAdminKeys();
-  const configuredKeyMatches = providedKey && !environmentKeys.includes(providedKey)
-    ? await isConfiguredAdminKey(providedKey)
-    : false;
+  const configuredKeyMatch = providedKey && !environmentKeys.includes(providedKey)
+    ? await resolveConfiguredAdminKey(providedKey)
+    : null;
 
-  if (providedKey && (environmentKeys.includes(providedKey) || configuredKeyMatches)) {
+  if (providedKey && (environmentKeys.includes(providedKey) || configuredKeyMatch)) {
     if (options.permission && isOwnerOnlyAdminPermission(options.permission)) {
       return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
+    }
+    if (configuredKeyMatch?.touchLastUsed) {
+      try {
+        await configuredKeyMatch.touchLastUsed();
+      } catch (error) {
+        console.error('Unable to update admin service key usage timestamp:', error);
+      }
     }
     return {
       type: 'api-key',

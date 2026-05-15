@@ -4909,6 +4909,14 @@ function SecuritySettings({
                     <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
                       {entry.keyPrefix || 'sk_srv_...'} / {entry.keyFingerprint || 'fingerprint unavailable'}
                     </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Scope {entry.permissionScope === 'non-owner-admin' || !entry.permissionScope
+                        ? 'non-owner admin APIs'
+                        : entry.permissionScope}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Last used {entry.lastUsedAt ? formatAuditTime(entry.lastUsedAt) : 'never'}
+                    </p>
                     {revoked ? (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Revoked {formatAuditTime(entry.revokedAt || '')} by {entry.revokedBy || 'system'}
