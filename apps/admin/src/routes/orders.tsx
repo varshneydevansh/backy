@@ -101,6 +101,8 @@ type OrderWorkflowStatus = 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refund
 type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 type FulfillmentStatus = 'unfulfilled' | 'processing' | 'fulfilled' | 'cancelled';
 type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
+type OrderRiskLevel = 'low' | 'medium' | 'high';
+type OrderRiskReviewStatus = 'cleared' | 'pending_review' | 'approved' | 'held';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
@@ -185,6 +187,10 @@ interface OrderFormState {
   trackingNumber: string;
   trackingUrl: string;
   fulfilledAt: string;
+  riskScore: string;
+  riskLevel: OrderRiskLevel;
+  riskReasons: string;
+  riskReviewStatus: OrderRiskReviewStatus;
   shippingAddress: string;
   billingAddress: string;
   refundAmount: string;
@@ -292,6 +298,10 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
   { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
@@ -329,6 +339,10 @@ const ORDER_EXPORT_COLUMNS = [
   'tracking_number',
   'tracking_url',
   'fulfilled_at',
+  'risk_score',
+  'risk_level',
+  'risk_reasons',
+  'risk_review_status',
   'shipping_address',
   'billing_address',
   'refund_amount',
@@ -369,6 +383,10 @@ const ORDER_IMPORT_COLUMNS = [
   'trackingnumber',
   'trackingurl',
   'fulfilledat',
+  'riskscore',
+  'risklevel',
+  'riskreasons',
+  'riskreviewstatus',
   'shippingaddress',
   'billingaddress',
   'refundamount',
@@ -396,6 +414,11 @@ const ORDER_BACKEND_SYSTEMS = [
     key: 'customer',
     title: 'Customer support',
     detail: 'Customer name, email, phone, customer ID, billing/shipping addresses, and private order notes.',
+  },
+  {
+    key: 'risk',
+    title: 'Fraud risk review',
+    detail: 'Checkout intake scores private orders, stores review reasons, and lets operators clear or hold risky orders.',
   },
   {
     key: 'security',
@@ -434,6 +457,10 @@ const EMPTY_ORDER_FORM: OrderFormState = {
   trackingNumber: '',
   trackingUrl: '',
   fulfilledAt: '',
+  riskScore: '0',
+  riskLevel: 'low',
+  riskReasons: '',
+  riskReviewStatus: 'cleared',
   shippingAddress: '',
   billingAddress: '',
   refundAmount: '',
@@ -658,6 +685,7 @@ function OrdersRoute() {
     ));
     const hasCustomerData = orders.some((order) => Boolean(readOrderValue(order.values, 'customername', '') && order.values.email));
     const hasPaymentData = orders.some((order) => Boolean(readOrderValue(order.values, 'paymentreference', '') || readOrderValue(order.values, 'paymentprovider', '')));
+    const hasRiskSignals = orders.some((order) => Boolean(readOrderValue(order.values, 'risklevel', '') || readOrderValue(order.values, 'riskreviewstatus', '') || Number(readOrderValue(order.values, 'riskscore', 0)) > 0));
     const hasStructuredItems = orders.some((order) => parseOrderLineItems(order.values.items, String(order.values.currency || 'USD')).length > 0);
     const checks = [
       {
@@ -668,7 +696,7 @@ function OrdersRoute() {
       {
         label: 'Private fields',
         detail: missingOrderFields.length === 0
-          ? 'Payment, fulfillment, tracking, refund, address, and notes fields are present.'
+          ? 'Payment, fulfillment, risk, tracking, refund, address, and notes fields are present.'
           : `${missingOrderFields.length} field${missingOrderFields.length === 1 ? '' : 's'} need sync.`,
         ready: hasSchema && missingOrderFields.length === 0,
       },
@@ -707,6 +735,11 @@ function OrdersRoute() {
         detail: hasPaymentData ? 'Payment provider references are connected.' : 'Attach payment provider/reference data for reconciliation.',
         ready: hasPaymentData || !hasOrders,
       },
+      {
+        label: 'Risk controls',
+        detail: hasRiskSignals ? 'Fraud/risk scoring fields are active on private orders.' : 'Checkout risk fields will populate on new order intake.',
+        ready: hasRiskSignals || !hasOrders,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -716,6 +749,7 @@ function OrdersRoute() {
       workflow: [
         { label: 'Capture', detail: 'Create the private order record from checkout, manual entry, or a server-side integration.' },
         { label: 'Verify', detail: 'Track customer, line items, payment status, provider reference, and paid timestamp.' },
+        { label: 'Assess', detail: 'Review checkout risk score, reasons, and fraud-review state before fulfillment.' },
         { label: 'Fulfill', detail: 'Move orders through processing, carrier, tracking, fulfilled date, or digital delivery notes.' },
         { label: 'Resolve', detail: 'Record manual cancellations, refund notes, internal notes, and private reporting without exposing order data publicly.' },
       ],
@@ -861,6 +895,12 @@ function OrdersRoute() {
       trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
       trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
       fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+      risk: {
+        score: toNumber(readOrderValue(order.values, 'riskscore', 0)),
+        level: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
+        reasons: String(readOrderValue(order.values, 'riskreasons', '')),
+        reviewStatus: asOrderRiskReviewStatus(readOrderValue(order.values, 'riskreviewstatus', undefined)),
+      },
       refundAmount: readOrderValue(order.values, 'refundamount', null) === null || readOrderValue(order.values, 'refundamount', undefined) === undefined
         ? null
         : toNumber(readOrderValue(order.values, 'refundamount', 0)),
@@ -1402,6 +1442,10 @@ function OrdersRoute() {
         trackingnumber: formState.trackingNumber.trim(),
         trackingurl: formState.trackingUrl.trim(),
         fulfilledat: formState.fulfilledAt || null,
+        riskscore: formState.riskScore ? Number(formState.riskScore) : 0,
+        risklevel: formState.riskLevel,
+        riskreasons: formState.riskReasons.trim(),
+        riskreviewstatus: formState.riskReviewStatus,
         shippingaddress: formState.shippingAddress.trim(),
         billingaddress: formState.billingAddress.trim(),
         refundamount: formState.refundAmount ? Number(formState.refundAmount) : null,
@@ -3083,6 +3127,60 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-risk-controls">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Fraud risk controls</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Checkout intake populates risk score, level, reasons, and review state for private order review.
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-[120px_1fr_1fr]">
+                    <Field label="Risk score">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={formState.riskScore}
+                        onChange={(event) => setFormState((current) => ({ ...current, riskScore: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                    <Field label="Risk level">
+                      <select
+                        aria-label="Risk level"
+                        value={formState.riskLevel}
+                        onChange={(event) => setFormState((current) => ({ ...current, riskLevel: event.target.value as OrderRiskLevel }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </Field>
+                    <Field label="Review status">
+                      <select
+                        aria-label="Risk review status"
+                        value={formState.riskReviewStatus}
+                        onChange={(event) => setFormState((current) => ({ ...current, riskReviewStatus: event.target.value as OrderRiskReviewStatus }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      >
+                        <option value="cleared">Cleared</option>
+                        <option value="pending_review">Pending review</option>
+                        <option value="approved">Approved</option>
+                        <option value="held">Held</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Risk reasons">
+                    <textarea
+                      value={formState.riskReasons}
+                      onChange={(event) => setFormState((current) => ({ ...current, riskReasons: event.target.value }))}
+                      rows={3}
+                      className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Risk rules or reviewer notes"
+                    />
+                  </Field>
+                </div>
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -3412,6 +3510,10 @@ function OrderCard({
   const paidAt = String(readOrderValue(values, 'paidat', ''));
   const fulfilledAt = String(readOrderValue(values, 'fulfilledat', ''));
   const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
+  const riskScore = toNumber(readOrderValue(values, 'riskscore', 0));
+  const riskLevel = String(readOrderValue(values, 'risklevel', riskScore >= 60 ? 'high' : riskScore >= 25 ? 'medium' : 'low'));
+  const riskReviewStatus = String(readOrderValue(values, 'riskreviewstatus', riskLevel === 'low' ? 'cleared' : 'pending_review'));
+  const riskReasons = String(readOrderValue(values, 'riskreasons', '')).trim();
   const lineItems = parseOrderLineItems(values.items, currency);
   const lineItemSummary = formatOrderItemSummary(values.items, currency);
   const lineItemQuantity = lineItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -3465,6 +3567,17 @@ function OrderCard({
                   Refund {formatMoney(refundAmount, currency)}
                 </span>
               ) : null}
+              <span className={cn(
+                'rounded-md border px-2 py-1 text-[11px] font-medium capitalize',
+                riskLevel === 'high'
+                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                  : riskLevel === 'medium'
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+              )}
+              >
+                Risk {riskLevel} · {riskScore}
+              </span>
               {lineItems.length > 0 ? (
                 <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
                   {lineItems.length} item{lineItems.length === 1 ? '' : 's'} · {lineItemQuantity} unit{lineItemQuantity === 1 ? '' : 's'}
@@ -3478,11 +3591,17 @@ function OrderCard({
           <div className="text-xs text-muted-foreground">{order.updatedAt ? formatDate(order.updatedAt) : 'Now'}</div>
         </div>
       </div>
-      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
         <StatePill label="Order" value={orderStatus} />
         <StatePill label="Payment" value={paymentStatus} />
         <StatePill label="Fulfillment" value={fulfillmentStatus} />
+        <StatePill label="Risk review" value={riskReviewStatus.replace(/_/g, ' ')} />
       </div>
+      {riskReasons ? (
+        <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          {riskReasons}
+        </div>
+      ) : null}
       {lineItemSummary ? (
         <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
           {lineItemSummary}
@@ -3620,6 +3739,18 @@ const asFulfillmentStatus = (value: unknown): FulfillmentStatus => (
   ['unfulfilled', 'processing', 'fulfilled', 'cancelled'].includes(String(value))
     ? String(value) as FulfillmentStatus
     : 'unfulfilled'
+);
+
+const asOrderRiskLevel = (value: unknown): OrderRiskLevel => (
+  ['low', 'medium', 'high'].includes(String(value))
+    ? String(value) as OrderRiskLevel
+    : 'low'
+);
+
+const asOrderRiskReviewStatus = (value: unknown): OrderRiskReviewStatus => (
+  ['cleared', 'pending_review', 'approved', 'held'].includes(String(value))
+    ? String(value) as OrderRiskReviewStatus
+    : 'cleared'
 );
 
 const asOrderSource = (value: unknown): OrderSource => (
@@ -3811,6 +3942,10 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
   trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
   trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
   fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+  riskScore: String(readOrderValue(order.values, 'riskscore', 0) ?? 0),
+  riskLevel: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
+  riskReasons: String(readOrderValue(order.values, 'riskreasons', '')),
+  riskReviewStatus: asOrderRiskReviewStatus(readOrderValue(order.values, 'riskreviewstatus', undefined)),
   shippingAddress: String(readOrderValue(order.values, 'shippingaddress', '')),
   billingAddress: String(readOrderValue(order.values, 'billingaddress', '')),
   refundAmount: readOrderValue(order.values, 'refundamount', null) === null || readOrderValue(order.values, 'refundamount', undefined) === undefined
@@ -3988,6 +4123,10 @@ const orderToExportRecord = (
   tracking_number: String(readOrderValue(order.values, 'trackingnumber', '')),
   tracking_url: String(readOrderValue(order.values, 'trackingurl', '')),
   fulfilled_at: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+  risk_score: optionalNumber(readOrderValue(order.values, 'riskscore', 0)),
+  risk_level: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
+  risk_reasons: String(readOrderValue(order.values, 'riskreasons', '')),
+  risk_review_status: asOrderRiskReviewStatus(readOrderValue(order.values, 'riskreviewstatus', undefined)),
   shipping_address: String(readOrderValue(order.values, 'shippingaddress', '')),
   billing_address: String(readOrderValue(order.values, 'billingaddress', '')),
   refund_amount: optionalNumber(readOrderValue(order.values, 'refundamount', null)),

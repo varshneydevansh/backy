@@ -17,7 +17,7 @@ const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const PRODUCT_REQUIRED_FIELD_COUNT = 30;
-const ORDER_REQUIRED_FIELD_COUNT = 29;
+const ORDER_REQUIRED_FIELD_COUNT = 33;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
@@ -122,6 +122,10 @@ const ORDER_SCHEMA_FIELDS = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
   { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
@@ -1309,6 +1313,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(order.total === 106.86, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
   assert(quote.pricing?.rules?.taxRatePercent === 10, `Quote pricing rules were not exposed: ${JSON.stringify(quote)}`);
   assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
+  assert(orderPayload.data?.risk?.level === 'medium' && orderPayload.data?.risk?.reviewStatus === 'pending_review', `Order risk assessment was not returned: ${JSON.stringify(orderPayload.data?.risk)}`);
 
   const updatedProduct = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(updatedProduct.values?.inventory === 4, `Inventory reservation did not reduce stock to 4 after default and explicit checkout quantities: ${updatedProduct.values?.inventory}`);
@@ -1324,6 +1329,10 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.taxamount === 8.62, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.riskscore === 25, `Order risk score was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.risklevel === 'medium', `Order risk level was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.riskreviewstatus === 'pending_review', `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(String(orderRecord.values?.riskreasons || '').includes('Manual payment capture'), `Order risk reasons were not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const orderEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
   const orderEvents = orderEventsPayload.data?.events || orderEventsPayload.events || [];

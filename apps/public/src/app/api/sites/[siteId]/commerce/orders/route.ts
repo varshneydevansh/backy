@@ -86,6 +86,7 @@ const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_CONTRACT_VERSION = 'backy.commerce-orders.v1';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_CHECKOUT_ITEM_QUANTITY = 999;
+type OrderRiskLevel = 'low' | 'medium' | 'high';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -458,6 +459,73 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
 };
 
 type CheckoutLineItem = ReturnType<typeof lineItemFromProduct>;
+
+const assessCheckoutRisk = ({
+  input,
+  quote,
+  lineItems,
+  checkoutSession,
+}: {
+  input: CheckoutOrderInput;
+  quote: ReturnType<typeof calculateCheckoutQuote>;
+  lineItems: CheckoutLineItem[];
+  checkoutSession: CheckoutSessionHandoff;
+}) => {
+  let score = 0;
+  const reasons: string[] = [];
+  const totalQuantity = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+  const emailDomain = input.customer?.email?.split('@')[1] || '';
+
+  if (quote.total >= 500) {
+    score += 40;
+    reasons.push('High order value over 500.');
+  } else if (quote.total >= 200) {
+    score += 20;
+    reasons.push('Elevated order value over 200.');
+  }
+
+  if (totalQuantity >= 10) {
+    score += 25;
+    reasons.push('High unit quantity in checkout cart.');
+  } else if (lineItems.some((item) => item.quantity >= 4)) {
+    score += 10;
+    reasons.push('Multiple units of the same product.');
+  }
+
+  if (checkoutSession.provider === 'manual' && quote.total >= 100) {
+    score += 25;
+    reasons.push('Manual payment capture on a larger order.');
+  }
+
+  if (input.shippingAddress && input.billingAddress && input.shippingAddress.toLowerCase() !== input.billingAddress.toLowerCase()) {
+    score += 15;
+    reasons.push('Shipping and billing addresses differ.');
+  }
+
+  if (!input.customer?.phone) {
+    score += 10;
+    reasons.push('Customer phone is missing.');
+  }
+
+  if (['mailinator.com', 'tempmail.com', '10minutemail.com'].includes(emailDomain)) {
+    score += 25;
+    reasons.push('Disposable email domain detected.');
+  }
+
+  if (quote.subtotal > 0 && quote.discountAmount / quote.subtotal >= 0.3) {
+    score += 10;
+    reasons.push('Large discount used at checkout.');
+  }
+
+  const boundedScore = Math.min(100, score);
+  const level: OrderRiskLevel = boundedScore >= 60 ? 'high' : boundedScore >= 25 ? 'medium' : 'low';
+  return {
+    score: boundedScore,
+    level,
+    reasons,
+    reviewStatus: level === 'low' ? 'cleared' : 'pending_review',
+  };
+};
 type InventoryReservation = {
   record: CommerceSourceRecord;
   originalValues: Record<string, unknown>;
@@ -1333,6 +1401,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         createdAt: orderCreatedAt,
       });
+      const risk = assessCheckoutRisk({ input, quote, lineItems, checkoutSession });
       let customerProfile = await upsertRepositoryCheckoutCustomer({
         siteId: site.id,
         repositories,
@@ -1362,6 +1431,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         paymentprovider: checkoutSession.provider,
         paymentreference: checkoutSession.reference,
         fulfillmentstatus: 'unfulfilled',
+        riskscore: risk.score,
+        risklevel: risk.level,
+        riskreasons: risk.reasons.join('\n'),
+        riskreviewstatus: risk.reviewStatus,
         shippingaddress: input.shippingAddress || '',
         billingaddress: input.billingAddress || '',
         notes: input.notes || '',
@@ -1445,6 +1518,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           checkoutSession,
           quote,
           lineItems,
+          risk,
           deliveries,
         },
       }, {
@@ -1556,6 +1630,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
       createdAt: orderCreatedAt,
     });
+    const risk = assessCheckoutRisk({ input, quote, lineItems, checkoutSession });
     let customerProfile = upsertDemoCheckoutCustomer({
       siteId: site.id,
       input,
@@ -1595,6 +1670,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           paymentprovider: checkoutSession.provider,
           paymentreference: checkoutSession.reference,
           fulfillmentstatus: 'unfulfilled',
+          riskscore: risk.score,
+          risklevel: risk.level,
+          riskreasons: risk.reasons.join('\n'),
+          riskreviewstatus: risk.reviewStatus,
           shippingaddress: input.shippingAddress || '',
           billingaddress: input.billingAddress || '',
           notes: input.notes || '',
@@ -1667,6 +1746,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         checkoutSession,
         quote,
         lineItems,
+        risk,
         deliveries,
       },
     }, {

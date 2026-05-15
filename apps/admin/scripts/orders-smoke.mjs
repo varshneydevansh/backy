@@ -17,7 +17,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-const ORDER_REQUIRED_FIELD_COUNT = 29;
+const ORDER_REQUIRED_FIELD_COUNT = 33;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -45,6 +45,10 @@ const ORDER_FIELDS = [
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
+  { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 172, defaultValue: 0 },
+  { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 174, options: ['low', 'medium', 'high'], defaultValue: 'low' },
+  { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 176 },
+  { key: 'riskreviewstatus', label: 'Risk Review Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['cleared', 'pending_review', 'approved', 'held'], defaultValue: 'cleared' },
   { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
   { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
   { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
@@ -787,6 +791,7 @@ const assertOrdersLayout = async (client) => {
       notificationDelivery: Boolean(document.querySelector('[data-testid="orders-notification-delivery"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
+      riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
       privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
@@ -803,7 +808,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.riskControls && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -857,6 +862,10 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'trackingnumber',
     'trackingurl',
     'fulfilledat',
+    'riskscore',
+    'risklevel',
+    'riskreasons',
+    'riskreviewstatus',
     'shippingaddress',
     'billingaddress',
     'refundamount',
@@ -890,6 +899,10 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     `1ZIMPORT${suffix.toUpperCase()}`,
     `https://carrier.example/import/${suffix}`,
     '',
+    '12',
+    'low',
+    'CSV import baseline risk.',
+    'cleared',
     'Imported shipping address',
     'Imported billing address',
     '0',
@@ -916,6 +929,7 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(record.values?.ordersource === 'import', `Imported source was unexpected: ${JSON.stringify(record.values?.ordersource)}`);
   assert(record.values?.paymentstatus === 'paid', `Imported payment status was unexpected: ${JSON.stringify(record.values?.paymentstatus)}`);
   assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
+  assert(record.values?.riskscore === 12 && record.values?.risklevel === 'low' && record.values?.riskreviewstatus === 'cleared', `Imported risk fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
 
   return record;
@@ -1351,7 +1365,10 @@ const main = async () => {
         values.ordernumber === orderNumber &&
         values.paymentstatus === 'pending' &&
         values.fulfillmentstatus === 'unfulfilled' &&
-        values.customerid === customerFixture.record.id
+        values.customerid === customerFixture.record.id &&
+        Number(values.riskscore) === 0 &&
+        values.risklevel === 'low' &&
+        values.riskreviewstatus === 'cleared'
       ),
       'Created order did not persist expected initial values',
     );
