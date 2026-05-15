@@ -235,6 +235,7 @@ export async function POST(request: NextRequest) {
 
     const createdUsers = [];
     const updatedUsers = [];
+    const beforeUpdatedUsers = [];
     const errors = [...parsed.errors];
     const authPolicySettings = await getAdminAuthPolicySettings();
     let skipped = 0;
@@ -288,6 +289,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        beforeUpdatedUsers.push(existing);
         const updated = repositories
           ? (await repositories.users.update(existing.id, {
               fullName: row.fullName,
@@ -372,6 +374,11 @@ export async function POST(request: NextRequest) {
           updated: updatedUsers.length,
           skipped,
           errors: errors.length,
+          createdUsers,
+          updatedUsers,
+        },
+        before: {
+          updatedUsers: beforeUpdatedUsers,
         },
         metadata: {
           mode,
@@ -379,6 +386,9 @@ export async function POST(request: NextRequest) {
           updated: updatedUsers.length,
           skipped,
           errors: errors.length,
+          rollbackAvailable: changedUsers.length > 0,
+          createdUserIds: createdUsers.map((user) => user.id),
+          updatedUserIds: updatedUsers.map((user) => user.id),
           userIds: changedUsers.map((user) => user.id),
           emails: changedUsers.map((user) => user.email),
           requestedById: access.session?.user.id || null,
@@ -399,6 +409,8 @@ export async function POST(request: NextRequest) {
           updated: updatedUsers.length,
           skipped,
           errors,
+          rollbackAvailable: !dryRun && changedUsers.length > 0,
+          rollbackRequestId: !dryRun && changedUsers.length > 0 ? requestId : null,
         },
       },
     });

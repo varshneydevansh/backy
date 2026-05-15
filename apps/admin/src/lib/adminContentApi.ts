@@ -533,6 +533,17 @@ interface ApiImportUsersResponse {
   };
 }
 
+interface ApiUserImportRollbackResponse {
+  success: boolean;
+  data?: {
+    rollback: UserImportRollbackResult;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export type AdminPermissionCapability =
   | 'view'
   | 'create'
@@ -1575,6 +1586,22 @@ export interface UserImportResult {
   updated: number;
   skipped: number;
   errors: UserImportError[];
+  rollbackAvailable?: boolean;
+  rollbackRequestId?: string | null;
+}
+
+export interface UserImportRollbackResult {
+  importRequestId?: string | null;
+  importAction?: string;
+  deleted: number;
+  restored: number;
+  skipped: Array<{
+    userId: string;
+    email: string;
+    reason: string;
+  }>;
+  deletedUserIds: string[];
+  restoredUserIds: string[];
 }
 
 export interface SiteSettingsInput {
@@ -3884,6 +3911,23 @@ export async function importUsersCsv(
   }
 
   return payload.data.import;
+}
+
+export async function rollbackUsersImport(requestId?: string | null): Promise<UserImportRollbackResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/import/rollback`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(requestId ? { requestId } : {}),
+  });
+  const payload = await readJson<ApiUserImportRollbackResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.rollback) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to roll back users import', payload.error?.details);
+  }
+
+  return payload.data.rollback;
 }
 
 export async function getSettings(): Promise<SiteSettingsInput> {

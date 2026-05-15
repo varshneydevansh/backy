@@ -48,6 +48,7 @@ import {
   importUsersCsv,
   listAdminAuditLogs,
   listUsers,
+  rollbackUsersImport,
   updateUser as updateBackendUser,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
@@ -315,6 +316,7 @@ function UsersListView() {
   const [importMode, setImportMode] = useState<'create' | 'upsert'>('create');
   const [isImportingUsers, setIsImportingUsers] = useState(false);
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
+  const [isRollingBackImport, setIsRollingBackImport] = useState(false);
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
@@ -333,7 +335,7 @@ function UsersListView() {
   const managePermissionTitle = canManageUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.delete', USER_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', USER_PERMISSION_ROLE_DEFAULTS);
-  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport;
+  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport || isRollingBackImport;
   const isUsersBusy = isLoading || isUserMutationBusy || isPermissionMatrixPending;
   const routeNotice = routeSearch.notice || '';
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
@@ -830,6 +832,32 @@ function UsersListView() {
       if (importInputRef.current) {
         importInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleRollbackImport = async () => {
+    if (isUsersBusy || !importResult?.rollbackAvailable) return;
+    if (!canManageUsers || !canDeleteUsers) {
+      setNotice(!canManageUsers
+        ? managePermissionTitle || 'Rolling back imports requires user management access.'
+        : deletePermissionTitle || 'Rolling back imports requires user delete access.');
+      return;
+    }
+    const confirmed = window.confirm('Roll back the last user import batch? Created users from that batch will be deleted and updated users will be restored.');
+    if (!confirmed) return;
+
+    setIsRollingBackImport(true);
+    setNotice(null);
+    try {
+      const rollback = await rollbackUsersImport(importResult.rollbackRequestId);
+      await loadUsers();
+      await loadUserAuditLogs();
+      setNotice(`Rolled back import: ${rollback.deleted} created user${rollback.deleted === 1 ? '' : 's'} deleted, ${rollback.restored} update${rollback.restored === 1 ? '' : 's'} restored, ${rollback.skipped.length} skipped.`);
+      setImportResult(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to roll back users import.');
+    } finally {
+      setIsRollingBackImport(false);
     }
   };
 
@@ -1691,6 +1719,18 @@ function UsersListView() {
                   >
                     {importResult.errors.length} row issue{importResult.errors.length === 1 ? '' : 's'}
                   </span>
+                  {importResult.rollbackAvailable && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleRollbackImport()}
+                      disabled={isUsersBusy || !canManageUsers || !canDeleteUsers}
+                      title={!canManageUsers ? managePermissionTitle : !canDeleteUsers ? deletePermissionTitle : undefined}
+                      data-testid="users-import-rollback-button"
+                    >
+                      {isRollingBackImport ? 'Rolling back...' : 'Roll back import'}
+                    </Button>
+                  )}
                 </div>
                 {importResult.errors.length > 0 && (
                   <ul className="mt-3 grid gap-1 text-xs text-muted-foreground">

@@ -1212,6 +1212,47 @@ const importUsersThroughUi = async (client, csvPath, expectedName, options = {})
   return null;
 };
 
+const rollbackLatestUsersImport = async (client, email, restoredName) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="users-import-rollback-button"]');
+      return {
+        ready: button instanceof HTMLButtonElement && button.disabled === false,
+        hasButton: Boolean(button),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+    if (state.ready) break;
+    if (attempt === 119) throw new Error(`Users import rollback button did not become ready: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+  const clickResult = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="users-import-rollback-button"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'button-missing' };
+    window.confirm = () => true;
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickResult.ok, `Unable to click users import rollback: ${JSON.stringify(clickResult)}`);
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        ready: body.includes('Rolled back import') &&
+          body.includes('1 update restored') &&
+          body.includes(${JSON.stringify(restoredName)}) &&
+          body.includes(${JSON.stringify(email)}),
+        body: body.slice(0, 1200),
+      };
+    })()`);
+    if (state.ready) return state;
+    if (attempt === 119) throw new Error(`Users import rollback result did not become ready: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+  return null;
+};
+
 const assertLayout = async (client, expectedName) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -1415,6 +1456,13 @@ const main = async () => {
     assert(
       upsertAuditLogs.some((log) => log.action === 'user.import.upsert' && log.metadata?.updated === 1 && log.metadata?.mode === 'upsert'),
       `User import upsert audit log was not recorded: ${JSON.stringify(upsertAuditLogs).slice(0, 500)}`,
+    );
+    await rollbackLatestUsersImport(client, importedEmail, importedFullName);
+    await waitForUser(importedEmail, (user) => user.fullName === importedFullName && user.role === 'editor' && user.status === 'invited');
+    const rollbackAuditLogs = await listUserAuditLogs('import');
+    assert(
+      rollbackAuditLogs.some((log) => log.action === 'user.import.rollback' && log.metadata?.restoredUserIds?.includes(importedUserId)),
+      `User import rollback audit log was not recorded: ${JSON.stringify(rollbackAuditLogs).slice(0, 500)}`,
     );
     await waitForUsersSelfProtection(client);
     await openUserDetail(client, 'Admin User');
