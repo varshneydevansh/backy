@@ -15,6 +15,22 @@ const STALE_ADMIN_API_KEY = 'sk_live_stale_settings_smoke_admin_key';
 let apiAdminSessionToken = '';
 
 const commerceWebhookSecretReference = (suffix) => `env:STRIPE_WEBHOOK_SECRET_${suffix.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+const shippingOriginAddressForSuffix = (suffix) => JSON.stringify({
+  name: `Backy Warehouse ${suffix}`,
+  street1: '100 Fulfillment Way',
+  city: 'Austin',
+  state: 'TX',
+  zip: '78701',
+  country: 'US',
+  phone: '555-0100',
+});
+const shippingParcelForSuffix = (suffix) => JSON.stringify({
+  length: 8,
+  width: 6,
+  height: 2,
+  weight: 12,
+  predefined_package: `parcel-${suffix}`,
+});
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1072,6 +1088,12 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Shipping base', '11.5');
   await setLabeledControl(client, 'Shipping weight rate', '1.75');
   await setLabeledControl(client, 'Discount percent', '12.5');
+  await setLabeledControl(client, 'Label provider', 'easypost');
+  await setLabeledControl(client, 'Default carrier', 'UPS');
+  await setLabeledControl(client, 'Default service', 'Ground');
+  await setLabeledControl(client, 'Origin address JSON', shippingOriginAddressForSuffix(suffix));
+  await setLabeledControl(client, 'Rate ID', `rate_${suffix}`);
+  await setLabeledControl(client, 'Default parcel JSON', shippingParcelForSuffix(suffix));
   await setLabeledControl(client, 'Billing plan', 'pro');
   await setLabeledControl(client, 'Monthly order limit', '5000');
   await setLabeledControl(client, 'Product limit', '750');
@@ -1085,9 +1107,16 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasStorefrontHandoff: document.body?.innerText?.includes('Storefront API handoff') || false,
     hasCheckoutProvider: document.body?.innerText?.includes('Checkout provider') || false,
     hasSettlement: document.body?.innerText?.includes('Settlement') || false,
+    hasShippingLabelExecution: document.body?.innerText?.includes('Shipping label execution') || false,
   }))()`);
   assert(commerceState.search.includes('tab=commerce'), `Commerce tab search state was not persisted: ${JSON.stringify(commerceState)}`);
-  assert(commerceState.hasStorefrontHandoff && commerceState.hasCheckoutProvider && commerceState.hasSettlement, `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`);
+  assert(
+    commerceState.hasStorefrontHandoff &&
+      commerceState.hasCheckoutProvider &&
+      commerceState.hasSettlement &&
+      commerceState.hasShippingLabelExecution,
+    `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`,
+  );
 
   await openSettingsTab(client, 'Notifications', 'tab=notifications');
   await setLabeledControl(client, 'Comment moderation events', false);
@@ -1218,6 +1247,12 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.shippingBaseAmount === 11.5, 'Commerce shipping base was not persisted');
   assert(settings.integrations?.commerce?.shippingWeightRate === 1.75, 'Commerce shipping weight rate was not persisted');
   assert(settings.integrations?.commerce?.discountPercent === 12.5, 'Commerce discount percent was not persisted');
+  assert(settings.integrations?.commerce?.shippingLabelProvider === 'easypost', 'Commerce shipping label provider was not persisted');
+  assert(settings.integrations?.commerce?.shippingDefaultCarrier === 'UPS', 'Commerce shipping default carrier was not persisted');
+  assert(settings.integrations?.commerce?.shippingDefaultServiceLevel === 'Ground', 'Commerce shipping default service was not persisted');
+  assert(settings.integrations?.commerce?.shippingOriginAddress === shippingOriginAddressForSuffix(suffix), 'Commerce shipping origin address was not persisted');
+  assert(settings.integrations?.commerce?.shippingDefaultRateId === `rate_${suffix}`, 'Commerce shipping default rate ID was not persisted');
+  assert(settings.integrations?.commerce?.shippingDefaultParcel === shippingParcelForSuffix(suffix), 'Commerce shipping default parcel was not persisted');
   assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
   assert(settings.integrations?.commerce?.billingPlan === 'pro', 'Commerce billing plan was not persisted');
   assert(settings.integrations?.commerce?.monthlyOrderLimit === 5000, 'Commerce monthly order limit was not persisted');
