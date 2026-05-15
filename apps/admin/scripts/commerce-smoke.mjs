@@ -1551,34 +1551,54 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
 };
 
 const assertProductsLayout = async (client) => {
-  const layout = await evaluate(client, `(() => ({
-    width: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
-    hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
-    hasCommerceAnalytics: Boolean(document.querySelector('[data-testid="products-commerce-analytics"]')) &&
-      document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
-      document.body?.innerText?.includes('Paid revenue') &&
-      document.body?.innerText?.includes('Customer profiles'),
-    hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="products-customer-profile-manager"]')) &&
-      document.body?.innerText?.includes('Manage profile') &&
-      document.body?.innerText?.includes('Save profile'),
-    hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
-      document.body?.innerText?.includes('Subscription metadata') &&
-      document.body?.innerText?.includes('Trial days'),
-    hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
-      document.body?.innerText?.includes('Page and editor binding contract') &&
-      document.body?.innerText?.includes('Product card blocks') &&
-      document.body?.innerText?.includes('Cart and order intake'),
-    hasProductPageTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')) &&
-      Boolean(document.querySelector('[data-testid="products-page-template-list"]')) &&
-      Boolean(document.querySelector('[data-testid="products-page-template-item"]')) &&
-      document.body?.innerText?.includes('Product page templates'),
-    hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
-    hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
-  }))()`);
+  await clickByText(client, 'Refresh', { exact: true }).catch(() => null);
+  await waitUntilIdle(client, '/products refresh before layout assertion');
+
+  let layout = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    layout = await evaluate(client, `(() => {
+      const productPerformance = document.querySelector('[data-testid="products-product-performance"]');
+      const productPerformanceText = productPerformance?.textContent || '';
+      return {
+        width: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
+        hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
+        hasCommerceAnalytics: Boolean(document.querySelector('[data-testid="products-commerce-analytics"]')) &&
+          document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
+          document.body?.innerText?.includes('Paid revenue') &&
+          document.body?.innerText?.includes('Customer profiles'),
+        hasProductPerformance: Boolean(productPerformance) &&
+          productPerformanceText.includes('Product performance') &&
+          productPerformanceText.includes('ranked') &&
+          /\\b[1-9][0-9]*\\s+unit/.test(productPerformanceText),
+        productPerformanceText,
+        hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="products-customer-profile-manager"]')) &&
+          document.body?.innerText?.includes('Manage profile') &&
+          document.body?.innerText?.includes('Save profile'),
+        hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
+          document.body?.innerText?.includes('Subscription metadata') &&
+          document.body?.innerText?.includes('Trial days'),
+        hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
+          document.body?.innerText?.includes('Page and editor binding contract') &&
+          document.body?.innerText?.includes('Product card blocks') &&
+          document.body?.innerText?.includes('Cart and order intake'),
+        hasProductPageTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')) &&
+          Boolean(document.querySelector('[data-testid="products-page-template-list"]')) &&
+          Boolean(document.querySelector('[data-testid="products-page-template-item"]')) &&
+          document.body?.innerText?.includes('Product page templates'),
+        hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
+        hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+      };
+    })()`);
+    if (layout.hasProductPerformance) {
+      break;
+    }
+    await sleep(250);
+  }
+
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasProductPerformance && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

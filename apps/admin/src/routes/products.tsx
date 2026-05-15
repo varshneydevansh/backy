@@ -256,6 +256,17 @@ interface CustomerProfileDraft {
   notes: string;
 }
 
+interface CommerceLineItem {
+  id: string;
+  productId: string;
+  slug: string;
+  title: string;
+  sku: string;
+  quantity: number;
+  lineTotal: number;
+  currency: string;
+}
+
 interface FrontendProductTemplateBlueprint {
   title: string;
   slug: string;
@@ -910,6 +921,19 @@ function ProductsRoute() {
     categories: new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean)).size,
   }), [products, totalProductCount]);
   const commerceAnalytics = useMemo(() => {
+    const productLookup = new Map<string, CollectionRecord>();
+    products.forEach((product) => {
+      [
+        product.id,
+        product.slug,
+        String(readProductValue(product.values, 'sku', '') || ''),
+        String(readProductValue(product.values, 'title', '') || ''),
+      ]
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((key) => productLookup.set(key, product));
+    });
+
     const orderSummaries = recentOrders.map((order) => {
       const values = order.values || {};
       const total = toNumber(values.total);
@@ -930,6 +954,7 @@ function ProductsRoute() {
         orderStatus: orderStatus || 'unknown',
         isPaid,
         isRefunded,
+        lineItems: parseOrderLineItems(values.items, String(values.currency || 'USD')),
         updatedAt: order.updatedAt || order.createdAt || '',
       };
     });
@@ -937,6 +962,52 @@ function ProductsRoute() {
     const refundedOrders = orderSummaries.filter((order) => order.isRefunded);
     const revenue = paidOrders.reduce((sum, order) => sum + order.total, 0);
     const averageOrderValue = paidOrders.length > 0 ? revenue / paidOrders.length : 0;
+    const productPerformance = new Map<string, {
+      productId: string;
+      slug: string;
+      title: string;
+      sku: string;
+      units: number;
+      revenue: number;
+      orderIds: Set<string>;
+      currency: string;
+      status: string;
+      inventory: number;
+      lowStock: boolean;
+    }>();
+
+    paidOrders.forEach((order) => {
+      order.lineItems.forEach((item) => {
+        const lookupKey = [item.productId, item.slug, item.sku, item.title]
+          .map((value) => value.trim().toLowerCase())
+          .find((value) => productLookup.has(value));
+        const product = lookupKey ? productLookup.get(lookupKey) || null : null;
+        const productValues = product?.values || {};
+        const aggregationKey = product?.id || item.productId || item.slug || item.sku || item.title;
+        if (!aggregationKey) return;
+
+        const stockState = product ? getProductStockState(productValues) : { lowStock: false };
+        const current = productPerformance.get(aggregationKey) || {
+          productId: product?.id || item.productId,
+          slug: product?.slug || item.slug,
+          title: String(readProductValue(productValues, 'title', item.title) || item.title),
+          sku: String(readProductValue(productValues, 'sku', item.sku) || item.sku),
+          units: 0,
+          revenue: 0,
+          orderIds: new Set<string>(),
+          currency: item.currency || order.currency,
+          status: product?.status || 'order-only',
+          inventory: product ? toNumber(readProductValue(productValues, 'inventory')) : 0,
+          lowStock: Boolean(stockState.lowStock),
+        };
+
+        current.units += item.quantity;
+        current.revenue += item.lineTotal;
+        current.orderIds.add(order.id);
+        productPerformance.set(aggregationKey, current);
+      });
+    });
+
     const customerSummaries = customerProfiles.map((customer) => {
       const values = customer.values || {};
       return {
@@ -965,9 +1036,17 @@ function ProductsRoute() {
       topCustomers: [...customerSummaries]
         .sort((first, second) => second.totalSpent - first.totalSpent)
         .slice(0, 3),
+      topProducts: [...productPerformance.values()]
+        .sort((first, second) => second.revenue - first.revenue || second.units - first.units)
+        .slice(0, 5)
+        .map(({ orderIds, ...product }) => ({
+          ...product,
+          revenue: moneyValue(product.revenue),
+          orderCount: orderIds.size,
+        })),
       recentOrders: orderSummaries.slice(0, 5),
     };
-  }, [customerProfiles, recentOrders]);
+  }, [customerProfiles, products, recentOrders]);
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
@@ -1189,6 +1268,19 @@ function ProductsRoute() {
       currency: commerceAnalytics.currency,
       customerProfilesLoaded: commerceAnalytics.customerCount,
       repeatCustomers: commerceAnalytics.repeatCustomerCount,
+      topProducts: commerceAnalytics.topProducts.map((product) => ({
+        productId: product.productId,
+        slug: product.slug,
+        title: product.title,
+        sku: product.sku,
+        units: product.units,
+        revenue: product.revenue,
+        currency: product.currency,
+        orderCount: product.orderCount,
+        status: product.status,
+        inventory: product.inventory,
+        lowStock: product.lowStock,
+      })),
       customersCollection: customersCollection
         ? {
             id: customersCollection.id,
@@ -2673,7 +2765,7 @@ function ProductsRoute() {
                   <Metric label="Customers" value={commerceAnalytics.customerCount} icon={<Package className="size-4" />} />
                   <Metric label="Avg order" value={formatMoney(commerceAnalytics.averageOrderValue, commerceAnalytics.currency)} icon={<Boxes className="size-4" />} />
                 </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="mt-4 grid gap-3 xl:grid-cols-3">
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent order signal</div>
@@ -2696,6 +2788,46 @@ function ProductsRoute() {
                       )) : (
                         <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
                           No private order records loaded yet. Public checkout intake will populate this signal after the first order.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3" data-testid="products-product-performance">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Product performance</div>
+                      <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                        {commerceAnalytics.topProducts.length} ranked
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {commerceAnalytics.topProducts.length > 0 ? commerceAnalytics.topProducts.map((product) => (
+                        <div key={product.productId || product.slug || product.title} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-foreground">{product.title || product.slug || 'Order line item'}</div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {product.sku || product.slug || product.productId || 'No product id'} · {product.units} unit{product.units === 1 ? '' : 's'}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <div className="font-semibold">{formatMoney(product.revenue, product.currency)}</div>
+                              <div className="text-[11px] text-muted-foreground">{product.orderCount} order{product.orderCount === 1 ? '' : 's'}</div>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="rounded bg-muted px-2 py-0.5 text-[11px] capitalize text-muted-foreground">{product.status}</span>
+                            <span className={cn(
+                              'rounded px-2 py-0.5 text-[11px]',
+                              product.lowStock ? 'bg-amber-50 text-amber-700' : 'bg-muted text-muted-foreground',
+                            )}
+                            >
+                              {product.lowStock ? 'Low stock' : `${product.inventory} in stock`}
+                            </span>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                          Product performance appears after paid checkout orders include structured line items.
                         </div>
                       )}
                     </div>
@@ -4147,7 +4279,15 @@ const maybeFiniteNumber = (value: unknown): number | null => {
   return Number.isFinite(numberValue) ? numberValue : null;
 };
 
-const safeParseJsonArray = (value: string): unknown[] => {
+const safeParseJsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return [];
+  }
+
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : [];
@@ -4174,6 +4314,50 @@ const formatMoney = (amount: number, currency: string): string => {
     }).format(amount);
   }
 };
+
+const moneyValue = (value: number): number => (
+  Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
+);
+
+const lineItemText = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const normalizeOrderLineItem = (value: unknown, index: number, fallbackCurrency: string): CommerceLineItem | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const title = lineItemText(record.title || record.name);
+  if (!title) {
+    return null;
+  }
+
+  const quantity = Math.max(1, Math.floor(toNumber(record.quantity || 1)));
+  const price = moneyValue(toNumber(record.price ?? record.unitPrice ?? record.amount));
+  const lineTotal = moneyValue(toNumber(record.lineTotal ?? record.total ?? price * quantity));
+  const productId = lineItemText(record.productId);
+  const slug = lineItemText(record.slug);
+  const sku = lineItemText(record.sku);
+
+  return {
+    id: lineItemText(record.id) || lineItemText(record.lineItemId) || `${productId || slug || sku || 'item'}-${index}`,
+    productId,
+    slug,
+    title,
+    sku,
+    quantity,
+    lineTotal,
+    currency: normalizeCurrency(lineItemText(record.currency) || fallbackCurrency),
+  };
+};
+
+const parseOrderLineItems = (value: unknown, fallbackCurrency = 'USD'): CommerceLineItem[] => (
+  safeParseJsonArray(value)
+    .map((item, index) => normalizeOrderLineItem(item, index, fallbackCurrency))
+    .filter((item): item is CommerceLineItem => Boolean(item))
+);
 
 const slugify = (value: string): string => (
   value
