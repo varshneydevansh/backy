@@ -1447,12 +1447,106 @@ const assertProductsLayout = async (client) => {
       document.body?.innerText?.includes('Page and editor binding contract') &&
       document.body?.innerText?.includes('Product card blocks') &&
       document.body?.innerText?.includes('Cart and order intake'),
+    hasProductPageTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')) &&
+      Boolean(document.querySelector('[data-testid="products-page-template-list"]')) &&
+      Boolean(document.querySelector('[data-testid="products-page-template-item"]')) &&
+      document.body?.innerText?.includes('Product page templates'),
     hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const assertProductPageTemplateShortcut = async (client, productCollection, mode) => {
+  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
+
+  let clickState = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    clickState = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="products-page-template-${mode}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          button: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          hasTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')),
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      }
+      button.click();
+      return { ok: true, text: button.textContent || '' };
+    })()`);
+
+    if (clickState.ok) {
+      break;
+    }
+
+    if (attempt === 99) {
+      break;
+    }
+
+    await sleep(250);
+  }
+
+  assert(clickState.ok, `Unable to click product ${mode} page template shortcut: ${JSON.stringify(clickState)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+      const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
+      const createButton = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent || '').includes('Create Page'));
+      return {
+        path: window.location.pathname,
+        template: params.get('template') || '',
+        collectionId: params.get('collectionId') || '',
+        datasetMode: params.get('datasetMode') || '',
+        title: document.querySelector('#page-title')?.value || '',
+        slug: document.querySelector('#page-slug')?.value || '',
+        nav: document.querySelector('#page-navigation-placement-select')?.value || '',
+        payloadTemplate: payload.template || '',
+        payloadDatasetMode: payload.datasetImport?.mode || '',
+        payloadCollectionId: payload.datasetImport?.collectionId || '',
+        importPanel: Boolean(importPanel),
+        importText: importPanel?.textContent || '',
+        createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    const expectedTitle = mode === 'item' ? 'Product detail' : 'Product catalog';
+    const expectedSlug = mode === 'item' ? 'product-detail' : 'products-list';
+    const expectedNav = mode === 'item' ? 'none' : 'primary';
+
+    if (
+      state.path === '/pages/new' &&
+      state.template === 'storefront' &&
+      state.collectionId === productCollection.id &&
+      state.datasetMode === mode &&
+      state.title === expectedTitle &&
+      state.slug === expectedSlug &&
+      state.nav === expectedNav &&
+      state.payloadTemplate === 'storefront' &&
+      state.payloadDatasetMode === mode &&
+      state.payloadCollectionId === productCollection.id &&
+      state.importPanel &&
+      state.importText.includes(productCollection.name) &&
+      state.importText.includes(productCollection.id) &&
+      state.createButtonDisabled === false
+    ) {
+      return state;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Product ${mode} page template did not open dataset page creation: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const assertDigitalStockFilters = async (client, productTitle) => {
@@ -1637,6 +1731,8 @@ const main = async () => {
     const layout = await assertProductsLayout(client);
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+    const productListPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, 'list');
+    const productDetailPageTemplate = await assertProductPageTemplateShortcut(client, finalProductCollection, 'item');
 
     const browserErrors = client.events
       .filter((event) => (
@@ -1703,6 +1799,18 @@ const main = async () => {
         totalSpent: publicCommerce.customerRecord.values?.totalspent,
       },
       layout,
+      productPageTemplates: {
+        list: {
+          collectionId: productListPageTemplate.collectionId,
+          datasetMode: productListPageTemplate.datasetMode,
+          slug: productListPageTemplate.slug,
+        },
+        detail: {
+          collectionId: productDetailPageTemplate.collectionId,
+          datasetMode: productDetailPageTemplate.datasetMode,
+          slug: productDetailPageTemplate.slug,
+        },
+      },
       frontendProductCleaned,
       restored,
       screenshotPath: SCREENSHOT_PATH,

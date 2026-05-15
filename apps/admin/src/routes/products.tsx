@@ -65,6 +65,11 @@ const PRODUCT_CONTROL_AREAS = [
     href: '#products-api',
   },
   {
+    title: 'Page templates',
+    detail: 'Create product list and detail pages with product dataset bindings.',
+    href: '#products-page-templates',
+  },
+  {
     title: 'Catalog health',
     detail: 'Inventory, published/draft counts, low stock, and digital products.',
     href: '#products-metrics',
@@ -92,6 +97,7 @@ const COMMERCE_SIGNAL_RECORD_LIMIT = 100;
 type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
 type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
+type ProductPageTemplateMode = 'list' | 'item';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 type ProductPermissionKey =
@@ -676,6 +682,93 @@ function ProductsRoute() {
   const commerceOrderCreateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
   const storefrontProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug={productSlug}`;
+  const productPageTemplateBriefs = useMemo(() => {
+    if (!productCollection) return [];
+
+    const buildBrief = ({
+      mode,
+      title,
+      slug,
+      description,
+      nav,
+      navLabel,
+    }: {
+      mode: ProductPageTemplateMode;
+      title: string;
+      slug: string;
+      description: string;
+      nav: 'primary' | 'none';
+      navLabel: string;
+    }) => {
+      const search = {
+        siteId: activeSiteId,
+        template: 'storefront',
+        collectionId: productCollection.id,
+        datasetMode: mode,
+        title,
+        slug,
+        description,
+        nav,
+        navLabel,
+      } as const;
+      const createRoute = `/pages/new?${new URLSearchParams(search).toString()}`;
+
+      return {
+        mode,
+        title,
+        slug,
+        description,
+        nav,
+        navLabel,
+        createRoute,
+        search,
+        manifest: {
+          schemaVersion: 'backy.product-page-template.v1',
+          mode,
+          createRoute,
+          page: {
+            suggestedTitle: title,
+            suggestedSlug: slug,
+            navigationPlacement: nav,
+            navigationLabel: navLabel,
+          },
+          dataset: {
+            collectionId: productCollection.id,
+            collectionSlug: PRODUCT_COLLECTION_SLUG,
+            datasetMode: mode,
+            titleField: productFieldKey('title'),
+            descriptionField: productFieldKey('description'),
+            imageField: productFieldKey('imageUrl'),
+            detailHref: '/products/{recordSlug}',
+          },
+          publicApis: {
+            catalog: commerceCatalogUrl,
+            productBySlug: commerceProductDetailUrl,
+            orderIntake: commerceOrderContractUrl,
+          },
+        },
+      };
+    };
+
+    return [
+      buildBrief({
+        mode: 'list',
+        title: 'Product catalog',
+        slug: 'products-list',
+        description: 'A storefront product list page bound to the Backy products collection with product cards, filters, and checkout-ready links.',
+        nav: 'primary',
+        navLabel: 'Shop',
+      }),
+      buildBrief({
+        mode: 'item',
+        title: 'Product detail',
+        slug: 'product-detail',
+        description: 'A storefront product detail page bound to one Backy product record with title, description, media, variants, and checkout metadata.',
+        nav: 'none',
+        navLabel: 'Product',
+      }),
+    ];
+  }, [activeSiteId, commerceCatalogUrl, commerceOrderContractUrl, commerceProductDetailUrl, productCollection]);
   const missingProductFields = useMemo(() => (
     productCollection ? getMissingProductFieldKeys(productCollection) : []
   ), [productCollection]);
@@ -1038,6 +1131,9 @@ function ProductsRoute() {
       model: 'Products are sellable CMS records that page and blog canvases can bind into storefront grids, detail sections, variant controls, checkout calls to action, and merchandising filters.',
       targets: PRODUCT_PAGE_BINDING_TARGETS,
       starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      productListTemplateRoute: productPageTemplateBriefs.find((brief) => brief.mode === 'list')?.createRoute || null,
+      productDetailTemplateRoute: productPageTemplateBriefs.find((brief) => brief.mode === 'item')?.createRoute || null,
+      productPageTemplates: productPageTemplateBriefs.map((brief) => brief.manifest),
       canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
       requiredFields: [productFieldKey('title'), 'slug', productFieldKey('sku'), productFieldKey('price'), productFieldKey('currency'), productFieldKey('inventory'), productFieldKey('productType'), productFieldKey('checkoutUrl')],
       optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('subscriptionEnabled'), productFieldKey('subscriptionInterval'), productFieldKey('subscriptionTrialDays'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
@@ -1149,6 +1245,7 @@ function ProductsRoute() {
     orderIntakeReady,
     ordersCollection,
     productApiReady,
+    productPageTemplateBriefs,
     productTypeFilter,
     productCollection,
     products,
@@ -2004,6 +2101,15 @@ function ProductsRoute() {
 
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
   };
+  const openProductPageTemplate = (brief: (typeof productPageTemplateBriefs)[number]) => {
+    if (isProductsBusy || !productCollection) return;
+    if (!canEditPages) {
+      setError(pagesEditPermissionTitle || 'Your account cannot create storefront pages.');
+      return;
+    }
+
+    navigate({ to: '/pages/new', search: brief.search });
+  };
   const selectProductsSite = (nextSiteId: string) => {
     if (isProductsBusy) return;
 
@@ -2566,6 +2672,67 @@ function ProductsRoute() {
                         <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
                           {target.key}
                         </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div id="products-page-templates" data-testid="products-page-templates" className="scroll-mt-24 rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Product page templates</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Start editable product list and detail pages with the Products collection already attached as a dataset.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {productPageTemplateBriefs.length} templates
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {productPageTemplateBriefs.map((brief) => (
+                    <div key={brief.mode} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{brief.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{brief.description}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 font-mono text-[10px] font-semibold text-primary">
+                          {brief.mode}
+                        </span>
+                      </div>
+                      <div className="mt-3 space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-2">
+                          <span className="font-medium text-foreground">Dataset</span>
+                          <span className="font-mono text-muted-foreground">{productCollection.id}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-2">
+                          <span className="font-medium text-foreground">Route draft</span>
+                          <span className="font-mono text-muted-foreground">/{brief.slug}</span>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => openProductPageTemplate(brief)}
+                          disabled={isProductsAccessBusy || !canEditPages}
+                          title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                          iconStart={<Sparkles className="size-4" />}
+                          data-testid={`products-page-template-${brief.mode}`}
+                        >
+                          Create {brief.mode === 'list' ? 'list page' : 'detail page'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(JSON.stringify(brief.manifest, null, 2), `${brief.title} page template brief`)}
+                          disabled={isProductsAccessBusy || !canExportProducts}
+                          title={!canExportProducts ? exportPermissionTitle : undefined}
+                          iconStart={<Copy className="size-4" />}
+                        >
+                          Copy brief
+                        </Button>
                       </div>
                     </div>
                   ))}
