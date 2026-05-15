@@ -119,6 +119,9 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   let subscriptionDunningCount = 0;
   let subscriptionCancelledCount = 0;
   let subscriptionActivePaidCount = 0;
+  let subscriptionPausedCount = 0;
+  let subscriptionResumedCount = 0;
+  let subscriptionTrialEndingCount = 0;
 
   records.forEach((record) => {
     const values = record.values || {};
@@ -149,6 +152,9 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
       if (notes.includes('invoice.payment_succeeded') || notes.includes('invoice.paid')) subscriptionRenewalCount += 1;
       if (notes.includes('customer.subscription.updated') || notes.includes('invoice.payment_failed')) subscriptionDunningCount += 1;
       if (notes.includes('customer.subscription.deleted') || fulfillmentStatus === 'cancelled') subscriptionCancelledCount += 1;
+      if (notes.includes('customer.subscription.paused')) subscriptionPausedCount += 1;
+      if (notes.includes('customer.subscription.resumed')) subscriptionResumedCount += 1;
+      if (notes.includes('customer.subscription.trial_will_end')) subscriptionTrialEndingCount += 1;
     }
 
     payment[paymentStatus].count += 1;
@@ -217,6 +223,9 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
       subscriptionRenewalCount,
       subscriptionDunningCount,
       subscriptionCancelledCount,
+      subscriptionPausedCount,
+      subscriptionResumedCount,
+      subscriptionTrialEndingCount,
     },
     sources,
     currencies,

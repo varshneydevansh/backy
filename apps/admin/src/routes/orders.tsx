@@ -2835,6 +2835,18 @@ function OrdersRoute() {
                         <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionDunningCount ?? 0}</span>
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Subscription paused</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionPausedCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Subscription resumed</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionResumedCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Trial ending soon</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionTrialEndingCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                         <span className="text-muted-foreground">Subscription cancelled</span>
                         <span className="font-mono font-semibold">{orderAnalytics?.operations.subscriptionCancelledCount ?? 0}</span>
                       </div>

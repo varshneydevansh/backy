@@ -2990,7 +2990,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             required: ['type'],
             properties: {
               id: { type: 'string' },
-              type: { type: 'string', examples: ['checkout.session.completed', 'invoice.payment_succeeded', 'customer.subscription.updated', 'customer.subscription.deleted', 'charge.refunded', 'payment_intent.payment_failed'] },
+              type: { type: 'string', examples: ['checkout.session.completed', 'invoice.payment_succeeded', 'customer.subscription.updated', 'customer.subscription.paused', 'customer.subscription.resumed', 'customer.subscription.trial_will_end', 'customer.subscription.deleted', 'charge.refunded', 'payment_intent.payment_failed'] },
               data: {
                 type: 'object',
                 properties: {

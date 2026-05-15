@@ -262,6 +262,48 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
   }
 
   if (
+    lowerType === 'customer.subscription.paused' ||
+    (
+      lowerType === 'customer.subscription.updated' &&
+      subscriptionStatus === 'paused'
+    )
+  ) {
+    return {
+      status: 'paused' as const,
+      values: {
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
+  if (
+    lowerType === 'customer.subscription.resumed' ||
+    (
+      lowerType === 'customer.subscription.updated' &&
+      ['active', 'trialing'].includes(subscriptionStatus)
+    )
+  ) {
+    return {
+      status: 'resumed' as const,
+      values: {
+        orderstatus: 'paid',
+        paymentstatus: 'paid',
+        paidat: textValue(currentValues.paidat) || now,
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
+  if (lowerType === 'customer.subscription.trial_will_end') {
+    return {
+      status: 'trial_will_end' as const,
+      values: {
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
+  if (
     lowerType === 'customer.subscription.deleted' ||
     (
       lowerType === 'customer.subscription.updated' &&

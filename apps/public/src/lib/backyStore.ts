@@ -791,7 +791,7 @@ let SETTINGS: StoreSettings = {
       providerAccountId: '',
       providerWebhookUrl: '',
       providerWebhookSecretId: '',
-      providerWebhookEvents: 'checkout.session.completed,payment_intent.succeeded,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.deleted,charge.refunded',
+      providerWebhookEvents: 'checkout.session.completed,payment_intent.succeeded,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted,charge.refunded',
       reconciliationMode: 'manual',
       reconciliationWindowHours: 24,
       checkoutSuccessPath: '/checkout/success',

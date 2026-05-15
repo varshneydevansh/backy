@@ -6561,6 +6561,9 @@ export interface OrderAnalytics {
     subscriptionRenewalCount?: number;
     subscriptionDunningCount?: number;
     subscriptionCancelledCount?: number;
+    subscriptionPausedCount?: number;
+    subscriptionResumedCount?: number;
+    subscriptionTrialEndingCount?: number;
   };
   sources: Array<{ source: string; count: number; total: number }>;
   currencies: Array<{ currency: string; count: number; total: number }>;

@@ -356,7 +356,7 @@ const enableCommercePricingSettings = async (settings) => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.deleted',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: true,
@@ -396,7 +396,7 @@ const enableStripeCommerceSettings = async () => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.deleted',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,customer.subscription.deleted',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: false,
@@ -1686,6 +1686,70 @@ const assertStripeCheckoutExecution = async ({
     assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription dunning webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
     assert(String(orderRecord.values?.notes || '').includes('customer.subscription.updated'), `Stripe subscription dunning settlement note missing: ${JSON.stringify(orderRecord.values)}`);
 
+    const pausedPayload = await postCommerceWebhook({
+      id: `evt_subscription_paused_${slug}`,
+      type: 'customer.subscription.paused',
+      data: {
+        object: {
+          id: `sub_${slug}`,
+          object: 'subscription',
+          status: 'paused',
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-paused-${slug}` });
+    assert(pausedPayload.data?.event?.status === 'paused', `Stripe subscription pause webhook did not record paused lifecycle state: ${JSON.stringify(pausedPayload)}`);
+    assert(pausedPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription pause webhook should keep the subscription reference: ${JSON.stringify(pausedPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription pause webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.paused'), `Stripe subscription pause lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+
+    const resumedPayload = await postCommerceWebhook({
+      id: `evt_subscription_resumed_${slug}`,
+      type: 'customer.subscription.resumed',
+      data: {
+        object: {
+          id: `sub_${slug}`,
+          object: 'subscription',
+          status: 'active',
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-resumed-${slug}` });
+    assert(resumedPayload.data?.event?.status === 'resumed', `Stripe subscription resume webhook did not record resumed lifecycle state: ${JSON.stringify(resumedPayload)}`);
+    assert(resumedPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription resume webhook should keep the subscription reference: ${JSON.stringify(resumedPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription resume webhook did not restore paid payment state: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription resume webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.resumed'), `Stripe subscription resume lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+
+    const trialEndingPayload = await postCommerceWebhook({
+      id: `evt_subscription_trial_end_${slug}`,
+      type: 'customer.subscription.trial_will_end',
+      data: {
+        object: {
+          id: `sub_${slug}`,
+          object: 'subscription',
+          status: 'trialing',
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-trial-ending-${slug}` });
+    assert(trialEndingPayload.data?.event?.status === 'trial_will_end', `Stripe subscription trial-ending webhook did not record trial lifecycle state: ${JSON.stringify(trialEndingPayload)}`);
+    assert(trialEndingPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription trial-ending webhook should keep the subscription reference: ${JSON.stringify(trialEndingPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription trial-ending webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.trial_will_end'), `Stripe subscription trial-ending lifecycle note missing: ${JSON.stringify(orderRecord.values)}`);
+
     const cancellationPayload = await postCommerceWebhook({
       id: `evt_subscription_deleted_${slug}`,
       type: 'customer.subscription.deleted',
@@ -1714,6 +1778,9 @@ const assertStripeCheckoutExecution = async ({
     assert(subscriptionAnalytics?.operations?.subscriptionOrderCount >= 1, `Order analytics did not count subscription orders: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
     assert(subscriptionAnalytics.operations.subscriptionRenewalCount >= 1, `Order analytics did not count subscription renewals: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
     assert(subscriptionAnalytics.operations.subscriptionDunningCount >= 1, `Order analytics did not count subscription dunning attention: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionPausedCount >= 1, `Order analytics did not count subscription pauses: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionResumedCount >= 1, `Order analytics did not count subscription resumes: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
+    assert(subscriptionAnalytics.operations.subscriptionTrialEndingCount >= 1, `Order analytics did not count subscription trial-ending notices: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
     assert(subscriptionAnalytics.operations.subscriptionCancelledCount >= 1, `Order analytics did not count subscription cancellations: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
 
     const stripeCustomerRecord = customersCollection?.id
