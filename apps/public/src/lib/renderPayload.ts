@@ -1032,7 +1032,11 @@ const hydrateDatasetRecords = (
 
   const query = isRecord(dataset.query) ? dataset.query : {};
   const pagination = isRecord(dataset.pagination) ? dataset.pagination : null;
-  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination, context);
+  const joinedFieldPaths = ['fieldKey', 'sortBy']
+    .map((key) => query[key])
+    .filter((value): value is string => typeof value === 'string' && value.includes('.'));
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination, context)
+    .map((record) => hydrateRepeaterJoinedRecordValues(siteId, collection, record, joinedFieldPaths, context));
 
   return {
     ...dataset,

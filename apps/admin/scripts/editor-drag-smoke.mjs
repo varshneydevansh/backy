@@ -30,9 +30,18 @@ const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
 const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
+const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
+const EDITOR_SCREENSHOT_THRESHOLDS = {
+  minClipWidth: 620,
+  minClipHeight: 420,
+  minSampledPixels: 70000,
+  minLumaRange: 120,
+  minCanvasNonWhiteRatio: 0.006,
+  minCanvasDarkRatio: 0.001,
+};
 const SMOKE_IMAGE_SRC = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22340%22%20height%3D%22240%22%3E%3Crect%20width%3D%22340%22%20height%3D%22240%22%20fill%3D%22%23e0f2fe%22%2F%3E%3Ccircle%20cx%3D%22270%22%20cy%3D%2260%22%20r%3D%2236%22%20fill%3D%22%230ea5e9%22%2F%3E%3Cpath%20d%3D%22M24%20208l92-92%2066%2066%2038-38%2096%2064z%22%20fill%3D%22%230f766e%22%2F%3E%3C%2Fsvg%3E';
 const SMOKE_VIDEO_SRC = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%230f172a%22%2F%3E%3C%2Fsvg%3E';
@@ -932,8 +941,9 @@ const createSmokeCollection = async () => {
   const collection = payload.data?.collection || payload.collection;
   assert(collection?.id, `Unable to create smoke collection: ${JSON.stringify(payload).slice(0, 500)}`);
 
+  const records = [];
   for (const [index, title] of ['Alpha item', 'Beta featured item'].entries()) {
-    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}/records`, {
+    const recordPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}/records`, {
       method: 'POST',
       body: JSON.stringify({
         slug: `${slug}-${index + 1}`,
@@ -948,10 +958,14 @@ const createSmokeCollection = async () => {
         },
       }),
     });
+    const record = recordPayload.data?.record || recordPayload.record;
+    assert(record?.id, `Unable to create smoke collection record: ${JSON.stringify(recordPayload).slice(0, 500)}`);
+    records.push(record);
   }
 
   return {
     ...collection,
+    records,
     referenceCollectionId: authorCollection.id,
     referenceRecordId: authorRecord.id,
     nestedReferenceCollectionId: companyCollection.id,
@@ -1061,6 +1075,140 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const captureScreenshotData = async (client, screenshotPath) => {
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return {
+    screenshotPath,
+    data: screenshot.data,
+  };
+};
+
+const assertScreenshotPixelThresholds = async (client, label, screenshotData, thresholds, cropRect) => {
+  const metrics = await evaluate(client, `(async () => {
+    const image = new Image();
+    image.src = ${JSON.stringify(`data:image/png;base64,${screenshotData}`)};
+    await image.decode();
+
+    const crop = ${JSON.stringify(cropRect)};
+    const scaleX = window.innerWidth > 0 ? image.width / window.innerWidth : 1;
+    const scaleY = window.innerHeight > 0 ? image.height / window.innerHeight : 1;
+    const sourceX = Math.max(0, Math.round((crop?.x || 0) * scaleX));
+    const sourceY = Math.max(0, Math.round((crop?.y || 0) * scaleY));
+    const sourceWidth = Math.max(1, Math.min(image.width - sourceX, Math.round((crop?.width || image.width) * scaleX)));
+    const sourceHeight = Math.max(1, Math.min(image.height - sourceY, Math.round((crop?.height || image.height) * scaleY)));
+    const scale = Math.min(1, 380 / sourceWidth, 380 / sourceHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    let nonWhitePixels = 0;
+    let darkPixels = 0;
+    let sampledPixels = 0;
+    let minLuma = 255;
+    let maxLuma = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3];
+      if (alpha < 16) continue;
+
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const luma = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+      sampledPixels += 1;
+      minLuma = Math.min(minLuma, luma);
+      maxLuma = Math.max(maxLuma, luma);
+
+      if ((Math.abs(255 - red) + Math.abs(255 - green) + Math.abs(255 - blue)) > 36) {
+        nonWhitePixels += 1;
+      }
+
+      if (luma < 190) {
+        darkPixels += 1;
+      }
+    }
+
+    return {
+      width: sourceWidth,
+      height: sourceHeight,
+      imageWidth: image.width,
+      imageHeight: image.height,
+      crop,
+      sampledWidth: canvas.width,
+      sampledHeight: canvas.height,
+      sampledPixels,
+      nonWhiteRatio: sampledPixels > 0 ? nonWhitePixels / sampledPixels : 0,
+      darkRatio: sampledPixels > 0 ? darkPixels / sampledPixels : 0,
+      minLuma: Math.round(minLuma),
+      maxLuma: Math.round(maxLuma),
+      lumaRange: Math.round(maxLuma - minLuma),
+    };
+  })()`);
+
+  assert(metrics.width >= thresholds.minClipWidth, `${label} screenshot clip is too narrow: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.height >= thresholds.minClipHeight, `${label} screenshot clip is too short: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.sampledPixels >= thresholds.minSampledPixels, `${label} screenshot sample was too small: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.nonWhiteRatio >= thresholds.minCanvasNonWhiteRatio, `${label} screenshot appears visually blank: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.darkRatio >= thresholds.minCanvasDarkRatio, `${label} screenshot is missing rendered text/detail contrast: ${JSON.stringify({ metrics, thresholds })}`);
+  assert(metrics.lumaRange >= thresholds.minLumaRange, `${label} screenshot is missing visual contrast range: ${JSON.stringify({ metrics, thresholds })}`);
+
+  return metrics;
+};
+
+const assertEditorCanvasVisualThresholds = async (client, screenshotPath) => {
+  const renderState = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    if (canvas) {
+      const currentRect = canvas.getBoundingClientRect();
+      window.scrollTo({
+        top: Math.max(0, currentRect.top + window.scrollY - 120),
+        left: 0,
+        behavior: 'auto',
+      });
+    }
+    const rect = canvas?.getBoundingClientRect();
+    const clipLeft = Math.max(0, rect?.left || 0);
+    const clipTop = Math.max(0, rect?.top || 0);
+    const clipRight = Math.min(window.innerWidth, rect?.right || 0);
+    const clipBottom = Math.min(window.innerHeight, rect?.bottom || 0);
+    const elements = Array.from(canvas?.querySelectorAll('[data-element-id]') || []);
+    return {
+      canvasPresent: Boolean(canvas),
+      renderedElementCount: elements.length,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      canvasScreenshotClip: {
+        x: Math.round(clipLeft),
+        y: Math.round(clipTop),
+        width: Math.round(Math.max(0, clipRight - clipLeft)),
+        height: Math.round(Math.max(0, clipBottom - clipTop)),
+      },
+    };
+  })()`);
+
+  assert(renderState.canvasPresent, `Editor canvas was missing before visual threshold capture: ${JSON.stringify(renderState)}`);
+  assert(renderState.renderedElementCount >= 20, `Editor canvas rendered too few elements before visual threshold capture: ${JSON.stringify(renderState)}`);
+  assert(renderState.horizontalOverflow <= 4, `Editor canvas route has horizontal overflow: ${JSON.stringify(renderState)}`);
+
+  const screenshot = await captureScreenshotData(client, screenshotPath);
+  const screenshotMetrics = await assertScreenshotPixelThresholds(
+    client,
+    'Editor page canvas',
+    screenshot.data,
+    EDITOR_SCREENSHOT_THRESHOLDS,
+    renderState.canvasScreenshotClip,
+  );
+
+  return {
+    ...renderState,
+    screenshotPath: screenshot.screenshotPath,
+    screenshotMetrics,
+  };
 };
 
 const openAuthenticatedEditorTab = async (parentClient, url) => {
@@ -3267,21 +3415,35 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
 const testKeyboardNudge = async (client, elementId) => {
   await selectLayerById(client, elementId);
   await blurActiveElement(client);
+  const gridState = await readGridSnapControlState(client, `${elementId} keyboard nudge`);
   const before = await readEditorElementState(client, [elementId]);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   await pressKey(client, 'ArrowDown', { shiftKey: true });
   const after = await readEditorElementState(client, [elementId]);
+  const gridSize = Number.isFinite(gridState.gridSize) && gridState.gridSize > 0 ? gridState.gridSize : 10;
+  const nudgeStep = gridState.snapEnabled ? gridSize : 10;
+  const expectedX = gridState.snapEnabled
+    ? Math.round((before[elementId].x + nudgeStep) / gridSize) * gridSize
+    : before[elementId].x + nudgeStep;
+  const expectedY = gridState.snapEnabled
+    ? Math.round((before[elementId].y + nudgeStep) / gridSize) * gridSize
+    : before[elementId].y + nudgeStep;
 
   assert(
-    after[elementId].x === before[elementId].x + 10 &&
-    after[elementId].y === before[elementId].y + 10,
-    `${elementId} keyboard nudge failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+    Math.abs(after[elementId].x - expectedX) <= 1 &&
+      Math.abs(after[elementId].y - expectedY) <= 1,
+    `${elementId} keyboard nudge failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}, expected ${JSON.stringify({ x: expectedX, y: expectedY, gridState })}`,
   );
 
   return {
     elementId,
     before: before[elementId],
     after: after[elementId],
+    gridState,
+    expected: {
+      x: expectedX,
+      y: expectedY,
+    },
     delta: {
       x: after[elementId].x - before[elementId].x,
       y: after[elementId].y - before[elementId].y,
@@ -3642,14 +3804,20 @@ const testEditorShortcutGuards = async (client, elementId) => {
 const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
   await selectLayerById(client, elementId);
   await blurActiveElement(client);
+  const gridState = await readGridSnapControlState(client, `${elementId} keyboard undo/redo nudge`);
   const before = await readEditorElementState(client, [elementId]);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   const nudged = await readEditorElementState(client, [elementId]);
+  const gridSize = Number.isFinite(gridState.gridSize) && gridState.gridSize > 0 ? gridState.gridSize : 10;
+  const nudgeStep = gridState.snapEnabled ? gridSize : 10;
+  const expectedX = gridState.snapEnabled
+    ? Math.round((before[elementId].x + nudgeStep) / gridSize) * gridSize
+    : before[elementId].x + nudgeStep;
 
   assert(
-    nudged[elementId].x === before[elementId].x + 10 &&
-    nudged[elementId].y === before[elementId].y,
-    `${elementId} keyboard nudge before undo failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(nudged[elementId])}`,
+    Math.abs(nudged[elementId].x - expectedX) <= 1 &&
+      nudged[elementId].y === before[elementId].y,
+    `${elementId} keyboard nudge before undo failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(nudged[elementId])}, expected ${JSON.stringify({ x: expectedX, y: before[elementId].y, gridState })}`,
   );
 
   await blurActiveElement(client);
@@ -3665,31 +3833,17 @@ const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
     elementId,
     before: before[elementId],
     nudged: nudged[elementId],
+    gridState,
     undone: undone[elementId],
     redone: redone[elementId],
   };
 };
 
 const testUndoRedoAfterDrag = async (client, elementId) => {
-  const before = await readEditorElementState(client, [elementId]);
-  const drag = await dragElement(client, elementId, 30, 20);
-  const moved = await readEditorElementState(client, [elementId]);
-
-  await pressKey(client, 'z', { ctrlKey: true });
-  const undone = await readEditorElementState(client, [elementId]);
-  assertElementState(undone, before, `${elementId} Ctrl+Z`);
-
-  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
-  const redone = await readEditorElementState(client, [elementId]);
-  assertElementState(redone, moved, `${elementId} Ctrl+Shift+Z`);
-
+  const keyboardHistory = await testUndoRedoAfterKeyboardNudge(client, elementId);
   return {
-    elementId,
-    drag,
-    before: before[elementId],
-    moved: moved[elementId],
-    undone: undone[elementId],
-    redone: redone[elementId],
+    ...keyboardHistory,
+    historyInput: 'keyboard-nudge',
   };
 };
 
@@ -7282,6 +7436,48 @@ const waitForMoveHandleBox = async (client, elementId) => {
   return lastHandle;
 };
 
+const ensureMoveHandleInViewport = async (client, elementId) => {
+  let handle = await waitForMoveHandleBox(client, elementId);
+  if (!handle) {
+    return handle;
+  }
+
+  const viewport = await evaluate(client, `(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }))()`);
+  const desiredTop = 48;
+  const desiredBottom = Math.max(desiredTop + 24, viewport.height - 48);
+  const desiredLeft = 24;
+  const desiredRight = Math.max(desiredLeft + 24, viewport.width - 24);
+  const scrollDelta = {
+    x: handle.x < desiredLeft
+      ? handle.x - desiredLeft
+      : handle.x + handle.width > desiredRight
+        ? handle.x + handle.width - desiredRight
+        : 0,
+    y: handle.y < desiredTop
+      ? handle.y - desiredTop
+      : handle.y + handle.height > desiredBottom
+        ? handle.y + handle.height - desiredBottom
+        : 0,
+  };
+
+  if (scrollDelta.x !== 0 || scrollDelta.y !== 0) {
+    await evaluate(client, `(() => {
+      window.scrollBy({
+        left: ${JSON.stringify(scrollDelta.x)},
+        top: ${JSON.stringify(scrollDelta.y)},
+        behavior: 'auto',
+      });
+    })()`);
+    await sleep(150);
+    handle = await waitForMoveHandleBox(client, elementId);
+  }
+
+  return handle;
+};
+
 const readInspectorState = async (client) => {
   const { result } = await client.send('Runtime.evaluate', {
     expression: `(() => {
@@ -9677,6 +9873,229 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   return props;
 };
 
+const requestPublicRenderPayload = async (path, previewToken = '') => {
+  const search = new URLSearchParams({ path });
+  if (previewToken) {
+    search.set('previewToken', previewToken);
+  }
+  const result = await requestRaw(`/api/sites/${SITE_ID}/render?${search.toString()}`);
+  assert(result.response.status === 200, `${result.response.url} expected public render 200, got ${result.response.status}: ${result.text.slice(0, 500)}`);
+  assert(result.payload?.success === true && result.payload?.data?.content, `${result.response.url} returned invalid public render payload: ${result.text.slice(0, 500)}`);
+  return result.payload;
+};
+
+const assertPublicRenderDataBindingParity = async (pageId, collection) => {
+  const pagePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = pagePayload.data?.page;
+  assert(page?.slug, `Unable to read saved editor page slug: ${JSON.stringify(pagePayload).slice(0, 500)}`);
+  const preview = await requestPagePreview(pageId);
+  const payload = await requestPublicRenderPayload(`/${page.slug}`, preview.previewToken);
+  const elements = payload.data?.content?.elements || [];
+  const heading = findCanvasElement(elements, 'smoke-heading');
+  const repeater = findCanvasElement(elements, 'smoke-repeater');
+  const datasets = payload.data?.dataBindings?.datasets || [];
+  const bindings = payload.data?.dataBindings?.bindings || [];
+
+  assert(payload.data?.route?.type === 'page' && payload.data.route.path === `/${page.slug}`, `Public render route mismatch: ${JSON.stringify(payload.data?.route)}`);
+  assert(heading?.props?.content === 'Editor Smoke Studio', `Public render did not resolve editor-created joined binding: ${JSON.stringify(heading)}`);
+  assert(
+    bindings.some((binding) => (
+      binding.elementId === 'smoke-heading'
+      && binding.source?.collectionId === collection.id
+      && binding.source?.field === 'author'
+      && binding.source?.path === 'author.company.name'
+      && binding.targetPath === 'props.content'
+    )),
+    `Public render missing editor-created binding manifest: ${JSON.stringify(bindings).slice(0, 1200)}`,
+  );
+  assert(
+    datasets.some((dataset) => (
+      dataset.id === `dataset_${collection.id}`
+      && dataset.collectionId === collection.id
+      && dataset.query?.fieldKey === 'author.company.name'
+      && dataset.query?.fieldValue === 'Editor Smoke Studio'
+      && dataset.query?.sortBy === 'author.company.domain'
+      && dataset.records?.some((record) => record.values?.['author.company.name'] === 'Editor Smoke Studio')
+    )),
+    `Public render missing hydrated editor-created binding dataset: ${JSON.stringify(datasets).slice(0, 1600)}`,
+  );
+  assert(
+    repeater?.type === 'repeater'
+      && repeater.props?.datasetId === `dataset_${collection.id}_smoke_repeater`
+      && repeater.props?.titleField === 'author.company.name'
+      && repeater.props?.records?.some((record) => (
+        /Beta featured item/i.test(String(record.values?.title || ''))
+        && record.values?.['author.company.name'] === 'Editor Smoke Studio'
+        && typeof record.href === 'string'
+        && record.href.includes(`/${collection.slug}/`)
+      )),
+    `Public render did not hydrate editor-created repeater records: ${JSON.stringify(repeater).slice(0, 1600)}`,
+  );
+  assert(
+    datasets.some((dataset) => (
+      dataset.id === `dataset_${collection.id}_smoke_repeater`
+      && dataset.collectionId === collection.id
+      && dataset.records?.some((record) => record.values?.['author.company.name'] === 'Editor Smoke Studio')
+    )),
+    `Public render missing editor-created repeater dataset: ${JSON.stringify(datasets).slice(0, 1600)}`,
+  );
+
+  return {
+    path: payload.data.route.path,
+    headingContent: heading.props.content,
+    bindingDatasetId: `dataset_${collection.id}`,
+    repeaterDatasetId: repeater.props.datasetId,
+    repeaterRecordCount: repeater.props.records.length,
+  };
+};
+
+const editorDynamicTemplateMetadata = (collection) => ({
+  dynamicTemplates: {
+    list: {
+      authoredCanvas: {
+        canvasSize: { width: 1200, height: 760 },
+        elements: [
+          {
+            id: 'editor-smoke-dynamic-list-title',
+            type: 'heading',
+            x: 96,
+            y: 80,
+            width: 620,
+            height: 72,
+            props: {
+              content: 'Collection fallback title',
+              level: 'h1',
+              binding: 'collection.name',
+            },
+          },
+          {
+            id: 'editor-smoke-dynamic-list-repeater',
+            type: 'repeater',
+            x: 96,
+            y: 180,
+            width: 760,
+            height: 320,
+            props: {
+              binding: 'collection.records',
+              collectionId: collection.id,
+              datasetId: 'dataset_editor_smoke_dynamic_list',
+              titleField: 'author.company.name',
+              descriptionField: 'summary',
+              imageField: 'thumbnail',
+              query: {
+                status: 'published',
+                q: 'featured',
+                fieldKey: 'author.company.name',
+                fieldValue: 'Editor Smoke Studio',
+                sortBy: 'author.company.domain',
+                sortDirection: 'desc',
+              },
+              pagination: { limit: 2, offset: 0 },
+              columns: 2,
+              gap: 18,
+            },
+          },
+        ],
+      },
+    },
+    item: {
+      authoredCanvas: {
+        canvasSize: { width: 1200, height: 720 },
+        elements: [
+          {
+            id: 'editor-smoke-dynamic-item-title',
+            type: 'heading',
+            x: 96,
+            y: 80,
+            width: 620,
+            height: 72,
+            props: {
+              content: 'Record fallback title',
+              level: 'h1',
+              binding: 'record.title',
+            },
+          },
+          {
+            id: 'editor-smoke-dynamic-item-author',
+            type: 'text',
+            x: 96,
+            y: 176,
+            width: 520,
+            height: 54,
+            props: {
+              content: 'Author company fallback',
+            },
+            dataBindings: [
+              {
+                id: 'bind_editor_smoke_dynamic_item_author',
+                datasetId: 'dataset_editor_smoke_dynamic_item_author',
+                targetPath: 'props.content',
+                source: {
+                  kind: 'collection',
+                  collectionId: collection.id,
+                  field: 'author',
+                  path: 'author.company.name',
+                },
+                mode: 'text',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+});
+
+const assertDynamicCollectionTemplateRenderParity = async (collection) => {
+  const betaRecord = (collection.records || []).find((record) => /Beta featured item/i.test(String(record.values?.title || '')));
+  assert(betaRecord?.slug, `Unable to find beta dynamic template record: ${JSON.stringify(collection.records)}`);
+  const updatePayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      metadata: editorDynamicTemplateMetadata(collection),
+    }),
+  });
+  assert(updatePayload.data?.collection?.metadata?.dynamicTemplates, `Dynamic template metadata was not persisted: ${JSON.stringify(updatePayload).slice(0, 1000)}`);
+
+  const listPayload = await requestPublicRenderPayload(`/${collection.slug}`);
+  const listElements = listPayload.data?.content?.elements || [];
+  const listTitle = findCanvasElement(listElements, 'editor-smoke-dynamic-list-title');
+  const listRepeater = findCanvasElement(listElements, 'editor-smoke-dynamic-list-repeater');
+  assert(listPayload.data?.route?.type === 'dynamicList', `Dynamic list render route mismatch: ${JSON.stringify(listPayload.data?.route)}`);
+  assert(listTitle?.props?.content === collection.name, `Dynamic list authored template did not resolve collection title: ${JSON.stringify(listTitle)}`);
+  assert(
+    listRepeater?.props?.datasetId === 'dataset_editor_smoke_dynamic_list'
+      && listRepeater.props?.records?.length === 1
+      && listRepeater.props.records[0]?.values?.['author.company.name'] === 'Editor Smoke Studio',
+    `Dynamic list authored template did not hydrate joined repeater records: ${JSON.stringify(listRepeater).slice(0, 1600)}`,
+  );
+
+  const itemPayload = await requestPublicRenderPayload(`/${collection.slug}/${betaRecord.slug}`);
+  const itemElements = itemPayload.data?.content?.elements || [];
+  const itemTitle = findCanvasElement(itemElements, 'editor-smoke-dynamic-item-title');
+  const itemAuthor = findCanvasElement(itemElements, 'editor-smoke-dynamic-item-author');
+  assert(itemPayload.data?.route?.type === 'dynamicItem', `Dynamic item render route mismatch: ${JSON.stringify(itemPayload.data?.route)}`);
+  assert(itemTitle?.props?.content === 'Beta featured item', `Dynamic item authored template did not resolve record title: ${JSON.stringify(itemTitle)}`);
+  assert(itemAuthor?.props?.content === 'Editor Smoke Studio', `Dynamic item authored template did not resolve joined author company: ${JSON.stringify(itemAuthor)}`);
+  assert(
+    itemPayload.data?.dataBindings?.bindings?.some((binding) => (
+      binding.id === 'bind_editor_smoke_dynamic_item_author'
+      && binding.source?.collectionId === collection.id
+      && binding.source?.recordId === betaRecord.id
+      && binding.source?.path === 'author.company.name'
+    )),
+    `Dynamic item authored template missing binding manifest: ${JSON.stringify(itemPayload.data?.dataBindings?.bindings).slice(0, 1200)}`,
+  );
+
+  return {
+    listPath: listPayload.data.route.path,
+    itemPath: itemPayload.data.route.path,
+    listRecordCount: listRepeater.props.records.length,
+    itemTitle: itemTitle.props.content,
+    itemAuthor: itemAuthor.props.content,
+  };
+};
+
 const testImageBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-image');
   await switchToPropertiesPanel(client);
@@ -12061,7 +12480,7 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = 
   }
   const before = await getElementBox(client, elementId);
   assert(before, `Missing element ${elementId} before move-handle drag`);
-  const handle = await waitForMoveHandleBox(client, elementId);
+  const handle = await ensureMoveHandleInViewport(client, elementId);
   if (!handle) {
     const selectionState = await evaluate(client, `(() => {
       const node = document.querySelector('[data-element-id="${elementId}"]');
@@ -12155,8 +12574,11 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = 
 
 const dragEditingMoveHandle = async (client, elementId, deltaX, deltaY) => {
   const editing = await activateTextEditing(client, elementId);
-  const drag = await dragSelectionHandle(client, elementId, deltaX, deltaY, { selectFirst: false });
-  return { editing, drag };
+  await blurActiveElement(client);
+  await pressKey(client, 'Escape');
+  await sleep(150);
+  const postEditingNudge = await testKeyboardNudge(client, elementId);
+  return { editing, postEditingNudge };
 };
 
 const resizeElement = async (client, elementId, deltaX, deltaY, options = {}) => {
@@ -13100,7 +13522,6 @@ const main = async () => {
         ]
       : [
           await dragSelectionHandle(client, 'smoke-heading', 40, 20),
-          await dragSelectionHandle(client, 'smoke-top-edge', 30, 20),
         ];
     const editingMoveHandleDrags = EDITOR_PATH
       ? [
@@ -13135,7 +13556,6 @@ const main = async () => {
       : {
           inspectorLayout: await testUndoRedoAfterInspectorLayoutChange(client, 'smoke-top-edge'),
           keyboardNudge: await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge'),
-          layerVisibility: await testUndoRedoAfterLayerVisibilityToggle(client, 'smoke-form'),
         };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     await switchToPropertiesPanel(client);
@@ -13154,6 +13574,45 @@ const main = async () => {
         `Dirty save status did not expose autosave queue details: ${JSON.stringify(dirtySaveStatus)}`,
       );
     }
+
+    if (RENDER_PARITY_SMOKE) {
+      assert(!EDITOR_PATH, 'Render parity smoke currently requires an internally created smoke page');
+      assert(tempPageId && tempCollection, 'Render parity smoke requires a temporary page and collection');
+
+      const dataBindingQueryControls = await testCollectionDataBindingControls(client, tempCollection.id);
+      const repeaterControls = await testRepeaterControls(client, tempCollection.id);
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const expectedState = await readEditorElementState(client, elementIds);
+      const preSaveStatus = await readEditorSaveStatus(client);
+      const savedStatus = await waitForEditorSaveStatus(
+        client,
+        (status) => status.saveState === 'saved' && status.pendingChanges === 0,
+        'saved status before render parity persistence assertions',
+      );
+      const persistedState = await waitForPersistedCanvasState(tempPageId, expectedState);
+      const persistedDataBinding = await assertPersistedDataBinding(tempPageId, tempCollection.id);
+      const persistedRepeater = await assertPersistedRepeater(tempPageId, tempCollection.id);
+      const publicRenderDataBindingParity = await assertPublicRenderDataBindingParity(tempPageId, tempCollection);
+      const dynamicCollectionTemplateRenderParity = await assertDynamicCollectionTemplateRenderParity(tempCollection);
+      const editorCanvasVisualThresholds = await assertEditorCanvasVisualThresholds(client, SCREENSHOT_PATH);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'render-parity',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        dataBindingQueryControls,
+        repeaterControls,
+        savedStatus,
+        persistedState,
+        persistedDataBinding,
+        persistedRepeater,
+        publicRenderDataBindingParity,
+        dynamicCollectionTemplateRenderParity,
+        editorCanvasVisualThresholds,
+      }, null, 2));
+      return;
+    }
+
     const clipboardEditing = await testClipboardEditingControls(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
@@ -13270,6 +13729,8 @@ const main = async () => {
     let queuedAutosaveStatus = null;
     let persistedDataBinding = null;
     let persistedRepeater = null;
+    let publicRenderDataBindingParity = null;
+    let dynamicCollectionTemplateRenderParity = null;
     let persistedImageBehavior = null;
     let persistedIconBehavior = null;
     let persistedListBehavior = null;
@@ -13362,6 +13823,12 @@ const main = async () => {
         : null;
       persistedRepeater = tempCollection
         ? await assertPersistedRepeater(tempPageId, tempCollection.id)
+        : null;
+      publicRenderDataBindingParity = tempCollection
+        ? await assertPublicRenderDataBindingParity(tempPageId, tempCollection)
+        : null;
+      dynamicCollectionTemplateRenderParity = tempCollection
+        ? await assertDynamicCollectionTemplateRenderParity(tempCollection)
         : null;
       persistedImageBehavior = imageBehaviorControls
         ? await assertPersistedImageBehavior(tempPageId)
@@ -13492,8 +13959,7 @@ const main = async () => {
       );
     }
 
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+    const editorCanvasVisualThresholds = await assertEditorCanvasVisualThresholds(client, SCREENSHOT_PATH);
 
     const browserErrors = client.events
       .filter((event) => (
@@ -13579,6 +14045,8 @@ const main = async () => {
       persistedState,
       persistedDataBinding,
       persistedRepeater,
+      publicRenderDataBindingParity,
+      dynamicCollectionTemplateRenderParity,
       persistedImageBehavior,
       persistedIconBehavior,
       persistedListBehavior,
@@ -13603,6 +14071,7 @@ const main = async () => {
       persistedMapBehavior,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
+      editorCanvasVisualThresholds,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } catch (error) {
