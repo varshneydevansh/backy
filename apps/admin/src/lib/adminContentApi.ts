@@ -1422,6 +1422,29 @@ interface ApiOrderShippingLabelResponse {
   };
 }
 
+export interface AdminOrderTrackingStatus {
+  status: string;
+  provider: string;
+  trackingNumber: string;
+  trackingUrl: string;
+  checkedAt: string;
+  providerPayload?: Record<string, unknown>;
+}
+
+interface ApiOrderTrackingResponse {
+  success: boolean;
+  data?: {
+    record: ApiCollectionRecord;
+    order?: ApiCollectionRecord;
+    tracking: AdminOrderTrackingStatus;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface AdminOrderProviderRefund {
   id: string;
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
@@ -6229,6 +6252,30 @@ export async function voidOrderShippingLabel(
   return {
     record: toCollectionRecord(payload.data.record || payload.data.order),
     label: payload.data.label,
+  };
+}
+
+export async function refreshOrderTracking(
+  siteId: string,
+  orderId: string,
+  input: { provider?: string; executionProvider?: string; trackingNumber?: string; trackingUrl?: string } = {},
+): Promise<{ record: CollectionRecord; tracking: AdminOrderTrackingStatus }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/tracking`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiOrderTrackingResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to refresh tracking');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    tracking: payload.data.tracking,
   };
 }
 

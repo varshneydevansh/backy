@@ -17,7 +17,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-const ORDER_REQUIRED_FIELD_COUNT = 49;
+const ORDER_REQUIRED_FIELD_COUNT = 51;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -44,6 +44,8 @@ const ORDER_FIELDS = [
   { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text', required: false, unique: false, sortOrder: 140 },
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
+  { key: 'trackingstatus', label: 'Tracking Status', type: 'text', required: false, unique: false, sortOrder: 165 },
+  { key: 'trackinglastcheckedat', label: 'Tracking Last Checked At', type: 'date', required: false, unique: false, sortOrder: 166 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
   { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
   { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
@@ -880,6 +882,8 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'fulfillmentcarrier',
     'trackingnumber',
     'trackingurl',
+    'trackingstatus',
+    'trackinglastcheckedat',
     'fulfilledat',
     'shippinglabelstatus',
     'shippinglabelprovider',
@@ -933,6 +937,8 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'UPS',
     `1ZIMPORT${suffix.toUpperCase()}`,
     `https://carrier.example/import/${suffix}`,
+    'processing',
+    '2026-05-10T10:04:00.000Z',
     '',
     'draft',
     'UPS',
@@ -980,6 +986,7 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(record.values?.ordersource === 'import', `Imported source was unexpected: ${JSON.stringify(record.values?.ordersource)}`);
   assert(record.values?.paymentstatus === 'paid', `Imported payment status was unexpected: ${JSON.stringify(record.values?.paymentstatus)}`);
   assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
+  assert(record.values?.trackingstatus === 'processing' && Boolean(record.values?.trackinglastcheckedat), `Imported tracking refresh fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.shippinglabelstatus === 'draft' && record.values?.shippinglabelprovider === 'UPS' && record.values?.shippinglabelid === `lbl_import_${suffix}` && record.values?.shippinglabelcost === 6, `Imported shipping label fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.providerrefundstatus === 'requested' && record.values?.providerrefundprovider === 'manual' && record.values?.providerrefundid === `rf_import_${suffix}` && record.values?.providerrefundamount === 0 && String(record.values?.providerrefundpayload || '').includes('backy.provider-refund.v1'), `Imported provider refund fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.riskscore === 12 && record.values?.risklevel === 'low' && record.values?.riskreviewstatus === 'cleared', `Imported risk fields were unexpected: ${JSON.stringify(record.values)}`);
@@ -1531,6 +1538,24 @@ const main = async () => {
       ),
       'Prepare Label did not create a replacement shipment label after void',
     );
+
+    await clickOrderCardButton(client, orderNumber, 'Refresh Tracking');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.fulfillmentstatus === 'processing' &&
+        values.trackingnumber === `1Z${suffix.toUpperCase()}` &&
+        values.trackingstatus === 'processing' &&
+        Boolean(values.trackinglastcheckedat) &&
+        /Tracking refreshed/.test(String(values.notes || ''))
+      ),
+      'Refresh Tracking did not persist tracking status fields',
+    );
+
+    const trackingRecord = await getCollectionRecordBySlug(collectionId, slug);
+    const trackingPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${trackingRecord.id}/tracking`);
+    assert(trackingPayload.data?.tracking?.status === 'processing', `Tracking endpoint did not return refreshed status: ${JSON.stringify(trackingPayload)}`);
 
     await clickOrderCardButton(client, orderNumber, 'Fulfill');
     await waitForOrderValue(

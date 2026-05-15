@@ -40,6 +40,7 @@ import {
   listOrderDeliveryEvents,
   listCollectionRecords,
   listCollections,
+  refreshOrderTracking,
   reconcileCommerceOrders,
   updateCollection,
   updateCollectionRecord,
@@ -193,6 +194,8 @@ interface OrderFormState {
   fulfillmentCarrier: string;
   trackingNumber: string;
   trackingUrl: string;
+  trackingStatus: string;
+  trackingLastCheckedAt: string;
   fulfilledAt: string;
   shippingLabelStatus: ShippingLabelStatus;
   shippingLabelProvider: string;
@@ -320,6 +323,8 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text', required: false, unique: false, sortOrder: 140 },
   { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
   { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
+  { key: 'trackingstatus', label: 'Tracking Status', type: 'text', required: false, unique: false, sortOrder: 165 },
+  { key: 'trackinglastcheckedat', label: 'Tracking Last Checked At', type: 'date', required: false, unique: false, sortOrder: 166 },
   { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
   { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', required: false, unique: false, sortOrder: 171, options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
   { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text', required: false, unique: false, sortOrder: 172 },
@@ -377,6 +382,8 @@ const ORDER_EXPORT_COLUMNS = [
   'fulfillment_carrier',
   'tracking_number',
   'tracking_url',
+  'tracking_status',
+  'tracking_last_checked_at',
   'fulfilled_at',
   'shipping_label_status',
   'shipping_label_provider',
@@ -437,6 +444,8 @@ const ORDER_IMPORT_COLUMNS = [
   'fulfillmentcarrier',
   'trackingnumber',
   'trackingurl',
+  'trackingstatus',
+  'trackinglastcheckedat',
   'fulfilledat',
   'shippinglabelstatus',
   'shippinglabelprovider',
@@ -527,6 +536,8 @@ const EMPTY_ORDER_FORM: OrderFormState = {
   fulfillmentCarrier: '',
   trackingNumber: '',
   trackingUrl: '',
+  trackingStatus: '',
+  trackingLastCheckedAt: '',
   fulfilledAt: '',
   shippingLabelStatus: 'none',
   shippingLabelProvider: '',
@@ -985,6 +996,8 @@ function OrdersRoute() {
       fulfillmentCarrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
       trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
       trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
+      trackingStatus: String(readOrderValue(order.values, 'trackingstatus', '')),
+      trackingLastCheckedAt: String(readOrderValue(order.values, 'trackinglastcheckedat', '') || ''),
       fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
       risk: {
         score: toNumber(readOrderValue(order.values, 'riskscore', 0)),
@@ -1554,6 +1567,8 @@ function OrdersRoute() {
         fulfillmentcarrier: formState.fulfillmentCarrier.trim(),
         trackingnumber: formState.trackingNumber.trim(),
         trackingurl: formState.trackingUrl.trim(),
+        trackingstatus: formState.trackingStatus.trim(),
+        trackinglastcheckedat: formState.trackingLastCheckedAt || null,
         fulfilledat: formState.fulfilledAt || null,
         shippinglabelstatus: formState.shippingLabelStatus,
         shippinglabelprovider: formState.shippingLabelProvider.trim(),
@@ -1695,6 +1710,37 @@ function OrdersRoute() {
       setNotice(`Shipping label ${label.id} voided.`);
     } catch (labelError) {
       setError(labelError instanceof Error ? labelError.message : 'Unable to void shipping label');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const refreshOrderTrackingAction = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot refresh tracking.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { record: updated, tracking } = await refreshOrderTracking(activeSiteId, order.id, {
+        provider: String(readOrderValue(order.values, 'fulfillmentcarrier', '') || '').trim(),
+        trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '') || '').trim(),
+        trackingUrl: String(readOrderValue(order.values, 'trackingurl', '') || '').trim(),
+        executionProvider: 'easypost',
+      });
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Tracking refreshed for ${tracking.trackingNumber}: ${tracking.status}.`);
+    } catch (trackingError) {
+      setError(trackingError instanceof Error ? trackingError.message : 'Unable to refresh tracking');
     } finally {
       setIsSaving(false);
     }
@@ -2998,6 +3044,7 @@ function OrdersRoute() {
                       onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
                       onShippingLabel={() => void prepareOrderShippingLabel(order)}
                       onVoidShippingLabel={() => void voidOrderShippingLabelAction(order)}
+                      onRefreshTracking={() => void refreshOrderTrackingAction(order)}
                       onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onProviderRefund={() => void requestOrderProviderRefund(order)}
@@ -3385,6 +3432,24 @@ function OrdersRoute() {
                       onChange={(event) => setFormState((current) => ({ ...current, trackingUrl: event.target.value }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="https://carrier.example/track"
+                    />
+                  </Field>
+                  <Field label="Tracking status">
+                    <input
+                      value={formState.trackingStatus}
+                      onChange={(event) => setFormState((current) => ({ ...current, trackingStatus: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="in_transit"
+                    />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Tracking checked">
+                    <input
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(formState.trackingLastCheckedAt)}
+                      onChange={(event) => setFormState((current) => ({ ...current, trackingLastCheckedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
                   <Field label="Fulfilled at">
@@ -3911,6 +3976,7 @@ function OrderCard({
   onPaid,
   onShippingLabel,
   onVoidShippingLabel,
+  onRefreshTracking,
   onFulfilled,
   onRefunded,
   onProviderRefund,
@@ -3930,6 +3996,7 @@ function OrderCard({
   onPaid: () => void;
   onShippingLabel: () => void;
   onVoidShippingLabel: () => void;
+  onRefreshTracking: () => void;
   onFulfilled: () => void;
   onRefunded: () => void;
   onProviderRefund: () => void;
@@ -3944,6 +4011,8 @@ function OrderCard({
   const orderStatus = String(readOrderValue(values, 'orderstatus', 'open'));
   const trackingNumber = String(readOrderValue(values, 'trackingnumber', ''));
   const trackingUrl = String(readOrderValue(values, 'trackingurl', ''));
+  const trackingStatus = String(readOrderValue(values, 'trackingstatus', ''));
+  const trackingLastCheckedAt = String(readOrderValue(values, 'trackinglastcheckedat', ''));
   const paymentReference = String(readOrderValue(values, 'paymentreference', ''));
   const orderSource = String(readOrderValue(values, 'ordersource', 'web'));
   const checkoutSessionId = String(readOrderValue(values, 'checkoutsessionid', ''));
@@ -4012,7 +4081,7 @@ function OrderCard({
               ) : null}
               {trackingNumber ? (
                 <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                  Track {trackingNumber}
+                  Track {trackingStatus || trackingNumber}
                 </span>
               ) : null}
               {shippingLabelId ? (
@@ -4093,7 +4162,7 @@ function OrderCard({
           {lineItemSummary}
         </p>
       ) : null}
-      {(paidAt || fulfilledAt || trackingUrl) && (
+      {(paidAt || fulfilledAt || trackingUrl || trackingStatus || trackingLastCheckedAt) && (
         <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
           {paidAt ? (
             <div className="rounded border border-border bg-muted/40 px-2 py-1.5">
@@ -4118,6 +4187,12 @@ function OrderCard({
               Tracking link
             </a>
           ) : null}
+          {trackingStatus || trackingLastCheckedAt ? (
+            <div className="rounded border border-border bg-muted/40 px-2 py-1.5">
+              <RefreshCw className="mr-1 inline size-3.5" />
+              Tracking {trackingStatus || 'checked'}{trackingLastCheckedAt ? ` ${formatWorkflowDate(trackingLastCheckedAt)}` : ''}
+            </div>
+          ) : null}
         </div>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -4137,6 +4212,9 @@ function OrderCard({
             <ExternalLink className="size-4" />
             Open Label
           </a>
+        ) : null}
+        {trackingNumber ? (
+          <Button size="sm" variant="outline" onClick={onRefreshTracking} disabled={disabled || fulfillmentStatus === 'cancelled'} iconStart={<RefreshCw className="size-4" />}>Refresh Tracking</Button>
         ) : null}
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
@@ -4314,6 +4392,8 @@ const camelizeOrderKey = (key: string): string => {
   if (key === 'fulfillmentcarrier') return 'fulfillmentCarrier';
   if (key === 'trackingnumber') return 'trackingNumber';
   if (key === 'trackingurl') return 'trackingUrl';
+  if (key === 'trackingstatus') return 'trackingStatus';
+  if (key === 'trackinglastcheckedat') return 'trackingLastCheckedAt';
   if (key === 'fulfilledat') return 'fulfilledAt';
   if (key === 'shippinglabelstatus') return 'shippingLabelStatus';
   if (key === 'shippinglabelprovider') return 'shippingLabelProvider';
@@ -4348,6 +4428,8 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.fulfillmentCarrier !== undefined ? { fulfillmentcarrier: updates.fulfillmentCarrier } : {}),
   ...(updates.trackingNumber !== undefined ? { trackingnumber: updates.trackingNumber } : {}),
   ...(updates.trackingUrl !== undefined ? { trackingurl: updates.trackingUrl } : {}),
+  ...(updates.trackingStatus !== undefined ? { trackingstatus: updates.trackingStatus } : {}),
+  ...(updates.trackingLastCheckedAt !== undefined ? { trackinglastcheckedat: updates.trackingLastCheckedAt || null } : {}),
   ...(updates.fulfilledAt !== undefined ? { fulfilledat: updates.fulfilledAt || null } : {}),
   ...(updates.shippingLabelStatus !== undefined ? { shippinglabelstatus: updates.shippingLabelStatus } : {}),
   ...(updates.shippingLabelProvider !== undefined ? { shippinglabelprovider: updates.shippingLabelProvider } : {}),
@@ -4436,6 +4518,8 @@ const buildRefundWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     fulfilledAt: '',
     trackingNumber: '',
     trackingUrl: '',
+    trackingStatus: '',
+    trackingLastCheckedAt: '',
     refundAmount: String(refundAmount),
     refundReason: currentReason || 'Customer return/refund manually recorded from Backy order workflow.',
     notes: currentNotes ? `${currentNotes}\n${workflowNote}` : workflowNote,
@@ -4463,6 +4547,8 @@ const buildCancelWorkflowUpdates = (order: CollectionRecord): Partial<OrderFormS
     fulfillmentCarrier: '',
     trackingNumber: '',
     trackingUrl: '',
+    trackingStatus: '',
+    trackingLastCheckedAt: '',
     fulfilledAt: '',
     refundAmount: shouldRefundPayment ? String(currentRefundAmount > 0 ? currentRefundAmount : total) : '',
     refundReason: shouldRefundPayment ? currentReason || 'Order cancellation manually recorded from Backy order workflow.' : '',
@@ -4502,6 +4588,8 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
   fulfillmentCarrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
   trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
   trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
+  trackingStatus: String(readOrderValue(order.values, 'trackingstatus', '')),
+  trackingLastCheckedAt: String(readOrderValue(order.values, 'trackinglastcheckedat', '') || ''),
   fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
   shippingLabelStatus: asShippingLabelStatus(readOrderValue(order.values, 'shippinglabelstatus', undefined)),
   shippingLabelProvider: String(readOrderValue(order.values, 'shippinglabelprovider', '')),
@@ -4703,6 +4791,8 @@ const orderToExportRecord = (
   fulfillment_carrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
   tracking_number: String(readOrderValue(order.values, 'trackingnumber', '')),
   tracking_url: String(readOrderValue(order.values, 'trackingurl', '')),
+  tracking_status: String(readOrderValue(order.values, 'trackingstatus', '')),
+  tracking_last_checked_at: String(readOrderValue(order.values, 'trackinglastcheckedat', '') || ''),
   fulfilled_at: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
   shipping_label_status: asShippingLabelStatus(readOrderValue(order.values, 'shippinglabelstatus', undefined)),
   shipping_label_provider: String(readOrderValue(order.values, 'shippinglabelprovider', '')),
