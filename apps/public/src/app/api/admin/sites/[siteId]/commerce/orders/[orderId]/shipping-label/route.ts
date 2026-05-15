@@ -48,6 +48,7 @@ interface CollectionRecordAuditSource {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const EASYPOST_API_BASE = 'https://api.easypost.com/v2';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -125,7 +126,252 @@ interface ShippingLabelPayload {
   url: string;
   cost: number;
   createdAt: string;
+  providerPayload?: Record<string, unknown>;
 }
+
+interface EasyPostRatePayload {
+  id: string;
+  carrier: string;
+  service: string;
+  rate: number;
+}
+
+interface EasyPostLabelResult {
+  ok: boolean;
+  label?: {
+    id: string;
+    status: ShippingLabelPayload['status'];
+    provider: string;
+    serviceLevel: string;
+    url: string;
+    cost: number;
+  };
+  payload: Record<string, unknown>;
+}
+
+const easyPostApiKey = () => (
+  process.env.BACKY_EASYPOST_API_KEY?.trim()
+  || process.env.EASYPOST_API_KEY?.trim()
+  || ''
+);
+
+const normalizeProviderKey = (value: string): string => value.toLowerCase().replace(/[\s_-]+/g, '');
+
+const canExecuteEasyPostLabel = (body: Record<string, unknown>): boolean => {
+  const executionProvider = textValue(body.executionProvider)
+    || textValue(body.labelProvider)
+    || textValue(body.provider);
+  if (normalizeProviderKey(executionProvider) !== 'easypost') return false;
+  if (!easyPostApiKey()) return false;
+  return Object.keys(toRecord(body.fromAddress)).length > 0
+    && Object.keys(toRecord(body.toAddress)).length > 0
+    && Object.keys(toRecord(body.parcel)).length > 0;
+};
+
+const safeProviderField = (value: unknown): string | number | boolean | null => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'boolean') return value;
+  return null;
+};
+
+const safeProviderRecord = (value: unknown): Record<string, string | number | boolean | null> => {
+  const record = toRecord(value);
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([key, entry]) => [key, safeProviderField(entry)] as const)
+      .filter(([, entry]) => entry !== null && entry !== ''),
+  );
+};
+
+const safeEasyPostRatePayload = (value: unknown): EasyPostRatePayload | null => {
+  const rate = toRecord(value);
+  const id = textValue(rate.id);
+  if (!id) return null;
+  return {
+    id,
+    carrier: textValue(rate.carrier),
+    service: textValue(rate.service),
+    rate: numberValue(rate.rate),
+  };
+};
+
+const safeEasyPostShipmentPayload = (value: Record<string, unknown>) => {
+  const postageLabel = toRecord(value.postage_label);
+  const selectedRate = safeEasyPostRatePayload(value.selected_rate);
+  const rates = Array.isArray(value.rates)
+    ? value.rates.map(safeEasyPostRatePayload).filter((rate): rate is EasyPostRatePayload => Boolean(rate))
+    : [];
+
+  return {
+    id: textValue(value.id),
+    object: textValue(value.object),
+    mode: textValue(value.mode),
+    status: textValue(value.status),
+    trackingCode: textValue(value.tracking_code),
+    selectedRate,
+    ratesCount: rates.length,
+    postageLabel: {
+      id: textValue(postageLabel.id),
+      labelUrl: textValue(postageLabel.label_url),
+      labelFileType: textValue(postageLabel.label_file_type),
+      labelDate: textValue(postageLabel.label_date),
+    },
+  };
+};
+
+const safeEasyPostErrorPayload = (value: Record<string, unknown>) => {
+  const error = toRecord(value.error);
+  return {
+    code: textValue(error.code),
+    message: textValue(error.message) || textValue(value.message) || 'EasyPost label purchase failed.',
+    errors: Array.isArray(error.errors) ? error.errors.slice(0, 5) : [],
+  };
+};
+
+const pickEasyPostRate = (
+  shipment: Record<string, unknown>,
+  input: {
+    rateId: string;
+    carrier: string;
+    serviceLevel: string;
+  },
+): EasyPostRatePayload | null => {
+  const rates = Array.isArray(shipment.rates)
+    ? shipment.rates.map(safeEasyPostRatePayload).filter((rate): rate is EasyPostRatePayload => Boolean(rate))
+    : [];
+  if (rates.length === 0) return null;
+
+  const normalizedRateId = input.rateId.toLowerCase();
+  const normalizedCarrier = input.carrier.toLowerCase();
+  const normalizedServiceLevel = input.serviceLevel.toLowerCase();
+  return rates.find((rate) => normalizedRateId && rate.id.toLowerCase() === normalizedRateId)
+    || rates.find((rate) => (
+      (!normalizedCarrier || rate.carrier.toLowerCase() === normalizedCarrier) &&
+      (!normalizedServiceLevel || rate.service.toLowerCase() === normalizedServiceLevel)
+    ))
+    || [...rates].sort((a, b) => a.rate - b.rate)[0]
+    || null;
+};
+
+const easyPostHeaders = () => ({
+  authorization: `Basic ${Buffer.from(`${easyPostApiKey()}:`).toString('base64')}`,
+  'content-type': 'application/json',
+});
+
+const easyPostRequest = async (path: string, body: Record<string, unknown>) => {
+  const response = await fetch(`${EASYPOST_API_BASE}${path}`, {
+    method: 'POST',
+    headers: easyPostHeaders(),
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  return {
+    ok: response.ok,
+    payload: toRecord(payload),
+  };
+};
+
+const executeEasyPostLabel = async (input: {
+  orderId: string;
+  orderNumber: string;
+  labelId: string;
+  carrier: string;
+  serviceLevel: string;
+  rateId: string;
+  fromAddress: Record<string, unknown>;
+  toAddress: Record<string, unknown>;
+  parcel: Record<string, unknown>;
+}): Promise<EasyPostLabelResult> => {
+  const shipmentResult = await easyPostRequest('/shipments', {
+    shipment: {
+      from_address: safeProviderRecord(input.fromAddress),
+      to_address: safeProviderRecord(input.toAddress),
+      parcel: safeProviderRecord(input.parcel),
+      reference: input.orderNumber || input.orderId,
+      options: {
+        label_format: 'PDF',
+      },
+    },
+  });
+
+  if (!shipmentResult.ok) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'easypost',
+        action: 'shipments.create',
+        executionMode: 'easypost-api',
+        error: safeEasyPostErrorPayload(shipmentResult.payload),
+      },
+    };
+  }
+
+  const shipmentId = textValue(shipmentResult.payload.id);
+  const selectedRate = pickEasyPostRate(shipmentResult.payload, input);
+  if (!shipmentId || !selectedRate) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'easypost',
+        action: 'shipments.buy',
+        executionMode: 'easypost-api',
+        shipment: safeEasyPostShipmentPayload(shipmentResult.payload),
+        error: {
+          message: selectedRate ? 'EasyPost shipment id was missing.' : 'EasyPost did not return a purchasable rate.',
+        },
+      },
+    };
+  }
+
+  const buyResult = await easyPostRequest(`/shipments/${encodeURIComponent(shipmentId)}/buy`, {
+    rate: { id: selectedRate.id },
+  });
+
+  if (!buyResult.ok) {
+    return {
+      ok: false,
+      payload: {
+        schemaVersion: 'backy.shipping-label.v1',
+        provider: 'easypost',
+        action: 'shipments.buy',
+        executionMode: 'easypost-api',
+        shipment: safeEasyPostShipmentPayload(shipmentResult.payload),
+        selectedRate,
+        error: safeEasyPostErrorPayload(buyResult.payload),
+      },
+    };
+  }
+
+  const boughtShipment = safeEasyPostShipmentPayload(buyResult.payload);
+  const boughtRate = boughtShipment.selectedRate || selectedRate;
+  const postageLabel = toRecord(buyResult.payload.postage_label);
+  const postageLabelId = textValue(postageLabel.id);
+  const labelUrl = textValue(postageLabel.label_url);
+
+  return {
+    ok: true,
+    label: {
+      id: postageLabelId || shipmentId || input.labelId,
+      status: 'purchased',
+      provider: boughtRate.carrier || input.carrier || 'easypost',
+      serviceLevel: boughtRate.service || input.serviceLevel || 'standard',
+      url: labelUrl,
+      cost: boughtRate.rate,
+    },
+    payload: {
+      schemaVersion: 'backy.shipping-label.v1',
+      provider: 'easypost',
+      action: 'shipments.buy',
+      executionMode: 'easypost-api',
+      shipment: boughtShipment,
+      selectedRate: boughtRate,
+    },
+  };
+};
 
 const buildLabelUrl = (origin: string, siteId: string, orderId: string): string => (
   `${origin.replace(/\/$/, '')}/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/${encodeURIComponent(orderId)}/shipping-label`
@@ -157,7 +403,7 @@ const appendNote = (current: unknown, note: string): string => {
   return currentNotes ? `${currentNotes}\n${note}` : note;
 };
 
-const buildShippingLabelUpdate = ({
+const buildShippingLabelUpdate = async ({
   siteId,
   origin,
   record,
@@ -171,7 +417,11 @@ const buildShippingLabelUpdate = ({
   const now = new Date().toISOString();
   const values = toRecord(record.values);
   const existing = existingLabelPayload(origin, siteId, record);
-  const provider = textValue(body.provider) || textValue(values.fulfillmentcarrier) || 'manual';
+  const requestedProvider = textValue(body.provider) || textValue(values.fulfillmentcarrier) || 'manual';
+  const requestedProviderIsEasyPost = normalizeProviderKey(requestedProvider) === 'easypost';
+  const provider = requestedProviderIsEasyPost
+    ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'easypost'
+    : requestedProvider;
   const serviceLevel = textValue(body.serviceLevel) || textValue(values.shippingservicelevel) || 'standard';
   const labelId = existing?.id || `lbl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const labelUrl = buildLabelUrl(origin, siteId, record.id);
@@ -181,7 +431,19 @@ const buildShippingLabelUpdate = ({
     ? currentFulfillmentStatus
     : 'processing';
   const createdAt = existing?.createdAt || now;
-  const label: ShippingLabelPayload = {
+  const providerPayload: Record<string, unknown> = {
+    schemaVersion: 'backy.shipping-label.v1',
+    provider: requestedProviderIsEasyPost ? 'easypost' : provider,
+    action: requestedProviderIsEasyPost ? 'shipments.buy' : 'provider.shipping_label.create',
+    executionMode: canExecuteEasyPostLabel(body) ? 'easypost-api' : 'handoff',
+    orderId: record.id,
+    orderNumber: textValue(values.ordernumber),
+    requestedCarrier: provider,
+    requestedServiceLevel: serviceLevel,
+    idempotencyKey: labelId,
+  };
+  let statusNote = 'handoff prepared';
+  let label: ShippingLabelPayload = {
     id: labelId,
     status: 'draft',
     provider,
@@ -189,7 +451,29 @@ const buildShippingLabelUpdate = ({
     url: labelUrl,
     cost,
     createdAt,
+    providerPayload,
   };
+
+  if (canExecuteEasyPostLabel(body)) {
+    const result = await executeEasyPostLabel({
+      orderId: record.id,
+      orderNumber: textValue(values.ordernumber),
+      labelId,
+      carrier: provider,
+      serviceLevel,
+      rateId: textValue(body.rateId) || textValue(body.easypostRateId),
+      fromAddress: toRecord(body.fromAddress),
+      toAddress: toRecord(body.toAddress),
+      parcel: toRecord(body.parcel),
+    });
+    label = {
+      ...label,
+      ...(result.ok && result.label ? result.label : {}),
+      url: result.ok && result.label?.url ? result.label.url : label.url,
+      providerPayload: result.payload,
+    };
+    statusNote = result.ok ? 'purchased' : 'purchase failed; handoff retained';
+  }
 
   return {
     label,
@@ -204,7 +488,7 @@ const buildShippingLabelUpdate = ({
       shippingservicelevel: label.serviceLevel,
       shippinglabelcost: label.cost,
       shippinglabelcreatedat: label.createdAt,
-      notes: appendNote(values.notes, `Shipping label handoff prepared ${now} with ${provider} ${serviceLevel}.`),
+      notes: appendNote(values.notes, `Shipping label ${statusNote} ${now} with ${label.provider} ${label.serviceLevel}.`),
     },
   };
 };
@@ -280,7 +564,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      const { label, values: rawValues } = buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
+      const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
       const values = normalizeCollectionRecordMediaValues(collection, rawValues);
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
@@ -332,7 +616,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    const { label, values: rawValues } = buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
+    const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
     const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
     const validationErrors = validateCollectionRecordValues(collection, values, {
       existingValues: record.values,

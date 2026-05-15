@@ -1405,6 +1405,7 @@ export interface AdminOrderShippingLabel {
   url: string;
   cost: number;
   createdAt: string;
+  providerPayload?: Record<string, unknown>;
 }
 
 interface ApiOrderShippingLabelResponse {
@@ -6174,7 +6175,19 @@ export async function updateCollectionRecord(
 export async function createOrderShippingLabel(
   siteId: string,
   orderId: string,
-  input: { provider?: string; serviceLevel?: string; cost?: number } = {},
+  input: {
+    provider?: string;
+    serviceLevel?: string;
+    cost?: number;
+    executionProvider?: string;
+    labelProvider?: string;
+    carrier?: string;
+    rateId?: string;
+    easypostRateId?: string;
+    fromAddress?: Record<string, unknown>;
+    toAddress?: Record<string, unknown>;
+    parcel?: Record<string, unknown>;
+  } = {},
 ): Promise<{ record: CollectionRecord; label: AdminOrderShippingLabel }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/shipping-label`, {
     method: 'POST',
