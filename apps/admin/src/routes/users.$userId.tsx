@@ -11,6 +11,7 @@ import {
   Clock3,
   Code2,
   Copy,
+  Crown,
   Download,
   ExternalLink,
   History,
@@ -35,6 +36,7 @@ import {
   getUser as getBackendUser,
   getUserPermissions,
   listAdminAuditLogs,
+  transferUserOwnership,
   updateUserPermissions,
   updateUser as updateBackendUser,
   type AdminPermissionGroup,
@@ -164,6 +166,11 @@ const USER_DETAIL_CONTROL_AREAS = [
     href: '#user-detail-recovery',
   },
   {
+    title: 'Ownership',
+    detail: 'Transfer workspace ownership to an active admin.',
+    href: '#user-detail-ownership',
+  },
+  {
     title: 'Danger zone',
     detail: 'Removal guardrails and destructive access controls.',
     href: '#user-detail-danger',
@@ -228,6 +235,8 @@ function EditUserPage() {
   const [resetExpiresInMinutes, setResetExpiresInMinutes] = useState(60);
   const [isCreatingResetToken, setIsCreatingResetToken] = useState(false);
   const [resetTokenNotice, setResetTokenNotice] = useState<string | null>(null);
+  const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
+  const [ownershipTransferNotice, setOwnershipTransferNotice] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<{
     fullName: string;
@@ -554,6 +563,14 @@ function EditUserPage() {
     !isCreatingInviteToken &&
     formData.status === 'invited',
   );
+  const canTransferOwnership = Boolean(
+    canManageUsers &&
+    currentAdmin?.role === 'owner' &&
+    !isCurrentUser &&
+    formData.status === 'active' &&
+    !isUserDetailBusy &&
+    !isTransferringOwnership,
+  );
   const canSaveUserDetail = canManageUsers && canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
@@ -584,6 +601,17 @@ function EditUserPage() {
         label: 'Admin guardrail',
         detail: isPrivileged ? 'This account can control settings, integrations, and users.' : 'This account cannot manage workspace settings or users.',
         ready: true,
+      },
+      {
+        label: 'Ownership transfer',
+        detail: canTransferOwnership
+          ? 'The signed-in owner can transfer workspace ownership to this active account.'
+          : isCurrentUser
+            ? 'Ownership transfer needs a separate active target account.'
+            : formData.status === 'active'
+              ? 'Only the signed-in workspace owner can run the explicit transfer action.'
+              : 'Activate the target user before transferring workspace ownership.',
+        ready: formData.status === 'active',
       },
       {
         label: 'Delete protection',
@@ -617,7 +645,7 @@ function EditUserPage() {
         { label: 'Recover', detail: 'Use reset help, suspension, or removal when access needs intervention.' },
       ],
     };
-  }, [canSubmit, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user]);
+  }, [canSubmit, canTransferOwnership, currentAdmin?.role, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user]);
 
   if (!isCurrentAdminPermissionMatrixPending && (!canViewUsers || isUserAccessDenied)) {
     return (
@@ -767,6 +795,38 @@ function EditUserPage() {
     }
   };
 
+  const handleOwnershipTransfer = async () => {
+    if (!canManageUsers) {
+      setOwnershipTransferNotice(managePermissionTitle || 'Your account cannot transfer ownership.');
+      return;
+    }
+
+    if (!canTransferOwnership) {
+      setOwnershipTransferNotice('Ownership transfer requires a signed-in owner and a separate active target user.');
+      return;
+    }
+
+    setIsTransferringOwnership(true);
+    setOwnershipTransferNotice(null);
+    setNotice(null);
+
+    try {
+      const result = await transferUserOwnership(userId);
+      setUsers(result.users);
+      setFormData((current) => ({
+        ...current,
+        role: result.newOwner.role,
+        status: result.newOwner.status,
+      }));
+      setOwnershipTransferNotice(`${result.newOwner.fullName} is now workspace owner. ${result.previousOwner.fullName} was moved to admin.`);
+      await loadUserAuditLogs();
+    } catch (error) {
+      setOwnershipTransferNotice(error instanceof Error ? error.message : 'Unable to transfer workspace ownership.');
+    } finally {
+      setIsTransferringOwnership(false);
+    }
+  };
+
   const resetForm = () => {
     if (isUserDetailBusy) return;
     if (!canManageUsers) {
@@ -868,11 +928,22 @@ function EditUserPage() {
         active: action.status === formData.status,
       })),
     },
+    ownershipTransfer: {
+      endpoint: `${userDetailUrl}/transfer-ownership`,
+      method: 'POST',
+      targetUserId: user.id,
+      targetStatus: formData.status,
+      currentAdminId: currentAdmin?.id || null,
+      currentAdminRole: currentAdmin?.role || null,
+      available: canTransferOwnership,
+      result: 'Target becomes owner; signed-in owner becomes admin.',
+    },
     updatePayload,
     guardrails: [
       'Backend prevents deleting or demoting the final active owner/admin.',
       'Duplicate emails are rejected before persistence.',
       'Lifecycle quick actions persist only status; use Save changes for identity or role edits.',
+      'Ownership transfer requires a signed-in owner session, a separate active target user, and records user.ownership.transfer audit metadata.',
       'Per-user activity is queryable through the admin audit log by entity and id.',
       'Suspend or inactivate access before destructive removal when ownership history matters.',
     ],
@@ -1816,6 +1887,58 @@ function EditUserPage() {
                 );
               })}
             </div>
+          </section>
+
+          <section
+            id="user-detail-ownership"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            data-testid="user-detail-ownership-transfer"
+          >
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-violet-50 p-2 text-violet-700">
+                <Crown className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Ownership transfer</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Move workspace ownership to this active user through an audited owner-only action.
+                </p>
+              </div>
+            </div>
+            {ownershipTransferNotice && (
+              <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+                {ownershipTransferNotice}
+              </div>
+            )}
+            <dl className="mt-4 grid gap-2 text-xs text-muted-foreground">
+              <div className="flex justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Current signed-in owner</dt>
+                <dd className="text-right font-medium text-foreground">{currentAdmin?.fullName || currentAdmin?.email || 'Unknown admin'}</dd>
+              </div>
+              <div className="flex justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Transfer target</dt>
+                <dd className="text-right font-medium text-foreground">{user.fullName} ({formData.status})</dd>
+              </div>
+              <div className="flex justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                <dt>After transfer</dt>
+                <dd className="text-right font-medium text-foreground">Target becomes owner; signed-in owner becomes admin.</dd>
+              </div>
+            </dl>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full"
+              onClick={() => void handleOwnershipTransfer()}
+              disabled={!canTransferOwnership}
+              title={!canTransferOwnership ? 'Ownership transfer requires a signed-in owner and a separate active target user.' : undefined}
+              data-testid="user-detail-transfer-ownership-button"
+              iconStart={<Crown className="size-4" />}
+            >
+              {isTransferringOwnership ? 'Transferring ownership...' : `Transfer ownership to ${user.fullName}`}
+            </Button>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              This does not delete or suspend the previous owner. It preserves access by moving the previous owner to admin.
+            </p>
           </section>
 
           <section

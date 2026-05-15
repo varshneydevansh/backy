@@ -283,6 +283,21 @@ const getUser = async (userId) => {
   return payload.data?.user || payload.user;
 };
 
+const updateUser = async (userId, input) => {
+  const payload = await requestApi(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.user || payload.user;
+};
+
+const transferUserOwnership = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/transfer-ownership`, {
+    method: 'POST',
+  });
+  return payload.data?.transfer || payload.transfer;
+};
+
 const listUserAuditLogs = async (userId) => {
   const params = new URLSearchParams({ entity: 'user', entityId: userId, limit: '20' });
   const payload = await requestApi(`/api/admin/audit-logs?${params.toString()}`);
@@ -1136,6 +1151,56 @@ const setUserDetailLifecycle = async (client, label) => {
   }
 };
 
+const transferOwnershipFromDetail = async (client, fullName) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-ownership-transfer"]');
+      const button = document.querySelector('[data-testid="user-detail-transfer-ownership-button"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel),
+        hasTarget: text.includes(${JSON.stringify(fullName)}),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        text: text.slice(0, 1000),
+      };
+    })()`);
+
+    if (state.ready && state.hasTarget && state.disabled === false) {
+      break;
+    }
+    if (attempt === 99) {
+      throw new Error(`Ownership transfer panel was not ready: ${JSON.stringify(state).slice(0, 1600)}`);
+    }
+    await sleep(250);
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="user-detail-transfer-ownership-button"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'button-missing' };
+    if (button.disabled) return { ok: false, reason: 'button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to click ownership transfer: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-ownership-transfer"]');
+      const text = panel?.textContent || '';
+      return {
+        ok: text.includes('is now workspace owner') && text.includes('was moved to admin'),
+        text: text.slice(0, 1000),
+      };
+    })()`);
+    if (result.ok) {
+      return result;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Ownership transfer UI did not show success state.');
+};
+
 const removeUserFromDirectory = async (client, fullName) => {
   await waitForUsersPageUser(client, fullName);
   const openResult = await evaluate(client, `(() => {
@@ -1549,6 +1614,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await updateUser('user-admin', { role: 'owner', status: 'active' });
     await assertUsersApiRequiresAuth();
     await assertUserPermissionOverridesAreEnforced();
     const existing = await findUserByEmail(email);
@@ -1685,6 +1751,21 @@ const main = async () => {
     );
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
+    await openUserDetail(client, fullName);
+    await transferOwnershipFromDetail(client, fullName);
+    const transferTarget = await waitForUser(email, (user) => user.id === createdUserId && user.role === 'owner' && user.status === 'active');
+    assert(transferTarget.role === 'owner', `Ownership transfer did not promote target user: ${JSON.stringify(transferTarget).slice(0, 500)}`);
+    const demotedAdmin = await getUser('user-admin');
+    assert(demotedAdmin.role === 'admin', `Ownership transfer did not demote the previous owner: ${JSON.stringify(demotedAdmin).slice(0, 500)}`);
+    const ownershipAuditLogs = await listUserAuditLogs(createdUserId);
+    assert(
+      ownershipAuditLogs.some((log) => log.action === 'user.ownership.transfer' && log.metadata?.previousOwnerId === 'user-admin' && log.metadata?.newOwnerId === createdUserId),
+      `Ownership transfer audit log was not recorded: ${JSON.stringify(ownershipAuditLogs).slice(0, 500)}`,
+    );
+    await updateUser('user-admin', { role: 'owner', status: 'active' });
+    await waitForUser('admin@backy.io', (admin) => admin.role === 'owner' && admin.status === 'active');
+    await navigateToUsers(client);
+    await waitForUsersPageUser(client, email);
 
     await setDirectoryUserSelect(client, fullName, 'Change role for', 'viewer');
     await waitForUser(email, (user) => user.role === 'viewer');
@@ -1734,6 +1815,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    await updateUser('user-admin', { role: 'owner', status: 'active' }).catch(() => undefined);
     await cleanup({ client, childProcess, userDataDir, userId: createdUserId });
     if (importedUserId) {
       await deleteUser(importedUserId).catch(() => undefined);

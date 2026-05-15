@@ -432,6 +432,20 @@ interface ApiUserResponse {
   };
 }
 
+interface ApiUserOwnershipTransferResponse {
+  success: boolean;
+  data?: {
+    transfer: {
+      previousOwner: ApiUser;
+      newOwner: ApiUser;
+    };
+    users?: ApiUser[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export type AdminTeamRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 export interface AdminTeamMember {
@@ -1788,6 +1802,12 @@ export interface AdminUserDeliveryResult {
 export interface UserCreateResult {
   user: User;
   invite?: AdminInviteToken | null;
+}
+
+export interface UserOwnershipTransferResult {
+  previousOwner: User;
+  newOwner: User;
+  users: User[];
 }
 
 export interface UserUpdateInput {
@@ -4117,6 +4137,26 @@ export async function updateUser(userId: string, input: UserUpdateInput): Promis
   }
 
   return toStoreUser(payload.data.user);
+}
+
+export async function transferUserOwnership(userId: string): Promise<UserOwnershipTransferResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}/transfer-ownership`, {
+    method: 'POST',
+  });
+  const payload = await readJson<ApiUserOwnershipTransferResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.transfer) {
+    throw new Error(payload.error?.message || 'Unable to transfer workspace ownership');
+  }
+
+  return {
+    previousOwner: toStoreUser(payload.data.transfer.previousOwner),
+    newOwner: toStoreUser(payload.data.transfer.newOwner),
+    users: (payload.data.users || [
+      payload.data.transfer.previousOwner,
+      payload.data.transfer.newOwner,
+    ]).map(toStoreUser),
+  };
 }
 
 export async function deleteUser(userId: string): Promise<void> {
