@@ -192,7 +192,11 @@ const reconcileValues = (
   };
 };
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
+async function handleCommerceReconciliation(
+  request: NextRequest,
+  { params }: RouteParams,
+  defaultBody?: Record<string, unknown>,
+) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'commerce.configure' });
   if (access instanceof NextResponse) {
@@ -202,14 +206,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const url = new URL(request.url);
-    const body = await parseJsonBody(request);
+    const body = defaultBody || await parseJsonBody(request);
+    const runMode = normalizeRunMode(body.runMode ?? url.searchParams.get('runMode'));
     const runOptions: ReconciliationRunOptions = {
       dryRun: normalizeDryRun(body.dryRun ?? url.searchParams.get('dryRun')),
       limit: normalizeLimit(url.searchParams.get('limit')),
       processedAt: new Date().toISOString(),
-      runMode: normalizeRunMode(body.runMode ?? url.searchParams.get('runMode')),
+      runMode,
       actorId: textValue(body.actor) || (
-        normalizeRunMode(body.runMode ?? url.searchParams.get('runMode')) === 'scheduled'
+        runMode === 'scheduled'
           ? 'scheduled-commerce-reconciliation'
           : access.session?.user.id || 'admin-api'
       ),
@@ -427,4 +432,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     console.error('Commerce reconciliation API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
+}
+
+export async function POST(request: NextRequest, context: RouteParams) {
+  return handleCommerceReconciliation(request, context);
+}
+
+export async function GET(request: NextRequest, context: RouteParams) {
+  return handleCommerceReconciliation(request, context, {
+    actor: request.headers.get('x-backy-actor') || 'scheduled-commerce-reconciliation',
+    dryRun: request.nextUrl.searchParams.get('dryRun') || false,
+    runMode: 'scheduled',
+  });
 }

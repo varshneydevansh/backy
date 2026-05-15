@@ -107,7 +107,7 @@ const requestApi = async (endpoint, options = {}) => {
   if (options.body && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
-  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization') && !headers.has('x-backy-admin-key')) {
     headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
   }
 
@@ -175,6 +175,24 @@ const enableCommerceWebhookSettings = async (settings) => {
     },
   };
   return patchSettingsFromSnapshot(next);
+};
+
+const issueScheduledReconciliationServiceKey = async (suffix) => {
+  const configuredKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
+  if (configuredKey) {
+    return configuredKey;
+  }
+
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'issue-admin-api-key',
+      label: `Orders scheduled reconciliation ${suffix}`,
+    }),
+  });
+  const key = payload.data?.issuedKey?.adminApiKey;
+  assert(key, `Settings did not issue a scheduled reconciliation service key: ${JSON.stringify(payload).slice(0, 500)}`);
+  return key;
 };
 
 const loginAdminApi = async () => {
@@ -1290,6 +1308,7 @@ const main = async () => {
 
   try {
     await enableCommerceWebhookSettings(originalSettings);
+    const scheduledExecutionAdminKey = await issueScheduledReconciliationServiceKey(suffix);
     await ensureOrdersSmokeCollection();
     customerFixture = await ensureCustomerSmokeProfile(suffix);
     customerCollectionId = customerFixture.collection.id;
@@ -1522,6 +1541,30 @@ const main = async () => {
     );
     const pendingAfterDryRun = await getCollectionRecordBySlug(collectionId, slug);
     assert(pendingAfterDryRun.values?.paymentstatus === 'pending', `Scheduled reconciliation dry-run mutated the order: ${JSON.stringify(pendingAfterDryRun.values).slice(0, 500)}`);
+
+    const scheduledExecutionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/reconcile?limit=50`, {
+      method: 'GET',
+      headers: {
+        'x-backy-admin-key': scheduledExecutionAdminKey,
+        'x-backy-actor': 'orders-smoke-scheduled-reconciliation',
+        'x-request-id': `orders-reconcile-scheduled-execution-${suffix}`,
+      },
+    });
+    const scheduledExecution = scheduledExecutionPayload.data;
+    assert(scheduledExecution?.schemaVersion === 'backy.commerce-reconciliation.v1', `Scheduled reconciliation execution returned wrong schema: ${JSON.stringify(scheduledExecutionPayload).slice(0, 500)}`);
+    assert(scheduledExecution.runMode === 'scheduled', `Scheduled reconciliation execution did not use scheduled run mode: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
+    assert(scheduledExecution.dryRun === false, `Scheduled reconciliation execution should mutate by default: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
+    assert(scheduledExecution.updatedCount >= 1, `Scheduled reconciliation execution did not update the stale order: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
+    assert(
+      scheduledExecution.updates?.some((update) => update.orderId === orderRecordId && update.paymentStatus === 'paid' && update.eventId === `evt_orders_reconcile_${suffix}`),
+      `Scheduled reconciliation execution did not report the expected order update: ${JSON.stringify(scheduledExecution).slice(0, 500)}`,
+    );
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.paymentreference === `pi_reconcile_${suffix}` && /Commerce reconciliation applied/.test(String(values.notes || '')),
+      'Scheduled reconciliation execution did not repair stale payment state',
+    );
 
     await clickReconcileProvider(client);
     await waitForReconciliationPanel(client);
