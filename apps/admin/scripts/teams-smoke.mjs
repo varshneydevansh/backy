@@ -211,6 +211,24 @@ const navigate = async (client, url, readyExpression, description) => {
   return waitForState(client, readyExpression, description);
 };
 
+const waitForTeamAuditPanel = async (client, expectedLabels, description) => waitForState(
+  client,
+  `(() => {
+    const panel = document.querySelector('[data-testid="teams-audit-panel"]');
+    const text = panel?.innerText || '';
+    const expectedLabels = ${JSON.stringify(expectedLabels)};
+    return {
+      ready: Boolean(panel) &&
+        text.includes('Team activity') &&
+        text.includes('activity.export') &&
+        text.includes('Request') &&
+        expectedLabels.every((label) => text.includes(label)),
+      text: text.slice(0, 1600),
+    };
+  })()`,
+  description,
+);
+
 const authStorageScript = (sessionToken, user) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
@@ -412,6 +430,7 @@ const main = async () => {
       })()`,
       'Created team visible',
     );
+    await waitForTeamAuditPanel(client, ['Team created'], 'Team create audit panel');
 
     await clickSelector(client, '[data-testid="teams-edit-button"]');
     await setInputValue(client, '[data-testid="teams-edit-name-input"]', editedName);
@@ -431,6 +450,7 @@ const main = async () => {
       })()`,
       'Edited team visible',
     );
+    await waitForTeamAuditPanel(client, ['Team created', 'Team updated'], 'Team update audit panel');
 
     await clickSelector(client, '[data-testid="teams-invite-button"]');
     await setInputValue(client, '[data-testid="teams-invite-email-input"]', inviteEmail);
@@ -449,6 +469,7 @@ const main = async () => {
       })()`,
       'Invite delivery panel',
     );
+    await waitForTeamAuditPanel(client, ['Team member invited', inviteEmail, 'viewer'], 'Team invite audit panel');
 
     const invitedMember = await waitForTeam(editedSlug, (team) => (
       team.members.some((member) => member.email === inviteEmail && member.role === 'viewer')
@@ -469,6 +490,7 @@ const main = async () => {
       })()`,
       'Member role update notice',
     );
+    await waitForTeamAuditPanel(client, ['Team member role updated', 'editor'], 'Team role update audit panel');
 
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.confirm = () => true;' });
     await evaluate(client, 'window.confirm = () => true; true');
@@ -478,13 +500,15 @@ const main = async () => {
       client,
       `(() => {
         const body = document.body?.innerText || '';
+        const memberSelect = document.querySelector('[data-testid="teams-member-role-${invitedMember.id}"]');
         return {
-          ready: body.includes('Team member removed.') && !body.includes(${JSON.stringify(inviteEmail)}),
+          ready: body.includes('Team member removed.') && !(memberSelect instanceof HTMLElement),
           body: body.slice(0, 900),
         };
       })()`,
       'Member removal notice',
     );
+    await waitForTeamAuditPanel(client, ['Team member removed'], 'Team member removal audit panel');
 
     await clickSelector(client, '[data-testid="teams-delete-button"]');
     await waitForTeamMissing(editedSlug);

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Check, Copy, RefreshCw, Users } from 'lucide-react';
+import { Activity, Check, Copy, RefreshCw, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -10,10 +10,12 @@ import {
   deleteTeam,
   getUserPermissions,
   inviteTeamMember,
+  listAdminAuditLogs,
   listTeams,
   removeTeamMember,
   updateTeam,
   updateTeamMemberRole,
+  type AdminAuditLog,
   type AdminTeam,
   type AdminInviteToken,
   type AdminUserPermissionMatrix,
@@ -43,11 +45,12 @@ const toTeam = (team: AdminTeam): Team => ({
   plan: team.plan,
 });
 
-type TeamPermissionKey = 'users.view' | 'users.manage';
+type TeamPermissionKey = 'users.view' | 'users.manage' | 'activity.export';
 
 const TEAM_PERMISSION_ROLE_DEFAULTS: Record<TeamPermissionKey, Array<AuthUser['role']>> = {
   'users.view': ['owner', 'admin'],
   'users.manage': ['owner', 'admin'],
+  'activity.export': ['owner', 'admin'],
 };
 
 interface TeamInviteDeliveryResult {
@@ -70,13 +73,19 @@ function TeamsPage() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [teamAuditLogs, setTeamAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingTeamAudit, setIsLoadingTeamAudit] = useState(false);
+  const [teamAuditError, setTeamAuditError] = useState<string | null>(null);
 
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
   const canViewTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
   const canManageTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', TEAM_PERMISSION_ROLE_DEFAULTS);
   const viewPermissionTitle = canViewTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', TEAM_PERMISSION_ROLE_DEFAULTS);
   const isTeamsBusy = isLoading || isRefreshing || isPermissionMatrixPending;
+  const isTeamAuditDisabled = isLoadingTeamAudit || isPermissionMatrixPending || !canExportActivity || !currentTeamId;
 
   const currentTeamExists = useMemo(
     () => teams.some((team) => team.id === currentTeamId),
@@ -165,6 +174,35 @@ function TeamsPage() {
     }
   }, [currentTeamExists, teams]);
 
+  const loadTeamAuditLogs = useCallback(async (teamId = currentTeamId) => {
+    if (!teamId) {
+      setTeamAuditLogs([]);
+      setTeamAuditError(null);
+      return;
+    }
+    if (!canExportActivity) {
+      setTeamAuditLogs([]);
+      setTeamAuditError(activityPermissionTitle || 'Your account cannot read team audit activity.');
+      return;
+    }
+
+    setIsLoadingTeamAudit(true);
+    setTeamAuditError(null);
+    try {
+      const result = await listAdminAuditLogs({ teamId, limit: 12 });
+      setTeamAuditLogs(result.logs);
+    } catch (auditError) {
+      setTeamAuditLogs([]);
+      setTeamAuditError(auditError instanceof Error ? auditError.message : 'Unable to load team activity.');
+    } finally {
+      setIsLoadingTeamAudit(false);
+    }
+  }, [activityPermissionTitle, canExportActivity, currentTeamId]);
+
+  useEffect(() => {
+    void loadTeamAuditLogs();
+  }, [loadTeamAuditLogs]);
+
   const refreshAfterMutation = useCallback(async (message: string) => {
     await loadTeams();
     setNotice(message);
@@ -205,7 +243,8 @@ function TeamsPage() {
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team created.');
     setCurrentTeamId(createdTeam.id);
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
+    await loadTeamAuditLogs(createdTeam.id);
+  }, [canManageTeams, loadTeamAuditLogs, managePermissionTitle, refreshAfterMutation]);
 
   const handleUpdateTeam = useCallback(async (teamId: string, updates: Partial<Team>) => {
     if (!canManageTeams) {
@@ -217,7 +256,8 @@ function TeamsPage() {
     });
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team saved.');
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation]);
+    await loadTeamAuditLogs(teamId);
+  }, [canManageTeams, loadTeamAuditLogs, managePermissionTitle, refreshAfterMutation]);
 
   const handleDeleteTeam = useCallback(async (teamId: string) => {
     if (!canManageTeams) {
@@ -241,7 +281,8 @@ function TeamsPage() {
         ? 'Invite created. Copy the manual delivery link below.'
         : 'Team member invited.',
     );
-  }, [canManageTeams, managePermissionTitle, refreshAfterMutation, teams]);
+    await loadTeamAuditLogs(teamId);
+  }, [canManageTeams, loadTeamAuditLogs, managePermissionTitle, refreshAfterMutation, teams]);
 
   const copyLatestInviteUrl = useCallback(async () => {
     if (!latestInviteDelivery?.invite.inviteUrl) return;
@@ -262,7 +303,8 @@ function TeamsPage() {
     await updateTeamMemberRole(teamId, memberId, role);
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team member role updated.');
-  }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
+    await loadTeamAuditLogs(teamId);
+  }, [canManageTeams, getTeamMemberMutationBlockReason, loadTeamAuditLogs, managePermissionTitle, refreshAfterMutation]);
 
   const handleRemoveMember = useCallback(async (teamId: string, memberId: string) => {
     if (!canManageTeams) {
@@ -278,7 +320,8 @@ function TeamsPage() {
     await removeTeamMember(teamId, memberId);
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team member removed.');
-  }, [canManageTeams, getTeamMemberMutationBlockReason, managePermissionTitle, refreshAfterMutation]);
+    await loadTeamAuditLogs(teamId);
+  }, [canManageTeams, getTeamMemberMutationBlockReason, loadTeamAuditLogs, managePermissionTitle, refreshAfterMutation]);
 
   return (
     <PageShell
@@ -386,7 +429,114 @@ function TeamsPage() {
             onSwitchTeam={setCurrentTeamId}
           />
         )}
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="teams-audit-panel">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg border border-border bg-muted/40 p-2 text-muted-foreground">
+                <Activity className="size-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Team activity</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Recent team and member mutations are read from admin audit logs for the selected workspace.
+                </p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  Required permission: activity.export
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              iconStart={<RefreshCw className={isLoadingTeamAudit ? 'size-3.5 animate-spin' : 'size-3.5'} />}
+              onClick={() => void loadTeamAuditLogs()}
+              disabled={isTeamAuditDisabled}
+              title={!canExportActivity ? activityPermissionTitle : undefined}
+            >
+              Refresh audit
+            </Button>
+          </div>
+          {teamAuditError ? (
+            <Notice tone="error" className="mt-4">
+              {teamAuditError}
+            </Notice>
+          ) : isLoadingTeamAudit ? (
+            <div className="mt-4 space-y-2" aria-label="Loading team activity">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="h-16 animate-pulse rounded-lg bg-muted/50" />
+              ))}
+            </div>
+          ) : teamAuditLogs.length === 0 ? (
+            <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+              No team activity has been recorded for the selected workspace yet.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-3" data-testid="teams-audit-list">
+              {teamAuditLogs.map((log) => (
+                <TeamAuditEvent key={log.id} log={log} />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </PageShell>
   );
+}
+
+function TeamAuditEvent({ log }: { log: AdminAuditLog }) {
+  const teamName = readAuditString(log.metadata?.teamName) || readAuditString(log.after?.name) || readAuditString(log.before?.name);
+  const email = readAuditString(log.metadata?.email) || readAuditString(log.after?.email) || readAuditString(log.before?.email);
+  const role = readAuditString(log.metadata?.role) || readAuditString(log.after?.role);
+  const title = getTeamAuditTitle(log);
+
+  return (
+    <article className="rounded-lg border border-border bg-muted/20 p-4" data-testid={`teams-audit-event-${log.action}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-foreground">{title}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {[teamName, email, role].filter(Boolean).join(' | ') || log.entityId}
+          </div>
+        </div>
+        <time className="font-mono text-[11px] text-muted-foreground">{formatAuditDate(log.createdAt)}</time>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+        <div>
+          <dt className="font-medium text-foreground">Entity</dt>
+          <dd>{log.entity}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-foreground">Action</dt>
+          <dd>{log.action}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-foreground">Request</dt>
+          <dd className="truncate font-mono">{log.requestId || 'n/a'}</dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
+function getTeamAuditTitle(log: AdminAuditLog): string {
+  if (log.entity === 'teamMember') {
+    if (log.action === 'create') return 'Team member invited';
+    if (log.action === 'update') return 'Team member role updated';
+    if (log.action === 'delete') return 'Team member removed';
+  }
+  if (log.entity === 'team') {
+    if (log.action === 'create') return 'Team created';
+    if (log.action === 'update') return 'Team updated';
+    if (log.action === 'delete') return 'Team deleted';
+  }
+
+  return `${log.entity}.${log.action}`;
+}
+
+const readAuditString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+
+function formatAuditDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
