@@ -97,6 +97,19 @@ const RESET_EXPIRY_OPTIONS = [
   { value: 1440, label: '24 hours' },
 ];
 
+const USER_AUDIT_ACTION_OPTIONS = [
+  { value: 'all', label: 'All activity' },
+  { value: 'create', label: 'Created' },
+  { value: 'update', label: 'Updated' },
+  { value: 'delete', label: 'Removed' },
+  { value: 'user.permission_overrides.update', label: 'Permission changes' },
+  { value: 'user.invite_token.create', label: 'Invite links' },
+  { value: 'user.invite.accept', label: 'Invite accepted' },
+  { value: 'user.password_reset_token.create', label: 'Reset tokens' },
+  { value: 'user.password_reset.accept', label: 'Reset accepted' },
+  { value: 'user.import.rollback', label: 'Import rollback' },
+];
+
 const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
   { label: 'View dashboards, sites, content, submissions, and reports', roles: ['owner', 'admin', 'editor', 'viewer'] },
   { label: 'Create and edit pages, posts, forms, collections, and media', roles: ['owner', 'admin', 'editor'] },
@@ -191,6 +204,10 @@ function EditUserPage() {
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const [userAuditActionFilter, setUserAuditActionFilter] = useState('all');
+  const [userAuditRequestIdDraft, setUserAuditRequestIdDraft] = useState('');
+  const [userAuditRequestIdFilter, setUserAuditRequestIdFilter] = useState('');
+  const [selectedUserAuditLogId, setSelectedUserAuditLogId] = useState<string | null>(null);
   const [currentAdminPermissionMatrix, setCurrentAdminPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isLoadingCurrentAdminPermissions, setIsLoadingCurrentAdminPermissions] = useState(Boolean(currentAdmin?.id));
   const [currentAdminPermissionError, setCurrentAdminPermissionError] = useState<string | null>(null);
@@ -253,6 +270,10 @@ function EditUserPage() {
   const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.delete', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'activity.export', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const isUserDetailBusy = isLoadingUser || isLoading || isCurrentAdminPermissionMatrixPending;
+  const selectedUserAuditLog = useMemo(
+    () => userAuditLogs.find((log) => log.id === selectedUserAuditLogId) || userAuditLogs[0] || null,
+    [selectedUserAuditLogId, userAuditLogs],
+  );
 
   useEffect(() => {
     setIsLoadingUser(!user);
@@ -364,7 +385,13 @@ function EditUserPage() {
     setUserAuditError(null);
 
     try {
-      const result = await listAdminAuditLogs({ entity: 'user', entityId: userId, limit: 12 });
+      const result = await listAdminAuditLogs({
+        entity: 'user',
+        entityId: userId,
+        action: userAuditActionFilter === 'all' ? undefined : userAuditActionFilter,
+        requestId: userAuditRequestIdFilter || undefined,
+        limit: 25,
+      });
       setUserAuditLogs(result.logs);
     } catch (error) {
       setUserAuditError(error instanceof Error ? error.message : 'Unable to load user activity.');
@@ -372,11 +399,29 @@ function EditUserPage() {
     } finally {
       setIsLoadingUserAudit(false);
     }
-  }, [canExportActivity, isCurrentAdminPermissionMatrixPending, userId]);
+  }, [canExportActivity, isCurrentAdminPermissionMatrixPending, userAuditActionFilter, userAuditRequestIdFilter, userId]);
 
   useEffect(() => {
     void loadUserAuditLogs();
   }, [loadUserAuditLogs]);
+
+  useEffect(() => {
+    setSelectedUserAuditLogId((current) => (
+      current && userAuditLogs.some((log) => log.id === current)
+        ? current
+        : userAuditLogs[0]?.id || null
+    ));
+  }, [userAuditLogs]);
+
+  const applyUserAuditFilters = () => {
+    setUserAuditRequestIdFilter(userAuditRequestIdDraft.trim());
+  };
+
+  const clearUserAuditFilters = () => {
+    setUserAuditActionFilter('all');
+    setUserAuditRequestIdDraft('');
+    setUserAuditRequestIdFilter('');
+  };
 
   const loadPermissionMatrix = useCallback(async () => {
     if (isCurrentAdminPermissionMatrixPending) return;
@@ -1391,6 +1436,68 @@ function EditUserPage() {
               </div>
             )}
 
+            <div className="mt-4 grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" data-testid="user-detail-activity-filters">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Action</span>
+                <select
+                  value={userAuditActionFilter}
+                  onChange={(event) => setUserAuditActionFilter(event.target.value)}
+                  disabled={isLoadingUserAudit || !canExportActivity}
+                  data-testid="user-detail-activity-filter-action"
+                  className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {USER_AUDIT_ACTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Request ID</span>
+                <input
+                  type="search"
+                  value={userAuditRequestIdDraft}
+                  onChange={(event) => setUserAuditRequestIdDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      applyUserAuditFilters();
+                    }
+                  }}
+                  disabled={isLoadingUserAudit || !canExportActivity}
+                  data-testid="user-detail-activity-filter-request"
+                  placeholder="req_..."
+                  className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={applyUserAuditFilters}
+                  disabled={isLoadingUserAudit || !canExportActivity}
+                  data-testid="user-detail-activity-filter-apply"
+                >
+                  Apply
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearUserAuditFilters}
+                  disabled={isLoadingUserAudit || !canExportActivity || (userAuditActionFilter === 'all' && !userAuditRequestIdDraft && !userAuditRequestIdFilter)}
+                  data-testid="user-detail-activity-filter-clear"
+                >
+                  Clear
+                </Button>
+              </div>
+              <p className="md:col-span-3 text-xs leading-5 text-muted-foreground">
+                Showing {userAuditLogs.length} event{userAuditLogs.length === 1 ? '' : 's'}
+                {userAuditActionFilter !== 'all' ? ` for ${USER_AUDIT_ACTION_OPTIONS.find((option) => option.value === userAuditActionFilter)?.label.toLowerCase() || userAuditActionFilter}` : ''}
+                {userAuditRequestIdFilter ? ` matching request ${userAuditRequestIdFilter}` : ''}.
+              </p>
+            </div>
+
             {isLoadingUserAudit ? (
               <div className="mt-4 space-y-2" aria-label="Loading user activity">
                 {[0, 1, 2].map((index) => (
@@ -1399,13 +1506,21 @@ function EditUserPage() {
               </div>
             ) : userAuditLogs.length === 0 ? (
               <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
-                No activity has been recorded for this user yet.
+                No activity matches the current user activity filters.
               </div>
             ) : (
-              <div className="mt-4 space-y-2">
-                {userAuditLogs.map((log) => (
-                  <UserDetailAuditEvent key={log.id} log={log} />
-                ))}
+              <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+                <div className="space-y-2" data-testid="user-detail-activity-results">
+                  {userAuditLogs.map((log) => (
+                    <UserDetailAuditEvent
+                      key={log.id}
+                      log={log}
+                      isSelected={selectedUserAuditLog?.id === log.id}
+                      onSelect={() => setSelectedUserAuditLogId(log.id)}
+                    />
+                  ))}
+                </div>
+                <UserDetailAuditEventDetail log={selectedUserAuditLog} />
               </div>
             )}
           </section>
@@ -1809,7 +1924,15 @@ function EditUserPage() {
   );
 }
 
-function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
+function UserDetailAuditEvent({
+  log,
+  isSelected,
+  onSelect,
+}: {
+  log: AdminAuditLog;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   const email = readAuditString(log.metadata?.email) || readAuditString(log.after?.email) || readAuditString(log.before?.email) || log.entityId;
   const role = readAuditString(log.metadata?.role) || readAuditString(log.after?.role) || readAuditString(log.before?.role);
   const status = readAuditString(log.metadata?.status) || readAuditString(log.after?.status) || readAuditString(log.before?.status);
@@ -1838,7 +1961,11 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
         : 'bg-sky-50 text-sky-700';
 
   return (
-    <article className="rounded-lg border border-border bg-background p-3">
+    <article className={cn(
+      'rounded-lg border bg-background p-3',
+      isSelected ? 'border-primary shadow-sm ring-1 ring-primary/20' : 'border-border',
+    )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1856,7 +1983,18 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
             {changedFields.length > 0 ? ` - changed ${changedFields.join(', ')}` : ''}
           </p>
         </div>
-        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatAuditDate(log.createdAt)}</span>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="font-mono text-[11px] text-muted-foreground">{formatAuditDate(log.createdAt)}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected ? 'secondary' : 'outline'}
+            onClick={onSelect}
+            data-testid="user-detail-activity-view-detail"
+          >
+            {isSelected ? 'Selected' : 'View detail'}
+          </Button>
+        </div>
       </div>
       {log.requestId && (
         <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
@@ -1864,6 +2002,73 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
         </p>
       )}
     </article>
+  );
+}
+
+function UserDetailAuditEventDetail({ log }: { log: AdminAuditLog | null }) {
+  if (!log) {
+    return (
+      <aside className="rounded-lg border border-dashed border-border bg-background p-3 text-sm text-muted-foreground" data-testid="user-detail-activity-detail">
+        Select an activity event to inspect request metadata, before/after snapshots, and structured audit context.
+      </aside>
+    );
+  }
+
+  const summaryItems = [
+    { label: 'Action', value: log.action },
+    { label: 'Entity', value: `${log.entity}:${log.entityId}` },
+    { label: 'Actor', value: log.actorId || 'System or unavailable' },
+    { label: 'Request', value: log.requestId || 'Not recorded' },
+    { label: 'Site', value: log.siteId || 'Workspace global' },
+    { label: 'Team', value: log.teamId || 'No team scope' },
+    { label: 'Created', value: formatAuditDate(log.createdAt) },
+  ];
+
+  return (
+    <aside className="rounded-lg border border-border bg-background p-3" data-testid="user-detail-activity-detail">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Audit event detail</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Full structured payload for the selected user activity event.
+          </p>
+        </div>
+        <span className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+          {log.id}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs">
+        {summaryItems.map((item) => (
+          <div key={item.label} className="grid gap-1 rounded-lg border border-border bg-card px-2.5 py-2 sm:grid-cols-[6rem_minmax(0,1fr)]">
+            <dt className="font-semibold uppercase tracking-normal text-muted-foreground">{item.label}</dt>
+            <dd className="min-w-0 break-words font-medium text-foreground">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 grid gap-3">
+        <AuditJsonBlock title="Before" value={log.before} />
+        <AuditJsonBlock title="After" value={log.after} />
+        <AuditJsonBlock title="Metadata" value={log.metadata} />
+      </div>
+    </aside>
+  );
+}
+
+function AuditJsonBlock({ title, value }: { title: string; value?: Record<string, unknown> }) {
+  const json = formatAuditJson(value);
+  const isEmpty = json === 'None';
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-2.5">
+      <div className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">{title}</div>
+      <pre className={cn(
+        'mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-[11px] leading-5',
+        isEmpty ? 'text-muted-foreground' : 'text-foreground',
+      )}
+      >
+{json}
+      </pre>
+    </section>
   );
 }
 
@@ -2059,6 +2264,12 @@ function AccessReadinessCheck({ label, detail, ready }: { label: string; detail:
 const readAuditString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
 const roleLabel = (role: string): string => ROLE_OPTIONS.find((option) => option.value === role)?.label || role;
+
+const formatAuditJson = (value?: Record<string, unknown>): string => {
+  if (!value || Object.keys(value).length === 0) return 'None';
+
+  return JSON.stringify(value, null, 2);
+};
 
 const formatAuditDate = (value: string): string => {
   const date = new Date(value);

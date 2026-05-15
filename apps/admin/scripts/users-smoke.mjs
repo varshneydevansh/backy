@@ -1410,21 +1410,75 @@ const waitForUserDetailActivity = async (client, email) => {
     const state = await evaluate(client, `(() => {
       const panel = document.querySelector('[data-testid="user-detail-activity"]');
       const text = panel?.textContent || '';
+      const filters = document.querySelector('[data-testid="user-detail-activity-filters"]');
+      const detail = document.querySelector('[data-testid="user-detail-activity-detail"]');
       return {
         ready: Boolean(panel),
+        hasFilters: Boolean(filters),
+        hasDetail: Boolean(detail),
+        hasDetailPayload: (detail?.textContent || '').includes('Audit event detail') &&
+          (detail?.textContent || '').includes('After') &&
+          (detail?.textContent || '').includes('Metadata'),
         hasUser: text.includes(${JSON.stringify(email)}),
         hasUpdated: text.includes('Updated'),
         hasSuspended: text.includes('suspended'),
         text: text.slice(0, 1600),
       };
     })()`);
-    if (state.ready && state.hasUser && state.hasUpdated && state.hasSuspended) {
-      return state;
+    if (state.ready && state.hasFilters && state.hasDetail && state.hasDetailPayload && state.hasUser && state.hasUpdated && state.hasSuspended) {
+      break;
+    }
+    await sleep(250);
+    if (attempt === 99) {
+      throw new Error(`User detail activity panel did not show ${email}: ${JSON.stringify(state).slice(0, 2000)}`);
+    }
+  }
+
+  const selected = await evaluate(client, `(() => {
+    const action = document.querySelector('[data-testid="user-detail-activity-filter-action"]');
+    if (!(action instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'missing-action-filter' };
+    }
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    valueSetter?.call(action, 'update');
+    action.dispatchEvent(new Event('input', { bubbles: true }));
+    action.dispatchEvent(new Event('change', { bubbles: true }));
+    const detailButton = document.querySelector('[data-testid="user-detail-activity-view-detail"]');
+    if (detailButton instanceof HTMLButtonElement) {
+      detailButton.click();
+    }
+    return { ok: true, value: action.value };
+  })()`);
+  assert(selected.ok && selected.value === 'update', `Unable to select user detail activity filter: ${JSON.stringify(selected)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const filtered = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-activity"]');
+      const action = document.querySelector('[data-testid="user-detail-activity-filter-action"]');
+      const results = document.querySelector('[data-testid="user-detail-activity-results"]');
+      const detail = document.querySelector('[data-testid="user-detail-activity-detail"]');
+      const text = panel?.textContent || '';
+      const detailText = detail?.textContent || '';
+      return {
+        actionValue: action instanceof HTMLSelectElement ? action.value : '',
+        hasFilteredCopy: text.includes('for updated'),
+        hasUpdated: (results?.textContent || '').includes('Updated'),
+        hasSuspended: text.includes('suspended'),
+        hasDetailPayload: detailText.includes('Audit event detail') &&
+          detailText.includes('Action') &&
+          detailText.includes('After') &&
+          detailText.includes('Metadata'),
+        detailText: detailText.slice(0, 1200),
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (filtered.actionValue === 'update' && filtered.hasFilteredCopy && filtered.hasUpdated && filtered.hasSuspended && filtered.hasDetailPayload) {
+      return filtered;
     }
     await sleep(250);
   }
 
-  throw new Error(`User detail activity panel did not show ${email}: timed out`);
+  throw new Error(`User detail activity filters/detail did not show ${email}: timed out`);
 };
 
 const launchChrome = () => {
