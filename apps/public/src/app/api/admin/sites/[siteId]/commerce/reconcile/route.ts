@@ -25,6 +25,7 @@ interface RouteParams {
 }
 
 type ReconciliationStatus = 'paid' | 'refunded' | 'failed';
+type ReconciliationRunMode = 'manual' | 'scheduled';
 
 interface CommerceReconciliationEvent {
   id: string;
@@ -35,6 +36,14 @@ interface CommerceReconciliationEvent {
   paymentReference: string;
   paymentStatus: ReconciliationStatus;
   createdAt: string;
+}
+
+interface ReconciliationRunOptions {
+  dryRun: boolean;
+  limit: number;
+  processedAt: string;
+  runMode: ReconciliationRunMode;
+  actorId: string;
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
@@ -63,10 +72,29 @@ const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonV
 
 const auditMetadata = (value: Record<string, unknown>): BackyJsonObject => value as BackyJsonObject;
 
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
 const normalizeLimit = (raw: string | null): number => {
   const limit = Number.parseInt(raw || '100', 10);
   return Number.isFinite(limit) ? Math.max(1, Math.min(500, limit)) : 100;
 };
+
+const normalizeRunMode = (value: unknown): ReconciliationRunMode => (
+  textValue(value) === 'scheduled' ? 'scheduled' : 'manual'
+);
+
+const normalizeDryRun = (value: unknown): boolean => (
+  value === true || textValue(value).toLowerCase() === 'true'
+);
 
 const mapPaymentStatus = (value: unknown): ReconciliationStatus | null => {
   const status = textValue(value).toLowerCase();
@@ -173,7 +201,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const limit = normalizeLimit(new URL(request.url).searchParams.get('limit'));
+    const url = new URL(request.url);
+    const body = await parseJsonBody(request);
+    const runOptions: ReconciliationRunOptions = {
+      dryRun: normalizeDryRun(body.dryRun ?? url.searchParams.get('dryRun')),
+      limit: normalizeLimit(url.searchParams.get('limit')),
+      processedAt: new Date().toISOString(),
+      runMode: normalizeRunMode(body.runMode ?? url.searchParams.get('runMode')),
+      actorId: textValue(body.actor) || (
+        normalizeRunMode(body.runMode ?? url.searchParams.get('runMode')) === 'scheduled'
+          ? 'scheduled-commerce-reconciliation'
+          : access.session?.user.id || 'admin-api'
+      ),
+    };
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -193,7 +233,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         repositories.auditLogs.list({
           siteId: site.id,
           action: 'commerce-webhook',
-          limit,
+          limit: runOptions.limit,
           offset: 0,
         }),
       ]);
@@ -209,6 +249,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
         const nextValues = reconcileValues(record, event);
         if (!nextValues) continue;
+        if (runOptions.dryRun) {
+          updates.push({
+            orderId: record.id,
+            orderNumber: record.values.ordernumber,
+            paymentStatus: nextValues.paymentstatus,
+            eventId: event.id,
+          });
+          continue;
+        }
         let updated = (await repositories.collections.updateRecord(site.id, ordersCollection.id, record.id, {
           status: record.status,
           values: toJsonRecord(nextValues),
@@ -228,28 +277,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
       }
 
-      await recordAdminAudit({
-        repositories,
-        siteId: site.id,
-        actorId: access.session?.user.id || 'admin-api',
-        entity: 'collection',
-        entityId: ordersCollection.id,
-        action: 'commerce-reconcile',
-        metadata: auditMetadata({
-          eventCount: events.length,
-          updatedCount: updates.length,
-          unmatchedCount: unmatchedEvents.length,
-        }),
-        requestId,
-      });
+      if (!runOptions.dryRun) {
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          actorId: runOptions.actorId,
+          entity: 'collection',
+          entityId: ordersCollection.id,
+          action: 'commerce-reconcile',
+          metadata: auditMetadata({
+            schemaVersion: RECONCILIATION_SCHEMA_VERSION,
+            runMode: runOptions.runMode,
+            dryRun: runOptions.dryRun,
+            limit: runOptions.limit,
+            processedAt: runOptions.processedAt,
+            eventCount: events.length,
+            eligibleUpdateCount: updates.length,
+            updatedCount: updates.length,
+            unmatchedCount: unmatchedEvents.length,
+          }),
+          requestId,
+        });
+      }
 
       return publicContractJson({
         success: true,
         requestId,
         data: {
           schemaVersion: RECONCILIATION_SCHEMA_VERSION,
+          runMode: runOptions.runMode,
+          dryRun: runOptions.dryRun,
+          processedAt: runOptions.processedAt,
+          limit: runOptions.limit,
           eventCount: events.length,
-          updatedCount: updates.length,
+          eligibleUpdateCount: updates.length,
+          updatedCount: runOptions.dryRun ? 0 : updates.length,
           unmatchedCount: unmatchedEvents.length,
           updates,
           unmatchedEvents,
@@ -269,13 +331,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }).records;
     const webhookEvents = listAuditEvents(site.id, {
       kind: 'commerce-webhook',
-      limit,
+      limit: runOptions.limit,
       offset: 0,
     }).events;
     const adminEvents = listAdminAuditLogs({
       siteId: site.id,
       action: 'commerce-webhook',
-      limit,
+      limit: runOptions.limit,
       offset: 0,
     }).items;
     const events = [
@@ -294,6 +356,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
       const nextValues = reconcileValues(record, event);
       if (!nextValues) continue;
+      if (runOptions.dryRun) {
+        updates.push({
+          orderId: record.id,
+          orderNumber: record.values.ordernumber,
+          paymentStatus: nextValues.paymentstatus,
+          eventId: event.id,
+        });
+        continue;
+      }
       const updatedRecord = updateAdminCollectionRecord(site.id, ordersCollection.id, record.id, {
         status: record.status,
         values: nextValues,
@@ -313,27 +384,40 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    await recordAdminAudit({
-      siteId: site.id,
-      actorId: access.session?.user.id || 'admin-api',
-      entity: 'collection',
-      entityId: ordersCollection.id,
-      action: 'commerce-reconcile',
-      metadata: auditMetadata({
-        eventCount: uniqueEvents.length,
-        updatedCount: updates.length,
-        unmatchedCount: unmatchedEvents.length,
-      }),
-      requestId,
-    });
+    if (!runOptions.dryRun) {
+      await recordAdminAudit({
+        siteId: site.id,
+        actorId: runOptions.actorId,
+        entity: 'collection',
+        entityId: ordersCollection.id,
+        action: 'commerce-reconcile',
+        metadata: auditMetadata({
+          schemaVersion: RECONCILIATION_SCHEMA_VERSION,
+          runMode: runOptions.runMode,
+          dryRun: runOptions.dryRun,
+          limit: runOptions.limit,
+          processedAt: runOptions.processedAt,
+          eventCount: uniqueEvents.length,
+          eligibleUpdateCount: updates.length,
+          updatedCount: updates.length,
+          unmatchedCount: unmatchedEvents.length,
+        }),
+        requestId,
+      });
+    }
 
     return publicContractJson({
       success: true,
       requestId,
       data: {
         schemaVersion: RECONCILIATION_SCHEMA_VERSION,
+        runMode: runOptions.runMode,
+        dryRun: runOptions.dryRun,
+        processedAt: runOptions.processedAt,
+        limit: runOptions.limit,
         eventCount: uniqueEvents.length,
-        updatedCount: updates.length,
+        eligibleUpdateCount: updates.length,
+        updatedCount: runOptions.dryRun ? 0 : updates.length,
         unmatchedCount: unmatchedEvents.length,
         updates,
         unmatchedEvents,

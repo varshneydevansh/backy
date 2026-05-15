@@ -6049,7 +6049,12 @@ export async function updateCollectionRecord(
 
 export interface CommerceReconciliationResult {
   schemaVersion: 'backy.commerce-reconciliation.v1';
+  runMode?: 'manual' | 'scheduled';
+  dryRun?: boolean;
+  processedAt?: string;
+  limit?: number;
   eventCount: number;
+  eligibleUpdateCount?: number;
   updatedCount: number;
   unmatchedCount: number;
   updates: Array<{

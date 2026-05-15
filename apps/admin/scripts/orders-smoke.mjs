@@ -16,6 +16,7 @@ const SCREENSHOT_PATH = process.env.BACKY_ORDERS_SCREENSHOT || path.join(os.tmpd
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
+const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 const ORDER_REQUIRED_FIELD_COUNT = 29;
 let apiAdminSessionToken = '';
 
@@ -135,6 +136,45 @@ const postCommerceWebhook = async (body, headers = {}) => {
     },
     body: rawBody,
   });
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  const settings = payload.data?.settings;
+  assert(settings?.integrations, `Settings response did not include integrations: ${JSON.stringify(payload).slice(0, 500)}`);
+  return JSON.parse(JSON.stringify(settings));
+};
+
+const patchSettingsFromSnapshot = async (settings) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      deliveryMode: settings.deliveryMode,
+      auth: settings.auth,
+      storage: settings.storage,
+      integrations: settings.integrations,
+    }),
+  });
+  return payload.data?.settings;
+};
+
+const enableCommerceWebhookSettings = async (settings) => {
+  const next = JSON.parse(JSON.stringify(settings));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      mode: 'checkout-provider',
+      paymentProvider: 'manual',
+      providerMode: 'test',
+      providerWebhookUrl: 'https://hooks.example.com/backy-orders-smoke',
+      providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      webhookEventsEnabled: true,
+      reconciliationMode: 'webhook',
+    },
+  };
+  return patchSettingsFromSnapshot(next);
 };
 
 const loginAdminApi = async () => {
@@ -717,29 +757,36 @@ const setAriaControl = async (client, ariaLabel, value) => {
 };
 
 const assertOrdersLayout = async (client) => {
-  const layout = await evaluate(client, `(() => ({
-    width: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    command: Boolean(document.querySelector('[data-testid="orders-command-center"]')),
-    api: Boolean(document.querySelector('#orders-api')),
-    metrics: Boolean(document.querySelector('#orders-metrics')),
-    queue: Boolean(document.querySelector('#orders-queue')),
-    editor: Boolean(document.querySelector('#orders-editor')),
-    hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
-    checkout: document.body?.innerText?.includes('/commerce/orders') || false,
-    privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
-    hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
-    hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
-      Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
-    adminApiOpensWithButton: (() => {
-      const controls = Array.from(document.querySelectorAll('#orders-api button, #orders-api a'));
-      const control = controls.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Open admin API');
-      return control instanceof HTMLButtonElement;
-    })(),
-  }))()`);
-  assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
-  return layout;
+  let layout = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    layout = await evaluate(client, `(() => ({
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      command: Boolean(document.querySelector('[data-testid="orders-command-center"]')),
+      api: Boolean(document.querySelector('#orders-api')),
+      metrics: Boolean(document.querySelector('#orders-metrics')),
+      queue: Boolean(document.querySelector('#orders-queue')),
+      editor: Boolean(document.querySelector('#orders-editor')),
+      hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
+      checkout: document.body?.innerText?.includes('/commerce/orders') || false,
+      privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
+      hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+      hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
+        Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
+      adminApiOpensWithButton: (() => {
+        const controls = Array.from(document.querySelectorAll('#orders-api button, #orders-api a'));
+        const control = controls.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Open admin API');
+        return control instanceof HTMLButtonElement;
+      })(),
+      body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
+    }))()`);
+    assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
+    if (layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+      return layout;
+    }
+    await sleep(250);
+  }
+  assert(false, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
 };
 
 const assertOrderCsvImport = async ({ collectionId, suffix }) => {
@@ -1001,21 +1048,32 @@ const exerciseFilters = async (client, orderNumber) => {
 };
 
 const clickOrderCardButton = async (client, orderNumber, buttonText) => {
-  const result = await evaluate(client, `(() => {
-    const orderNumber = ${JSON.stringify(orderNumber)};
-    const buttonText = ${JSON.stringify(buttonText)};
-    const cards = Array.from(document.querySelectorAll('article'));
-    const card = cards.find((candidate) => (candidate.textContent || '').includes(orderNumber));
-    const button = Array.from((card || document).querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
-    ));
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, hasCard: Boolean(card), buttonText, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
-    }
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(result.ok, `Unable to click ${buttonText} for ${orderNumber}: ${JSON.stringify(result)}`);
+  let result = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const orderNumber = ${JSON.stringify(orderNumber)};
+      const buttonText = ${JSON.stringify(buttonText)};
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((candidate) => (candidate.textContent || '').includes(orderNumber));
+      const button = Array.from((card || document).querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          hasCard: Boolean(card),
+          buttonText,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          cardText: (card?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 600),
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (result.ok) break;
+    await sleep(250);
+  }
+  assert(result?.ok, `Unable to click ${buttonText} for ${orderNumber}: ${JSON.stringify(result)}`);
   await sleep(350);
   return result;
 };
@@ -1144,6 +1202,7 @@ const cleanup = async ({
   customerRecordId,
   originalOrdersCollection,
   originalCustomerCollection,
+  originalSettings,
 }) => {
   if (client) {
     try {
@@ -1202,6 +1261,14 @@ const cleanup = async ({
   } catch {
     // Schema restore is best-effort because the smoke snapshots before mutation.
   }
+
+  if (originalSettings) {
+    try {
+      await patchSettingsFromSnapshot(originalSettings);
+    } catch {
+      // Settings restore is best-effort; later smokes should snapshot their own requirements.
+    }
+  }
 };
 
 const main = async () => {
@@ -1216,11 +1283,13 @@ const main = async () => {
   let customerFixture;
   assertOrdersBulkWorkflowHandlesPartialResults();
   await loginAdminApi();
+  const originalSettings = await getSettings();
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
   const originalCustomerCollection = snapshotCollection(await findCollection(CUSTOMERS_COLLECTION_SLUG));
   const suffix = Date.now().toString(36);
 
   try {
+    await enableCommerceWebhookSettings(originalSettings);
     await ensureOrdersSmokeCollection();
     customerFixture = await ensureCustomerSmokeProfile(suffix);
     customerCollectionId = customerFixture.collection.id;
@@ -1433,6 +1502,27 @@ const main = async () => {
         notes: 'Order smoke reset after provider webhook to verify admin reconciliation.',
       },
     });
+    const scheduledDryRunPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/reconcile?limit=50`, {
+      method: 'POST',
+      body: JSON.stringify({
+        runMode: 'scheduled',
+        dryRun: true,
+        actor: 'orders-smoke-scheduled-reconciliation',
+      }),
+    });
+    const scheduledDryRun = scheduledDryRunPayload.data;
+    assert(scheduledDryRun?.schemaVersion === 'backy.commerce-reconciliation.v1', `Scheduled reconciliation dry-run returned wrong schema: ${JSON.stringify(scheduledDryRunPayload).slice(0, 500)}`);
+    assert(scheduledDryRun.runMode === 'scheduled', `Scheduled reconciliation dry-run did not preserve run mode: ${JSON.stringify(scheduledDryRun).slice(0, 500)}`);
+    assert(scheduledDryRun.dryRun === true, `Scheduled reconciliation dry-run did not report dryRun: ${JSON.stringify(scheduledDryRun).slice(0, 500)}`);
+    assert(scheduledDryRun.updatedCount === 0, `Scheduled reconciliation dry-run should not mutate orders: ${JSON.stringify(scheduledDryRun).slice(0, 500)}`);
+    assert(scheduledDryRun.eligibleUpdateCount >= 1, `Scheduled reconciliation dry-run did not find the stale order: ${JSON.stringify(scheduledDryRun).slice(0, 500)}`);
+    assert(
+      scheduledDryRun.updates?.some((update) => update.orderId === orderRecordId && update.paymentStatus === 'paid' && update.eventId === `evt_orders_reconcile_${suffix}`),
+      `Scheduled reconciliation dry-run did not expose the expected order update: ${JSON.stringify(scheduledDryRun).slice(0, 500)}`,
+    );
+    const pendingAfterDryRun = await getCollectionRecordBySlug(collectionId, slug);
+    assert(pendingAfterDryRun.values?.paymentstatus === 'pending', `Scheduled reconciliation dry-run mutated the order: ${JSON.stringify(pendingAfterDryRun.values).slice(0, 500)}`);
+
     await clickReconcileProvider(client);
     await waitForReconciliationPanel(client);
     await waitForOrderValue(
@@ -1475,6 +1565,7 @@ const main = async () => {
       customerRecordId,
       originalOrdersCollection,
       originalCustomerCollection,
+      originalSettings,
     });
   }
 };
