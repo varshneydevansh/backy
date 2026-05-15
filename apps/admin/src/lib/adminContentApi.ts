@@ -455,6 +455,20 @@ export interface AdminTeam {
   members: AdminTeamMember[];
   plan?: 'free' | 'pro' | 'enterprise';
   settings?: Record<string, unknown>;
+  workspace?: {
+    siteCount: number;
+    publishedSiteCount: number;
+    draftSiteCount: number;
+    archivedSiteCount: number;
+    sites: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      customDomain?: string | null;
+      status: string;
+      updatedAt?: string | null;
+    }>;
+  };
 }
 
 interface ApiTeamResponse {

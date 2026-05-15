@@ -100,6 +100,7 @@ interface PageContent {
 
 interface StoreSite {
   id: string;
+  teamId?: string | null;
   name: string;
   slug: string;
   description: string;
@@ -523,6 +524,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
 const SITE_LIST: StoreSite[] = [
   {
     id: 'site-demo',
+    teamId: 'demo-team',
     name: 'Backy Demo Site',
     slug: 'demo',
     description: 'Official Backy CMS demo site for website and blog examples.',
@@ -534,6 +536,7 @@ const SITE_LIST: StoreSite[] = [
   },
   {
     id: 'site-cook',
+    teamId: 'demo-team',
     name: 'Cooking Studio',
     slug: 'cooks',
     description: 'A starter template for recipes and editorial blogs.',
@@ -4400,6 +4403,7 @@ export function createAdminSite(input: Record<string, unknown>): StoreSite {
 
   const site: StoreSite = {
     id: sanitizeString(input.id) || createRuntimeId('site'),
+    teamId: sanitizeString(input.teamId) || null,
     name,
     slug,
     description: sanitizeString(input.description),
@@ -4452,6 +4456,9 @@ export function updateAdminSite(siteId: string, input: Record<string, unknown>):
     customDomain: input.customDomain === undefined
       ? current.customDomain
       : sanitizeString(input.customDomain) || null,
+    teamId: input.teamId === undefined
+      ? current.teamId || null
+      : sanitizeString(input.teamId) || null,
     status: nextStatus,
     isPublished: input.isPublished === undefined
       ? nextStatus === 'published'

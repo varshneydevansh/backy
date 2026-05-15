@@ -44,6 +44,7 @@ const toTeam = (team: AdminTeam): Team => ({
     joinedAt: member.joinedAt,
   })),
   plan: team.plan,
+  workspace: team.workspace,
 });
 
 type TeamPermissionKey = 'users.view' | 'users.manage' | 'activity.export';

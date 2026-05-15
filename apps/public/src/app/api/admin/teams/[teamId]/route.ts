@@ -6,6 +6,7 @@ import {
   getAdminTeamById,
   getAdminTeamBySlug,
   getAdminUserById,
+  getSites,
   listAdminTeamMembers,
   updateAdminTeam,
   type StoreTeam,
@@ -57,6 +58,42 @@ const normalizeSettings = (value: unknown) => (
     : undefined
 );
 
+const workspaceSummary = (sites: Array<{
+  id: string;
+  name: string;
+  slug: string;
+  customDomain?: string | null;
+  status?: string;
+  isPublished?: boolean;
+  updatedAt?: string;
+  createdAt?: string;
+}>) => {
+  const normalizedSites = sites.map((site) => {
+    const status = site.status === 'archived'
+      ? 'archived'
+      : site.status === 'published' || site.isPublished
+        ? 'published'
+        : 'draft';
+
+    return {
+      id: site.id,
+      name: site.name,
+      slug: site.slug,
+      customDomain: site.customDomain || null,
+      status,
+      updatedAt: site.updatedAt || site.createdAt || null,
+    };
+  });
+
+  return {
+    siteCount: normalizedSites.length,
+    publishedSiteCount: normalizedSites.filter((site) => site.status === 'published').length,
+    draftSiteCount: normalizedSites.filter((site) => site.status === 'draft').length,
+    archivedSiteCount: normalizedSites.filter((site) => site.status === 'archived').length,
+    sites: normalizedSites.slice(0, 8),
+  };
+};
+
 const demoTeamWithMembers = (team: StoreTeam) => {
   const members = listAdminTeamMembers(team.id).map((member) => {
     const user = getAdminUserById(member.userId);
@@ -72,6 +109,7 @@ const demoTeamWithMembers = (team: StoreTeam) => {
     ...team,
     members,
     plan: team.settings?.plan || 'free',
+    workspace: workspaceSummary(getSites({ includeUnpublished: true }).filter((site) => site.teamId === team.id)),
   };
 };
 
@@ -83,6 +121,7 @@ const withMembers = async (
   if (!team) return null;
 
   const members = await repositories.teams.listMembers({ teamId });
+  const sites = await repositories.sites.list({ teamId, status: 'all', limit: 100, offset: 0 });
   const enrichedMembers = await Promise.all(members.items.map(async (member) => {
     const user = await repositories.users.getById(member.userId);
     return {
@@ -97,6 +136,7 @@ const withMembers = async (
     ...team,
     members: enrichedMembers,
     plan: team.settings?.plan || 'free',
+    workspace: workspaceSummary(sites.items),
   };
 };
 
@@ -272,6 +312,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       }
       await repositories.teams.delete(teamId);
     } else {
+      const ownedSites = getSites({ includeUnpublished: true }).filter((site) => site.teamId === teamId);
+      if (ownedSites.length > 0) {
+        return errorResponse(409, 'TEAM_HAS_SITES', "Move or delete this team's sites before deleting the team.", requestId);
+      }
       deleteAdminTeam(teamId);
     }
 

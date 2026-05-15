@@ -5,6 +5,7 @@ import {
   createAdminTeam,
   getAdminTeamBySlug,
   getAdminUserById,
+  getSites,
   listAdminTeamMembers,
   listAdminTeams,
   type StoreTeam,
@@ -69,6 +70,43 @@ const demoTeamWithMembers = (team: StoreTeam) => {
     ...team,
     members,
     plan: team.settings?.plan || 'free',
+    workspace: workspaceSummary(getSites({ includeUnpublished: true }).filter((site) => site.teamId === team.id)),
+  };
+};
+
+const workspaceSummary = (sites: Array<{
+  id: string;
+  name: string;
+  slug: string;
+  customDomain?: string | null;
+  status?: string;
+  isPublished?: boolean;
+  updatedAt?: string;
+  createdAt?: string;
+}>) => {
+  const normalizedSites = sites.map((site) => {
+    const status = site.status === 'archived'
+      ? 'archived'
+      : site.status === 'published' || site.isPublished
+        ? 'published'
+        : 'draft';
+
+    return {
+      id: site.id,
+      name: site.name,
+      slug: site.slug,
+      customDomain: site.customDomain || null,
+      status,
+      updatedAt: site.updatedAt || site.createdAt || null,
+    };
+  });
+
+  return {
+    siteCount: normalizedSites.length,
+    publishedSiteCount: normalizedSites.filter((site) => site.status === 'published').length,
+    draftSiteCount: normalizedSites.filter((site) => site.status === 'draft').length,
+    archivedSiteCount: normalizedSites.filter((site) => site.status === 'archived').length,
+    sites: normalizedSites.slice(0, 8),
   };
 };
 
@@ -78,6 +116,7 @@ const withMembers = async (
 ) => {
   if (!team) return null;
   const members = await repositories.teams.listMembers({ teamId: team.id });
+  const sites = await repositories.sites.list({ teamId: team.id, status: 'all', limit: 100, offset: 0 });
   const enrichedMembers = await Promise.all(members.items.map(async (member) => {
     const user = await repositories.users.getById(member.userId);
     return {
@@ -92,6 +131,7 @@ const withMembers = async (
     ...team,
     members: enrichedMembers,
     plan: team.settings?.plan || 'free',
+    workspace: workspaceSummary(sites.items),
   };
 };
 

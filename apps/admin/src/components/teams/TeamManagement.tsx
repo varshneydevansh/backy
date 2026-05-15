@@ -36,6 +36,20 @@ export interface Team {
     createdAt: string;
     members: TeamMember[];
     plan?: 'free' | 'pro' | 'enterprise';
+    workspace?: {
+        siteCount: number;
+        publishedSiteCount: number;
+        draftSiteCount: number;
+        archivedSiteCount: number;
+        sites: Array<{
+            id: string;
+            name: string;
+            slug: string;
+            customDomain?: string | null;
+            status: string;
+            updatedAt?: string | null;
+        }>;
+    };
 }
 
 interface TeamManagementProps {
@@ -507,6 +521,11 @@ export function TeamManagement({
     const mutationsDisabled = isMutating || !canManageTeams;
     const mutationTitle = canManageTeams ? undefined : mutationDisabledReason;
     const normalizedCurrentAdminEmail = currentAdminEmail?.trim().toLowerCase() || '';
+    const currentTeamSiteCount = currentTeam?.workspace?.siteCount || 0;
+    const teamDeleteDisabled = mutationsDisabled || currentTeamSiteCount > 0;
+    const teamDeleteTitle = currentTeamSiteCount > 0
+        ? 'Move or delete this team\'s sites before deleting the team.'
+        : mutationTitle;
 
     const memberMutationBlockReason = useCallback(
         (team: Team, member: TeamMember, action: 'role' | 'remove') => {
@@ -721,11 +740,78 @@ export function TeamManagement({
                             data-testid="teams-delete-button"
                             style={{ ...styles.button, ...styles.dangerButton }}
                             onClick={() => handleDelete(currentTeam)}
-                            disabled={mutationsDisabled}
-                            title={mutationTitle}
+                            disabled={teamDeleteDisabled}
+                            title={teamDeleteTitle}
                         >
                             Delete
                         </button>
+                    </div>
+
+                    <div
+                        data-testid="teams-workspace-sites-panel"
+                        style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            padding: '16px',
+                            marginBottom: '20px',
+                            backgroundColor: '#f9fafb',
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                            <div>
+                                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                                    Workspace Sites
+                                </h3>
+                                <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                                    Team ownership gates deletion and keeps site workspaces attached to the right account.
+                                </p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ ...styles.badge, backgroundColor: '#e0f2fe', color: '#075985' }}>
+                                    {currentTeam.workspace?.siteCount || 0} total
+                                </span>
+                                <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#166534' }}>
+                                    {currentTeam.workspace?.publishedSiteCount || 0} published
+                                </span>
+                                <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                    {currentTeam.workspace?.draftSiteCount || 0} draft
+                                </span>
+                            </div>
+                        </div>
+                        {currentTeam.workspace?.sites?.length ? (
+                            <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
+                                {currentTeam.workspace.sites.map((site) => (
+                                    <div
+                                        key={site.id}
+                                        data-testid={`teams-workspace-site-${site.id}`}
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            borderRadius: '6px',
+                                            border: '1px solid #e5e7eb',
+                                            backgroundColor: '#ffffff',
+                                            padding: '10px 12px',
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{site.name}</div>
+                                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                                /{site.slug}{site.customDomain ? ` | ${site.customDomain}` : ''}
+                                            </div>
+                                        </div>
+                                        <span style={{ ...styles.badge, backgroundColor: '#f3f4f6', color: '#374151' }}>
+                                            {site.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>
+                                No sites are currently owned by this team.
+                            </p>
+                        )}
                     </div>
 
                     {/* Members List */}

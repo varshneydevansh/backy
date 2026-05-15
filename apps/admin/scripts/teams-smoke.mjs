@@ -59,6 +59,28 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const expectApiError = async (endpoint, options = {}, expectedCode) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(!response.ok || payload.success === false, `${endpoint} unexpectedly succeeded: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    !expectedCode || payload.error?.code === expectedCode,
+    `${endpoint} returned unexpected error: ${JSON.stringify(payload.error || payload).slice(0, 500)}`,
+  );
+  return payload;
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -83,6 +105,11 @@ const listTeams = async () => {
   return payload.data?.teams || [];
 };
 
+const listSites = async () => {
+  const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
+  return payload.data?.sites || [];
+};
+
 const createTeam = async (name) => {
   const payload = await requestApi('/api/admin/teams', {
     method: 'POST',
@@ -91,6 +118,21 @@ const createTeam = async (name) => {
   const team = payload.data?.team;
   assert(team?.id, `Create team did not return a team: ${JSON.stringify(payload).slice(0, 500)}`);
   return team;
+};
+
+const createSite = async ({ name, slug, teamId }) => {
+  const payload = await requestApi('/api/admin/sites', {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      slug,
+      teamId,
+      status: 'draft',
+    }),
+  });
+  const site = payload.data?.site;
+  assert(site?.id, `Create site did not return a site: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
 };
 
 const createUser = async ({ fullName, email, role = 'viewer', status = 'invited' }) => {
@@ -134,6 +176,27 @@ const acceptInvite = async (token) => {
 const deleteTeam = async (teamId) => {
   if (!teamId) return;
   await requestApi(`/api/admin/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE' });
+};
+
+const deleteSite = async (siteId) => {
+  if (!siteId) return;
+  await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
+};
+
+const cleanupPreviousSmokeRecords = async () => {
+  const sites = await listSites();
+  for (const site of sites) {
+    if (typeof site.slug === 'string' && site.slug.startsWith('team-owned-site-')) {
+      await deleteSite(site.id);
+    }
+  }
+
+  const teams = await listTeams();
+  for (const team of teams) {
+    if (typeof team.slug === 'string' && (team.slug.startsWith('smoke-team-') || team.slug.startsWith('api-smoke-team-'))) {
+      await deleteTeam(team.id);
+    }
+  }
 };
 
 const deleteUser = async (userId) => {
@@ -364,7 +427,14 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, teamIds = [], userIds = [] }) => {
+const cleanup = async ({ client, childProcess, userDataDir, siteIds = [], teamIds = [], userIds = [] }) => {
+  for (const siteId of siteIds) {
+    try {
+      await deleteSite(siteId);
+    } catch {
+      // Best-effort cleanup for temporary smoke sites.
+    }
+  }
   for (const teamId of teamIds) {
     try {
       await deleteTeam(teamId);
@@ -403,6 +473,7 @@ const main = async () => {
   let client;
   let childProcess;
   let userDataDir;
+  const temporarySiteIds = [];
   const temporaryTeamIds = [];
   const temporaryUserIds = [];
   const suffix = Date.now().toString(36);
@@ -419,9 +490,15 @@ const main = async () => {
   const readOnlyEmail = `teams-readonly-${suffix}@example.com`;
   const readOnlyFullName = `Teams Readonly ${suffix}`;
   let activeAuthPreload = null;
+  let adminUserId = '';
 
   try {
     const adminSession = await loginAdminApi();
+    adminUserId = adminSession.user?.id || '';
+    if (adminUserId) {
+      await setUserPermissionOverrides(adminUserId, { 'sites.delete': 'allow' });
+    }
+    await cleanupPreviousSmokeRecords();
     const apiCreatedTeam = await createTeam(`API ${teamName}`);
     temporaryTeamIds.push(apiCreatedTeam.id);
     await requestApi(`/api/admin/teams/${encodeURIComponent(apiCreatedTeam.id)}`, {
@@ -484,13 +561,66 @@ const main = async () => {
         return {
           ready: body.includes(${JSON.stringify(teamName)}) &&
             body.includes('/smoke-team-${suffix}') &&
-            body.includes('Team created.'),
+            body.includes('Team created.') &&
+            body.includes('Workspace Sites') &&
+            body.includes('No sites are currently owned by this team.'),
           body: body.slice(0, 900),
         };
       })()`,
       'Created team visible',
     );
     await waitForTeamAuditPanel(client, ['Team created'], 'Team create audit panel');
+
+    const ownedSite = await createSite({
+      name: `Team Owned Site ${suffix}`,
+      slug: `team-owned-site-${suffix}`,
+      teamId: createdTeam.id,
+    });
+    temporarySiteIds.push(ownedSite.id);
+    await expectApiError(
+      `/api/admin/teams/${encodeURIComponent(createdTeam.id)}`,
+      { method: 'DELETE' },
+      'TEAM_HAS_SITES',
+    );
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        return {
+          ready: body.includes(${JSON.stringify(ownedSite.name)}) &&
+            body.includes('Workspace Sites') &&
+            body.includes('1 total') &&
+            deleteButton instanceof HTMLButtonElement &&
+            deleteButton.disabled === true &&
+            deleteButton.title.includes('Move or delete'),
+          body: body.slice(0, 1400),
+          deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+          deleteTitle: deleteButton instanceof HTMLButtonElement ? deleteButton.title : null,
+        };
+      })()`,
+      'Team workspace site ownership panel',
+    );
+    await deleteSite(ownedSite.id);
+    temporarySiteIds.pop();
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        return {
+          ready: body.includes(${JSON.stringify(teamName)}) &&
+            body.includes('No sites are currently owned by this team.') &&
+            deleteButton instanceof HTMLButtonElement &&
+            deleteButton.disabled === false,
+          body: body.slice(0, 1400),
+          deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+        };
+      })()`,
+      'Team workspace ownership cleared',
+    );
 
     await clickSelector(client, '[data-testid="teams-edit-button"]');
     await setInputValue(client, '[data-testid="teams-edit-name-input"]', editedName);
@@ -622,7 +752,9 @@ const main = async () => {
             createButton.disabled === false &&
             (!(editButton instanceof HTMLButtonElement) || editButton.disabled === false) &&
             (!(inviteButton instanceof HTMLButtonElement) || inviteButton.disabled === false) &&
-            (!(deleteButton instanceof HTMLButtonElement) || deleteButton.disabled === false) &&
+            deleteButton instanceof HTMLButtonElement &&
+            (deleteButton.disabled === false || deleteButton.title.includes('Move or delete')) &&
+            body.includes('Workspace Sites') &&
             auditRefresh instanceof HTMLButtonElement &&
             auditRefresh.disabled === false,
           path: window.location.pathname,
@@ -791,7 +923,14 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, teamIds: temporaryTeamIds, userIds: temporaryUserIds });
+    await cleanup({ client, childProcess, userDataDir, siteIds: temporarySiteIds, teamIds: temporaryTeamIds, userIds: temporaryUserIds });
+    if (adminUserId) {
+      try {
+        await setUserPermissionOverrides(adminUserId, { 'sites.delete': null });
+      } catch {
+        // Best-effort restoration for the smoke-only cleanup permission.
+      }
+    }
   }
 };
 
