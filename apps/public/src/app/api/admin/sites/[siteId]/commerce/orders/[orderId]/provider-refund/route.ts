@@ -61,7 +61,6 @@ interface ProviderRefundPayload {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
-const STRIPE_REFUND_ENDPOINT = 'https://api.stripe.com/v1/refunds';
 const ZERO_DECIMAL_CURRENCIES = new Set([
   'BIF',
   'CLP',
@@ -122,6 +121,16 @@ const stripeSecretKey = () => (
   || process.env.STRIPE_SECRET_KEY?.trim()
   || ''
 );
+
+const stripeRefundEndpoint = () => {
+  const baseUrl = (
+    process.env.BACKY_STRIPE_REFUND_API_BASE_URL?.trim()
+    || process.env.BACKY_STRIPE_API_BASE_URL?.trim()
+    || process.env.STRIPE_API_BASE_URL?.trim()
+    || 'https://api.stripe.com'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/v1/refunds`;
+};
 
 const isStripePaymentIntent = (value: string) => value.startsWith('pi_');
 const isStripeCharge = (value: string) => value.startsWith('ch_');
@@ -257,7 +266,7 @@ const executeStripeRefund = async (input: {
     params.set('charge', input.paymentReference);
   }
 
-  const response = await fetch(STRIPE_REFUND_ENDPOINT, {
+  const response = await fetch(stripeRefundEndpoint(), {
     method: 'POST',
     headers: {
       authorization: `Bearer ${stripeSecretKey()}`,

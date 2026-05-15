@@ -21,6 +21,8 @@ const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 const ORDER_REQUIRED_FIELD_COUNT = 57;
 const STRIPE_TAX_MOCK_PORT = Number(process.env.BACKY_STRIPE_TAX_MOCK_PORT || 45679);
 const STRIPE_TAX_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_TAX_MOCK_PORT}`;
+const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT || 45680);
+const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -239,6 +241,47 @@ const createStripeTaxMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(STRIPE_TAX_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const stripeRefundExecutionEnabled = () => {
+  const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
+  const apiBaseUrl = process.env.BACKY_STRIPE_REFUND_API_BASE_URL || process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === STRIPE_REFUND_MOCK_BASE_URL);
+};
+
+const createStripeRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const form = Object.fromEntries(new URLSearchParams(bodyText).entries());
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        form,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `re_smoke_${requests.length}`,
+        object: 'refund',
+        status: 'succeeded',
+        amount: Number(form.amount || 0),
+        currency: 'usd',
+        payment_intent: form.payment_intent || '',
+        charge: form.charge || '',
+        reason: form.reason || '',
+        created: 1710000000 + requests.length,
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(STRIPE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1427,6 +1470,30 @@ const editOrderAfterWorkflow = async (client, orderNumber) => {
   return null;
 };
 
+const prepareStripeProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'stripe', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `pi_refund_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('stripe') && document.body?.innerText?.includes(${JSON.stringify(`pi_refund_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Stripe provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const clickReconcileProvider = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
@@ -1590,6 +1657,7 @@ const main = async () => {
   let customerFixture;
   let quoteProviderServer;
   let stripeTaxMockServer;
+  let stripeRefundMockServer;
   let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
@@ -1894,6 +1962,10 @@ const main = async () => {
       'Refund/Return did not persist refund workflow fields',
     );
 
+    if (stripeRefundExecutionEnabled()) {
+      stripeRefundMockServer = await createStripeRefundMockServer();
+      await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
+    }
     await clickOrderCardButton(client, orderNumber, 'Provider Refund');
     const providerRefundRecord = await waitForOrderValue(
       collectionId,
@@ -1902,22 +1974,39 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        values.providerrefundstatus === 'requires_action' &&
-        values.providerrefundprovider === 'manual' &&
+        values.providerrefundstatus === (stripeRefundExecutionEnabled() ? 'succeeded' : 'requires_action') &&
+        values.providerrefundprovider === (stripeRefundExecutionEnabled() ? 'stripe' : 'manual') &&
         Boolean(values.providerrefundid) &&
-        String(values.providerrefundreference || '').includes(String(values.paymentreference || '')) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
         Number(values.providerrefundamount) === expectedProviderTotal &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
+        (!stripeRefundExecutionEnabled() || Boolean(values.providerrefundcompletedat)) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
-        /Provider refund handoff/.test(String(values.notes || ''))
+        (stripeRefundExecutionEnabled()
+          ? /Provider refund executed succeeded/.test(String(values.notes || '')) && String(values.providerrefundpayload || '').includes('stripe-api')
+          : /Provider refund handoff/.test(String(values.notes || '')))
       ),
-      'Provider Refund did not persist provider refund handoff fields',
+      'Provider Refund did not persist provider refund fields',
     );
 
     const providerRefundPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerRefundRecord.id}/provider-refund`);
-    assert(providerRefundPayload.data?.refund?.id === providerRefundRecord.values.providerrefundid, `Provider refund endpoint did not return the prepared handoff: ${JSON.stringify(providerRefundPayload)}`);
+    assert(providerRefundPayload.data?.refund?.id === providerRefundRecord.values.providerrefundid, `Provider refund endpoint did not return the prepared refund: ${JSON.stringify(providerRefundPayload)}`);
+    if (stripeRefundExecutionEnabled()) {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
+      const stripeRefundRequest = stripeRefundMockServer.requests[0];
+      const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+      assert(stripeRefundRequest.url === '/v1/refunds', `Stripe refund mock received unexpected URL: ${JSON.stringify(stripeRefundMockServer.requests)}`);
+      assert(stripeRefundRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe refund mock did not receive bearer auth: ${JSON.stringify(stripeRefundRequest.headers)}`);
+      assert(stripeRefundRequest.form.payment_intent === `pi_refund_${suffix}`, `Stripe refund form did not include the payment intent: ${JSON.stringify(stripeRefundRequest.form)}`);
+      assert(Number(stripeRefundRequest.form.amount) === Math.round(expectedProviderTotal * 100), `Stripe refund form amount did not match order total: ${JSON.stringify(stripeRefundRequest.form)}`);
+      assert(/^rf_/.test(String(stripeRefundRequest.form['metadata[backy_refund_id]'] || '')), `Stripe refund form did not include the internal refund metadata: ${JSON.stringify(stripeRefundRequest.form)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('re_smoke_'), `Provider refund did not persist the Stripe refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Stripe execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Stripe refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'stripe-api', `Provider refund payload did not persist Stripe execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    }
 
     await editOrderAfterWorkflow(client, orderNumber);
     await waitForOrderValue(
@@ -2115,6 +2204,9 @@ const main = async () => {
     }
     if (stripeTaxMockServer) {
       await stripeTaxMockServer.close().catch(() => {});
+    }
+    if (stripeRefundMockServer) {
+      await stripeRefundMockServer.close().catch(() => {});
     }
     if (fulfillmentProviderServer) {
       await fulfillmentProviderServer.close().catch(() => {});
