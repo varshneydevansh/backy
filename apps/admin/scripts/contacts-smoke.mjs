@@ -110,6 +110,19 @@ const requestApiRaw = async (endpoint, options = {}) => {
   return { response, payload };
 };
 
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -143,7 +156,7 @@ const createLeadForm = async () => {
       successMessage: 'Lead received.',
       enableHoneypot: true,
       enableCaptcha: false,
-      moderationMode: 'manual',
+      moderationMode: 'auto-approve',
       contactShare: {
         enabled: true,
         nameField: 'full_name',
@@ -259,6 +272,11 @@ const findUserByEmail = async (email) => {
   return users.find((user) => user.email === email);
 };
 
+const listUsers = async () => {
+  const payload = await requestApi('/api/admin/users');
+  return payload.data?.users || payload.users || [];
+};
+
 const deleteUser = async (userId) => {
   if (!userId) return;
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
@@ -296,6 +314,64 @@ const createContactDirectly = async (formId) => {
   const contact = payload.data?.contact || payload.contact;
   assert(contact?.id, `Direct contact create did not return a contact: ${JSON.stringify(payload).slice(0, 500)}`);
   return contact;
+};
+
+const createQualifiedPromotionContact = async (formId, email) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Contacts Billing Blocked',
+      email,
+      phone: '+1 555 0198',
+      status: 'qualified',
+      notes: 'Created for contact promotion billing smoke.',
+      sourceValues: { source: 'promotion-billing-smoke' },
+      upsertByEmail: false,
+    }),
+  });
+  const contact = payload.data?.contact || payload.contact;
+  assert(contact?.id, `Promotion billing contact create did not return a contact: ${JSON.stringify(payload).slice(0, 500)}`);
+  return contact;
+};
+
+const assertContactPromotionBillingSeatLimitEnforced = async (formId) => {
+  const settings = await getSettings();
+  const existingUsers = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedEmail = `contacts-seat-blocked-${Date.now().toString(36)}@example.com`;
+  const contact = await createQualifiedPromotionContact(formId, blockedEmail);
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: Math.max(1, existingUsers.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/${contact.id}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({
+        role: 'viewer',
+        status: 'invited',
+        createInvite: true,
+      }),
+    });
+
+    assert(response.status === 402, `Billing seat limit should reject contact promotion, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_SEAT_LIMIT', `Billing seat-limited contact promotion should return BILLING_SEAT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findUserByEmail(blockedEmail)), 'Billing-limited contact promotion unexpectedly persisted a user.');
+    const contacts = await listContacts(formId);
+    const current = contacts.find((item) => item.id === contact.id);
+    assert(!current?.sourceValues?.__backyPromotion, 'Billing-limited contact promotion unexpectedly marked the contact promoted.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const assertContactHardDelete = async (formId) => {
@@ -1161,6 +1237,7 @@ const main = async () => {
     const directContact = await createContactDirectly(form.id);
     await assertInvalidContactEmailRejected(form.id, directContact.id);
     await assertContactHardDelete(form.id);
+    await assertContactPromotionBillingSeatLimitEnforced(form.id);
     const importedContact = await importContactsCsv(form.id);
     const duplicateContacts = await createDuplicateContacts(form.id);
     const submission = await submitLead(form.id);

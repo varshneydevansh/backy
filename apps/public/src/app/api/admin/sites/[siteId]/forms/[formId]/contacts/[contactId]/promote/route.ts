@@ -11,10 +11,12 @@ import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import {
   createAdminUser,
+  getAdminSettings,
   getAdminUserByEmail,
   getContactById,
   getFormById,
   getSiteByIdOrSlug,
+  listAdminUsers,
   updateContactStatus,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -55,6 +57,38 @@ const normalizeRole = (value: unknown): PromotionRole => (
 const normalizeStatus = (value: unknown): PromotionStatus => (
   value === 'active' ? 'active' : 'invited'
 );
+
+const readBillingSeatPolicy = (settings: unknown) => {
+  const root = isRecord(settings) ? settings : {};
+  const integrations = isRecord(root.integrations) ? root.integrations : {};
+  const commerce = isRecord(integrations.commerce) ? integrations.commerce : {};
+  const limit = Number(commerce.seatLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    seatLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const enforceSeatBillingLimit = (
+  settings: unknown,
+  currentUserCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingSeatPolicy(settings);
+  if (policy.overageMode === 'block' && currentUserCount >= policy.seatLimit) {
+    return errorResponse(
+      402,
+      'BILLING_SEAT_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.seatLimit} user seat${policy.seatLimit === 1 ? '' : 's'}. Update Settings billing limits before promoting another contact to a user.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const normalizeExpiresInMinutes = (value: unknown): number | null => {
   if (value === undefined || value === null || value === '') return 10080;
@@ -155,6 +189,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy(status, authPolicySettings);
         if (!inviteOnlyPolicy.ok) {
           return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
+        }
+        const [settings, existingUsers] = await Promise.all([
+          repositories.settings.get(),
+          repositories.users.list({ limit: 1, offset: 0 }),
+        ]);
+        const billingLimitError = enforceSeatBillingLimit(settings, existingUsers.pagination.total, requestId);
+        if (billingLimitError) {
+          return billingLimitError;
         }
       }
 
@@ -265,6 +307,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy(status, authPolicySettings);
       if (!inviteOnlyPolicy.ok) {
         return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
+      }
+      const billingLimitError = enforceSeatBillingLimit(getAdminSettings(), listAdminUsers().length, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
       }
     }
 
