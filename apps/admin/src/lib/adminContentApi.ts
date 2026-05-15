@@ -1728,6 +1728,10 @@ export interface SiteSettingsInput {
       pathPrefix?: string;
       privateFilesEnabled?: boolean;
       imageTransformsEnabled?: boolean;
+      maxFileSizeMb?: number;
+      workspaceStorageLimitGb?: number;
+      warningThresholdPercent?: number;
+      allowedFileTypes?: string;
     };
     vercel?: {
       projectId?: string;

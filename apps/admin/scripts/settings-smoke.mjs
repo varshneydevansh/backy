@@ -832,6 +832,10 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   await setLabeledControl(client, 'Path prefix', 'sites/{siteId}');
   await setLabeledControl(client, 'Private files', true);
   await setLabeledControl(client, 'Image transforms', true);
+  await setLabeledControl(client, 'Max upload size (MB)', '128');
+  await setLabeledControl(client, 'Workspace storage limit (GB)', '512');
+  await setLabeledControl(client, 'Storage warning threshold (%)', '85');
+  await setLabeledControl(client, 'Allowed file types', 'image/*,font/*,application/pdf,.zip');
   await setLabeledControl(client, 'Project URL', `https://${suffix}.supabase.co`);
   await setLabeledControl(client, 'Project ref', suffix);
   await setLabeledControl(client, 'Database', true, { exact: true });
@@ -963,6 +967,10 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.seo?.titleTemplate === `%s | Backy Smoke ${suffix}`, 'SEO title template was not persisted');
   assert(settings.integrations?.storage?.provider === 'supabase', 'Storage provider was not persisted');
   assert(settings.integrations?.storage?.bucket === `media-${suffix}`, 'Storage bucket was not persisted');
+  assert(settings.integrations?.storage?.maxFileSizeMb === 128, 'Storage max upload size was not persisted');
+  assert(settings.integrations?.storage?.workspaceStorageLimitGb === 512, 'Storage workspace limit was not persisted');
+  assert(settings.integrations?.storage?.warningThresholdPercent === 85, 'Storage warning threshold was not persisted');
+  assert(settings.integrations?.storage?.allowedFileTypes === 'image/*,font/*,application/pdf,.zip', 'Storage allowed file types were not persisted');
   assert(settings.integrations?.supabase?.projectRef === suffix, 'Supabase project ref was not persisted');
   assert(settings.integrations?.supabase?.databaseEnabled === true, 'Supabase database toggle was not persisted');
   assert(settings.integrations?.vercel?.projectId === `prj_${suffix}`, 'Vercel project id was not persisted');

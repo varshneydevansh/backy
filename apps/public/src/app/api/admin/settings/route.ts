@@ -561,6 +561,10 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       pathPrefix: stringValue(storage.pathPrefix),
       privateFilesEnabled: boolValue(storage.privateFilesEnabled),
       imageTransformsEnabled: boolValue(storage.imageTransformsEnabled, true),
+      maxFileSizeMb: Math.min(Math.max(numberValue(storage.maxFileSizeMb, 25), 1), 2048),
+      workspaceStorageLimitGb: Math.min(Math.max(numberValue(storage.workspaceStorageLimitGb, 10), 1), 102400),
+      warningThresholdPercent: Math.min(Math.max(numberValue(storage.warningThresholdPercent, 80), 50), 100),
+      allowedFileTypes: stringValue(storage.allowedFileTypes),
     },
     vercel: {
       projectId: stringValue(vercel.projectId),

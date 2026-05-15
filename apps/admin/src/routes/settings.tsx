@@ -2762,6 +2762,33 @@ function validateSettingsDraft({
     });
   }
 
+  if (storage.maxFileSizeMb !== undefined && (storage.maxFileSizeMb < 1 || storage.maxFileSizeMb > 2048)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Max upload size is outside the supported range',
+      detail: 'Use a maximum file size from 1 MB to 2048 MB.',
+      severity: 'error',
+    });
+  }
+
+  if (storage.workspaceStorageLimitGb !== undefined && (storage.workspaceStorageLimitGb < 1 || storage.workspaceStorageLimitGb > 102400)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Workspace storage limit is outside the supported range',
+      detail: 'Use a workspace storage limit from 1 GB to 102400 GB.',
+      severity: 'error',
+    });
+  }
+
+  if (storage.warningThresholdPercent !== undefined && (storage.warningThresholdPercent < 50 || storage.warningThresholdPercent > 100)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Storage warning threshold is outside the supported range',
+      detail: 'Use a warning threshold from 50% to 100%.',
+      severity: 'error',
+    });
+  }
+
   if (supabase.projectUrl && !isValidHttpUrl(supabase.projectUrl)) {
     addIssue(issues, {
       tab: 'infrastructure',
@@ -3830,6 +3857,58 @@ function InfrastructureSettings({
                   Image transforms
                 </label>
               </div>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Max upload size (MB)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={2048}
+                  value={storage.maxFileSizeMb ?? ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ maxFileSizeMb: Number(event.target.value) })}
+                  placeholder="25"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Workspace storage limit (GB)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={102400}
+                  value={storage.workspaceStorageLimitGb ?? ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ workspaceStorageLimitGb: Number(event.target.value) })}
+                  placeholder="10"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Storage warning threshold (%)</span>
+                <input
+                  type="number"
+                  min={50}
+                  max={100}
+                  value={storage.warningThresholdPercent ?? ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ warningThresholdPercent: Number(event.target.value) })}
+                  placeholder="80"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Allowed file types</span>
+                <input
+                  value={storage.allowedFileTypes || ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({ allowedFileTypes: event.target.value })}
+                  placeholder="image/*,font/*,application/pdf"
+                  className={inputClassName}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Comma-separated MIME types or extensions for uploads, fonts, and downloadable files.
+                </span>
+              </label>
             </div>
           </div>
           {runtimeStorage?.missing && runtimeStorage.missing.length > 0 && (
