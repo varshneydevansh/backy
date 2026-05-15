@@ -1440,6 +1440,9 @@ const assertProductsLayout = async (client) => {
       document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
       document.body?.innerText?.includes('Paid revenue') &&
       document.body?.innerText?.includes('Customer profiles'),
+    hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="products-customer-profile-manager"]')) &&
+      document.body?.innerText?.includes('Manage profile') &&
+      document.body?.innerText?.includes('Save profile'),
     hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
       document.body?.innerText?.includes('Subscription metadata') &&
       document.body?.innerText?.includes('Trial days'),
@@ -1455,8 +1458,61 @@ const assertProductsLayout = async (client) => {
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const assertCustomerProfileManagement = async (client, customersCollection, customerRecord) => {
+  assert(customersCollection?.id, 'Customers collection is required for profile management smoke coverage');
+  assert(customerRecord?.id, 'Customer record is required for profile management smoke coverage');
+
+  await navigateToRoute(client, '/products', 'products-command-center', 'Catalog command center');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const selector = document.querySelector('[aria-label="Customer profile"]');
+      const manager = document.querySelector('[data-testid="products-customer-profile-manager"]');
+      return {
+        hasSelector: selector instanceof HTMLSelectElement,
+        hasCustomerOption: selector instanceof HTMLSelectElement
+          ? Array.from(selector.options).some((option) => option.value === ${JSON.stringify(customerRecord.id)})
+          : false,
+        hasManager: Boolean(manager),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+    if (state.hasSelector && state.hasCustomerOption && state.hasManager) {
+      break;
+    }
+    if (attempt === 99) {
+      throw new Error(`Customer profile manager did not load checkout customer: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await setAriaControl(client, 'Customer profile', customerRecord.id);
+  await setLabeledControl(client, 'Customer name', 'Commerce Smoke VIP Buyer', { exact: true });
+  await setLabeledControl(client, 'Customer phone', '+1 555 0199', { exact: true });
+  await setLabeledControl(client, 'Customer status', 'vip');
+  await setLabeledControl(client, 'Customer notes', 'Flagged by commerce smoke profile management.', { exact: true });
+  await clickByText(client, 'Save profile', { exact: true });
+  await waitUntilIdle(client, '/products customer profile');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const updated = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
+    if (
+      updated?.values?.name === 'Commerce Smoke VIP Buyer' &&
+      updated.values?.status === 'vip' &&
+      updated.values?.phone === '+1 555 0199' &&
+      String(updated.values?.notes || '').includes('commerce smoke profile management')
+    ) {
+      return updated;
+    }
+    await sleep(250);
+  }
+
+  const current = await getCollectionRecordBySlug(customersCollection.id, customerRecord.slug);
+  throw new Error(`Customer profile management did not persist changes: ${JSON.stringify(current?.values)}`);
 };
 
 const assertProductPageTemplateShortcut = async (client, productCollection, mode) => {
@@ -1670,6 +1726,7 @@ const main = async () => {
   let restored = false;
   let frontendTemplateProduct = null;
   let frontendCatalogProduct = null;
+  let managedCustomerProfile = null;
 
   try {
     await waitForCdp();
@@ -1727,6 +1784,7 @@ const main = async () => {
     orderRecordId = publicCommerce.orderRecord.id;
     finalCustomerCollection = publicCommerce.customersCollection;
     customerRecordId = publicCommerce.customerRecord.id;
+    managedCustomerProfile = await assertCustomerProfileManagement(client, finalCustomerCollection, publicCommerce.customerRecord);
 
     const layout = await assertProductsLayout(client);
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -1797,6 +1855,7 @@ const main = async () => {
         slug: publicCommerce.customerRecord.slug,
         orderCount: publicCommerce.customerRecord.values?.ordercount,
         totalSpent: publicCommerce.customerRecord.values?.totalspent,
+        managedStatus: managedCustomerProfile?.values?.status,
       },
       layout,
       productPageTemplates: {

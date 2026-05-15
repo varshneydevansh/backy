@@ -244,6 +244,18 @@ interface ProductOptionMatrixDraft {
   replaceExisting: boolean;
 }
 
+const CUSTOMER_STATUS_OPTIONS = ['lead', 'customer', 'vip', 'inactive'] as const;
+
+type CustomerStatusOption = (typeof CUSTOMER_STATUS_OPTIONS)[number];
+
+interface CustomerProfileDraft {
+  name: string;
+  email: string;
+  phone: string;
+  status: CustomerStatusOption;
+  notes: string;
+}
+
 interface FrontendProductTemplateBlueprint {
   title: string;
   slug: string;
@@ -320,6 +332,19 @@ const normalizeProductRecord = (record: CollectionRecord): CollectionRecord => (
   ...record,
   values: normalizeProductValues(record.values),
 });
+
+const customerProfileToDraft = (record: CollectionRecord | null): CustomerProfileDraft => {
+  const values = record?.values || {};
+  const status = String(values.status || 'customer').trim().toLowerCase();
+
+  return {
+    name: String(values.name || values.fullname || values.customername || values.email || ''),
+    email: String(values.email || ''),
+    phone: String(values.phone || ''),
+    status: CUSTOMER_STATUS_OPTIONS.includes(status as CustomerStatusOption) ? status as CustomerStatusOption : 'customer',
+    notes: String(values.notes || ''),
+  };
+};
 
 const PRODUCT_FIELDS: CollectionField[] = [
   { key: productFieldKey('title'), label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
@@ -588,6 +613,8 @@ function ProductsRoute() {
   const [products, setProducts] = useState<CollectionRecord[]>([]);
   const [recentOrders, setRecentOrders] = useState<CollectionRecord[]>([]);
   const [customerProfiles, setCustomerProfiles] = useState<CollectionRecord[]>([]);
+  const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
+  const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
@@ -598,9 +625,10 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingCustomerProfile, setIsSavingCustomerProfile] = useState(false);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
-  const isProductsBusy = isLoading || isSaving || isImportingProducts || Boolean(isCreatingTemplateId);
+  const isProductsBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingProducts || Boolean(isCreatingTemplateId);
   const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
@@ -786,6 +814,10 @@ function ProductsRoute() {
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
   );
+  const selectedCustomerProfile = useMemo(
+    () => customerProfiles.find((customer) => customer.id === selectedCustomerProfileId) || null,
+    [customerProfiles, selectedCustomerProfileId],
+  );
   const frontendProductTemplates = useMemo(
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'product'),
     [frontendDesign?.templates],
@@ -912,6 +944,9 @@ function ProductsRoute() {
         slug: customer.slug,
         name: String(values.name || values.fullname || values.customername || values.email || customer.slug),
         email: String(values.email || ''),
+        phone: String(values.phone || ''),
+        status: String(values.status || 'customer'),
+        notes: String(values.notes || ''),
         orderCount: toNumber(values.ordercount || values.orderCount),
         totalSpent: toNumber(values.totalspent || values.totalSpent),
         lastOrderNumber: String(values.lastordernumber || values.lastOrderNumber || ''),
@@ -1295,6 +1330,8 @@ function ProductsRoute() {
       setProducts([]);
       setRecentOrders([]);
       setCustomerProfiles([]);
+      setSelectedCustomerProfileId(null);
+      setCustomerProfileDraft(customerProfileToDraft(null));
       setProductPagination(null);
       clearProductEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce products.');
@@ -1317,6 +1354,8 @@ function ProductsRoute() {
         setProducts([]);
         setRecentOrders([]);
         setCustomerProfiles([]);
+        setSelectedCustomerProfileId(null);
+        setCustomerProfileDraft(customerProfileToDraft(null));
         setProductPagination(null);
         clearProductEditorState();
         return;
@@ -1350,7 +1389,13 @@ function ProductsRoute() {
           : Promise.resolve(null),
       ]);
       setRecentOrders(ordersResult?.records || []);
-      setCustomerProfiles(customersResult?.records || []);
+      const customerRecords = customersResult?.records || [];
+      setCustomerProfiles(customerRecords);
+      setSelectedCustomerProfileId((current) => (
+        current && customerRecords.some((customer) => customer.id === current)
+          ? current
+          : customerRecords[0]?.id || null
+      ));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load products');
     } finally {
@@ -1506,6 +1551,10 @@ function ProductsRoute() {
     if (!selectedProduct) return;
     setFormState(productToForm(selectedProduct));
   }, [selectedProduct]);
+
+  useEffect(() => {
+    setCustomerProfileDraft(customerProfileToDraft(selectedCustomerProfile));
+  }, [selectedCustomerProfile]);
 
   const clearProductEditorState = () => {
     setSelectedProductId(null);
@@ -1922,6 +1971,64 @@ function ProductsRoute() {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete product');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const selectCustomerProfile = (customer: CollectionRecord) => {
+    if (isProductsBusy) return;
+    if (!canViewProducts) {
+      setError(viewPermissionTitle || 'Your account cannot view customer profiles.');
+      return;
+    }
+
+    setSelectedCustomerProfileId(customer.id);
+    setCustomerProfileDraft(customerProfileToDraft(customer));
+  };
+
+  const saveCustomerProfile = async () => {
+    if (!customersCollection || !selectedCustomerProfile) return;
+    if (isProductsBusy) return;
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot update customer profiles.');
+      return;
+    }
+
+    const name = customerProfileDraft.name.trim();
+    const email = customerProfileDraft.email.trim().toLowerCase();
+    if (!name || !email) {
+      setError('Customer name and email are required before saving a profile.');
+      setNotice(null);
+      return;
+    }
+
+    setIsSavingCustomerProfile(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateCollectionRecord(activeSiteId, customersCollection.id, selectedCustomerProfile.id, {
+        slug: selectedCustomerProfile.slug,
+        status: selectedCustomerProfile.status,
+        scheduledAt: selectedCustomerProfile.scheduledAt || null,
+        values: {
+          ...selectedCustomerProfile.values,
+          name,
+          email,
+          phone: customerProfileDraft.phone.trim(),
+          status: customerProfileDraft.status,
+          notes: customerProfileDraft.notes.trim(),
+        },
+      });
+
+      setCustomerProfiles((current) => current.map((customer) => (
+        customer.id === updated.id ? updated : customer
+      )));
+      setSelectedCustomerProfileId(updated.id);
+      setNotice('Customer profile updated.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update customer profile');
+    } finally {
+      setIsSavingCustomerProfile(false);
     }
   };
 
@@ -2596,9 +2703,29 @@ function ProductsRoute() {
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top customer profiles</div>
-                      <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                        {commerceAnalytics.repeatCustomerCount} repeat
-                      </span>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {customerProfiles.length > 0 ? (
+                          <select
+                            aria-label="Customer profile"
+                            value={selectedCustomerProfileId || ''}
+                            onChange={(event) => {
+                              const profile = customerProfiles.find((item) => item.id === event.target.value);
+                              if (profile) selectCustomerProfile(profile);
+                            }}
+                            disabled={isProductsAccessBusy || !canViewProducts}
+                            className="min-h-8 max-w-44 rounded-md border border-border bg-background px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {customerProfiles.map((customer) => (
+                              <option key={customer.id} value={customer.id}>
+                                {String(customer.values?.email || customer.values?.name || customer.slug)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                          {commerceAnalytics.repeatCustomerCount} repeat
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-3 space-y-2">
                       {commerceAnalytics.topCustomers.length > 0 ? commerceAnalytics.topCustomers.map((customer) => (
@@ -2606,10 +2733,33 @@ function ProductsRoute() {
                           <div className="min-w-0">
                             <div className="truncate font-medium text-foreground">{customer.name}</div>
                             <div className="truncate text-xs text-muted-foreground">{customer.email || customer.slug}</div>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] capitalize text-muted-foreground">
+                                {customer.status}
+                              </span>
+                              {customer.phone ? (
+                                <span className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  {customer.phone}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                           <div className="shrink-0 text-right">
                             <div className="font-semibold">{formatMoney(customer.totalSpent, commerceAnalytics.currency)}</div>
                             <div className="text-[11px] text-muted-foreground">{customer.orderCount} orders</div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                const profile = customerProfiles.find((item) => item.id === customer.id);
+                                if (profile) selectCustomerProfile(profile);
+                              }}
+                              disabled={isProductsAccessBusy || !canViewProducts}
+                              className="mt-1 min-h-8 px-2 text-xs"
+                              data-testid={`products-customer-manage-${customer.id}`}
+                            >
+                              Manage
+                            </Button>
                           </div>
                         </div>
                       )) : (
@@ -2618,6 +2768,93 @@ function ProductsRoute() {
                         </div>
                       )}
                     </div>
+                    {selectedCustomerProfile && (
+                      <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="products-customer-profile-manager">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-foreground">Manage profile</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Update private customer contact status and notes without leaving Products.
+                            </div>
+                          </div>
+                          <span className="rounded-full bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                            {selectedCustomerProfile.slug}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Field label="Customer name">
+                            <input
+                              value={customerProfileDraft.name}
+                              onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, name: event.target.value }))}
+                              disabled={isProductsAccessBusy || !canEditProducts}
+                              className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </Field>
+                          <Field label="Customer email">
+                            <input
+                              type="email"
+                              value={customerProfileDraft.email}
+                              onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, email: event.target.value }))}
+                              disabled={isProductsAccessBusy || !canEditProducts}
+                              className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </Field>
+                          <Field label="Customer phone">
+                            <input
+                              value={customerProfileDraft.phone}
+                              onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, phone: event.target.value }))}
+                              disabled={isProductsAccessBusy || !canEditProducts}
+                              className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </Field>
+                          <Field label="Customer status">
+                            <select
+                              value={customerProfileDraft.status}
+                              onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, status: event.target.value as CustomerStatusOption }))}
+                              disabled={isProductsAccessBusy || !canEditProducts}
+                              className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm capitalize disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {CUSTOMER_STATUS_OPTIONS.map((status) => (
+                                <option key={status} value={status}>{status}</option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                        <Field label="Customer notes" className="mt-3">
+                          <textarea
+                            value={customerProfileDraft.notes}
+                            onChange={(event) => setCustomerProfileDraft((current) => ({ ...current, notes: event.target.value }))}
+                            rows={3}
+                            disabled={isProductsAccessBusy || !canEditProducts}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            placeholder="Internal customer notes"
+                          />
+                        </Field>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                          <Link
+                            to="/collections"
+                            search={customerCollectionSearch}
+                            aria-disabled={!customersCollection || isProductsBusy}
+                            className={cn(
+                              'inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-accent',
+                              (!customersCollection || isProductsBusy) && 'pointer-events-none opacity-60',
+                            )}
+                          >
+                            Open collection
+                          </Link>
+                          <Button
+                            size="sm"
+                            onClick={() => void saveCustomerProfile()}
+                            disabled={isProductsAccessBusy || !canEditProducts}
+                            title={!canEditProducts ? editPermissionTitle : undefined}
+                            iconStart={<Edit3 className="size-4" />}
+                            data-testid="products-customer-profile-save"
+                          >
+                            {isSavingCustomerProfile ? 'Saving...' : 'Save profile'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3695,9 +3932,9 @@ function ProductWorkflowStep({ index, label, detail }: { index: number; label: s
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <label className="block space-y-2">
+    <label className={cn('block space-y-2', className)}>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
