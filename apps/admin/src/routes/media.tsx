@@ -7316,6 +7316,42 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
           </div>
         ))}
       </div>
+      {result.credentialRotation && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-credential-rotation">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Credential rotation probe</h4>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{result.credentialRotation.summary}</p>
+            </div>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', result.credentialRotation.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+              {result.credentialRotation.status}
+            </span>
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Replacement probe path</dt>
+              <dd className="break-all font-mono">{result.credentialRotation.probePath}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Detected replacement fields</dt>
+              <dd>{result.credentialRotation.fields.filter((field) => field.detected).length} / {result.credentialRotation.fields.length}</dd>
+            </div>
+          </dl>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {result.credentialRotation.checks.map((check) => (
+              <div key={check.label} className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">{check.label}</span>
+                  <span className={cn('text-[11px] font-semibold', check.ready ? 'text-success' : 'text-warning')}>
+                    {check.ready ? 'Ready' : 'Needs attention'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
           <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Credential fields</h4>

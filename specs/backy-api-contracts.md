@@ -161,6 +161,9 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns `data.settings.runtimeStorage`, a non-secret diagnostic object with `{ provider, configured, missing, publicUrl?, basePath?, bucket?, region?, endpoint? }` for the active media storage runtime.
   - Returns `data.settings.runtimeDatabase`, `runtimeSupabase`, and `runtimeVercel` non-secret runtime diagnostics so the admin can show database/Supabase/Vercel readiness without exposing tokens or service-role keys.
 
+- `POST /api/admin/settings`
+  - Body action `"media-storage-provisioning-probe"` creates or verifies the active local/S3/Supabase storage container, performs upload/read/stat/list/delete probe operations, emits a `settings.media_storage.provisioning_probe` audit event, and returns non-secret credential-rotation readiness. When provider-specific `BACKY_*_NEXT_*` replacement storage credential environment variables are present, the response validates that replacement credential against the target bucket/path before it is promoted to active runtime variables.
+
 - `PATCH /api/admin/settings`
   - Body supports partial platform settings updates: `deliveryMode`, `apiKeys`, `storage`, `auth`, and `integrations`.
   - `integrations.supabase` persists non-secret metadata only: `projectUrl`, `projectRef`, `databaseEnabled`, `storageEnabled`, and `authEnabled`.

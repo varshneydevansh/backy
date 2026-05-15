@@ -1142,6 +1142,7 @@ const runMediaStorageProvisioningProbe = async (client) => {
           text.includes('Probe upload') &&
           text.includes('Readback') &&
           text.includes('Probe cleanup') &&
+          text.includes('Credential rotation probe') &&
           text.includes('Credential fields') &&
           text.includes('Rotation runbook'),
         text: text.slice(0, 1800),

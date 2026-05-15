@@ -23,6 +23,7 @@ import {
   resolvePublicRepositoryRuntimeConfig,
   shouldUseDemoStoreFallback,
 } from '@/lib/repositoryRuntime';
+import { createStorageAdapter } from '@backy/storage';
 import type { BackyJsonObject, BackyJsonValue, BackySettings } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -911,6 +912,20 @@ interface StorageProvisioningAutomation {
   detail: string;
 }
 
+interface StorageCredentialRotationProbe {
+  status: StorageProvisioningStatus;
+  summary: string;
+  probePath: string;
+  fields: Array<{
+    name: string;
+    secret: boolean;
+    required: boolean;
+    detected: boolean;
+  }>;
+  checks: StorageProvisioningCheck[];
+  nextSteps: string[];
+}
+
 const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
   const runtimeImport = new Function('specifier', 'return import(specifier)') as (value: string) => Promise<TModule>;
   return runtimeImport(specifier);
@@ -1207,8 +1222,69 @@ const storageRotationFields = (provider: string) => {
   ];
 };
 
-const runStorageContainerAutomation = async (): Promise<StorageProvisioningAutomation> => {
-  const resolved = resolveMediaStorageConfig();
+const storageRotationCandidateFields = (provider: string) => {
+  if (provider === 's3') {
+    return [
+      { name: 'BACKY_S3_NEXT_ACCESS_KEY_ID', secret: true, required: true, detected: Boolean(envValue(['BACKY_S3_NEXT_ACCESS_KEY_ID', 'AWS_NEXT_ACCESS_KEY_ID'])) },
+      { name: 'BACKY_S3_NEXT_SECRET_ACCESS_KEY', secret: true, required: true, detected: Boolean(envValue(['BACKY_S3_NEXT_SECRET_ACCESS_KEY', 'AWS_NEXT_SECRET_ACCESS_KEY'])) },
+      { name: 'BACKY_S3_NEXT_BUCKET', secret: false, required: false, detected: Boolean(envValue(['BACKY_S3_NEXT_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET'])) },
+      { name: 'BACKY_S3_NEXT_REGION', secret: false, required: false, detected: Boolean(envValue(['BACKY_S3_NEXT_REGION', 'AWS_NEXT_REGION'])) },
+      { name: 'BACKY_S3_NEXT_ENDPOINT', secret: false, required: false, detected: Boolean(envValue(['BACKY_S3_NEXT_ENDPOINT', 'BACKY_NEXT_STORAGE_ENDPOINT'])) },
+      { name: 'BACKY_S3_NEXT_PUBLIC_URL', secret: false, required: false, detected: Boolean(envValue(['BACKY_S3_NEXT_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL'])) },
+    ];
+  }
+
+  if (provider === 'supabase') {
+    return [
+      { name: 'BACKY_SUPABASE_NEXT_URL', secret: false, required: false, detected: Boolean(envValue(['BACKY_SUPABASE_NEXT_URL', 'SUPABASE_NEXT_URL'])) },
+      { name: 'BACKY_SUPABASE_NEXT_SERVICE_ROLE_KEY', secret: true, required: true, detected: Boolean(envValue(['BACKY_SUPABASE_NEXT_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_NEXT_ANON_KEY', 'SUPABASE_NEXT_SERVICE_ROLE_KEY', 'SUPABASE_NEXT_ANON_KEY'])) },
+      { name: 'BACKY_SUPABASE_NEXT_STORAGE_BUCKET', secret: false, required: false, detected: Boolean(envValue(['BACKY_SUPABASE_NEXT_STORAGE_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET'])) },
+    ];
+  }
+
+  return [
+    { name: 'BACKY_NEXT_LOCAL_UPLOADS_DIR', secret: false, required: false, detected: Boolean(envValue(['BACKY_NEXT_LOCAL_UPLOADS_DIR', 'BACKY_NEXT_STORAGE_LOCAL_PATH'])) },
+    { name: 'BACKY_NEXT_LOCAL_PUBLIC_URL', secret: false, required: false, detected: Boolean(envValue(['BACKY_NEXT_LOCAL_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL'])) },
+  ];
+};
+
+const buildStorageRotationCandidateEnv = (provider: string): Record<string, string | undefined> => {
+  const env: Record<string, string | undefined> = { ...process.env };
+  if (provider === 's3') {
+    env.BACKY_STORAGE_PROVIDER = 's3';
+    env.BACKY_S3_ACCESS_KEY_ID = envValue(['BACKY_S3_NEXT_ACCESS_KEY_ID', 'AWS_NEXT_ACCESS_KEY_ID']) || env.BACKY_S3_ACCESS_KEY_ID || env.AWS_ACCESS_KEY_ID;
+    env.BACKY_S3_SECRET_ACCESS_KEY = envValue(['BACKY_S3_NEXT_SECRET_ACCESS_KEY', 'AWS_NEXT_SECRET_ACCESS_KEY']) || env.BACKY_S3_SECRET_ACCESS_KEY || env.AWS_SECRET_ACCESS_KEY;
+    env.BACKY_S3_BUCKET = envValue(['BACKY_S3_NEXT_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET']) || env.BACKY_S3_BUCKET || env.BACKY_STORAGE_BUCKET;
+    env.BACKY_S3_REGION = envValue(['BACKY_S3_NEXT_REGION', 'AWS_NEXT_REGION']) || env.BACKY_S3_REGION || env.AWS_REGION;
+    env.BACKY_S3_ENDPOINT = envValue(['BACKY_S3_NEXT_ENDPOINT', 'BACKY_NEXT_STORAGE_ENDPOINT']) || env.BACKY_S3_ENDPOINT || env.BACKY_STORAGE_ENDPOINT;
+    env.BACKY_S3_PUBLIC_URL = envValue(['BACKY_S3_NEXT_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL']) || env.BACKY_S3_PUBLIC_URL || env.BACKY_MEDIA_PUBLIC_URL;
+    env.BACKY_S3_FORCE_PATH_STYLE = envValue(['BACKY_S3_NEXT_FORCE_PATH_STYLE']) || env.BACKY_S3_FORCE_PATH_STYLE;
+    return env;
+  }
+
+  if (provider === 'supabase') {
+    env.BACKY_STORAGE_PROVIDER = 'supabase';
+    env.BACKY_SUPABASE_URL = envValue(['BACKY_SUPABASE_NEXT_URL', 'SUPABASE_NEXT_URL']) || env.BACKY_SUPABASE_URL || env.SUPABASE_URL;
+    env.BACKY_SUPABASE_SERVICE_ROLE_KEY = envValue(['BACKY_SUPABASE_NEXT_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_NEXT_ANON_KEY', 'SUPABASE_NEXT_SERVICE_ROLE_KEY', 'SUPABASE_NEXT_ANON_KEY']) || env.BACKY_SUPABASE_SERVICE_ROLE_KEY || env.BACKY_SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
+    env.BACKY_SUPABASE_STORAGE_BUCKET = envValue(['BACKY_SUPABASE_NEXT_STORAGE_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET']) || env.BACKY_SUPABASE_STORAGE_BUCKET || env.BACKY_STORAGE_BUCKET;
+    return env;
+  }
+
+  env.BACKY_STORAGE_PROVIDER = 'local';
+  env.BACKY_LOCAL_UPLOADS_DIR = envValue(['BACKY_NEXT_LOCAL_UPLOADS_DIR', 'BACKY_NEXT_STORAGE_LOCAL_PATH']) || env.BACKY_LOCAL_UPLOADS_DIR || env.BACKY_STORAGE_LOCAL_PATH;
+  env.BACKY_LOCAL_PUBLIC_URL = envValue(['BACKY_NEXT_LOCAL_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL']) || env.BACKY_LOCAL_PUBLIC_URL || env.BACKY_MEDIA_PUBLIC_URL;
+  return env;
+};
+
+const hasStorageRotationCandidate = (provider: string) => (
+  storageRotationCandidateFields(provider).some((field) => field.detected)
+);
+
+type ResolvedMediaStorage = ReturnType<typeof resolveMediaStorageConfig>;
+
+const runStorageContainerAutomation = async (
+  resolved: ResolvedMediaStorage = resolveMediaStorageConfig(),
+): Promise<StorageProvisioningAutomation> => {
   const { config, summary } = resolved;
   const provider = summary.provider;
   const target = provider === 'local'
@@ -1356,9 +1432,172 @@ const runStorageContainerAutomation = async (): Promise<StorageProvisioningAutom
   }
 };
 
+const runStorageOperationChecks = async (input: {
+  adapter: Awaited<ReturnType<typeof createStorageAdapter>>;
+  probePath: string;
+  probeBody: Buffer;
+}): Promise<StorageProvisioningCheck[]> => {
+  const checks: StorageProvisioningCheck[] = [];
+  const upload = await input.adapter.upload(input.probeBody, {
+    path: input.probePath,
+    filename: input.probePath.split('/').pop() || 'probe.txt',
+    mimeType: 'text/plain',
+    metadata: {
+      source: 'backy-media-storage-probe',
+    },
+  });
+  checks.push({
+    label: 'Probe upload',
+    ready: upload.path === input.probePath,
+    detail: upload.path === input.probePath
+      ? `Probe object uploaded to ${input.probePath}.`
+      : `Probe uploaded to ${upload.path}.`,
+  });
+
+  const readBuffer = await input.adapter.read(input.probePath);
+  checks.push({
+    label: 'Readback',
+    ready: readBuffer.equals(input.probeBody),
+    detail: readBuffer.equals(input.probeBody)
+      ? 'Probe object was read back with matching bytes.'
+      : 'Probe readback bytes did not match the uploaded content.',
+  });
+
+  const stat = await input.adapter.stat(input.probePath);
+  checks.push({
+    label: 'Object metadata',
+    ready: Boolean(stat && stat.size === input.probeBody.length),
+    detail: stat
+      ? `Provider returned object metadata (${stat.size} bytes).`
+      : 'Provider did not return object metadata for the probe.',
+  });
+
+  const prefix = input.probePath.split('/').slice(0, -1).join('/');
+  const listed = await input.adapter.list(prefix);
+  checks.push({
+    label: 'Bucket listing',
+    ready: listed.some((item) => item.path === input.probePath),
+    detail: listed.some((item) => item.path === input.probePath)
+      ? 'Provider list operation can see the probe object.'
+      : 'Provider list operation did not include the probe object.',
+  });
+
+  await input.adapter.delete(input.probePath);
+  const existsAfterDelete = await input.adapter.exists(input.probePath);
+  checks.push({
+    label: 'Probe cleanup',
+    ready: !existsAfterDelete,
+    detail: existsAfterDelete
+      ? 'Probe object still exists after delete.'
+      : 'Probe object cleaned up successfully.',
+  });
+
+  return checks;
+};
+
+const runMediaStorageCredentialRotationProbe = async (
+  requestId: string,
+  provider: string,
+): Promise<StorageCredentialRotationProbe> => {
+  const fields = storageRotationCandidateFields(provider);
+  const probePath = `sites/_backy/rotation/${requestId}.txt`;
+  const probeBody = Buffer.from(`backy media storage rotation probe ${requestId}\n`, 'utf8');
+  const nextSteps = [
+    'Provision the replacement provider credential in the storage provider account.',
+    'Expose the replacement credential through BACKY_*_NEXT_* environment variables.',
+    'Run this rotation probe and confirm it reaches ready.',
+    'Promote the replacement credential to the active BACKY_* storage variables.',
+    'Redeploy or restart Backy, run the provisioning probe once more, then revoke the old provider credential.',
+  ];
+
+  if (!hasStorageRotationCandidate(provider)) {
+    return {
+      status: 'blocked',
+      summary: 'No replacement storage credential environment variables were detected for a rotation probe.',
+      probePath,
+      fields,
+      checks: [
+        {
+          label: 'Replacement credential',
+          ready: false,
+          detail: 'Set the provider-specific BACKY_*_NEXT_* environment variables before probing credential rotation.',
+        },
+      ],
+      nextSteps,
+    };
+  }
+
+  const candidate = resolveMediaStorageConfig(buildStorageRotationCandidateEnv(provider));
+  if (!candidate.config) {
+    return {
+      status: 'blocked',
+      summary: 'Replacement storage credential is incomplete.',
+      probePath,
+      fields,
+      checks: [
+        {
+          label: 'Replacement configuration',
+          ready: false,
+          detail: candidate.summary.error || `Missing ${candidate.summary.missing.join(', ') || 'storage configuration'}.`,
+        },
+      ],
+      nextSteps,
+    };
+  }
+
+  const automation = await runStorageContainerAutomation(candidate);
+  const checks: StorageProvisioningCheck[] = [
+    {
+      label: 'Replacement configuration',
+      ready: candidate.summary.configured,
+      detail: `${candidate.summary.provider} replacement storage configuration resolved without exposing credential values.`,
+    },
+    {
+      label: 'Replacement container',
+      ready: automation.status === 'ready',
+      detail: automation.detail,
+    },
+  ];
+
+  if (automation.status !== 'ready') {
+    return {
+      status: 'blocked',
+      summary: 'Replacement credential was detected, but its storage container could not be verified.',
+      probePath,
+      fields,
+      checks,
+      nextSteps,
+    };
+  }
+
+  try {
+    const adapter = await createStorageAdapter(candidate.config);
+    checks.push(...await runStorageOperationChecks({ adapter, probePath, probeBody }));
+  } catch (error) {
+    checks.push({
+      label: 'Replacement provider operation',
+      ready: false,
+      detail: error instanceof Error ? error.message : 'Replacement credential provider operation failed.',
+    });
+  }
+
+  const blocked = checks.some((check) => !check.ready);
+  return {
+    status: blocked ? 'blocked' : 'ready',
+    summary: blocked
+      ? 'Replacement credential was detected, but one or more rotation checks failed.'
+      : 'Replacement credential can create or verify the storage container and complete upload, readback, metadata, listing, and cleanup operations.',
+    probePath,
+    fields,
+    checks,
+    nextSteps,
+  };
+};
+
 const runMediaStorageProvisioningProbe = async (requestId: string) => {
   const summary = getMediaStorageConfigSummary();
   const automation = await runStorageContainerAutomation();
+  const credentialRotation = await runMediaStorageCredentialRotationProbe(requestId, summary.provider);
   const checks: StorageProvisioningCheck[] = [
     {
       label: 'Runtime configuration',
@@ -1380,6 +1619,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
       probePath,
       automation,
       checks,
+      credentialRotation,
       rotation: {
         fields: storageRotationFields(summary.provider),
         nextSteps: [
@@ -1394,60 +1634,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
 
   try {
     const adapter = await getMediaStorageAdapter();
-    const upload = await adapter.upload(probeBody, {
-      path: probePath,
-      filename: `${requestId}.txt`,
-      mimeType: 'text/plain',
-      metadata: {
-        source: 'backy-media-storage-provisioning-probe',
-        requestId,
-      },
-    });
-    checks.push({
-      label: 'Probe upload',
-      ready: upload.path === probePath,
-      detail: upload.path === probePath
-        ? `Probe object uploaded to ${probePath}.`
-        : `Probe uploaded to ${upload.path}.`,
-    });
-
-    const readBuffer = await adapter.read(probePath);
-    checks.push({
-      label: 'Readback',
-      ready: readBuffer.equals(probeBody),
-      detail: readBuffer.equals(probeBody)
-        ? 'Probe object was read back with matching bytes.'
-        : 'Probe readback bytes did not match the uploaded content.',
-    });
-
-    const stat = await adapter.stat(probePath);
-    checks.push({
-      label: 'Object metadata',
-      ready: Boolean(stat && stat.size === probeBody.length),
-      detail: stat
-        ? `Provider returned object metadata (${stat.size} bytes).`
-        : 'Provider did not return object metadata for the probe.',
-    });
-
-    const prefix = probePath.split('/').slice(0, -1).join('/');
-    const listed = await adapter.list(prefix);
-    checks.push({
-      label: 'Bucket listing',
-      ready: listed.some((item) => item.path === probePath),
-      detail: listed.some((item) => item.path === probePath)
-        ? 'Provider list operation can see the probe object.'
-        : 'Provider list operation did not include the probe object.',
-    });
-
-    await adapter.delete(probePath);
-    const existsAfterDelete = await adapter.exists(probePath);
-    checks.push({
-      label: 'Probe cleanup',
-      ready: !existsAfterDelete,
-      detail: existsAfterDelete
-        ? 'Probe object still exists after delete.'
-        : 'Probe object cleaned up successfully.',
-    });
+    checks.push(...await runStorageOperationChecks({ adapter, probePath, probeBody }));
   } catch (error) {
     checks.push({
       label: 'Provider operation',
@@ -1469,6 +1656,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
     probePath,
     automation,
     checks,
+    credentialRotation,
     rotation: {
       fields: storageRotationFields(summary.provider),
       nextSteps: [

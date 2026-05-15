@@ -2104,6 +2104,14 @@ export interface SettingsStorageProvisioningResult {
     detail: string;
   };
   checks: SettingsStorageProvisioningCheck[];
+  credentialRotation?: {
+    status: 'ready' | 'blocked';
+    summary: string;
+    probePath: string;
+    fields: SettingsStorageProvisioningField[];
+    checks: SettingsStorageProvisioningCheck[];
+    nextSteps: string[];
+  };
   rotation: {
     fields: SettingsStorageProvisioningField[];
     nextSteps: string[];
