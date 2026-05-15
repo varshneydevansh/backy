@@ -471,6 +471,7 @@ const SITE_WEBHOOK_EVENT_KINDS: SiteWebhookEventKind[] = [
   'contact-sync',
   'contact-status',
   'commerce-order',
+  'commerce-product',
   'commerce-webhook',
   'comment-submitted',
   'comment-status',

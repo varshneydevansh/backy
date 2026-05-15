@@ -615,6 +615,7 @@ function normalizeNotificationSettings(
       newUser: false,
       pagePublished: false,
       orderCreated: settings.email?.orderCreated === true,
+      productLowStock: settings.email?.productLowStock === true,
       systemUpdates: false,
     },
     inApp: {
@@ -2699,6 +2700,7 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
     pagePublished: false,
     formSubmission: false,
     orderCreated: false,
+    productLowStock: false,
     comments: true,
     systemUpdates: false,
     recipient: '',
@@ -3409,7 +3411,7 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification email provider',
     description: 'Selects production email delivery for form, comment, invite, reset, and workflow notifications.',
     configured: Boolean(runtimeNotifications?.productionReady),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.systemUpdates),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.productLowStock || notifications?.email?.systemUpdates),
     valueHint: runtimeNotifications?.emailProvider,
     example: 'resend',
   },
@@ -3420,7 +3422,7 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification sender',
     description: 'Sender identity used by Backy notification emails.',
     configured: Boolean(runtimeNotifications?.from),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.systemUpdates),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.productLowStock || notifications?.email?.systemUpdates),
     valueHint: runtimeNotifications?.from,
     example: 'Backy <notifications@example.com>',
   },
@@ -5093,6 +5095,7 @@ function NotificationSettings({
               { key: 'pagePublished' as const, label: 'Page published', live: false },
               { key: 'formSubmission' as const, label: 'New form submission', live: true },
               { key: 'orderCreated' as const, label: 'New commerce order', live: true },
+              { key: 'productLowStock' as const, label: 'Product low stock', live: true },
               { key: 'systemUpdates' as const, label: 'System updates', live: false },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">

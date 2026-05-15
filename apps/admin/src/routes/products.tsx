@@ -28,6 +28,7 @@ import {
   getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
+  listProductNotificationEvents,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -37,6 +38,7 @@ import {
   type CollectionRecord,
   type CollectionRecordPagination,
   type AdminUserPermissionMatrix,
+  type OrderDeliveryEvent,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
@@ -624,6 +626,8 @@ function ProductsRoute() {
   const [products, setProducts] = useState<CollectionRecord[]>([]);
   const [recentOrders, setRecentOrders] = useState<CollectionRecord[]>([]);
   const [customerProfiles, setCustomerProfiles] = useState<CollectionRecord[]>([]);
+  const [productNotificationEvents, setProductNotificationEvents] = useState<OrderDeliveryEvent[]>([]);
+  const [productNotificationError, setProductNotificationError] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
   const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
@@ -1189,6 +1193,7 @@ function ProductsRoute() {
       commerceProductBySlug: commerceProductDetailUrl,
       commerceOrderContract: commerceOrderContractUrl,
       commerceOrderCreate: commerceOrderCreateUrl,
+      productNotificationEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-product`,
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
     },
@@ -1290,6 +1295,21 @@ function ProductsRoute() {
           }
         : null,
     },
+    notifications: {
+      lowStockAutomation: 'Checkout inventory reservation emits commerce-product events when a physical product crosses its low-stock threshold.',
+      events: productNotificationEvents.map((event) => ({
+        id: event.id,
+        status: event.status,
+        target: event.target,
+        channel: String(event.metadata?.channel || ''),
+        event: String(event.metadata?.event || ''),
+        productId: String(event.metadata?.productId || ''),
+        productTitle: String(event.metadata?.productTitle || ''),
+        inventory: Number(event.metadata?.inventory || 0),
+        lowStockThreshold: Number(event.metadata?.lowStockThreshold || 0),
+        createdAt: event.createdAt,
+      })),
+    },
     filters: {
       search: searchQuery,
       status: statusFilter,
@@ -1375,7 +1395,9 @@ function ProductsRoute() {
     productPageTemplateBriefs,
     productTypeFilter,
     productCollection,
+    productNotificationEvents,
     products,
+    publicBaseUrl,
     searchQuery,
     storefrontApiUrl,
     storefrontProductDetailUrl,
@@ -1412,6 +1434,23 @@ function ProductsRoute() {
     navigate({ to: '/products', search: normalized, replace: true });
   };
 
+  const loadProductNotificationEvents = async () => {
+    if (!canViewCommerce) {
+      setProductNotificationEvents([]);
+      setProductNotificationError(null);
+      return;
+    }
+
+    try {
+      const result = await listProductNotificationEvents(activeSiteId, { limit: 50 });
+      setProductNotificationEvents(result.events);
+      setProductNotificationError(null);
+    } catch (loadError) {
+      setProductNotificationEvents([]);
+      setProductNotificationError(loadError instanceof Error ? loadError.message : 'Unable to load product notification events');
+    }
+  };
+
   const loadProducts = async () => {
     if (isProductsBusy) return;
     if (isPermissionMatrixPending) return;
@@ -1422,6 +1461,8 @@ function ProductsRoute() {
       setProducts([]);
       setRecentOrders([]);
       setCustomerProfiles([]);
+      setProductNotificationEvents([]);
+      setProductNotificationError(null);
       setSelectedCustomerProfileId(null);
       setCustomerProfileDraft(customerProfileToDraft(null));
       setProductPagination(null);
@@ -1446,6 +1487,8 @@ function ProductsRoute() {
         setProducts([]);
         setRecentOrders([]);
         setCustomerProfiles([]);
+        setProductNotificationEvents([]);
+        setProductNotificationError(null);
         setSelectedCustomerProfileId(null);
         setCustomerProfileDraft(customerProfileToDraft(null));
         setProductPagination(null);
@@ -1483,6 +1526,7 @@ function ProductsRoute() {
       setRecentOrders(ordersResult?.records || []);
       const customerRecords = customersResult?.records || [];
       setCustomerProfiles(customerRecords);
+      void loadProductNotificationEvents();
       setSelectedCustomerProfileId((current) => (
         current && customerRecords.some((customer) => customer.id === current)
           ? current
@@ -2831,6 +2875,63 @@ function ProductsRoute() {
                         </div>
                       )}
                     </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3" data-testid="products-notification-automation">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Product automation</div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void loadProductNotificationEvents()}
+                        disabled={isProductsAccessBusy || !canViewCommerce}
+                        title={!canViewCommerce ? viewPermissionTitle : undefined}
+                        iconStart={<RefreshCw className="size-3.5" />}
+                      >
+                        Refresh
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      Checkout inventory reservations emit low-stock product notifications when a physical item crosses its configured threshold.
+                    </p>
+                    <code className="mt-2 block text-xs text-muted-foreground">/events?kind=commerce-product</code>
+                    {productNotificationError ? (
+                      <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        {productNotificationError}
+                      </div>
+                    ) : productNotificationEvents.length === 0 ? (
+                      <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                        No product automation events recorded yet.
+                      </div>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {productNotificationEvents.slice(0, 4).map((event) => (
+                          <div key={event.id} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium text-foreground">
+                                  {String(event.metadata?.productTitle || event.metadata?.productSlug || 'Product alert')}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {String(event.metadata?.event || 'product.low_stock')} {'->'} {String(event.metadata?.channel || 'event')}
+                                </div>
+                              </div>
+                              <span className={cn(
+                                'rounded px-2 py-0.5 text-[11px]',
+                                event.status === 'succeeded' ? 'bg-success/10 text-success' : event.status === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground',
+                              )}
+                              >
+                                {event.status}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              <span>{Number(event.metadata?.inventory || 0)} in stock</span>
+                              <span>threshold {Number(event.metadata?.lowStockThreshold || 0)}</span>
+                              {event.createdAt ? <span>{formatDate(event.createdAt)}</span> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-center justify-between gap-3">

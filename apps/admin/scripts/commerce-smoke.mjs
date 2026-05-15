@@ -305,6 +305,7 @@ const enableCommercePricingSettings = async (settings) => {
       email: {
         ...(next.integrations?.notifications?.email || {}),
         orderCreated: true,
+        productLowStock: true,
         recipient: 'commerce-ops@example.com',
       },
     },
@@ -1026,7 +1027,7 @@ const fillProductEditor = async (client, suffix) => {
   await setLabeledControl(client, 'Compare at', '79');
   await setLabeledControl(client, 'Currency', 'USD');
   await setLabeledControl(client, 'Stock', '7');
-  await setLabeledControl(client, 'Low stock at', '2');
+  await setLabeledControl(client, 'Low stock at', '4');
   await setLabeledControl(client, 'Inventory policy', 'deny');
   await setLabeledControl(client, 'Type', 'physical');
   await setLabeledControl(client, 'Checkout URL', `https://checkout.example.com/${slug}`);
@@ -1245,7 +1246,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(product.variants?.length === 4, `Public product variants were not generated from matrix: ${JSON.stringify(product.variants)}`);
   assert(product.variants.some((variant) => variant.sku === `SMOKE-${slug.split('-').at(-1)?.toUpperCase()}-S-BLACK` || (variant.title === 'S / Black' && variant.option === 'Size: S / Color: Black')), `Public product variant matrix missing S / Black: ${JSON.stringify(product.variants)}`);
   assert(product.inventory?.quantity === 7, `Public product inventory was unexpected: ${JSON.stringify(product.inventory)}`);
-  assert(product.inventory?.lowStockThreshold === 2, `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`);
+  assert(product.inventory?.lowStockThreshold === 4, `Public low stock threshold was unexpected: ${JSON.stringify(product.inventory)}`);
   assert(product.inventory?.policy === 'deny', `Public inventory policy was unexpected: ${JSON.stringify(product.inventory)}`);
   assert(product.featured === true, 'Public product featured flag was not true');
   assert(product.checkout?.url === `https://checkout.example.com/${slug}`, `Public checkout URL was unexpected: ${JSON.stringify(product.checkout)}`);
@@ -1326,6 +1327,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(customer?.id, `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report local order email delivery: ${JSON.stringify(deliveries)}`);
+  assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.event === 'product.low_stock' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report product low-stock email delivery: ${JSON.stringify(deliveries)}`);
   assert(checkoutSession?.id === `cs_${slug}`, `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.provider === 'manual', `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.amountTotal === 106.86, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
@@ -1369,6 +1371,16 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(succeededOrderEmailEvent?.target === 'mailto:commerce-ops@example.com', `Commerce order delivery target was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
   assert(succeededOrderEmailEvent?.metadata?.provider === 'local-outbox', `Commerce order delivery provider metadata was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
   assert(succeededOrderEmailEvent?.metadata?.orderNumber === order.orderNumber, `Commerce order delivery metadata did not include order number: ${JSON.stringify(succeededOrderEmailEvent)}`);
+  const productEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-product&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
+  const productEvents = productEventsPayload.data?.events || productEventsPayload.events || [];
+  const productDeliveryEvents = productEvents.filter((event) => event.metadata?.productSlug === slug && event.metadata?.event === 'product.low_stock');
+  const productDeliveryStatuses = new Set(productDeliveryEvents.map((event) => event.status));
+  assert(productDeliveryStatuses.has('queued') && productDeliveryStatuses.has('succeeded'), `Product low-stock delivery events were not exposed through /events: ${JSON.stringify(productEventsPayload)}`);
+  const succeededProductEmailEvent = productDeliveryEvents.find((event) => event.status === 'succeeded');
+  assert(succeededProductEmailEvent?.target === 'mailto:commerce-ops@example.com', `Product low-stock delivery target was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
+  assert(succeededProductEmailEvent?.metadata?.provider === 'local-outbox', `Product low-stock provider metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
+  assert(succeededProductEmailEvent?.metadata?.inventory === 4, `Product low-stock inventory metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
+  assert(succeededProductEmailEvent?.metadata?.lowStockThreshold === 4, `Product low-stock threshold metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
   assert(orderRecord.values?.total === 106.86, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const customersCollection = await findCollection(CUSTOMERS_COLLECTION_SLUG);
@@ -1559,6 +1571,8 @@ const assertProductsLayout = async (client) => {
     layout = await evaluate(client, `(() => {
       const productPerformance = document.querySelector('[data-testid="products-product-performance"]');
       const productPerformanceText = productPerformance?.textContent || '';
+      const productAutomation = document.querySelector('[data-testid="products-notification-automation"]');
+      const productAutomationText = productAutomation?.textContent || '';
       return {
         width: window.innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
@@ -1573,6 +1587,12 @@ const assertProductsLayout = async (client) => {
           productPerformanceText.includes('ranked') &&
           /\\b[1-9][0-9]*\\s+unit/.test(productPerformanceText),
         productPerformanceText,
+        hasProductAutomation: Boolean(productAutomation) &&
+          productAutomationText.includes('Product automation') &&
+          productAutomationText.includes('/events?kind=commerce-product') &&
+          productAutomationText.includes('product.low_stock') &&
+          productAutomationText.includes('4 in stock'),
+        productAutomationText,
         hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="products-customer-profile-manager"]')) &&
           document.body?.innerText?.includes('Manage profile') &&
           document.body?.innerText?.includes('Save profile'),
@@ -1591,14 +1611,14 @@ const assertProductsLayout = async (client) => {
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
     })()`);
-    if (layout.hasProductPerformance) {
+    if (layout.hasProductPerformance && layout.hasProductAutomation) {
       break;
     }
     await sleep(250);
   }
 
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasProductPerformance && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

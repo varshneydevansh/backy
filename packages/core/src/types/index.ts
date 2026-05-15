@@ -369,6 +369,7 @@ export type SiteWebhookEventKind =
   | 'contact-sync'
   | 'contact-status'
   | 'commerce-order'
+  | 'commerce-product'
   | 'commerce-webhook'
   | 'comment-submitted'
   | 'comment-status'

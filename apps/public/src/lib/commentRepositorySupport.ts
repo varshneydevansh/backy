@@ -24,7 +24,7 @@ export function normalizeRepositoryReportReason(raw: string | null | undefined):
 export async function recordRepositoryInteractionEvent(
   repositories: PublicCommentRepositories,
   event: {
-    kind: 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'commerce-order' | 'comment-submitted' | 'comment-status' | 'comment-reported';
+    kind: 'form-submission' | 'contact-shared' | 'contact-sync' | 'contact-status' | 'commerce-order' | 'commerce-product' | 'comment-submitted' | 'comment-status' | 'comment-reported';
     siteId: string;
     formId?: string | null;
     commentId?: string | null;

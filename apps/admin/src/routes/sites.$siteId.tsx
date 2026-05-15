@@ -589,6 +589,7 @@ const SITE_WEBHOOK_EVENT_OPTIONS: Array<{ value: SiteWebhookEventKind; label: st
   { value: 'contact-sync', label: 'Contact synced' },
   { value: 'contact-status', label: 'Contact status changed' },
   { value: 'commerce-order', label: 'Commerce order created' },
+  { value: 'commerce-product', label: 'Commerce product alert' },
   { value: 'commerce-webhook', label: 'Commerce webhook received' },
   { value: 'comment-submitted', label: 'Comment submitted' },
   { value: 'comment-status', label: 'Comment status changed' },

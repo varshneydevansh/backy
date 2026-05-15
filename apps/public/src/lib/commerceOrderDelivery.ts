@@ -2,6 +2,7 @@ import { getAdminSettings, trackWebhookEvent } from '@/lib/backyStore';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
 import {
   buildCommerceOrderNotificationEmail,
+  buildCommerceProductLowStockEmail,
   EmailDeliveryError,
   getEmailDeliveryConfig,
   sendEmailMessage,
@@ -25,6 +26,18 @@ export interface CommerceOrderNotificationOrder {
   itemCount?: number;
   paymentStatus?: string;
   fulfillmentStatus?: string;
+  checkoutSessionId?: string;
+}
+
+export interface CommerceProductNotificationProduct {
+  id: string;
+  slug: string;
+  title: string;
+  sku?: string;
+  inventory: number;
+  lowStockThreshold: number;
+  previousInventory?: number;
+  orderNumber?: string;
   checkoutSessionId?: string;
 }
 
@@ -90,6 +103,48 @@ async function recordCommerceOrderDeliveryEvent(params: {
       paymentStatus: params.order.paymentStatus || 'pending',
       fulfillmentStatus: params.order.fulfillmentStatus || 'unfulfilled',
       checkoutSessionId: params.order.checkoutSessionId || '',
+      ...(params.metadata || {}),
+    },
+  };
+
+  if (params.repositories) {
+    await recordRepositoryInteractionEvent(params.repositories, event);
+    return;
+  }
+
+  trackWebhookEvent(event);
+}
+
+async function recordCommerceProductDeliveryEvent(params: {
+  repositories?: CommerceRepositories | null;
+  siteId: string;
+  product: CommerceProductNotificationProduct;
+  target: string;
+  status: CommerceOrderDeliveryStatus;
+  requestId: string;
+  statusCode?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const event = {
+    kind: 'commerce-product' as const,
+    siteId: params.siteId,
+    target: params.target,
+    status: params.status,
+    statusCode: params.statusCode,
+    requestId: params.requestId,
+    actor: 'commerce-product-automation',
+    error: params.error,
+    metadata: {
+      productId: params.product.id,
+      productSlug: params.product.slug,
+      productTitle: params.product.title,
+      sku: params.product.sku || '',
+      inventory: params.product.inventory,
+      previousInventory: params.product.previousInventory ?? null,
+      lowStockThreshold: params.product.lowStockThreshold,
+      orderNumber: params.product.orderNumber || '',
+      checkoutSessionId: params.product.checkoutSessionId || '',
       ...(params.metadata || {}),
     },
   };
@@ -249,6 +304,161 @@ async function deliverCommerceOrderEmail(params: {
   }
 }
 
+async function deliverCommerceProductWebhook(params: {
+  repositories?: CommerceRepositories | null;
+  siteId: string;
+  product: CommerceProductNotificationProduct;
+  target: string;
+  requestId: string;
+}) {
+  await recordCommerceProductDeliveryEvent({
+    ...params,
+    status: 'queued',
+    metadata: { channel: 'webhook', event: 'product.low_stock' },
+  });
+
+  try {
+    const response = await fetch(params.target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-backy-site-id': params.siteId,
+        'x-backy-product-id': params.product.id,
+        'x-backy-product-event': 'product.low_stock',
+      },
+      body: JSON.stringify({
+        kind: 'commerce-product',
+        event: 'product.low_stock',
+        siteId: params.siteId,
+        product: params.product,
+        requestId: params.requestId,
+      }),
+    });
+
+    await recordCommerceProductDeliveryEvent({
+      ...params,
+      status: response.ok ? 'succeeded' : 'failed',
+      statusCode: response.status,
+      error: response.ok ? undefined : `Webhook returned ${response.status}`,
+      metadata: { channel: 'webhook', event: 'product.low_stock' },
+    });
+
+    return {
+      attempted: true as const,
+      channel: 'webhook' as const,
+      event: 'product.low_stock' as const,
+      target: params.target,
+      status: response.ok ? 'succeeded' as const : 'failed' as const,
+      statusCode: response.status,
+      error: response.ok ? undefined : `Webhook returned ${response.status}`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown webhook error';
+    await recordCommerceProductDeliveryEvent({
+      ...params,
+      status: 'failed',
+      error: message,
+      metadata: { channel: 'webhook', event: 'product.low_stock' },
+    });
+
+    return {
+      attempted: true as const,
+      channel: 'webhook' as const,
+      event: 'product.low_stock' as const,
+      target: params.target,
+      status: 'failed' as const,
+      error: message,
+    };
+  }
+}
+
+async function deliverCommerceProductEmail(params: {
+  repositories?: CommerceRepositories | null;
+  siteId: string;
+  product: CommerceProductNotificationProduct;
+  target: string;
+  requestId: string;
+}) {
+  const config = getEmailDeliveryConfig();
+  const message = buildCommerceProductLowStockEmail({
+    config,
+    siteId: params.siteId,
+    product: params.product,
+    requestId: params.requestId,
+    to: params.target,
+  });
+
+  await recordCommerceProductDeliveryEvent({
+    ...params,
+    target: `mailto:${params.target}`,
+    status: 'queued',
+    metadata: {
+      channel: 'email',
+      event: 'product.low_stock',
+      provider: config.provider,
+      from: config.from,
+      subject: message.subject,
+    },
+  });
+
+  try {
+    const result = await sendEmailMessage(config, message);
+    await recordCommerceProductDeliveryEvent({
+      ...params,
+      target: `mailto:${params.target}`,
+      status: 'succeeded',
+      statusCode: result.statusCode,
+      metadata: {
+        channel: 'email',
+        event: 'product.low_stock',
+        provider: config.provider,
+        from: config.from,
+        subject: message.subject,
+        ...(result.metadata || {}),
+      },
+    });
+
+    return {
+      attempted: true as const,
+      channel: 'email' as const,
+      event: 'product.low_stock' as const,
+      target: `mailto:${params.target}`,
+      status: 'succeeded' as const,
+      statusCode: result.statusCode,
+      provider: config.provider,
+      metadata: result.metadata,
+    };
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : 'Unknown email delivery error';
+    await recordCommerceProductDeliveryEvent({
+      ...params,
+      target: `mailto:${params.target}`,
+      status: 'failed',
+      statusCode: error instanceof EmailDeliveryError ? error.statusCode : undefined,
+      error: messageText,
+      metadata: {
+        channel: 'email',
+        event: 'product.low_stock',
+        provider: config.provider,
+        from: config.from,
+        subject: message.subject,
+        ...(error instanceof EmailDeliveryError ? error.metadata || {} : {}),
+      },
+    });
+
+    return {
+      attempted: true as const,
+      channel: 'email' as const,
+      event: 'product.low_stock' as const,
+      target: `mailto:${params.target}`,
+      status: 'failed' as const,
+      statusCode: error instanceof EmailDeliveryError ? error.statusCode : undefined,
+      provider: config.provider,
+      error: messageText,
+    };
+  }
+}
+
 export async function notifyCommerceOrderCreated(params: {
   repositories?: CommerceRepositories | null;
   siteId: string;
@@ -276,6 +486,41 @@ export async function notifyCommerceOrderCreated(params: {
 
   if (orderEmailEnabled && recipient) {
     deliveries.push(await deliverCommerceOrderEmail({
+      ...params,
+      target: recipient,
+    }));
+  }
+
+  return deliveries;
+}
+
+export async function notifyCommerceProductLowStock(params: {
+  repositories?: CommerceRepositories | null;
+  siteId: string;
+  product: CommerceProductNotificationProduct;
+  requestId: string;
+}) {
+  const notifications = await readNotificationSettings(params.repositories);
+  const digestFrequency = readString(notifications.digestFrequency);
+  if (digestFrequency === 'off') {
+    return [];
+  }
+
+  const deliveries = [];
+  const webhookUrl = readString(notifications.webhookUrl);
+  const email = readRecord(notifications.email);
+  const lowStockEmailEnabled = readBoolean(email.productLowStock, false);
+  const recipient = resolveNotificationEmailRecipient(email);
+
+  if (webhookUrl) {
+    deliveries.push(await deliverCommerceProductWebhook({
+      ...params,
+      target: webhookUrl,
+    }));
+  }
+
+  if (lowStockEmailEnabled && recipient) {
+    deliveries.push(await deliverCommerceProductEmail({
       ...params,
       target: recipient,
     }));

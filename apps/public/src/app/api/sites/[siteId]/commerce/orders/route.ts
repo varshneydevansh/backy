@@ -29,7 +29,12 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { notifyCommerceOrderCreated, type CommerceOrderNotificationOrder } from '@/lib/commerceOrderDelivery';
+import {
+  notifyCommerceOrderCreated,
+  notifyCommerceProductLowStock,
+  type CommerceOrderNotificationOrder,
+  type CommerceProductNotificationProduct,
+} from '@/lib/commerceOrderDelivery';
 
 interface RouteParams {
   params: Promise<{
@@ -1173,6 +1178,71 @@ const applyDemoInventoryReservations = ({
   };
 };
 
+const lowStockProductFromReservation = (
+  reservation: InventoryReservation,
+  context: {
+    orderNumber: string;
+    checkoutSessionId: string;
+  },
+): CommerceProductNotificationProduct | null => {
+  const before = productRecordToCommerceProduct({
+    ...reservation.record,
+    values: reservation.originalValues,
+  });
+  const after = productRecordToCommerceProduct({
+    ...reservation.record,
+    values: reservation.values,
+  });
+
+  if (after.productType !== 'physical') return null;
+  if (after.inventory.lowStockThreshold <= 0) return null;
+  if (!after.inventory.lowStock || before.inventory.lowStock) return null;
+
+  return {
+    id: after.id,
+    slug: after.slug,
+    title: after.title,
+    sku: after.sku,
+    inventory: after.inventory.quantity,
+    previousInventory: before.inventory.quantity,
+    lowStockThreshold: after.inventory.lowStockThreshold,
+    orderNumber: context.orderNumber,
+    checkoutSessionId: context.checkoutSessionId,
+  };
+};
+
+const notifyLowStockProductsFromReservations = async ({
+  repositories,
+  siteId,
+  reservations,
+  orderNumber,
+  checkoutSessionId,
+  requestId,
+}: {
+  repositories?: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>> | null;
+  siteId: string;
+  reservations: InventoryReservation[];
+  orderNumber: string;
+  checkoutSessionId: string;
+  requestId: string;
+}) => {
+  const products = reservations
+    .map((reservation) => lowStockProductFromReservation(reservation, { orderNumber, checkoutSessionId }))
+    .filter((product): product is CommerceProductNotificationProduct => Boolean(product));
+  const deliveries = [];
+
+  for (const product of products) {
+    deliveries.push(...await notifyCommerceProductLowStock({
+      repositories,
+      siteId,
+      product,
+      requestId,
+    }));
+  }
+
+  return deliveries;
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -1455,11 +1525,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         billingaddress: input.billingAddress || '',
         notes: input.notes || '',
       };
+      const reservationList = Array.from(inventoryReservations.values());
       const rollbackInventoryReservations = await applyRepositoryInventoryReservations({
         siteId: site.id,
         productsCollectionId: productsCollection.id,
         repositories,
-        reservations: inventoryReservations.values(),
+        reservations: reservationList,
       });
 
       let order: Awaited<ReturnType<typeof repositories.collections.createRecord>>['item'];
@@ -1486,7 +1557,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
       const itemCount = lineItems.reduce((sum, item) => sum + item.quantity, 0);
-      const deliveries = await notifyOrderCreated({
+      const orderDeliveries = await notifyOrderCreated({
         repositories,
         siteId: site.id,
         requestId,
@@ -1504,6 +1575,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           checkoutSessionId: checkoutSession.id,
         },
       });
+      const productDeliveries = await notifyLowStockProductsFromReservations({
+        repositories,
+        siteId: site.id,
+        reservations: reservationList,
+        orderNumber,
+        checkoutSessionId: checkoutSession.id,
+        requestId,
+      });
+      const deliveries = [...orderDeliveries, ...productDeliveries];
 
       return publicContractJson({
         success: true,
@@ -1655,10 +1735,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       total: quote.total,
       requestId,
     });
+    const reservationList = Array.from(inventoryReservations.values());
     const rollbackInventoryReservations = applyDemoInventoryReservations({
       siteId: site.id,
       productsCollectionId: productsCollection.id,
-      reservations: inventoryReservations.values(),
+      reservations: reservationList,
     });
 
     let order: NonNullable<ReturnType<typeof createAdminCollectionRecord>>;
@@ -1731,7 +1812,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
     const itemCount = lineItems.reduce((sum, item) => sum + item.quantity, 0);
-    const deliveries = await notifyOrderCreated({
+    const orderDeliveries = await notifyOrderCreated({
       siteId: site.id,
       requestId,
       order: {
@@ -1748,6 +1829,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         checkoutSessionId: checkoutSession.id,
       },
     });
+    const productDeliveries = await notifyLowStockProductsFromReservations({
+      siteId: site.id,
+      reservations: reservationList,
+      orderNumber,
+      checkoutSessionId: checkoutSession.id,
+      requestId,
+    });
+    const deliveries = [...orderDeliveries, ...productDeliveries];
 
     return publicContractJson({
       success: true,

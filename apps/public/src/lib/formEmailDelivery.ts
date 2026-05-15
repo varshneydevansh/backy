@@ -15,7 +15,7 @@ export interface EmailDeliveryMessage {
   commentId?: string;
   orderId?: string;
   userId?: string;
-  entityType?: 'form-submission' | 'comment' | 'commerce-order' | 'admin-invite' | 'admin-password-reset';
+  entityType?: 'form-submission' | 'comment' | 'commerce-order' | 'commerce-product' | 'admin-invite' | 'admin-password-reset';
   status: string;
   requestId: string;
   values?: Record<string, unknown>;
@@ -277,6 +277,60 @@ export const buildCommerceOrderNotificationEmail = (params: {
       paymentStatus: params.order.paymentStatus || 'pending',
       fulfillmentStatus: params.order.fulfillmentStatus || 'unfulfilled',
       checkoutSessionId: params.order.checkoutSessionId || '',
+    },
+  };
+};
+
+export const buildCommerceProductLowStockEmail = (params: {
+  config: EmailDeliveryConfig;
+  siteId: string;
+  product: {
+    id: string;
+    slug: string;
+    title: string;
+    sku?: string;
+    inventory: number;
+    lowStockThreshold: number;
+    orderNumber?: string;
+    checkoutSessionId?: string;
+  };
+  requestId: string;
+  to: string;
+}): EmailDeliveryMessage => {
+  const subject = `Low stock: ${params.product.title}`;
+  const text = [
+    `Backy detected low product stock for ${params.siteId}.`,
+    '',
+    `Site: ${params.siteId}`,
+    `Product: ${params.product.title}`,
+    `Product id: ${params.product.id}`,
+    `Slug: ${params.product.slug}`,
+    params.product.sku ? `SKU: ${params.product.sku}` : '',
+    `Inventory: ${params.product.inventory}`,
+    `Threshold: ${params.product.lowStockThreshold}`,
+    params.product.orderNumber ? `Order: ${params.product.orderNumber}` : '',
+    params.product.checkoutSessionId ? `Checkout session: ${params.product.checkoutSessionId}` : '',
+    `Request: ${params.requestId}`,
+  ].filter(Boolean).join('\n');
+
+  return {
+    to: params.to,
+    from: params.config.from,
+    subject,
+    text,
+    siteId: params.siteId,
+    entityType: 'commerce-product',
+    status: 'low-stock',
+    requestId: params.requestId,
+    values: {
+      productId: params.product.id,
+      productSlug: params.product.slug,
+      productTitle: params.product.title,
+      sku: params.product.sku || '',
+      inventory: params.product.inventory,
+      lowStockThreshold: params.product.lowStockThreshold,
+      orderNumber: params.product.orderNumber || '',
+      checkoutSessionId: params.product.checkoutSessionId || '',
     },
   };
 };

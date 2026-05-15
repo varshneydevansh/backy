@@ -680,6 +680,7 @@ const normalizeNotificationIntegrations = (value: unknown): BackyJsonObject | un
       newUser: false,
       pagePublished: false,
       orderCreated: email.orderCreated === true,
+      productLowStock: email.productLowStock === true,
       systemUpdates: false,
     },
     inApp: {
@@ -1154,6 +1155,7 @@ const buildInfrastructureDiagnostics = ({
   const notificationEmailEnabled = boolValue(notificationEmail.formSubmission)
     || boolValue(notificationEmail.comments)
     || boolValue(notificationEmail.orderCreated)
+    || boolValue(notificationEmail.productLowStock)
     || boolValue(notificationEmail.systemUpdates)
     || Boolean(stringValue(notificationEmail.recipient));
   const commerceWebhookRequired = boolValue(commerce.webhookEventsEnabled)
