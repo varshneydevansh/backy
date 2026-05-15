@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  DEFAULT_SITE_SETTINGS,
   canvasElementsToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
@@ -15,6 +16,7 @@ import {
 } from '@backy-cms/core';
 import {
   createAdminPage,
+  getAdminSettings,
   getPageByPath,
   getPageSummary,
   getSiteByIdOrSlug,
@@ -154,6 +156,45 @@ const rejectIfReadinessBlocked = (
   return checks.length > 0
     ? errorResponse(400, 'READINESS_BLOCKED', 'Resolve page readiness errors before publishing', requestId, { readiness, checks })
     : null;
+};
+
+const readPageBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
+  const siteRoot = isRecord(siteSettings) ? siteSettings : {};
+  const workspaceRoot = isRecord(workspaceSettings) ? workspaceSettings : {};
+  const integrations = isRecord(workspaceRoot.integrations) ? workspaceRoot.integrations : {};
+  const commerce = isRecord(integrations.commerce) ? integrations.commerce : {};
+  const billingQuota = isRecord(siteRoot.billingQuota) ? siteRoot.billingQuota : {};
+  const limits = isRecord(billingQuota.limits) ? billingQuota.limits : {};
+  const limit = Number(limits.pages);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    pageLimit: Number.isFinite(limit) && limit >= 0
+      ? Math.round(limit)
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.pages,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+const enforcePageBillingLimit = (
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  currentPageCount: number,
+  requestId: string,
+) => {
+  const policy = readPageBillingPolicy(siteSettings, workspaceSettings);
+  if (policy.overageMode === 'block' && currentPageCount >= policy.pageLimit) {
+    return errorResponse(
+      402,
+      'BILLING_PAGE_LIMIT',
+      `The ${policy.billingPlan} site plan allows ${policy.pageLimit} page${policy.pageLimit === 1 ? '' : 's'}. Update the site billing quota before creating another page.`,
+      requestId,
+    );
+  }
+
+  return null;
 };
 
 const adminPageFromRepositoryPage = (page: BackyPage, includeContent = true) => {
@@ -328,6 +369,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
       }
 
+      const [settings, existingPages] = await Promise.all([
+        repositories.settings.get(),
+        repositories.pages.list({
+          siteId: site.id,
+          includeUnpublished: true,
+          status: 'all',
+          limit: 1,
+          offset: 0,
+        }),
+      ]);
+      const billingLimitError = enforcePageBillingLimit(site.settings, settings, existingPages.pagination.total, requestId);
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const seeded = seedInputFromFrontendDesignTemplate({
         siteSettings: site.settings,
         body,
@@ -451,6 +507,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const routeConflict = findPageRouteConflict({ slug, title, isHomepage }, listCollections(site.id, { includeUnpublished: true }));
     if (routeConflict) {
       return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+    }
+
+    const existingPages = getPageSummary(site.id, { includeUnpublished: true });
+    const billingLimitError = enforcePageBillingLimit(site.settings, getAdminSettings(), existingPages.length, requestId);
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const seeded = seedInputFromFrontendDesignTemplate({

@@ -51,6 +51,54 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestApiRaw = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
+const getSite = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`);
+  return payload.data?.site || payload.site;
+};
+
+const updateSite = async (siteId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
+};
+
+const listPages = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}/pages?includeUnpublished=true`);
+  return payload.data?.pages || payload.pages || [];
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -101,6 +149,61 @@ const acceptInviteToken = async (token) => {
   const user = payload.data?.user;
   assert(session?.token && user?.id, `Invite accept did not return a user session: ${JSON.stringify(payload).slice(0, 500)}`);
   return { session, user };
+};
+
+const assertPageBillingLimitEnforced = async (suffix) => {
+  const site = await getSite(HIERARCHY_SITE_ID);
+  const settings = await getSettings();
+  const existingPages = await listPages(HIERARCHY_SITE_ID);
+  const originalSettings = site.settings || {};
+  const originalBillingQuota = originalSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedSlug = `blocked-page-limit-${suffix}`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await updateSite(HIERARCHY_SITE_ID, {
+    settings: {
+      ...originalSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          pages: existingPages.length,
+        },
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${encodeURIComponent(HIERARCHY_SITE_ID)}/pages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: `Blocked Page Limit ${suffix}`,
+        slug: blockedSlug,
+        status: 'draft',
+        description: 'Temporary page that should be blocked by billing quota.',
+        content: [],
+      }),
+    });
+
+    assert(response.status === 402, `Billing page limit should reject page creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_PAGE_LIMIT', `Billing page limit should return BILLING_PAGE_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const afterPages = await listPages(HIERARCHY_SITE_ID);
+    assert(!afterPages.some((page) => page.slug === blockedSlug), 'Billing-limited page creation unexpectedly persisted a page.');
+  } finally {
+    await updateSite(HIERARCHY_SITE_ID, { settings: originalSettings });
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const deleteUser = async (userId) => {
@@ -1269,6 +1372,7 @@ const main = async () => {
     viewerUserId = viewer.id;
     const viewerInvite = await createInviteToken(viewer.id);
     const viewerSession = await acceptInviteToken(viewerInvite.token);
+    await assertPageBillingLimitEnforced(suffix);
     hierarchyPages = await createHierarchyPages();
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
