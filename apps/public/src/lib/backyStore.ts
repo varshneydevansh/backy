@@ -280,6 +280,18 @@ interface ApiKeyRotationHistoryEntry {
   newAdminKeyFingerprint?: string | null;
 }
 
+interface ApiKeyRevocationHistoryEntry {
+  id: string;
+  scope: 'all' | 'public' | 'admin';
+  keyType: 'public' | 'admin';
+  revokedAt: string;
+  actorId: string | null;
+  requestId: string | null;
+  reason: 'rotated' | 'replaced';
+  revokedKeyFingerprint: string | null;
+  replacementKeyFingerprint: string | null;
+}
+
 type CollectionFieldType =
   | 'text'
   | 'richText'
@@ -679,6 +691,46 @@ const apiKeyRotationHistoryEntryJson = (entry: ApiKeyRotationHistoryEntry): Back
   newAdminKeyFingerprint: entry.newAdminKeyFingerprint || null,
 });
 
+const apiKeyRevocationHistory = (
+  value: unknown,
+): ApiKeyRevocationHistoryEntry[] => (
+  Array.isArray(value)
+    ? value
+      .filter((entry): entry is Record<string, unknown> => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ))
+      .map<ApiKeyRevocationHistoryEntry>((entry) => {
+        const scope: ApiKeyRevocationHistoryEntry['scope'] = entry.scope === 'public' || entry.scope === 'admin' ? entry.scope : 'all';
+        const keyType: ApiKeyRevocationHistoryEntry['keyType'] = entry.keyType === 'admin' ? 'admin' : 'public';
+        const reason: ApiKeyRevocationHistoryEntry['reason'] = entry.reason === 'replaced' ? 'replaced' : 'rotated';
+        return {
+          id: sanitizeString(entry.id) || createRuntimeId('key_revocation'),
+          scope,
+          keyType,
+          revokedAt: sanitizeString(entry.revokedAt) || new Date().toISOString(),
+          actorId: sanitizeString(entry.actorId) || null,
+          requestId: sanitizeString(entry.requestId) || null,
+          reason,
+          revokedKeyFingerprint: sanitizeString(entry.revokedKeyFingerprint) || null,
+          replacementKeyFingerprint: sanitizeString(entry.replacementKeyFingerprint) || null,
+        };
+      })
+      .slice(0, 40)
+    : []
+);
+
+const apiKeyRevocationHistoryEntryJson = (entry: ApiKeyRevocationHistoryEntry): BackyJsonObject => ({
+  id: entry.id,
+  scope: entry.scope,
+  keyType: entry.keyType,
+  revokedAt: entry.revokedAt,
+  actorId: entry.actorId,
+  requestId: entry.requestId,
+  reason: entry.reason,
+  revokedKeyFingerprint: entry.revokedKeyFingerprint,
+  replacementKeyFingerprint: entry.replacementKeyFingerprint,
+});
+
 const appendApiKeyRotationHistory = (
   auth: BackyJsonObject | undefined,
   entry: ApiKeyRotationHistoryEntry,
@@ -688,6 +740,17 @@ const appendApiKeyRotationHistory = (
     apiKeyRotationHistoryEntryJson(entry),
     ...apiKeyRotationHistory(auth?.apiKeyRotationHistory).map(apiKeyRotationHistoryEntryJson),
   ].slice(0, 20),
+});
+
+const appendApiKeyRevocationHistory = (
+  auth: BackyJsonObject | undefined,
+  entries: ApiKeyRevocationHistoryEntry[],
+): BackyJsonObject => ({
+  ...(auth || {}),
+  apiKeyRevocationHistory: [
+    ...entries.map(apiKeyRevocationHistoryEntryJson),
+    ...apiKeyRevocationHistory(auth?.apiKeyRevocationHistory).map(apiKeyRevocationHistoryEntryJson),
+  ].slice(0, 40),
 });
 
 let SETTINGS: StoreSettings = {
@@ -5063,25 +5126,54 @@ export function regenerateAdminApiKeys(
     : SETTINGS.apiKeys.adminApiKey;
   const now = new Date().toISOString();
 
+  const revocationEntries: ApiKeyRevocationHistoryEntry[] = [];
+  if (previousApiKeys.publicApiKey !== nextPublicApiKey) {
+    revocationEntries.push({
+      id: createRuntimeId('key_revocation'),
+      scope: kind,
+      keyType: 'public',
+      revokedAt: now,
+      actorId: metadata.actorId || null,
+      requestId: metadata.requestId || null,
+      reason: 'rotated',
+      revokedKeyFingerprint: keyFingerprint(previousApiKeys.publicApiKey),
+      replacementKeyFingerprint: keyFingerprint(nextPublicApiKey),
+    });
+  }
+  if (previousApiKeys.adminApiKey !== nextAdminApiKey) {
+    revocationEntries.push({
+      id: createRuntimeId('key_revocation'),
+      scope: kind,
+      keyType: 'admin',
+      revokedAt: now,
+      actorId: metadata.actorId || null,
+      requestId: metadata.requestId || null,
+      reason: 'rotated',
+      revokedKeyFingerprint: keyFingerprint(previousApiKeys.adminApiKey),
+      replacementKeyFingerprint: keyFingerprint(nextAdminApiKey),
+    });
+  }
+  const authWithRotation = appendApiKeyRotationHistory(SETTINGS.auth, {
+    id: createRuntimeId('key_rotation'),
+    scope: kind,
+    rotatedAt: now,
+    actorId: metadata.actorId || null,
+    requestId: metadata.requestId || null,
+    publicKeyChanged: previousApiKeys.publicApiKey !== nextPublicApiKey,
+    adminKeyChanged: previousApiKeys.adminApiKey !== nextAdminApiKey,
+    previousPublicKeyFingerprint: keyFingerprint(previousApiKeys.publicApiKey),
+    newPublicKeyFingerprint: keyFingerprint(nextPublicApiKey),
+    previousAdminKeyFingerprint: keyFingerprint(previousApiKeys.adminApiKey),
+    newAdminKeyFingerprint: keyFingerprint(nextAdminApiKey),
+  });
+
   SETTINGS = {
     ...SETTINGS,
     apiKeys: {
       publicApiKey: nextPublicApiKey,
       adminApiKey: nextAdminApiKey,
     },
-    auth: appendApiKeyRotationHistory(SETTINGS.auth, {
-      id: createRuntimeId('key_rotation'),
-      scope: kind,
-      rotatedAt: now,
-      actorId: metadata.actorId || null,
-      requestId: metadata.requestId || null,
-      publicKeyChanged: previousApiKeys.publicApiKey !== nextPublicApiKey,
-      adminKeyChanged: previousApiKeys.adminApiKey !== nextAdminApiKey,
-      previousPublicKeyFingerprint: keyFingerprint(previousApiKeys.publicApiKey),
-      newPublicKeyFingerprint: keyFingerprint(nextPublicApiKey),
-      previousAdminKeyFingerprint: keyFingerprint(previousApiKeys.adminApiKey),
-      newAdminKeyFingerprint: keyFingerprint(nextAdminApiKey),
-    }),
+    auth: appendApiKeyRevocationHistory(authWithRotation, revocationEntries),
     updatedAt: now,
   };
 

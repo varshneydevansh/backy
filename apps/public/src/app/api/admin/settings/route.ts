@@ -282,6 +282,38 @@ const appendRotationHistory = (
   ].slice(0, 20),
 });
 
+const normalizeRevocationHistory = (value: unknown): BackyJsonObject[] => (
+  Array.isArray(value)
+    ? value
+      .filter((entry): entry is BackyJsonObject => (
+        entry && typeof entry === 'object' && !Array.isArray(entry)
+      ))
+      .map((entry) => ({
+        id: stringValue(entry.id) || `key_revocation_${randomUUID().slice(0, 8)}`,
+        scope: entry.scope === 'public' || entry.scope === 'admin' ? entry.scope : 'all',
+        keyType: entry.keyType === 'admin' ? 'admin' : 'public',
+        revokedAt: stringValue(entry.revokedAt) || new Date().toISOString(),
+        actorId: stringValue(entry.actorId) || null,
+        requestId: stringValue(entry.requestId) || null,
+        reason: entry.reason === 'replaced' ? 'replaced' : 'rotated',
+        revokedKeyFingerprint: stringValue(entry.revokedKeyFingerprint) || null,
+        replacementKeyFingerprint: stringValue(entry.replacementKeyFingerprint) || null,
+      }))
+      .slice(0, 40)
+    : []
+);
+
+const appendRevocationHistory = (
+  auth: BackyJsonObject | undefined,
+  entries: BackyJsonObject[],
+): BackyJsonObject => ({
+  ...(auth || {}),
+  apiKeyRevocationHistory: [
+    ...entries,
+    ...normalizeRevocationHistory(auth?.apiKeyRevocationHistory),
+  ].slice(0, 40),
+});
+
 const buildRotationHistoryEntry = ({
   scope,
   beforeSettings,
@@ -311,6 +343,56 @@ const buildRotationHistoryEntry = ({
     previousAdminKeyFingerprint: keyFingerprint(before.adminApiKey),
     newAdminKeyFingerprint: keyFingerprint(after.adminApiKey),
   };
+};
+
+const buildRevocationHistoryEntries = ({
+  scope,
+  beforeSettings,
+  afterSettings,
+  access,
+  requestId,
+}: {
+  scope: 'all' | 'public' | 'admin';
+  beforeSettings: AdminSettingsSource;
+  afterSettings: AdminSettingsSource;
+  access: AdminAccessContext;
+  requestId: string;
+}): BackyJsonObject[] => {
+  const before = settingsApiKeys(beforeSettings);
+  const after = settingsApiKeys(afterSettings);
+  const revokedAt = new Date().toISOString();
+  const actorId = access.session?.user.id || null;
+  const entries: BackyJsonObject[] = [];
+
+  if (before.publicApiKey !== after.publicApiKey) {
+    entries.push({
+      id: `key_revocation_${randomUUID().slice(0, 8)}`,
+      scope,
+      keyType: 'public',
+      revokedAt,
+      actorId,
+      requestId,
+      reason: 'rotated',
+      revokedKeyFingerprint: keyFingerprint(before.publicApiKey),
+      replacementKeyFingerprint: keyFingerprint(after.publicApiKey),
+    });
+  }
+
+  if (before.adminApiKey !== after.adminApiKey) {
+    entries.push({
+      id: `key_revocation_${randomUUID().slice(0, 8)}`,
+      scope,
+      keyType: 'admin',
+      revokedAt,
+      actorId,
+      requestId,
+      reason: 'rotated',
+      revokedKeyFingerprint: keyFingerprint(before.adminApiKey),
+      replacementKeyFingerprint: keyFingerprint(after.adminApiKey),
+    });
+  }
+
+  return entries;
 };
 
 const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminApiKey?: boolean } = {}) => {
@@ -1296,8 +1378,16 @@ export async function POST(request: NextRequest) {
         access,
         requestId,
       });
+      const revocationEntries = buildRevocationHistoryEntries({
+        scope: keyScope,
+        beforeSettings,
+        afterSettings: rotatedSettings,
+        access,
+        requestId,
+      });
+      const authWithRotation = appendRotationHistory(rotatedSettings.auth, rotationEntry);
       const settings = (await repositories.settings.update({
-        auth: appendRotationHistory(rotatedSettings.auth, rotationEntry),
+        auth: appendRevocationHistory(authWithRotation, revocationEntries),
       })).item;
       await recordAdminAudit({
         repositories,

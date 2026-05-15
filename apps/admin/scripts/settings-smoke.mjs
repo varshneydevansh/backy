@@ -648,6 +648,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     `Public-key rotation should not rotate the admin key: ${JSON.stringify({ before: before.apiKeys, after: after.apiKeys })}`,
   );
   const latestRotation = after.auth?.apiKeyRotationHistory?.[0];
+  const latestRevocation = after.auth?.apiKeyRevocationHistory?.[0];
   assert(
     latestRotation?.scope === 'public' &&
       latestRotation.publicKeyChanged === true &&
@@ -657,6 +658,14 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
       latestRotation.previousPublicKeyFingerprint !== latestRotation.newPublicKeyFingerprint &&
       latestRotation.previousAdminKeyFingerprint === latestRotation.newAdminKeyFingerprint,
     `Public-key rotation history was not persisted correctly: ${JSON.stringify(after.auth?.apiKeyRotationHistory).slice(0, 1000)}`,
+  );
+  assert(
+    latestRevocation?.scope === 'public' &&
+      latestRevocation.keyType === 'public' &&
+      latestRevocation.reason === 'rotated' &&
+      latestRevocation.revokedKeyFingerprint === latestRotation.previousPublicKeyFingerprint &&
+      latestRevocation.replacementKeyFingerprint === latestRotation.newPublicKeyFingerprint,
+    `Public-key revocation history was not persisted correctly: ${JSON.stringify(after.auth?.apiKeyRevocationHistory).slice(0, 1000)}`,
   );
 
   let auditState = null;
@@ -668,14 +677,18 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
         hasRotationHistory: body.includes('API key rotation history') &&
           body.includes('public key') &&
           body.includes(${JSON.stringify(latestRotation.newPublicKeyFingerprint)}),
+        hasRevocationHistory: body.includes('API key revocation history') &&
+          body.includes('public key revoked') &&
+          body.includes(${JSON.stringify(latestRevocation.revokedKeyFingerprint)}),
         body: body.slice(0, 1800),
       };
     })()`);
-    if (auditState.hasAudit && auditState.hasRotationHistory) break;
+    if (auditState.hasAudit && auditState.hasRotationHistory && auditState.hasRevocationHistory) break;
     await sleep(250);
   }
   assert(auditState?.hasAudit, `API key rotation audit event did not render: ${JSON.stringify(auditState)}`);
   assert(auditState?.hasRotationHistory, `API key rotation history did not render: ${JSON.stringify(auditState)}`);
+  assert(auditState?.hasRevocationHistory, `API key revocation history did not render: ${JSON.stringify(auditState)}`);
 
   assert(
     ownerOriginalSettings.apiKeys?.publicApiKey === beforePublicKey &&
@@ -687,6 +700,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     publicKeyRotated: after.apiKeys.publicApiKey !== beforePublicKey,
     adminKeyPreserved: after.apiKeys.adminApiKey === beforeAdminKey,
     rotationHistoryPersisted: true,
+    revocationHistoryPersisted: true,
     auditRendered: true,
   };
 };

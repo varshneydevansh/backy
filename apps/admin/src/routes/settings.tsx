@@ -2387,7 +2387,7 @@ function DeliveryModeSettings({
 
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type AuthSettingsConfig = NonNullable<SiteSettingsInput['auth']>;
-type AuthPolicySettingsConfig = Required<Omit<AuthSettingsConfig, 'apiKeyRotationHistory'>>;
+type AuthPolicySettingsConfig = Required<Omit<AuthSettingsConfig, 'apiKeyRotationHistory' | 'apiKeyRevocationHistory'>>;
 type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
 type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
 type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
@@ -4537,6 +4537,7 @@ function SecuritySettings({
         ? 'the admin API key'
         : '';
   const rotationHistory = authSettings?.apiKeyRotationHistory || [];
+  const revocationHistory = authSettings?.apiKeyRevocationHistory || [];
 
   return (
     <div className="space-y-6">
@@ -4766,6 +4767,57 @@ function SecuritySettings({
                     <p className="mt-1">Changed: {entry.adminKeyChanged ? 'yes' : 'no'}</p>
                     <p className="mt-1 font-mono">Before {entry.previousAdminKeyFingerprint || 'n/a'}</p>
                     <p className="font-mono">After {entry.newAdminKeyFingerprint || 'n/a'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-border p-4" data-testid="settings-api-key-revocation-history">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">API key revocation history</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Fingerprints for replaced keys that are no longer accepted after rotation.
+            </p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {revocationHistory.length} revoked
+          </span>
+        </div>
+        {revocationHistory.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+            No API keys have been revoked by rotation yet.
+          </p>
+        ) : (
+          <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+            {revocationHistory.slice(0, 8).map((entry) => (
+              <div key={entry.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1fr_1.5fr]">
+                <div>
+                  <p className="font-medium text-foreground">
+                    {entry.keyType} key revoked
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatAuditTime(entry.revokedAt)} by {entry.actorId || 'system'}
+                  </p>
+                  {entry.requestId ? (
+                    <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      {entry.requestId}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="font-medium text-foreground">Revoked fingerprint</p>
+                    <p className="mt-1 font-mono">{entry.revokedKeyFingerprint || 'n/a'}</p>
+                    <p className="mt-2">Reason: {entry.reason || 'rotated'}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="font-medium text-foreground">Replacement fingerprint</p>
+                    <p className="mt-1 font-mono">{entry.replacementKeyFingerprint || 'n/a'}</p>
+                    <p className="mt-2">Scope: {entry.scope}</p>
                   </div>
                 </div>
               </div>
