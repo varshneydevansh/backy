@@ -132,6 +132,49 @@ const listUsers = async () => {
   return payload.data?.users || payload.users || [];
 };
 
+const listUsersPage = async (params = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value));
+    }
+  });
+  const payload = await requestApi(`/api/admin/users${query.size ? `?${query.toString()}` : ''}`);
+  return {
+    users: payload.data?.users || payload.users || [],
+    pagination: payload.data?.pagination || payload.pagination || null,
+  };
+};
+
+const assertUsersApiPagination = async ({ search, expectedIds }) => {
+  const firstPage = await listUsersPage({ search, limit: 1, offset: 0 });
+  const secondPage = await listUsersPage({ search, limit: 1, offset: 1 });
+
+  assert(firstPage.pagination?.limit === 1, `Users API first page limit metadata was wrong: ${JSON.stringify(firstPage).slice(0, 500)}`);
+  assert(firstPage.pagination?.offset === 0, `Users API first page offset metadata was wrong: ${JSON.stringify(firstPage).slice(0, 500)}`);
+  assert(firstPage.pagination?.total >= expectedIds.length, `Users API first page total did not include created users: ${JSON.stringify(firstPage).slice(0, 500)}`);
+  assert(firstPage.pagination?.hasMore === true, `Users API first page should report hasMore: ${JSON.stringify(firstPage).slice(0, 500)}`);
+  assert(firstPage.users.length === 1, `Users API first page should return exactly one user: ${JSON.stringify(firstPage).slice(0, 500)}`);
+
+  assert(secondPage.pagination?.limit === 1, `Users API second page limit metadata was wrong: ${JSON.stringify(secondPage).slice(0, 500)}`);
+  assert(secondPage.pagination?.offset === 1, `Users API second page offset metadata was wrong: ${JSON.stringify(secondPage).slice(0, 500)}`);
+  assert(secondPage.pagination?.total === firstPage.pagination.total, `Users API pagination total changed between pages: ${JSON.stringify({ firstPage, secondPage }).slice(0, 500)}`);
+  assert(secondPage.users.length === 1, `Users API second page should return exactly one user: ${JSON.stringify(secondPage).slice(0, 500)}`);
+  assert(firstPage.users[0]?.id !== secondPage.users[0]?.id, `Users API pagination returned duplicate rows: ${JSON.stringify({ firstPage, secondPage }).slice(0, 500)}`);
+
+  const seenIds = new Set([firstPage.users[0]?.id, secondPage.users[0]?.id]);
+  expectedIds.forEach((id) => {
+    assert(seenIds.has(id), `Users API paginated search did not include expected user ${id}: ${JSON.stringify({ firstPage, secondPage }).slice(0, 500)}`);
+  });
+
+  return {
+    total: firstPage.pagination.total,
+    firstId: firstPage.users[0]?.id,
+    secondId: secondPage.users[0]?.id,
+    hasMore: firstPage.pagination.hasMore,
+  };
+};
+
 const createUser = async ({ fullName, email, role = 'admin', status = 'invited' }) => {
   const payload = await requestApi('/api/admin/users', {
     method: 'POST',
@@ -1389,6 +1432,10 @@ const main = async () => {
     assert(created.role === 'admin' && created.status === 'invited', `Unexpected created user state: ${JSON.stringify(created)}`);
     const bulkCreated = await createUser({ fullName: bulkFullName, email: bulkEmail, role: 'viewer', status: 'active' });
     bulkUserId = bulkCreated.id;
+    const pagination = await assertUsersApiPagination({
+      search: suffix,
+      expectedIds: [createdUserId, bulkUserId],
+    });
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1544,6 +1591,7 @@ const main = async () => {
       ok: true,
       createdEmail: email,
       fullName,
+      pagination,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
