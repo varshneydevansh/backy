@@ -488,7 +488,7 @@ const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
     status: 'partial',
     contract: 'commerce catalog, order-intake contract, checkout-session handoff, provider webhook settlement, private orders collection, product records',
     controls: 'Products, Orders, collections, media galleries',
-    stillNeeded: 'Provider API execution, provider-grade taxes/shipping rates, automated refunds, subscriptions, fulfillment automation, and deployment-level cron configuration for scheduled reconciliation.',
+    stillNeeded: 'Provider API execution, provider-grade taxes/shipping rates, automated refunds, subscriptions, fulfillment automation, and production secret configuration for the scheduled reconciliation cron.',
   },
   {
     area: 'Forms, contacts, comments, registration',

@@ -1545,7 +1545,7 @@ const main = async () => {
     const scheduledExecutionPayload = await requestApi(`/api/admin/commerce/reconcile?siteId=${encodeURIComponent(SITE_ID)}&limit=50`, {
       method: 'GET',
       headers: {
-        'x-backy-admin-key': scheduledExecutionAdminKey,
+        authorization: `Bearer ${scheduledExecutionAdminKey}`,
         'x-backy-actor': 'orders-smoke-scheduled-reconciliation',
         'x-request-id': `orders-reconcile-scheduled-execution-${suffix}`,
       },

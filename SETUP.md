@@ -70,6 +70,14 @@ Backy can be deployed as two Vercel apps:
 
 Shared storage and database keys must be set in both apps (or only on `backy-public` for read-only flows).
 
+The root `vercel.json` registers a daily scheduled reconciliation call:
+
+```json
+{ "path": "/api/admin/commerce/reconcile?limit=100", "schedule": "0 3 * * *" }
+```
+
+For that cron to authenticate, configure `CRON_SECRET` to the same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY` on the deployed `backy-public` app. Vercel sends `Authorization: Bearer $CRON_SECRET`, and Backy treats bearer admin keys the same as `X-Backy-Admin-Key`.
+
 ## Security status notes
 
 - Current local auth flow in `apps/admin` uses `mockStore` + mocked login helper for fast dev.
