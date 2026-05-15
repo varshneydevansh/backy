@@ -3,6 +3,7 @@
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 
 const checks = [];
+let adminSessionToken = '';
 
 function assert(condition, message) {
   if (!condition) {
@@ -30,6 +31,28 @@ async function request(pathOrUrl, init) {
   };
 }
 
+async function loginAdminApi() {
+  if (adminSessionToken) {
+    return adminSessionToken;
+  }
+
+  const { response, json, url } = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+
+  assert(response.status === 200, `${url} expected admin login 200, got ${response.status}`);
+  assert(json?.success === true && json?.data?.session?.token, `${url} missing admin session token`);
+  adminSessionToken = json.data.session.token;
+  return adminSessionToken;
+}
+
 async function record(name, fn) {
   const startedAt = Date.now();
   await fn();
@@ -37,10 +60,12 @@ async function record(name, fn) {
 }
 
 async function createPreview(path) {
+  const sessionToken = await loginAdminApi();
   const { response, json, url } = await request(path, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      authorization: `Bearer ${sessionToken}`,
     },
     body: JSON.stringify({ ttlSeconds: 600 }),
   });
@@ -122,6 +147,29 @@ await record('published hosted post remains public', async () => {
   const { response, text, url } = await request('/sites/demo/blog/welcome');
   assert(response.status === 200, `${url} expected 200, got ${response.status}`);
   assert(text.includes('Backy CMS helps you ship'), `${url} missing published post content`);
+});
+
+await record('hosted blog archive renders published post cards and filters', async () => {
+  const { response, text, url } = await request('/sites/demo/blog');
+  assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+  assert(text.includes('backy-blog-archive'), `${url} missing archive shell`);
+  assert(text.includes('Welcome to Backy'), `${url} missing published post card`);
+  assert(text.includes('href="/sites/demo/blog/welcome"'), `${url} missing hosted post link`);
+  assert(!text.includes('Building CMS parity page by page'), `${url} rendered draft post in public archive`);
+  assert(text.includes('News'), `${url} missing category filter`);
+  assert(text.includes('Getting Started'), `${url} missing tag filter`);
+});
+
+await record('hosted blog archive supports taxonomy and empty filters', async () => {
+  const category = await request('/sites/demo/blog?category=news');
+  assert(category.response.status === 200, `${category.url} expected 200, got ${category.response.status}`);
+  assert(category.text.includes('News Articles'), `${category.url} missing category metadata`);
+  assert(category.text.includes('backy-blog-kicker">News') || category.text.includes('children":["News"," · "'), `${category.url} missing active category label`);
+  assert(category.text.includes('Welcome to Backy'), `${category.url} missing category post`);
+
+  const empty = await request('/sites/demo/blog?search=definitely-no-post');
+  assert(empty.response.status === 200, `${empty.url} expected 200, got ${empty.response.status}`);
+  assert(empty.text.includes('No posts found'), `${empty.url} missing empty state`);
 });
 
 console.log(`Preview contract smoke passed against ${baseUrl}`);
