@@ -1102,6 +1102,14 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
   await setLabeledControl(client, 'Shipping base', '11.5');
   await setLabeledControl(client, 'Shipping weight rate', '1.75');
   await setLabeledControl(client, 'Discount percent', '12.5');
+  await setLabeledControl(client, 'Tax provider', 'http');
+  await setLabeledControl(client, 'Tax endpoint URL', `https://pricing.example.com/${suffix}/tax`);
+  await setLabeledControl(client, 'Shipping provider', 'http');
+  await setLabeledControl(client, 'Shipping endpoint URL', `https://pricing.example.com/${suffix}/shipping`);
+  await setLabeledControl(client, 'Discount provider', 'http');
+  await setLabeledControl(client, 'Discount endpoint URL', `https://pricing.example.com/${suffix}/discount`);
+  await setLabeledControl(client, 'Fulfillment dispatch provider', 'http');
+  await setLabeledControl(client, 'Fulfillment endpoint URL', `https://warehouse.example.com/${suffix}/dispatch`);
   await setLabeledControl(client, 'Label provider', 'easypost');
   await setLabeledControl(client, 'Default carrier', 'UPS');
   await setLabeledControl(client, 'Default service', 'Ground');
@@ -1266,6 +1274,14 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.shippingBaseAmount === 11.5, 'Commerce shipping base was not persisted');
   assert(settings.integrations?.commerce?.shippingWeightRate === 1.75, 'Commerce shipping weight rate was not persisted');
   assert(settings.integrations?.commerce?.discountPercent === 12.5, 'Commerce discount percent was not persisted');
+  assert(settings.integrations?.commerce?.taxProvider === 'http', 'Commerce tax provider was not persisted');
+  assert(settings.integrations?.commerce?.taxProviderUrl === `https://pricing.example.com/${suffix}/tax`, 'Commerce tax provider URL was not persisted');
+  assert(settings.integrations?.commerce?.shippingProvider === 'http', 'Commerce shipping provider was not persisted');
+  assert(settings.integrations?.commerce?.shippingProviderUrl === `https://pricing.example.com/${suffix}/shipping`, 'Commerce shipping provider URL was not persisted');
+  assert(settings.integrations?.commerce?.discountProvider === 'http', 'Commerce discount provider was not persisted');
+  assert(settings.integrations?.commerce?.discountProviderUrl === `https://pricing.example.com/${suffix}/discount`, 'Commerce discount provider URL was not persisted');
+  assert(settings.integrations?.commerce?.fulfillmentProvider === 'http', 'Commerce fulfillment provider was not persisted');
+  assert(settings.integrations?.commerce?.fulfillmentProviderUrl === `https://warehouse.example.com/${suffix}/dispatch`, 'Commerce fulfillment provider URL was not persisted');
   assert(settings.integrations?.commerce?.shippingLabelProvider === 'easypost', 'Commerce shipping label provider was not persisted');
   assert(settings.integrations?.commerce?.shippingDefaultCarrier === 'UPS', 'Commerce shipping default carrier was not persisted');
   assert(settings.integrations?.commerce?.shippingDefaultServiceLevel === 'Ground', 'Commerce shipping default service was not persisted');
@@ -1391,6 +1407,41 @@ const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints = async (settings) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    body: JSON.stringify({
+      integrations: {
+        ...(settings.integrations || {}),
+        commerce: {
+          ...(settings.integrations?.commerce || {}),
+          shippingProvider: 'http',
+          shippingProviderUrl: 'not-a-valid-url',
+        },
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 400, `Invalid commerce provider endpoint should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'VALIDATION_ERROR', `Invalid provider endpoint rejection should return VALIDATION_ERROR: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.commerce?.shippingProviderUrl === settings.integrations?.commerce?.shippingProviderUrl,
+    `Rejected provider endpoint patch should not mutate persisted commerce URL: ${JSON.stringify(after.integrations?.commerce).slice(0, 500)}`,
+  );
+
+  return {
+    status: response.status,
+    code: payload.error?.code,
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1491,6 +1542,7 @@ const main = async () => {
     );
     const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
     const secretStorage = await assertDirectSettingsApiRejectsRawSecrets(await readSettings());
+    const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1520,6 +1572,7 @@ const main = async () => {
       permissionDenials,
       apiNormalization,
       secretStorage,
+      providerEndpointValidation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,

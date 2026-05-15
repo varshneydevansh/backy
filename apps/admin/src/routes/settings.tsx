@@ -3061,6 +3061,52 @@ function validateSettingsDraft({
     addIssue(issues, webhookSecretIssue);
   }
 
+  ([
+    {
+      provider: commerce.taxProvider,
+      url: commerce.taxProviderUrl,
+      label: 'Tax provider endpoint URL',
+      detail: 'Use an http or https tax calculator endpoint, or switch the tax provider back to built-in rules.',
+    },
+    {
+      provider: commerce.shippingProvider,
+      url: commerce.shippingProviderUrl,
+      label: 'Shipping provider endpoint URL',
+      detail: 'Use an http or https shipping calculator endpoint, or switch the shipping provider back to built-in rules.',
+    },
+    {
+      provider: commerce.discountProvider,
+      url: commerce.discountProviderUrl,
+      label: 'Discount provider endpoint URL',
+      detail: 'Use an http or https discount calculator endpoint, or switch the discount provider back to built-in rules.',
+    },
+    {
+      provider: commerce.fulfillmentProvider,
+      url: commerce.fulfillmentProviderUrl,
+      label: 'Fulfillment endpoint URL',
+      detail: 'Use an http or https warehouse/3PL endpoint, or switch fulfillment dispatch back to manual handoff.',
+    },
+  ] as const).forEach((endpoint) => {
+    const value = endpoint.url?.trim() || '';
+    if (endpoint.provider === 'http' && !value) {
+      addIssue(issues, {
+        tab: 'commerce',
+        label: `${endpoint.label} is required`,
+        detail: endpoint.detail,
+        severity: 'warning',
+      });
+      return;
+    }
+    if (value && !isValidHttpUrl(value)) {
+      addIssue(issues, {
+        tab: 'commerce',
+        label: `${endpoint.label} is invalid`,
+        detail: endpoint.detail,
+        severity: 'error',
+      });
+    }
+  });
+
   if (commerce.reconciliationMode === 'webhook' && !commerce.webhookEventsEnabled) {
     addIssue(issues, {
       tab: 'commerce',
@@ -5011,7 +5057,7 @@ function CommerceSettings({
                       </select>
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium">Endpoint URL</span>
+                      <span className="font-medium">{`${label.replace(' provider', '')} endpoint URL`}</span>
                       <input
                         value={String(resolved[urlKey] || '')}
                         onChange={(event) => update({ [urlKey]: event.target.value } as Partial<CommerceSettingsConfig>)}

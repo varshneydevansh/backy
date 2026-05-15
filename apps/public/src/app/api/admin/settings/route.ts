@@ -675,6 +675,44 @@ const validateSecretReferencePolicy = (integrations: unknown): string | null => 
   return null;
 };
 
+const validateCommerceProviderEndpoints = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const commerce = parseJsonObject(input?.commerce) || {};
+  const checks: Array<{ provider: string; url: string; label: string }> = [
+    {
+      provider: stringValue(commerce.taxProvider),
+      url: stringValue(commerce.taxProviderUrl),
+      label: 'Tax provider endpoint URL',
+    },
+    {
+      provider: stringValue(commerce.shippingProvider),
+      url: stringValue(commerce.shippingProviderUrl),
+      label: 'Shipping provider endpoint URL',
+    },
+    {
+      provider: stringValue(commerce.discountProvider),
+      url: stringValue(commerce.discountProviderUrl),
+      label: 'Discount provider endpoint URL',
+    },
+    {
+      provider: stringValue(commerce.fulfillmentProvider),
+      url: stringValue(commerce.fulfillmentProviderUrl),
+      label: 'Fulfillment endpoint URL',
+    },
+  ];
+
+  for (const check of checks) {
+    if (check.provider === 'http' && !check.url.trim()) {
+      return `${check.label} is required when its provider is set to HTTP.`;
+    }
+    if (check.url.trim() && !validateWebhookUrl(check.url).ok) {
+      return `${check.label} must be an http or https URL.`;
+    }
+  }
+
+  return null;
+};
+
 const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
   if (!input) {
@@ -2391,6 +2429,10 @@ export async function PATCH(request: NextRequest) {
       if (secretReferenceError) {
         return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
       }
+      const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
+      if (commerceEndpointError) {
+        return errorResponse(400, 'VALIDATION_ERROR', commerceEndpointError, requestId);
+      }
       const settings = (await repositories.settings.update({
         ...(deliveryMode ? { deliveryMode } : {}),
         apiKeys: {
@@ -2439,6 +2481,10 @@ export async function PATCH(request: NextRequest) {
     const secretReferenceError = validateSecretReferencePolicy(integrations);
     if (secretReferenceError) {
       return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
+    }
+    const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
+    if (commerceEndpointError) {
+      return errorResponse(400, 'VALIDATION_ERROR', commerceEndpointError, requestId);
     }
     const settings = updateAdminSettings({
       ...sanitizedBody,
