@@ -1445,6 +1445,30 @@ interface ApiOrderTrackingResponse {
   };
 }
 
+export interface AdminOrderFulfillmentDispatch {
+  id: string;
+  status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
+  provider: string;
+  orderNumber: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload: Record<string, unknown>;
+}
+
+interface ApiOrderFulfillmentResponse {
+  success: boolean;
+  data?: {
+    record: ApiCollectionRecord;
+    order?: ApiCollectionRecord;
+    fulfillment: AdminOrderFulfillmentDispatch;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface AdminOrderQuote {
   schemaVersion: 'backy.order-quote.v1';
   subtotal: number;
@@ -6303,6 +6327,30 @@ export async function refreshOrderTracking(
   return {
     record: toCollectionRecord(payload.data.record || payload.data.order),
     tracking: payload.data.tracking,
+  };
+}
+
+export async function dispatchOrderFulfillment(
+  siteId: string,
+  orderId: string,
+  input: { provider?: string; instructions?: string; requestedBy?: string } = {},
+): Promise<{ record: CollectionRecord; fulfillment: AdminOrderFulfillmentDispatch }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/fulfillment`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiOrderFulfillmentResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to dispatch order fulfillment');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    fulfillment: payload.data.fulfillment,
   };
 }
 

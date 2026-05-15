@@ -17,7 +17,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
-const ORDER_REQUIRED_FIELD_COUNT = 51;
+const ORDER_REQUIRED_FIELD_COUNT = 57;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -54,6 +54,12 @@ const ORDER_FIELDS = [
   { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
   { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
   { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
+  { key: 'fulfillmentdispatchstatus', label: 'Fulfillment Dispatch Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+  { key: 'fulfillmentprovider', label: 'Fulfillment Provider', type: 'text', required: false, unique: false, sortOrder: 179 },
+  { key: 'fulfillmentid', label: 'Fulfillment ID', type: 'text', required: false, unique: false, sortOrder: 180 },
+  { key: 'fulfillmentrequestedat', label: 'Fulfillment Requested At', type: 'date', required: false, unique: false, sortOrder: 181 },
+  { key: 'fulfillmentcompletedat', label: 'Fulfillment Completed At', type: 'date', required: false, unique: false, sortOrder: 182 },
+  { key: 'fulfillmentpayload', label: 'Fulfillment Payload', type: 'richText', required: false, unique: false, sortOrder: 183 },
   { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
   { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
   { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
@@ -923,6 +929,12 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'shippingservicelevel',
     'shippinglabelcost',
     'shippinglabelcreatedat',
+    'fulfillmentdispatchstatus',
+    'fulfillmentprovider',
+    'fulfillmentid',
+    'fulfillmentrequestedat',
+    'fulfillmentcompletedat',
+    'fulfillmentpayload',
     'riskscore',
     'risklevel',
     'riskreasons',
@@ -978,6 +990,12 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
     'ground',
     '6',
     '2026-05-10T10:05:00.000Z',
+    'requested',
+    'warehouse',
+    `ful_import_${suffix}`,
+    '2026-05-10T10:07:00.000Z',
+    '',
+    JSON.stringify({ schemaVersion: 'backy.fulfillment-dispatch.v1', fulfillmentId: `ful_import_${suffix}` }),
     '12',
     'low',
     'CSV import baseline risk.',
@@ -1019,6 +1037,7 @@ const assertOrderCsvImport = async ({ collectionId, suffix }) => {
   assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
   assert(record.values?.trackingstatus === 'processing' && Boolean(record.values?.trackinglastcheckedat), `Imported tracking refresh fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.shippinglabelstatus === 'draft' && record.values?.shippinglabelprovider === 'UPS' && record.values?.shippinglabelid === `lbl_import_${suffix}` && record.values?.shippinglabelcost === 6, `Imported shipping label fields were unexpected: ${JSON.stringify(record.values)}`);
+  assert(record.values?.fulfillmentdispatchstatus === 'requested' && record.values?.fulfillmentprovider === 'warehouse' && record.values?.fulfillmentid === `ful_import_${suffix}` && String(record.values?.fulfillmentpayload || '').includes('backy.fulfillment-dispatch.v1'), `Imported fulfillment dispatch fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.providerrefundstatus === 'requested' && record.values?.providerrefundprovider === 'manual' && record.values?.providerrefundid === `rf_import_${suffix}` && record.values?.providerrefundamount === 0 && String(record.values?.providerrefundpayload || '').includes('backy.provider-refund.v1'), `Imported provider refund fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(record.values?.riskscore === 12 && record.values?.risklevel === 'low' && record.values?.riskreviewstatus === 'cleared', `Imported risk fields were unexpected: ${JSON.stringify(record.values)}`);
   assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
@@ -1533,6 +1552,26 @@ const main = async () => {
       (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.fulfillmentstatus === 'processing',
       'Bulk processing action did not persist coherent fulfillment workflow fields',
     );
+
+    await clickOrderCardButton(client, orderNumber, 'Dispatch Fulfillment');
+    const fulfillmentRecord = await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.orderstatus === 'paid' &&
+        values.paymentstatus === 'paid' &&
+        values.fulfillmentstatus === 'processing' &&
+        values.fulfillmentdispatchstatus === 'requires_action' &&
+        values.fulfillmentprovider === 'UPS' &&
+        Boolean(values.fulfillmentid) &&
+        Boolean(values.fulfillmentrequestedat) &&
+        String(values.fulfillmentpayload || '').includes('backy.fulfillment-dispatch.v1') &&
+        /Fulfillment dispatch handoff prepared/.test(String(values.notes || ''))
+      ),
+      'Dispatch Fulfillment did not persist fulfillment handoff fields',
+    );
+    const fulfillmentPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${fulfillmentRecord.id}/fulfillment`);
+    assert(fulfillmentPayload.data?.fulfillment?.id === fulfillmentRecord.values.fulfillmentid, `Fulfillment endpoint did not return the prepared handoff: ${JSON.stringify(fulfillmentPayload)}`);
 
     await clickOrderCardButton(client, orderNumber, 'Prepare Label');
     await waitForOrderValue(

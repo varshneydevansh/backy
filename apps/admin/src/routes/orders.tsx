@@ -32,6 +32,7 @@ import {
   createOrderProviderRefund,
   createOrderShippingLabel,
   deleteCollectionRecord,
+  dispatchOrderFulfillment,
   getUserPermissions,
   getCommerceReconciliationReadiness,
   getOrderAnalytics,
@@ -111,6 +112,7 @@ type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
 type OrderRiskLevel = 'low' | 'medium' | 'high';
 type OrderRiskReviewStatus = 'cleared' | 'pending_review' | 'approved' | 'held';
 type ShippingLabelStatus = 'none' | 'draft' | 'purchased' | 'voided';
+type FulfillmentDispatchStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'requires_action';
 type ProviderRefundStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'requires_action';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
@@ -205,6 +207,12 @@ interface OrderFormState {
   shippingServiceLevel: string;
   shippingLabelCost: string;
   shippingLabelCreatedAt: string;
+  fulfillmentDispatchStatus: FulfillmentDispatchStatus;
+  fulfillmentProvider: string;
+  fulfillmentId: string;
+  fulfillmentRequestedAt: string;
+  fulfillmentCompletedAt: string;
+  fulfillmentPayload: string;
   riskScore: string;
   riskLevel: OrderRiskLevel;
   riskReasons: string;
@@ -334,6 +342,12 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'shippingservicelevel', label: 'Shipping Service Level', type: 'text', required: false, unique: false, sortOrder: 175 },
   { key: 'shippinglabelcost', label: 'Shipping Label Cost', type: 'number', required: false, unique: false, sortOrder: 176 },
   { key: 'shippinglabelcreatedat', label: 'Shipping Label Created At', type: 'date', required: false, unique: false, sortOrder: 177 },
+  { key: 'fulfillmentdispatchstatus', label: 'Fulfillment Dispatch Status', type: 'select', required: false, unique: false, sortOrder: 178, options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+  { key: 'fulfillmentprovider', label: 'Fulfillment Provider', type: 'text', required: false, unique: false, sortOrder: 179 },
+  { key: 'fulfillmentid', label: 'Fulfillment ID', type: 'text', required: false, unique: false, sortOrder: 180 },
+  { key: 'fulfillmentrequestedat', label: 'Fulfillment Requested At', type: 'date', required: false, unique: false, sortOrder: 181 },
+  { key: 'fulfillmentcompletedat', label: 'Fulfillment Completed At', type: 'date', required: false, unique: false, sortOrder: 182 },
+  { key: 'fulfillmentpayload', label: 'Fulfillment Payload', type: 'richText', required: false, unique: false, sortOrder: 183 },
   { key: 'riskscore', label: 'Risk Score', type: 'number', required: false, unique: false, sortOrder: 180, defaultValue: 0 },
   { key: 'risklevel', label: 'Risk Level', type: 'select', required: false, unique: false, sortOrder: 182, options: ['low', 'medium', 'high'], defaultValue: 'low' },
   { key: 'riskreasons', label: 'Risk Reasons', type: 'richText', required: false, unique: false, sortOrder: 184 },
@@ -393,6 +407,12 @@ const ORDER_EXPORT_COLUMNS = [
   'shipping_service_level',
   'shipping_label_cost',
   'shipping_label_created_at',
+  'fulfillment_dispatch_status',
+  'fulfillment_provider',
+  'fulfillment_id',
+  'fulfillment_requested_at',
+  'fulfillment_completed_at',
+  'fulfillment_payload',
   'risk_score',
   'risk_level',
   'risk_reasons',
@@ -455,6 +475,12 @@ const ORDER_IMPORT_COLUMNS = [
   'shippingservicelevel',
   'shippinglabelcost',
   'shippinglabelcreatedat',
+  'fulfillmentdispatchstatus',
+  'fulfillmentprovider',
+  'fulfillmentid',
+  'fulfillmentrequestedat',
+  'fulfillmentcompletedat',
+  'fulfillmentpayload',
   'riskscore',
   'risklevel',
   'riskreasons',
@@ -489,7 +515,7 @@ const ORDER_BACKEND_SYSTEMS = [
   {
     key: 'fulfillment',
     title: 'Fulfillment operations',
-    detail: 'Processing state, carrier, shipment label handoff, tracking number, tracking URL, fulfilled time, and cancellation flow.',
+    detail: 'Processing state, carrier, shipment label handoff, fulfillment dispatch payload, tracking number, tracking URL, fulfilled time, and cancellation flow.',
   },
   {
     key: 'customer',
@@ -547,6 +573,12 @@ const EMPTY_ORDER_FORM: OrderFormState = {
   shippingServiceLevel: '',
   shippingLabelCost: '',
   shippingLabelCreatedAt: '',
+  fulfillmentDispatchStatus: 'none',
+  fulfillmentProvider: '',
+  fulfillmentId: '',
+  fulfillmentRequestedAt: '',
+  fulfillmentCompletedAt: '',
+  fulfillmentPayload: '',
   riskScore: '0',
   riskLevel: 'low',
   riskReasons: '',
@@ -897,6 +929,7 @@ function OrdersRoute() {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
       adminShippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
+      adminFulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
       adminProviderRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
@@ -1000,6 +1033,11 @@ function OrdersRoute() {
       trackingStatus: String(readOrderValue(order.values, 'trackingstatus', '')),
       trackingLastCheckedAt: String(readOrderValue(order.values, 'trackinglastcheckedat', '') || ''),
       fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+      fulfillmentDispatchStatus: asFulfillmentDispatchStatus(readOrderValue(order.values, 'fulfillmentdispatchstatus', undefined)),
+      fulfillmentProvider: String(readOrderValue(order.values, 'fulfillmentprovider', '')),
+      fulfillmentId: String(readOrderValue(order.values, 'fulfillmentid', '')),
+      fulfillmentRequestedAt: String(readOrderValue(order.values, 'fulfillmentrequestedat', '') || ''),
+      fulfillmentCompletedAt: String(readOrderValue(order.values, 'fulfillmentcompletedat', '') || ''),
       risk: {
         score: toNumber(readOrderValue(order.values, 'riskscore', 0)),
         level: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
@@ -1578,6 +1616,12 @@ function OrdersRoute() {
         shippingservicelevel: formState.shippingServiceLevel.trim(),
         shippinglabelcost: formState.shippingLabelCost ? Number(formState.shippingLabelCost) : null,
         shippinglabelcreatedat: formState.shippingLabelCreatedAt || null,
+        fulfillmentdispatchstatus: formState.fulfillmentDispatchStatus,
+        fulfillmentprovider: formState.fulfillmentProvider.trim(),
+        fulfillmentid: formState.fulfillmentId.trim(),
+        fulfillmentrequestedat: formState.fulfillmentRequestedAt || null,
+        fulfillmentcompletedat: formState.fulfillmentCompletedAt || null,
+        fulfillmentpayload: formState.fulfillmentPayload.trim(),
         riskscore: formState.riskScore ? Number(formState.riskScore) : 0,
         risklevel: formState.riskLevel,
         riskreasons: formState.riskReasons.trim(),
@@ -1768,6 +1812,35 @@ function OrdersRoute() {
       setNotice(`Quote refreshed: ${formatMoney(quote.total, quote.currency)} total.`);
     } catch (quoteError) {
       setError(quoteError instanceof Error ? quoteError.message : 'Unable to refresh order quote');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const dispatchOrderFulfillmentAction = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot dispatch fulfillment.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { record: updated, fulfillment } = await dispatchOrderFulfillment(activeSiteId, order.id, {
+        provider: String(readOrderValue(order.values, 'fulfillmentprovider', '') || readOrderValue(order.values, 'fulfillmentcarrier', '') || '').trim() || 'manual',
+        requestedBy: currentAdmin?.email || currentAdmin?.id || 'backy-admin',
+      });
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Fulfillment dispatch ${fulfillment.status.replace(/_/g, ' ')} for ${fulfillment.provider}.`);
+    } catch (fulfillmentError) {
+      setError(fulfillmentError instanceof Error ? fulfillmentError.message : 'Unable to dispatch fulfillment');
     } finally {
       setIsSaving(false);
     }
@@ -3069,6 +3142,7 @@ function OrdersRoute() {
                       onSelectionChange={(checked) => toggleOrderSelection(order.id, checked)}
                       onEdit={() => selectOrderForEditing(order.id)}
                       onRefreshQuote={() => void refreshOrderQuoteAction(order)}
+                      onDispatchFulfillment={() => void dispatchOrderFulfillmentAction(order)}
                       onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
                       onShippingLabel={() => void prepareOrderShippingLabel(order)}
                       onVoidShippingLabel={() => void voidOrderShippingLabelAction(order)}
@@ -3564,6 +3638,73 @@ function OrdersRoute() {
                     </Field>
                   </div>
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-fulfillment-dispatch-controls">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Fulfillment dispatch</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Persist the provider handoff payload used by warehouse, 3PL, or fulfillment automation.
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="Dispatch status">
+                      <select
+                        aria-label="Fulfillment dispatch status"
+                        value={formState.fulfillmentDispatchStatus}
+                        onChange={(event) => setFormState((current) => ({ ...current, fulfillmentDispatchStatus: event.target.value as FulfillmentDispatchStatus }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      >
+                        <option value="none">None</option>
+                        <option value="requested">Requested</option>
+                        <option value="succeeded">Succeeded</option>
+                        <option value="failed">Failed</option>
+                        <option value="requires_action">Requires action</option>
+                      </select>
+                    </Field>
+                    <Field label="Provider">
+                      <input
+                        value={formState.fulfillmentProvider}
+                        onChange={(event) => setFormState((current) => ({ ...current, fulfillmentProvider: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="manual, ShipBob, warehouse"
+                      />
+                    </Field>
+                    <Field label="Fulfillment ID">
+                      <input
+                        value={formState.fulfillmentId}
+                        onChange={(event) => setFormState((current) => ({ ...current, fulfillmentId: event.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="Generated by Backy"
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Requested at">
+                      <input
+                        type="datetime-local"
+                        value={toDateTimeLocalValue(formState.fulfillmentRequestedAt)}
+                        onChange={(event) => setFormState((current) => ({ ...current, fulfillmentRequestedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                    <Field label="Completed at">
+                      <input
+                        type="datetime-local"
+                        value={toDateTimeLocalValue(formState.fulfillmentCompletedAt)}
+                        onChange={(event) => setFormState((current) => ({ ...current, fulfillmentCompletedAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Provider payload">
+                    <textarea
+                      value={formState.fulfillmentPayload}
+                      onChange={(event) => setFormState((current) => ({ ...current, fulfillmentPayload: event.target.value }))}
+                      rows={4}
+                      className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 font-mono text-xs"
+                      placeholder="{ }"
+                    />
+                  </Field>
+                </div>
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-risk-controls">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Fraud risk controls</div>
@@ -4002,6 +4143,7 @@ function OrderCard({
   onSelectionChange,
   onEdit,
   onRefreshQuote,
+  onDispatchFulfillment,
   onPaid,
   onShippingLabel,
   onVoidShippingLabel,
@@ -4023,6 +4165,7 @@ function OrderCard({
   onSelectionChange: (checked: boolean) => void;
   onEdit: () => void;
   onRefreshQuote: () => void;
+  onDispatchFulfillment: () => void;
   onPaid: () => void;
   onShippingLabel: () => void;
   onVoidShippingLabel: () => void;
@@ -4056,6 +4199,10 @@ function OrderCard({
   const shippingServiceLevel = String(readOrderValue(values, 'shippingservicelevel', ''));
   const shippingLabelCost = toNumber(readOrderValue(values, 'shippinglabelcost', 0));
   const shippingLabelCreatedAt = String(readOrderValue(values, 'shippinglabelcreatedat', ''));
+  const fulfillmentDispatchStatus = String(readOrderValue(values, 'fulfillmentdispatchstatus', 'none'));
+  const fulfillmentProvider = String(readOrderValue(values, 'fulfillmentprovider', ''));
+  const fulfillmentId = String(readOrderValue(values, 'fulfillmentid', ''));
+  const fulfillmentRequestedAt = String(readOrderValue(values, 'fulfillmentrequestedat', ''));
   const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
   const providerRefundStatus = String(readOrderValue(values, 'providerrefundstatus', 'none'));
   const providerRefundProvider = String(readOrderValue(values, 'providerrefundprovider', ''));
@@ -4119,6 +4266,11 @@ function OrderCard({
                   Label {shippingLabelStatus} · {shippingLabelId}
                 </span>
               ) : null}
+              {fulfillmentId ? (
+                <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-[11px] font-medium text-cyan-700">
+                  Fulfillment {fulfillmentDispatchStatus.replace(/_/g, ' ')}
+                </span>
+              ) : null}
               {refundAmount > 0 ? (
                 <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
                   Refund {formatMoney(refundAmount, currency)}
@@ -4177,6 +4329,13 @@ function OrderCard({
       {riskReasons ? (
         <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {riskReasons}
+        </div>
+      ) : null}
+      {fulfillmentId ? (
+        <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-800">
+          <PackageCheck className="mr-1 inline size-3.5" />
+          Fulfillment dispatch {fulfillmentId} is {fulfillmentDispatchStatus.replace(/_/g, ' ')} through {fulfillmentProvider || 'manual'}
+          {fulfillmentRequestedAt ? ` since ${formatWorkflowDate(fulfillmentRequestedAt)}` : ''}.
         </div>
       ) : null}
       {providerRefundId ? (
@@ -4247,6 +4406,7 @@ function OrderCard({
         {trackingNumber ? (
           <Button size="sm" variant="outline" onClick={onRefreshTracking} disabled={disabled || fulfillmentStatus === 'cancelled'} iconStart={<RefreshCw className="size-4" />}>Refresh Tracking</Button>
         ) : null}
+        <Button size="sm" variant="outline" onClick={onDispatchFulfillment} disabled={disabled || Boolean(fulfillmentId) || paymentStatus !== 'paid' || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<PackageCheck className="size-4" />}>Dispatch Fulfillment</Button>
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
         <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabled || Boolean(providerRefundId) || paymentStatus === 'pending' || paymentStatus === 'failed'} iconStart={<CreditCard className="size-4" />}>Provider Refund</Button>
@@ -4385,6 +4545,12 @@ const asShippingLabelStatus = (value: unknown): ShippingLabelStatus => (
     : 'none'
 );
 
+const asFulfillmentDispatchStatus = (value: unknown): FulfillmentDispatchStatus => (
+  ['none', 'requested', 'succeeded', 'failed', 'requires_action'].includes(String(value))
+    ? String(value) as FulfillmentDispatchStatus
+    : 'none'
+);
+
 const asProviderRefundStatus = (value: unknown): ProviderRefundStatus => (
   ['none', 'requested', 'succeeded', 'failed', 'requires_action'].includes(String(value))
     ? String(value) as ProviderRefundStatus
@@ -4433,6 +4599,12 @@ const camelizeOrderKey = (key: string): string => {
   if (key === 'shippingservicelevel') return 'shippingServiceLevel';
   if (key === 'shippinglabelcost') return 'shippingLabelCost';
   if (key === 'shippinglabelcreatedat') return 'shippingLabelCreatedAt';
+  if (key === 'fulfillmentdispatchstatus') return 'fulfillmentDispatchStatus';
+  if (key === 'fulfillmentprovider') return 'fulfillmentProvider';
+  if (key === 'fulfillmentid') return 'fulfillmentId';
+  if (key === 'fulfillmentrequestedat') return 'fulfillmentRequestedAt';
+  if (key === 'fulfillmentcompletedat') return 'fulfillmentCompletedAt';
+  if (key === 'fulfillmentpayload') return 'fulfillmentPayload';
   if (key === 'shippingaddress') return 'shippingAddress';
   if (key === 'billingaddress') return 'billingAddress';
   if (key === 'refundamount') return 'refundAmount';
@@ -4469,6 +4641,12 @@ const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, u
   ...(updates.shippingServiceLevel !== undefined ? { shippingservicelevel: updates.shippingServiceLevel } : {}),
   ...(updates.shippingLabelCost !== undefined ? { shippinglabelcost: updates.shippingLabelCost ? Number(updates.shippingLabelCost) : null } : {}),
   ...(updates.shippingLabelCreatedAt !== undefined ? { shippinglabelcreatedat: updates.shippingLabelCreatedAt || null } : {}),
+  ...(updates.fulfillmentDispatchStatus !== undefined ? { fulfillmentdispatchstatus: updates.fulfillmentDispatchStatus } : {}),
+  ...(updates.fulfillmentProvider !== undefined ? { fulfillmentprovider: updates.fulfillmentProvider } : {}),
+  ...(updates.fulfillmentId !== undefined ? { fulfillmentid: updates.fulfillmentId } : {}),
+  ...(updates.fulfillmentRequestedAt !== undefined ? { fulfillmentrequestedat: updates.fulfillmentRequestedAt || null } : {}),
+  ...(updates.fulfillmentCompletedAt !== undefined ? { fulfillmentcompletedat: updates.fulfillmentCompletedAt || null } : {}),
+  ...(updates.fulfillmentPayload !== undefined ? { fulfillmentpayload: updates.fulfillmentPayload } : {}),
   ...(updates.refundAmount !== undefined ? { refundamount: updates.refundAmount ? Number(updates.refundAmount) : null } : {}),
   ...(updates.refundReason !== undefined ? { refundreason: updates.refundReason } : {}),
   ...(updates.providerRefundStatus !== undefined ? { providerrefundstatus: updates.providerRefundStatus } : {}),
@@ -4631,6 +4809,12 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
     ? ''
     : String(readOrderValue(order.values, 'shippinglabelcost', '')),
   shippingLabelCreatedAt: String(readOrderValue(order.values, 'shippinglabelcreatedat', '') || ''),
+  fulfillmentDispatchStatus: asFulfillmentDispatchStatus(readOrderValue(order.values, 'fulfillmentdispatchstatus', undefined)),
+  fulfillmentProvider: String(readOrderValue(order.values, 'fulfillmentprovider', '')),
+  fulfillmentId: String(readOrderValue(order.values, 'fulfillmentid', '')),
+  fulfillmentRequestedAt: String(readOrderValue(order.values, 'fulfillmentrequestedat', '') || ''),
+  fulfillmentCompletedAt: String(readOrderValue(order.values, 'fulfillmentcompletedat', '') || ''),
+  fulfillmentPayload: String(readOrderValue(order.values, 'fulfillmentpayload', '')),
   riskScore: String(readOrderValue(order.values, 'riskscore', 0) ?? 0),
   riskLevel: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
   riskReasons: String(readOrderValue(order.values, 'riskreasons', '')),
@@ -4832,6 +5016,12 @@ const orderToExportRecord = (
   shipping_service_level: String(readOrderValue(order.values, 'shippingservicelevel', '')),
   shipping_label_cost: optionalNumber(readOrderValue(order.values, 'shippinglabelcost', null)),
   shipping_label_created_at: String(readOrderValue(order.values, 'shippinglabelcreatedat', '') || ''),
+  fulfillment_dispatch_status: asFulfillmentDispatchStatus(readOrderValue(order.values, 'fulfillmentdispatchstatus', undefined)),
+  fulfillment_provider: String(readOrderValue(order.values, 'fulfillmentprovider', '')),
+  fulfillment_id: String(readOrderValue(order.values, 'fulfillmentid', '')),
+  fulfillment_requested_at: String(readOrderValue(order.values, 'fulfillmentrequestedat', '') || ''),
+  fulfillment_completed_at: String(readOrderValue(order.values, 'fulfillmentcompletedat', '') || ''),
+  fulfillment_payload: String(readOrderValue(order.values, 'fulfillmentpayload', '')),
   risk_score: optionalNumber(readOrderValue(order.values, 'riskscore', 0)),
   risk_level: asOrderRiskLevel(readOrderValue(order.values, 'risklevel', undefined)),
   risk_reasons: String(readOrderValue(order.values, 'riskreasons', '')),
