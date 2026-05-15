@@ -61,6 +61,25 @@ interface ProviderRefundPayload {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const STRIPE_REFUND_ENDPOINT = 'https://api.stripe.com/v1/refunds';
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'BIF',
+  'CLP',
+  'DJF',
+  'GNF',
+  'JPY',
+  'KMF',
+  'KRW',
+  'MGA',
+  'PYG',
+  'RWF',
+  'UGX',
+  'VND',
+  'VUV',
+  'XAF',
+  'XOF',
+  'XPF',
+]);
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -96,6 +115,27 @@ const textValue = (value: unknown): string => (
 const numberValue = (value: unknown, fallback = 0): number => {
   const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : fallback;
+};
+
+const stripeSecretKey = () => (
+  process.env.BACKY_STRIPE_SECRET_KEY?.trim()
+  || process.env.STRIPE_SECRET_KEY?.trim()
+  || ''
+);
+
+const isStripePaymentIntent = (value: string) => value.startsWith('pi_');
+const isStripeCharge = (value: string) => value.startsWith('ch_');
+const canExecuteStripeRefund = (provider: string, paymentReference: string) => (
+  provider.toLowerCase() === 'stripe' &&
+  Boolean(stripeSecretKey()) &&
+  (isStripePaymentIntent(paymentReference) || isStripeCharge(paymentReference))
+);
+
+const toStripeAmount = (amount: number, currency: string): number => {
+  const normalizedCurrency = currency.toUpperCase();
+  return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
+    ? Math.max(0, Math.round(amount))
+    : Math.max(0, Math.round(amount * 100));
 };
 
 const collectionRecordAuditMetadata = (
@@ -170,52 +210,165 @@ const appendNote = (current: unknown, note: string): string => {
   return currentNotes ? `${currentNotes}\n${note}` : note;
 };
 
-const buildProviderRefundUpdate = (
+const safeStripeRefundPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id),
+  object: textValue(value.object),
+  status: textValue(value.status),
+  amount: Number(value.amount || 0),
+  currency: textValue(value.currency),
+  charge: textValue(value.charge),
+  payment_intent: textValue(value.payment_intent),
+  reason: textValue(value.reason),
+  failure_reason: textValue(value.failure_reason),
+  created: Number(value.created || 0),
+});
+
+const safeStripeErrorPayload = (value: Record<string, unknown>) => {
+  const error = toRecord(value.error);
+  return {
+    code: textValue(error.code),
+    type: textValue(error.type),
+    message: textValue(error.message) || 'Stripe refund request failed.',
+    decline_code: textValue(error.decline_code),
+    payment_intent: textValue(error.payment_intent),
+    charge: textValue(error.charge),
+  };
+};
+
+const executeStripeRefund = async (input: {
+  refundId: string;
+  orderId: string;
+  orderNumber: string;
+  paymentReference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+}) => {
+  const params = new URLSearchParams();
+  params.set('amount', String(toStripeAmount(input.amount, input.currency)));
+  params.set('reason', 'requested_by_customer');
+  params.set('metadata[backy_order_id]', input.orderId);
+  params.set('metadata[backy_order_number]', input.orderNumber);
+  params.set('metadata[backy_refund_id]', input.refundId);
+  params.set('metadata[backy_refund_reason]', input.reason.slice(0, 500));
+  if (isStripePaymentIntent(input.paymentReference)) {
+    params.set('payment_intent', input.paymentReference);
+  } else {
+    params.set('charge', input.paymentReference);
+  }
+
+  const response = await fetch(STRIPE_REFUND_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${stripeSecretKey()}`,
+      'content-type': 'application/x-www-form-urlencoded',
+      'idempotency-key': input.refundId,
+    },
+    body: params,
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeStripeErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeStripeRefundPayload(payloadRecord),
+  };
+};
+
+const buildProviderRefundUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
 ) => {
   const now = new Date().toISOString();
   const values = toRecord(record.values);
   const existing = existingRefundPayload(record);
-  const provider = textValue(body.provider) || textValue(values.paymentprovider) || 'manual';
+  const provider = (textValue(body.provider) || textValue(values.paymentprovider) || 'manual').toLowerCase();
   const amount = numberValue(body.amount, numberValue(values.refundamount, numberValue(values.total)));
   const currency = textValue(values.currency) || 'USD';
   const reason = textValue(body.reason) || textValue(values.refundreason) || 'Provider refund requested from Backy order workflow.';
   const refundId = existing?.id || `rf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const paymentReference = textValue(values.paymentreference);
-  const status: ProviderRefundPayload['status'] = provider === 'manual' ? 'requires_action' : 'requested';
-  const providerPayload = {
+  const shouldExecuteStripeRefund = canExecuteStripeRefund(provider, paymentReference);
+  const orderNumber = textValue(values.ordernumber);
+  const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.provider-refund.v1',
     action: provider === 'stripe' ? 'refunds.create' : 'provider.refund.create',
     provider,
+    executionMode: shouldExecuteStripeRefund ? 'stripe-api' : 'handoff',
     orderId: record.id,
-    orderNumber: textValue(values.ordernumber),
+    orderNumber,
     paymentReference,
     amount,
     currency,
     reason,
     idempotencyKey: refundId,
   };
+  let status: ProviderRefundPayload['status'] = provider === 'manual' ? 'requires_action' : 'requested';
+  let completedAt: string | null = null;
+  let providerRefundId = refundId;
+  let providerReference = paymentReference ? `${provider}:${paymentReference}:${refundId}` : `${provider}:${refundId}`;
+  let statusNote = 'handoff';
+
+  if (shouldExecuteStripeRefund) {
+    const result = await executeStripeRefund({
+      refundId,
+      orderId: record.id,
+      orderNumber,
+      paymentReference,
+      amount,
+      currency,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      if (result.payload.status === 'succeeded') {
+        status = 'succeeded';
+        completedAt = new Date().toISOString();
+      } else if (result.payload.status === 'failed' || result.payload.status === 'canceled') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerRefundId = result.payload.id || refundId;
+      providerReference = `${provider}:${result.payload.id || refundId}`;
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      statusNote = 'failed';
+    }
+  }
+
   const refund: ProviderRefundPayload = {
-    id: refundId,
+    id: providerRefundId,
     status,
     provider,
-    reference: paymentReference ? `${provider}:${paymentReference}:${refundId}` : `${provider}:${refundId}`,
+    reference: providerReference,
     amount,
     currency,
     reason,
     requestedAt: existing?.requestedAt || now,
-    completedAt: status === 'requires_action' ? null : existing?.completedAt || null,
+    completedAt,
     providerPayload,
   };
+  const shouldMarkRefunded = !shouldExecuteStripeRefund || status === 'succeeded';
 
   return {
     refund,
     values: {
       ...values,
-      orderstatus: 'refunded',
-      paymentstatus: 'refunded',
-      fulfillmentstatus: 'cancelled',
+      ...(shouldMarkRefunded ? {
+        orderstatus: 'refunded',
+        paymentstatus: 'refunded',
+        fulfillmentstatus: 'cancelled',
+      } : {}),
       refundamount: amount,
       refundreason: reason,
       providerrefundstatus: refund.status,
@@ -227,7 +380,7 @@ const buildProviderRefundUpdate = (
       providerrefundrequestedat: refund.requestedAt,
       providerrefundcompletedat: refund.completedAt,
       providerrefundpayload: JSON.stringify(refund.providerPayload, null, 2),
-      notes: appendNote(values.notes, `Provider refund handoff ${refund.status} ${now} for ${currency} ${amount.toFixed(2)} via ${provider}.`),
+      notes: appendNote(values.notes, `Provider refund ${statusNote} ${refund.status} ${now} for ${currency} ${amount.toFixed(2)} via ${provider}.`),
     },
   };
 };
@@ -297,7 +450,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      const { refund, values: rawValues } = buildProviderRefundUpdate(record, body);
+      const { refund, values: rawValues } = await buildProviderRefundUpdate(record, body);
       const values = normalizeCollectionRecordMediaValues(collection, rawValues);
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
@@ -349,7 +502,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    const { refund, values: rawValues } = buildProviderRefundUpdate(record, body);
+    const { refund, values: rawValues } = await buildProviderRefundUpdate(record, body);
     const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
     const validationErrors = validateCollectionRecordValues(collection, values, {
       existingValues: record.values,
