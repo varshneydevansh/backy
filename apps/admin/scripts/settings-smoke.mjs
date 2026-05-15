@@ -2,6 +2,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -39,6 +40,48 @@ const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) =>
 
   childProcess.once('exit', onExit);
 });
+
+const createWebhookCaptureServer = async () => {
+  const requests = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const rawBody = Buffer.concat(chunks).toString('utf8');
+      let body = {};
+      try {
+        body = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        body = { rawBody };
+      }
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(204);
+      response.end();
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  assert(address && typeof address === 'object', 'Webhook capture server did not expose a port');
+
+  return {
+    url: `http://127.0.0.1:${address.port}/settings-webhook`,
+    requests,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+  };
+};
 
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -777,7 +820,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   };
 };
 
-const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
+const updateSettingsThroughUi = async (client, suffix, originalSettings, notificationWebhookUrl) => {
   const initial = await navigateToSettings(client);
 
   await openSettingsTab(client, 'Delivery', 'tab=delivery');
@@ -915,7 +958,41 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
   await setLabeledControl(client, 'New form submission', true);
   await setLabeledControl(client, 'Pending comments', false);
   await setLabeledControl(client, 'Digest frequency', 'daily');
-  await setLabeledControl(client, 'Webhook URL', `https://hooks.example.com/${suffix}`);
+  await setLabeledControl(client, 'Webhook URL', notificationWebhookUrl);
+  await clickByTestId(client, 'settings-notification-webhook-test');
+  await waitForText(client, 'Notification webhook test succeeded.');
+  await waitForText(client, 'Last delivery: succeeded');
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const retryReady = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="settings-notification-webhook-retry"]');
+      const result = document.querySelector('[data-testid="settings-notification-webhook-result"]')?.textContent || '';
+      return {
+        ready: button instanceof HTMLButtonElement && !button.disabled && result.includes('req_'),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        result,
+      };
+    })()`);
+    if (retryReady.ready) break;
+    if (attempt === 59) {
+      throw new Error(`Notification webhook retry did not become available: ${JSON.stringify(retryReady)}`);
+    }
+    await sleep(150);
+  }
+  await clickByTestId(client, 'settings-notification-webhook-retry');
+  await waitForText(client, 'Notification webhook retry succeeded.');
+  const notificationWebhookState = await evaluate(client, `(() => {
+    const result = document.querySelector('[data-testid="settings-notification-webhook-result"]')?.textContent || '';
+    return {
+      hasResult: result.includes('Last delivery: succeeded'),
+      hasRetry: result.includes('/ retry'),
+      hasRequestId: result.includes('req_'),
+      result,
+    };
+  })()`);
+  assert(
+    notificationWebhookState.hasResult && notificationWebhookState.hasRetry && notificationWebhookState.hasRequestId,
+    `Notification webhook test/retry result did not render: ${JSON.stringify(notificationWebhookState)}`,
+  );
 
   await openSettingsTab(client, 'Security', 'tab=security');
   const securityKeyState = await evaluate(client, `(() => {
@@ -962,12 +1039,13 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings) => {
     delivery: finalDelivery,
     initialDelivery: delivery,
     infrastructureState,
+    notificationWebhookState,
     saved,
     layout,
   };
 };
 
-const assertPersistedSettings = (settings, suffix) => {
+const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.deliveryMode === 'custom-frontend', `Delivery mode was not persisted: ${settings.deliveryMode}`);
   assert(settings.integrations?.general?.siteName === `Backy Smoke ${suffix}`, 'General site name was not persisted');
   assert(settings.integrations?.appearance?.primaryColor === '#0f766e', 'Appearance primary color was not persisted');
@@ -1014,7 +1092,7 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.notifications?.inApp?.comments === false, 'Notification in-app toggle was not persisted');
   assert(settings.integrations?.notifications?.inApp?.mentions !== true, 'Planned mention notification should not persist as enabled');
   assert(settings.integrations?.notifications?.digestFrequency === 'instant', 'Planned digest frequency should normalize to instant');
-  assert(settings.integrations?.notifications?.webhookUrl === `https://hooks.example.com/${suffix}`, 'Notification webhook was not persisted');
+  assert(settings.integrations?.notifications?.webhookUrl === notificationWebhookUrl, 'Notification webhook was not persisted');
   assert(settings.auth?.requireTwoFactor !== true, 'Require 2FA should not persist as enabled without login enforcement');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
   assert(settings.auth?.minPasswordLength === 12, 'Password length was not persisted');
@@ -1111,6 +1189,7 @@ const main = async () => {
   let client;
   let restored = false;
   let adminPreloadIdentifier = '';
+  const webhookCapture = await createWebhookCaptureServer();
 
   try {
     const owner = await createUser({
@@ -1138,7 +1217,7 @@ const main = async () => {
     });
     adminPreloadIdentifier = adminPreload.identifier || '';
 
-    const ui = await updateSettingsThroughUi(client, suffix, originalSettings);
+    const ui = await updateSettingsThroughUi(client, suffix, originalSettings, webhookCapture.url);
     const ownerRotation = await assertOwnerCanRotateApiKeyThroughUi(
       client,
       ownerSession,
@@ -1146,7 +1225,16 @@ const main = async () => {
       adminPreloadIdentifier,
     );
     const persisted = await readSettings();
-    assertPersistedSettings(persisted, suffix);
+    assertPersistedSettings(persisted, suffix, webhookCapture.url);
+    assert(webhookCapture.requests.length >= 2, `Settings webhook test/retry did not hit capture server: ${JSON.stringify(webhookCapture.requests)}`);
+    assert(
+      webhookCapture.requests.some((entry) => entry.headers['x-backy-settings-webhook-test'] === 'true' && entry.body?.kind === 'settings.notification_webhook.test'),
+      `Settings webhook test payload was not captured: ${JSON.stringify(webhookCapture.requests).slice(0, 500)}`,
+    );
+    assert(
+      webhookCapture.requests.some((entry) => entry.headers['x-backy-webhook-retry'] === 'true' && entry.body?.kind === 'settings.notification_webhook.retry' && entry.body?.retry === true),
+      `Settings webhook retry payload was not captured: ${JSON.stringify(webhookCapture.requests).slice(0, 500)}`,
+    );
     const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -1183,6 +1271,13 @@ const main = async () => {
         vercel: persisted.integrations?.vercel,
         commerce: persisted.integrations?.commerce,
         notifications: persisted.integrations?.notifications,
+        notificationWebhookRequests: webhookCapture.requests.map((entry) => ({
+          method: entry.method,
+          url: entry.url,
+          kind: entry.body?.kind,
+          retry: entry.body?.retry,
+          requestId: entry.body?.requestId,
+        })),
         auth: persisted.auth,
       },
       restored,
@@ -1202,6 +1297,9 @@ const main = async () => {
         console.warn('Unable to remove temporary settings owner:', error instanceof Error ? error.message : error);
       });
     }
+    await webhookCapture.close().catch((error) => {
+      console.warn('Unable to stop settings webhook capture server:', error instanceof Error ? error.message : error);
+    });
     await cleanup({ client, childProcess, userDataDir });
   }
 };

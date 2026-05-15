@@ -528,6 +528,94 @@ const normalizeNotificationIntegrations = (value: unknown): BackyJsonObject | un
   };
 };
 
+const validateWebhookUrl = (value: string): { ok: true; url: URL } | { ok: false } => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? { ok: true, url } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+};
+
+const webhookAuditTarget = (target: string): string => {
+  const parsed = validateWebhookUrl(target);
+  if (!parsed.ok) return target;
+  return `${parsed.url.origin}${parsed.url.pathname}`;
+};
+
+const resolveNotificationWebhookUrl = (settings: AdminSettingsSource, override: unknown): string => {
+  const overrideUrl = stringValue(override);
+  if (overrideUrl) return overrideUrl;
+
+  const integrations = parseJsonObject(settings.integrations) || {};
+  const notifications = parseJsonObject(integrations.notifications) || {};
+  return stringValue(notifications.webhookUrl);
+};
+
+async function sendSettingsNotificationWebhook(params: {
+  target: string;
+  requestId: string;
+  access: AdminAccessContext;
+  retryOf?: string;
+}) {
+  const startedAt = new Date().toISOString();
+  const retry = Boolean(params.retryOf);
+  const payload = {
+    schemaVersion: 'backy.settings-notification-webhook-test.v1',
+    kind: retry ? 'settings.notification_webhook.retry' : 'settings.notification_webhook.test',
+    requestId: params.requestId,
+    retry,
+    retryOf: params.retryOf || null,
+    actorId: params.access.session?.user.id || null,
+    generatedAt: startedAt,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(params.target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-backy-event-kind': payload.kind,
+        'x-backy-request-id': params.requestId,
+        'x-backy-settings-webhook-test': 'true',
+        ...(retry ? { 'x-backy-webhook-retry': 'true' } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    return {
+      attempted: true,
+      target: params.target,
+      targetSummary: webhookAuditTarget(params.target),
+      status: response.ok ? 'succeeded' : 'failed',
+      statusCode: response.status,
+      error: response.ok ? undefined : `Webhook returned ${response.status}`,
+      requestId: params.requestId,
+      retry,
+      retryOf: params.retryOf || null,
+      generatedAt: startedAt,
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      target: params.target,
+      targetSummary: webhookAuditTarget(params.target),
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Unknown webhook error',
+      requestId: params.requestId,
+      retry,
+      retryOf: params.retryOf || null,
+      generatedAt: startedAt,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
   if (!input) {
@@ -1396,6 +1484,94 @@ export async function POST(request: NextRequest) {
         success: true,
         requestId,
         data: result,
+      });
+    }
+
+    if (body.action === 'test-notification-webhook') {
+      const retryOf = stringValue(body.retryOf);
+
+      if (!shouldUseDemoStoreFallback()) {
+        const repositories = await getRequiredDatabaseRepositories();
+        const settings = await repositories.settings.get();
+        const target = resolveNotificationWebhookUrl(settings, body.webhookUrl);
+        const validated = validateWebhookUrl(target);
+        if (!target) {
+          return errorResponse(409, 'NOTIFICATION_WEBHOOK_NOT_CONFIGURED', 'Notification webhook URL is not configured.', requestId);
+        }
+        if (!validated.ok) {
+          return errorResponse(400, 'VALIDATION_ERROR', 'Notification webhook URL must be http or https.', requestId);
+        }
+
+        const delivery = await sendSettingsNotificationWebhook({
+          target,
+          requestId,
+          access,
+          retryOf,
+        });
+        await recordAdminAudit({
+          repositories,
+          entity: 'settings',
+          entityId: 'platform',
+          action: retryOf ? 'settings.notification_webhook.retry' : 'settings.notification_webhook.test',
+          metadata: {
+            target: delivery.targetSummary,
+            status: delivery.status,
+            ...(delivery.statusCode === undefined ? {} : { statusCode: delivery.statusCode }),
+            ...(delivery.error ? { error: delivery.error } : {}),
+            retry: delivery.retry,
+            retryOf: delivery.retryOf,
+          },
+          requestId,
+        });
+
+        return NextResponse.json({
+          success: true,
+          requestId,
+          data: {
+            settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+            delivery,
+          },
+        });
+      }
+
+      const settings = getAdminSettings();
+      const target = resolveNotificationWebhookUrl(settings, body.webhookUrl);
+      const validated = validateWebhookUrl(target);
+      if (!target) {
+        return errorResponse(409, 'NOTIFICATION_WEBHOOK_NOT_CONFIGURED', 'Notification webhook URL is not configured.', requestId);
+      }
+      if (!validated.ok) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Notification webhook URL must be http or https.', requestId);
+      }
+
+      const delivery = await sendSettingsNotificationWebhook({
+        target,
+        requestId,
+        access,
+        retryOf,
+      });
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'platform',
+        action: retryOf ? 'settings.notification_webhook.retry' : 'settings.notification_webhook.test',
+        metadata: {
+          target: delivery.targetSummary,
+          status: delivery.status,
+          ...(delivery.statusCode === undefined ? {} : { statusCode: delivery.statusCode }),
+          ...(delivery.error ? { error: delivery.error } : {}),
+          retry: delivery.retry,
+          retryOf: delivery.retryOf,
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+          delivery,
+        },
       });
     }
 

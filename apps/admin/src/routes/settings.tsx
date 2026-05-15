@@ -51,10 +51,12 @@ import {
   regenerateSettingsApiKeys,
   revokeSettingsAdminApiKey,
   runSettingsStorageProvisioningProbe,
+  testSettingsNotificationWebhook,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type IssuedAdminApiKey,
+  type SettingsNotificationWebhookDeliveryResult,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
   type SettingsStorageProvisioningResult,
@@ -667,6 +669,8 @@ function SettingsPage() {
   const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditNotice, setAuditNotice] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [notificationWebhookDelivery, setNotificationWebhookDelivery] = useState<SettingsNotificationWebhookDeliveryResult | null>(null);
+  const [isNotificationWebhookTesting, setIsNotificationWebhookTesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -914,6 +918,38 @@ function SettingsPage() {
       await loadSettingsAuditLogs();
     } catch {
       setNotice('Backend key revoke failed. The admin API key was not changed.');
+    }
+  };
+
+  const handleTestNotificationWebhook = async (retryOf?: string | null) => {
+    setNotice(null);
+    if (!canConfigureSettings) {
+      setNotice(configurePermissionTitle || 'Your account cannot test notification webhooks.');
+      return;
+    }
+
+    const webhookUrl = notificationSettings.webhookUrl?.trim();
+    if (!webhookUrl) {
+      setNotice('Add a notification webhook URL before sending a test event.');
+      return;
+    }
+
+    setIsNotificationWebhookTesting(true);
+
+    try {
+      const delivery = await testSettingsNotificationWebhook({
+        webhookUrl,
+        retryOf,
+      });
+      setNotificationWebhookDelivery(delivery);
+      setNotice(delivery.status === 'succeeded'
+        ? retryOf ? 'Notification webhook retry succeeded.' : 'Notification webhook test succeeded.'
+        : retryOf ? 'Notification webhook retry failed.' : 'Notification webhook test failed.');
+      await loadSettingsAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Notification webhook test failed.');
+    } finally {
+      setIsNotificationWebhookTesting(false);
     }
   };
 
@@ -1606,6 +1642,11 @@ function SettingsPage() {
           <NotificationSettings
             value={notificationSettings}
             onChange={updateNotificationSettings}
+            delivery={notificationWebhookDelivery}
+            deliveryLoading={isNotificationWebhookTesting}
+            onTestWebhook={() => handleTestNotificationWebhook()}
+            onRetryWebhook={() => handleTestNotificationWebhook(notificationWebhookDelivery?.requestId)}
+            disabled={settingsFormDisabled}
           />
         )}
         {activeTab === 'security' && (
@@ -4560,9 +4601,19 @@ function CommerceSettings({
 function NotificationSettings({
   value,
   onChange,
+  delivery,
+  deliveryLoading,
+  onTestWebhook,
+  onRetryWebhook,
+  disabled,
 }: {
   value: NotificationSettingsConfig;
   onChange: (next: Partial<NotificationSettingsConfig>) => void;
+  delivery: SettingsNotificationWebhookDeliveryResult | null;
+  deliveryLoading: boolean;
+  onTestWebhook: () => void;
+  onRetryWebhook: () => void;
+  disabled: boolean;
 }) {
   const digestFrequency = value.digestFrequency === 'off' ? 'off' : 'instant';
   const updateEmail = (key: keyof NonNullable<NotificationSettingsConfig['email']>, checked: boolean) => {
@@ -4701,12 +4752,51 @@ function NotificationSettings({
                 className={inputClassName}
               />
             </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={onTestWebhook}
+                disabled={disabled || deliveryLoading || !value.webhookUrl?.trim()}
+                data-testid="settings-notification-webhook-test"
+              >
+                {deliveryLoading && !delivery?.retry ? 'Sending...' : 'Send test webhook'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onRetryWebhook}
+                disabled={disabled || deliveryLoading || !delivery?.requestId}
+                data-testid="settings-notification-webhook-retry"
+              >
+                {deliveryLoading && delivery?.retry ? 'Retrying...' : 'Retry webhook'}
+              </Button>
+            </div>
+            <div data-testid="settings-notification-webhook-result" className="rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+              {delivery ? (
+                <div className="grid gap-1">
+                  <div className="font-medium text-foreground">
+                    Last delivery: {delivery.status}
+                  </div>
+                  <div>
+                    Request {delivery.requestId}
+                    {delivery.statusCode ? ` / HTTP ${delivery.statusCode}` : ''}
+                    {delivery.retry ? ' / retry' : ' / test'}
+                  </div>
+                  <div>{delivery.error || delivery.targetSummary || delivery.target}</div>
+                </div>
+              ) : (
+                'Send a test event before relying on this endpoint for comment and workflow delivery.'
+              )}
+            </div>
           </div>
         </PanelContent>
       </Panel>
 
       <Notice tone="info" title="Runtime behavior">
-        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Activity controls audit-based header notifications. Comment emails and comment webhooks are recorded in delivery activity when a recipient or webhook URL is configured.
+        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Activity controls audit-based header notifications. Comment emails and comment webhooks are recorded in delivery activity when a recipient or webhook URL is configured. The test controls execute the Settings webhook immediately and record test/retry audit events.
       </Notice>
     </div>
   );

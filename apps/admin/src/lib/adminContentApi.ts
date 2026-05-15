@@ -1182,11 +1182,25 @@ export interface IssuedAdminApiKey {
   keyPrefix?: string | null;
 }
 
+export interface SettingsNotificationWebhookDeliveryResult {
+  attempted: boolean;
+  target: string;
+  targetSummary?: string;
+  status: 'succeeded' | 'failed';
+  statusCode?: number;
+  error?: string;
+  requestId: string;
+  retry: boolean;
+  retryOf?: string | null;
+  generatedAt: string;
+}
+
 interface ApiSettingsResponse {
   success: boolean;
   data?: {
     settings: ApiSettings;
     issuedKey?: IssuedAdminApiKey;
+    delivery?: SettingsNotificationWebhookDeliveryResult;
   };
   error?: {
     message?: string;
@@ -4179,6 +4193,30 @@ export async function runSettingsStorageProvisioningProbe(): Promise<SettingsSto
   }
 
   return payload.data;
+}
+
+export async function testSettingsNotificationWebhook(input: {
+  webhookUrl?: string;
+  retryOf?: string | null;
+}): Promise<SettingsNotificationWebhookDeliveryResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'test-notification-webhook',
+      webhookUrl: input.webhookUrl,
+      retryOf: input.retryOf || undefined,
+    }),
+  });
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.delivery) {
+    throw new Error(payload.error?.message || 'Unable to test notification webhook');
+  }
+
+  return payload.data.delivery;
 }
 
 export async function listAdminAuditLogs(filters: AdminAuditLogListFilters = {}): Promise<AdminAuditLogListResult> {
