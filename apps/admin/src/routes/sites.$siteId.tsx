@@ -588,6 +588,7 @@ const SITE_WEBHOOK_EVENT_OPTIONS: Array<{ value: SiteWebhookEventKind; label: st
   { value: 'contact-shared', label: 'Lead shared' },
   { value: 'contact-sync', label: 'Contact synced' },
   { value: 'contact-status', label: 'Contact status changed' },
+  { value: 'commerce-order', label: 'Commerce order created' },
   { value: 'commerce-webhook', label: 'Commerce webhook received' },
   { value: 'comment-submitted', label: 'Comment submitted' },
   { value: 'comment-status', label: 'Comment status changed' },

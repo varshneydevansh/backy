@@ -271,6 +271,15 @@ const enableCommercePricingSettings = async (settings) => {
       shippingWeightRate: 2,
       discountPercent: 12,
     },
+    notifications: {
+      ...(next.integrations?.notifications || {}),
+      digestFrequency: 'instant',
+      email: {
+        ...(next.integrations?.notifications?.email || {}),
+        orderCreated: true,
+        recipient: 'commerce-ops@example.com',
+      },
+    },
   };
   return patchSettingsFromSnapshot(next);
 };
@@ -1285,8 +1294,10 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const customer = orderPayload.data?.customer;
   const checkoutSession = orderPayload.data?.checkoutSession;
   const quote = orderPayload.data?.quote;
+  const deliveries = orderPayload.data?.deliveries || [];
   assert(order?.id, `Public order intake did not return an order: ${JSON.stringify(orderPayload).slice(0, 500)}`);
   assert(customer?.id, `Public order intake did not return a customer link: ${JSON.stringify(orderPayload).slice(0, 500)}`);
+  assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report local order email delivery: ${JSON.stringify(deliveries)}`);
   assert(checkoutSession?.id === `cs_${slug}`, `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.provider === 'manual', `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.amountTotal === 106.86, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
@@ -1313,6 +1324,16 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.taxamount === 8.62, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
+
+  const orderEventsPayload = await requestApi(`/api/sites/${SITE_ID}/events?kind=commerce-order&requestId=${encodeURIComponent(orderPayload.requestId || '')}&limit=20`);
+  const orderEvents = orderEventsPayload.data?.events || orderEventsPayload.events || [];
+  const orderDeliveryEvents = orderEvents.filter((event) => event.metadata?.orderId === order.id && event.metadata?.channel === 'email');
+  const orderDeliveryStatuses = new Set(orderDeliveryEvents.map((event) => event.status));
+  assert(orderDeliveryStatuses.has('queued') && orderDeliveryStatuses.has('succeeded'), `Commerce order delivery events were not exposed through /events: ${JSON.stringify(orderEventsPayload)}`);
+  const succeededOrderEmailEvent = orderDeliveryEvents.find((event) => event.status === 'succeeded');
+  assert(succeededOrderEmailEvent?.target === 'mailto:commerce-ops@example.com', `Commerce order delivery target was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
+  assert(succeededOrderEmailEvent?.metadata?.provider === 'local-outbox', `Commerce order delivery provider metadata was unexpected: ${JSON.stringify(succeededOrderEmailEvent)}`);
+  assert(succeededOrderEmailEvent?.metadata?.orderNumber === order.orderNumber, `Commerce order delivery metadata did not include order number: ${JSON.stringify(succeededOrderEmailEvent)}`);
   assert(orderRecord.values?.total === 106.86, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const customersCollection = await findCollection(CUSTOMERS_COLLECTION_SLUG);

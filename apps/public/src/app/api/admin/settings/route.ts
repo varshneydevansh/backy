@@ -626,6 +626,7 @@ const normalizeNotificationIntegrations = (value: unknown): BackyJsonObject | un
       ...email,
       newUser: false,
       pagePublished: false,
+      orderCreated: email.orderCreated === true,
       systemUpdates: false,
     },
     inApp: {
@@ -972,6 +973,7 @@ const buildInfrastructureDiagnostics = ({
   const vercelProductionDomain = stringValue(vercel.productionDomain) || runtimeVercel.url || '';
   const notificationEmailEnabled = boolValue(notificationEmail.formSubmission)
     || boolValue(notificationEmail.comments)
+    || boolValue(notificationEmail.orderCreated)
     || boolValue(notificationEmail.systemUpdates)
     || Boolean(stringValue(notificationEmail.recipient));
   const commerceWebhookRequired = boolValue(commerce.webhookEventsEnabled)

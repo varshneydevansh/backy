@@ -29,6 +29,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { notifyCommerceOrderCreated, type CommerceOrderNotificationOrder } from '@/lib/commerceOrderDelivery';
 
 interface RouteParams {
   params: Promise<{
@@ -159,6 +160,25 @@ const normalizeCheckoutInput = (body: Record<string, unknown>): CheckoutOrderInp
 };
 
 const buildOrderNumber = () => `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+const notifyOrderCreated = async (params: {
+  repositories?: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>> | null;
+  siteId: string;
+  order: CommerceOrderNotificationOrder;
+  requestId: string;
+}) => {
+  try {
+    return await notifyCommerceOrderCreated(params);
+  } catch (error) {
+    console.error('Commerce order notification delivery failed:', error);
+    return [{
+      attempted: false as const,
+      channel: 'system' as const,
+      status: 'failed' as const,
+      error: error instanceof Error ? error.message : 'Commerce order notification delivery failed.',
+    }];
+  }
+};
 
 const buildAbsoluteUrl = (request: NextRequest, path: string, params: Record<string, string> = {}): string => {
   const url = new URL(path.startsWith('/') ? path : `/${path}`, request.url);
@@ -1376,6 +1396,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         total: quote.total,
         requestId,
       });
+      const itemCount = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+      const deliveries = await notifyOrderCreated({
+        repositories,
+        siteId: site.id,
+        requestId,
+        order: {
+          id: order.id,
+          slug: order.slug,
+          orderNumber,
+          total: quote.total,
+          currency,
+          customerName: input.customer?.name || '',
+          email: input.customer?.email || '',
+          itemCount,
+          paymentStatus: values.paymentstatus,
+          fulfillmentStatus: values.fulfillmentstatus,
+          checkoutSessionId: checkoutSession.id,
+        },
+      });
 
       return publicContractJson({
         success: true,
@@ -1395,7 +1434,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             shippingAmount: quote.shippingAmount,
             discountAmount: quote.discountAmount,
             currency,
-            itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
+            itemCount,
             createdAt: order.createdAt,
           },
           customer: customerProfile ? {
@@ -1406,6 +1445,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           checkoutSession,
           quote,
           lineItems,
+          deliveries,
         },
       }, {
         status: 201,
@@ -1579,6 +1619,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       total: quote.total,
       requestId,
     });
+    const itemCount = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+    const deliveries = await notifyOrderCreated({
+      siteId: site.id,
+      requestId,
+      order: {
+        id: order.id,
+        slug: order.slug,
+        orderNumber,
+        total: quote.total,
+        currency,
+        customerName: input.customer?.name || '',
+        email: input.customer?.email || '',
+        itemCount,
+        paymentStatus: 'pending',
+        fulfillmentStatus: 'unfulfilled',
+        checkoutSessionId: checkoutSession.id,
+      },
+    });
 
     return publicContractJson({
       success: true,
@@ -1598,7 +1656,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           shippingAmount: quote.shippingAmount,
           discountAmount: quote.discountAmount,
           currency,
-          itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
+          itemCount,
           createdAt: order.createdAt,
         },
         customer: customerProfile ? {
@@ -1609,6 +1667,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         checkoutSession,
         quote,
         lineItems,
+        deliveries,
       },
     }, {
       status: 201,

@@ -784,12 +784,14 @@ const assertOrdersLayout = async (client) => {
       api: Boolean(document.querySelector('#orders-api')),
       metrics: Boolean(document.querySelector('#orders-metrics')),
       analytics: Boolean(document.querySelector('[data-testid="orders-analytics-panel"]')),
+      notificationDelivery: Boolean(document.querySelector('[data-testid="orders-notification-delivery"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
       privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
       analyticsEndpoint: document.body?.innerText?.includes('/commerce/orders/analytics') || false,
+      deliveryEndpoint: document.body?.innerText?.includes('/events?kind=commerce-order') || false,
       hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
         Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
@@ -801,7 +803,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.notificationDelivery && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);

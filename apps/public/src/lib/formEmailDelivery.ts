@@ -13,8 +13,9 @@ export interface EmailDeliveryMessage {
   formId?: string;
   submissionId?: string;
   commentId?: string;
+  orderId?: string;
   userId?: string;
-  entityType?: 'form-submission' | 'comment' | 'admin-invite' | 'admin-password-reset';
+  entityType?: 'form-submission' | 'comment' | 'commerce-order' | 'admin-invite' | 'admin-password-reset';
   status: string;
   requestId: string;
   values?: Record<string, unknown>;
@@ -219,6 +220,67 @@ export const buildCommentNotificationEmail = (params: {
   };
 };
 
+export const buildCommerceOrderNotificationEmail = (params: {
+  config: EmailDeliveryConfig;
+  siteId: string;
+  order: {
+    id: string;
+    slug?: string;
+    orderNumber: string;
+    total: number;
+    currency: string;
+    customerName?: string;
+    email?: string;
+    itemCount?: number;
+    paymentStatus?: string;
+    fulfillmentStatus?: string;
+    checkoutSessionId?: string;
+  };
+  requestId: string;
+  to: string;
+}): EmailDeliveryMessage => {
+  const subject = `New order ${params.order.orderNumber}`;
+  const text = [
+    `Backy received a new commerce order for ${params.siteId}.`,
+    '',
+    `Site: ${params.siteId}`,
+    `Order: ${params.order.id}`,
+    `Order number: ${params.order.orderNumber}`,
+    `Status: ${params.order.paymentStatus || 'pending'} / ${params.order.fulfillmentStatus || 'unfulfilled'}`,
+    `Total: ${params.order.currency} ${params.order.total.toFixed(2)}`,
+    `Items: ${params.order.itemCount ?? 0}`,
+    `Customer: ${params.order.customerName || params.order.email || 'Customer'}`,
+    params.order.email ? `Email: ${params.order.email}` : '',
+    params.order.checkoutSessionId ? `Checkout session: ${params.order.checkoutSessionId}` : '',
+    `Request: ${params.requestId}`,
+  ].filter(Boolean).join('\n');
+
+  return {
+    to: params.to,
+    from: params.config.from,
+    subject,
+    text,
+    siteId: params.siteId,
+    orderId: params.order.id,
+    entityType: 'commerce-order',
+    status: params.order.paymentStatus || 'pending',
+    requestId: params.requestId,
+    values: {
+      orderId: params.order.id,
+      orderSlug: params.order.slug || '',
+      orderNumber: params.order.orderNumber,
+      total: params.order.total,
+      currency: params.order.currency,
+      itemCount: params.order.itemCount || 0,
+      customerName: params.order.customerName || '',
+      email: params.order.email || '',
+      paymentStatus: params.order.paymentStatus || 'pending',
+      fulfillmentStatus: params.order.fulfillmentStatus || 'unfulfilled',
+      checkoutSessionId: params.order.checkoutSessionId || '',
+    },
+  };
+};
+
 const extractEmailAddress = (value: string): string => {
   const match = value.match(/<([^>]+)>/);
   return (match?.[1] || value).trim();
@@ -229,7 +291,7 @@ const escapeSmtpHeader = (value: string): string => value.replace(/[\r\n]+/g, ' 
 const escapeSmtpBody = (value: string): string => value.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
 
 const buildSmtpMessage = (message: EmailDeliveryMessage): string => {
-  const entityId = message.submissionId || message.commentId || message.requestId;
+  const entityId = message.submissionId || message.commentId || message.orderId || message.requestId;
   return [
     `From: ${escapeSmtpHeader(message.from)}`,
     `To: ${escapeSmtpHeader(message.to)}`,
@@ -243,6 +305,7 @@ const buildSmtpMessage = (message: EmailDeliveryMessage): string => {
     ...(message.formId ? [`X-Backy-Form-ID: ${escapeSmtpHeader(message.formId)}`] : []),
     ...(message.submissionId ? [`X-Backy-Submission-ID: ${escapeSmtpHeader(message.submissionId)}`] : []),
     ...(message.commentId ? [`X-Backy-Comment-ID: ${escapeSmtpHeader(message.commentId)}`] : []),
+    ...(message.orderId ? [`X-Backy-Order-ID: ${escapeSmtpHeader(message.orderId)}`] : []),
     ...(message.userId ? [`X-Backy-Admin-User-ID: ${escapeSmtpHeader(message.userId)}`] : []),
     '',
     escapeSmtpBody(message.text),
@@ -359,6 +422,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
     if (message.formId) headers['x-backy-form-id'] = message.formId;
     if (message.submissionId) headers['x-backy-submission-id'] = message.submissionId;
     if (message.commentId) headers['x-backy-comment-id'] = message.commentId;
+    if (message.orderId) headers['x-backy-order-id'] = message.orderId;
     if (message.userId) headers['x-backy-admin-user-id'] = message.userId;
 
     const response = await fetch(config.endpoint, {
@@ -373,6 +437,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
         formId: message.formId,
         submissionId: message.submissionId,
         commentId: message.commentId,
+        orderId: message.orderId,
         userId: message.userId,
         entityType: message.entityType,
         status: message.status,
@@ -406,6 +471,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
           ...(message.formId ? { 'X-Backy-Form-ID': message.formId } : {}),
           ...(message.submissionId ? { 'X-Backy-Submission-ID': message.submissionId } : {}),
           ...(message.commentId ? { 'X-Backy-Comment-ID': message.commentId } : {}),
+          ...(message.orderId ? { 'X-Backy-Order-ID': message.orderId } : {}),
           ...(message.userId ? { 'X-Backy-Admin-User-ID': message.userId } : {}),
         },
       }),

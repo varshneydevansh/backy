@@ -614,6 +614,7 @@ function normalizeNotificationSettings(
       ...(settings.email || {}),
       newUser: false,
       pagePublished: false,
+      orderCreated: settings.email?.orderCreated === true,
       systemUpdates: false,
     },
     inApp: {
@@ -2697,6 +2698,7 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
     newUser: false,
     pagePublished: false,
     formSubmission: false,
+    orderCreated: false,
     comments: true,
     systemUpdates: false,
     recipient: '',
@@ -3376,7 +3378,7 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification email provider',
     description: 'Selects production email delivery for form, comment, invite, reset, and workflow notifications.',
     configured: Boolean(runtimeNotifications?.productionReady),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.systemUpdates),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.systemUpdates),
     valueHint: runtimeNotifications?.emailProvider,
     example: 'resend',
   },
@@ -3387,7 +3389,7 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification sender',
     description: 'Sender identity used by Backy notification emails.',
     configured: Boolean(runtimeNotifications?.from),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.systemUpdates),
+    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.systemUpdates),
     valueHint: runtimeNotifications?.from,
     example: 'Backy <notifications@example.com>',
   },
@@ -4991,6 +4993,7 @@ function NotificationSettings({
               { key: 'newUser' as const, label: 'New user registration', live: false },
               { key: 'pagePublished' as const, label: 'Page published', live: false },
               { key: 'formSubmission' as const, label: 'New form submission', live: true },
+              { key: 'orderCreated' as const, label: 'New commerce order', live: true },
               { key: 'systemUpdates' as const, label: 'System updates', live: false },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
@@ -5126,7 +5129,7 @@ function NotificationSettings({
                   <div>{delivery.error || delivery.targetSummary || delivery.target}</div>
                 </div>
               ) : (
-                'Send a test event before relying on this endpoint for comment and workflow delivery.'
+                'Send a test event before relying on this endpoint for comment, commerce order, and workflow delivery.'
               )}
             </div>
           </div>
@@ -5134,7 +5137,7 @@ function NotificationSettings({
       </Panel>
 
       <Notice tone="info" title="Runtime behavior">
-        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Activity controls audit-based header notifications. Comment emails and comment webhooks are recorded in delivery activity when a recipient or webhook URL is configured. The test controls execute the Settings webhook immediately and record test/retry audit events.
+        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved. Activity controls audit-based header notifications. Comment and commerce order emails plus workflow webhooks are recorded in delivery activity when a recipient or webhook URL is configured. The test controls execute the Settings webhook immediately and record test/retry audit events.
       </Notice>
     </div>
   );

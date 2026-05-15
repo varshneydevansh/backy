@@ -470,6 +470,7 @@ const SITE_WEBHOOK_EVENT_KINDS: SiteWebhookEventKind[] = [
   'contact-shared',
   'contact-sync',
   'contact-status',
+  'commerce-order',
   'commerce-webhook',
   'comment-submitted',
   'comment-status',

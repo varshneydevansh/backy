@@ -848,6 +848,21 @@ interface ApiListCommentDeliveryEventsResponse {
   };
 }
 
+interface ApiListOrderDeliveryEventsResponse {
+  success: boolean;
+  data?: {
+    events: OrderDeliveryEvent[];
+    count?: number;
+    pagination?: ApiPagination;
+  };
+  events?: OrderDeliveryEvent[];
+  count?: number;
+  pagination?: ApiPagination;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiCommentDeliveryRetryResponse {
   success: boolean;
   requestId?: string;
@@ -1805,6 +1820,7 @@ export interface SiteSettingsInput {
         newUser?: boolean;
         pagePublished?: boolean;
         formSubmission?: boolean;
+        orderCreated?: boolean;
         comments?: boolean;
         systemUpdates?: boolean;
         recipient?: string;
@@ -2226,8 +2242,29 @@ export interface CommentDeliveryEvent {
   createdAt: string;
 }
 
+export interface OrderDeliveryEvent {
+  id: string;
+  siteId: string;
+  kind: 'commerce-order' | string;
+  target: string;
+  status: 'queued' | 'succeeded' | 'failed' | 'received' | string;
+  statusCode?: number;
+  requestId?: string | null;
+  reason?: string | null;
+  actor?: string | null;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  createdAt: string;
+}
+
 export interface CommentDeliveryEventList {
   events: CommentDeliveryEvent[];
+  count: number;
+  pagination?: ApiPagination;
+}
+
+export interface OrderDeliveryEventList {
+  events: OrderDeliveryEvent[];
   count: number;
   pagination?: ApiPagination;
 }
@@ -5068,6 +5105,32 @@ export async function listCommentDeliveryEvents(
 
   if (!response.ok || !payload.success || !events) {
     throw new Error(payload.error?.message || 'Unable to load comment delivery events');
+  }
+
+  return {
+    events,
+    count,
+    pagination,
+  };
+}
+
+export async function listOrderDeliveryEvents(
+  siteId: string,
+  filters: { limit?: number; offset?: number } = {},
+): Promise<OrderDeliveryEventList> {
+  const query = new URLSearchParams();
+  query.set('kind', 'commerce-order');
+  query.set('limit', String(filters.limit || 50));
+  query.set('offset', String(filters.offset || 0));
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/events?${query.toString()}`);
+  const payload = await readJson<ApiListOrderDeliveryEventsResponse>(response);
+  const events = payload.data?.events || payload.events;
+  const count = payload.data?.count ?? payload.count ?? events?.length ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination;
+
+  if (!response.ok || !payload.success || !events) {
+    throw new Error(payload.error?.message || 'Unable to load order delivery events');
   }
 
   return {
