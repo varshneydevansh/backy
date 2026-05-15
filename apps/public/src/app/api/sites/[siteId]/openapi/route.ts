@@ -2928,7 +2928,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     slug: { type: 'string' },
                     variantId: { type: 'string' },
                     variantSku: { type: 'string' },
-                    quantity: { type: 'integer', minimum: 1 },
+                    quantity: { type: 'integer', minimum: 1, maximum: 999 },
                   },
                 },
               },

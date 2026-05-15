@@ -21,6 +21,7 @@ const ORDER_REQUIRED_FIELD_COUNT = 29;
 const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
 const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
+const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 let apiAdminSessionToken = '';
 
 const PRODUCT_VALUE_KEYS = {
@@ -257,7 +258,7 @@ const enableCommercePricingSettings = async (settings) => {
       checkoutSuccessPath: '/checkout/success',
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
-      providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET,
+      providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
       providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
@@ -1197,6 +1198,27 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(product.delivery?.shippingProfile === 'standard-box', `Public shipping profile was unexpected: ${JSON.stringify(product.delivery)}`);
   assert(product.delivery?.taxClass === 'standard', `Public tax class was unexpected: ${JSON.stringify(product.delivery)}`);
   assert(product.delivery?.returnPolicy === '30-day returns for unopened smoke-test products.', `Public return policy was unexpected: ${JSON.stringify(product.delivery)}`);
+
+  const invalidQuantityResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      customer: {
+        name: 'Commerce Smoke Buyer',
+        email: 'commerce-smoke-invalid-quantity@example.com',
+      },
+      items: [{ slug, quantity: 1.5 }],
+    }),
+  });
+  const invalidQuantityPayload = await invalidQuantityResponse.json().catch(() => ({}));
+  assert(invalidQuantityResponse.status === 400, `Fractional checkout quantity should be rejected: ${invalidQuantityResponse.status} ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`);
+  assert(invalidQuantityPayload.error?.code === 'VALIDATION_ERROR', `Fractional checkout quantity returned wrong error: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`);
+  assert(
+    JSON.stringify(invalidQuantityPayload.error?.details || []).includes('whole number between 1 and 999'),
+    `Fractional checkout quantity did not expose the quantity validation detail: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`,
+  );
 
   const orderPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
     method: 'POST',

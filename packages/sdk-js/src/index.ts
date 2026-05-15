@@ -461,6 +461,7 @@ export interface BackyCommerceCatalogOptions extends BackyListOptions {
 export interface BackyCommerceLineItemInput {
   productId?: string;
   slug?: string;
+  /** Whole checkout quantity from 1 to 999. */
   quantity?: number;
 }
 

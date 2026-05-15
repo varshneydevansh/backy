@@ -84,6 +84,7 @@ const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_CONTRACT_VERSION = 'backy.commerce-orders.v1';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_CHECKOUT_ITEM_QUANTITY = 999;
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -359,13 +360,20 @@ const validateCheckoutInput = (input: CheckoutOrderInput): string[] => {
     if (!textValue(item.productId) && !textValue(item.slug)) {
       errors.push(`items[${index}] requires productId or slug`);
     }
-    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) {
-      errors.push(`items[${index}].quantity must be greater than 0`);
+    const quantity = Number(item.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_CHECKOUT_ITEM_QUANTITY) {
+      errors.push(`items[${index}].quantity must be a whole number between 1 and ${MAX_CHECKOUT_ITEM_QUANTITY}`);
     }
   });
 
   return errors;
 };
+
+const quantityForCheckoutItem = (item: CheckoutItemInput): number => (
+  Number.isInteger(Number(item.quantity))
+    ? Math.max(1, Math.min(MAX_CHECKOUT_ITEM_QUANTITY, Number(item.quantity)))
+    : 1
+);
 
 const requireGuestCheckoutAllowed = (
   commerce: CommerceStorefrontContract,
@@ -1234,7 +1242,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const reservationsEnabled = commerce.inventory.reservations;
       const inventoryReservations = new Map<string, InventoryReservation>();
       for (const item of input.items || []) {
-        const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
+        const quantity = quantityForCheckoutItem(item);
         const record = textValue(item.productId)
           ? await repositories.collections.getRecordById(site.id, productsCollection.id, textValue(item.productId))
           : await repositories.collections.getRecordBySlug(site.id, productsCollection.id, textValue(item.slug));
@@ -1435,7 +1443,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const reservationsEnabled = commerce.inventory.reservations;
     const inventoryReservations = new Map<string, InventoryReservation>();
     for (const item of input.items || []) {
-      const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
+      const quantity = quantityForCheckoutItem(item);
       const record = getCollectionRecordByIdOrSlug(
         site.id,
         productsCollection.id,
