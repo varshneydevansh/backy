@@ -23,6 +23,8 @@ const STRIPE_TAX_MOCK_PORT = Number(process.env.BACKY_STRIPE_TAX_MOCK_PORT || 45
 const STRIPE_TAX_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_TAX_MOCK_PORT}`;
 const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT || 45680);
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
+const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
+const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -282,6 +284,115 @@ const createStripeRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(STRIPE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const easyPostExecutionEnabled = () => {
+  const secret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_EASYPOST_API_BASE_URL || process.env.EASYPOST_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === EASYPOST_MOCK_BASE_URL);
+};
+
+const createEasyPostMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'POST' && request.url === '/v2/shipments') {
+        response.end(JSON.stringify({
+          id: 'shp_smoke_1',
+          object: 'Shipment',
+          mode: 'test',
+          status: 'unknown',
+          tracking_code: '',
+          rates: [{
+            id: 'rate_smoke_ground',
+            carrier: 'UPS',
+            service: 'Ground',
+            rate: '7.25',
+          }],
+        }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/v2/shipments/shp_smoke_1/buy') {
+        response.end(JSON.stringify({
+          id: 'shp_smoke_1',
+          object: 'Shipment',
+          mode: 'test',
+          status: 'purchased',
+          tracking_code: 'EZTRACK1',
+          selected_rate: {
+            id: 'rate_smoke_ground',
+            carrier: 'UPS',
+            service: 'Ground',
+            rate: '7.25',
+          },
+          postage_label: {
+            id: 'pl_smoke_1',
+            label_url: 'https://labels.easypost.test/shp_smoke_1.pdf',
+            label_file_type: 'application/pdf',
+            label_date: '2026-05-16T00:00:00Z',
+          },
+        }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/v2/shipments/shp_smoke_1/refund') {
+        response.end(JSON.stringify({
+          id: 'shp_smoke_1',
+          object: 'Shipment',
+          mode: 'test',
+          status: 'purchased',
+          refund_status: 'submitted',
+          tracking_code: 'EZTRACK1',
+          selected_rate: {
+            id: 'rate_smoke_ground',
+            carrier: 'UPS',
+            service: 'Ground',
+            rate: '7.25',
+          },
+          postage_label: {
+            id: 'pl_smoke_1',
+            label_url: 'https://labels.easypost.test/shp_smoke_1.pdf',
+            label_file_type: 'application/pdf',
+            label_date: '2026-05-16T00:00:00Z',
+          },
+        }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/v2/trackers') {
+        response.end(JSON.stringify({
+          id: 'trk_smoke_1',
+          object: 'Tracker',
+          mode: 'test',
+          status: 'delivered',
+          carrier: 'UPS',
+          tracking_code: body?.tracker?.tracking_code || 'EZTRACK1',
+          public_url: 'https://track.easypost.test/EZTRACK1',
+          signed_by: 'Backy Smoke',
+          est_delivery_date: '2026-05-16',
+          created_at: '2026-05-16T00:00:00Z',
+          updated_at: '2026-05-16T00:05:00Z',
+        }));
+        return;
+      }
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { code: 'not_found', message: `Unhandled EasyPost mock path ${request.method} ${request.url}` } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(EASYPOST_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1494,6 +1605,116 @@ const prepareStripeProviderRefundThroughUi = async (client, orderNumber, suffix)
   return null;
 };
 
+const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyPostMockServer) => {
+  const expectedSecret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY;
+  const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
+  const labelResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${beforeLabelRecord.id}/shipping-label`, {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'easypost',
+      executionProvider: 'easypost',
+      carrier: 'UPS',
+      serviceLevel: 'Ground',
+      rateId: 'rate_smoke_ground',
+      fromAddress: {
+        name: 'Backy Warehouse',
+        street1: '100 Fulfillment Way',
+        city: 'Austin',
+        state: 'TX',
+        zip: '78701',
+        country: 'US',
+        phone: '5555550100',
+      },
+      toAddress: {
+        name: 'Orders Smoke Customer',
+        street1: '200 Customer Lane',
+        city: 'San Francisco',
+        state: 'CA',
+        zip: '94105',
+        country: 'US',
+        phone: '5555550101',
+      },
+      parcel: {
+        length: 8,
+        width: 6,
+        height: 2,
+        weight: 12,
+      },
+    }),
+  });
+  assert(labelResponse.data?.label?.status === 'purchased', `EasyPost label purchase did not return a purchased label: ${JSON.stringify(labelResponse)}`);
+  assert(labelResponse.data?.label?.id === 'shp_smoke_1', `EasyPost label purchase did not persist shipment id: ${JSON.stringify(labelResponse.data?.label)}`);
+  assert(labelResponse.data?.label?.url === 'https://labels.easypost.test/shp_smoke_1.pdf', `EasyPost label purchase did not persist label URL: ${JSON.stringify(labelResponse.data?.label)}`);
+  assert(labelResponse.data?.label?.providerPayload?.executionMode === 'easypost-api', `EasyPost label purchase did not expose execution metadata: ${JSON.stringify(labelResponse.data?.label)}`);
+
+  const shipmentCreateRequest = easyPostMockServer.requests.find((request) => request.url === '/v2/shipments');
+  const shipmentBuyRequest = easyPostMockServer.requests.find((request) => request.url === '/v2/shipments/shp_smoke_1/buy');
+  const expectedAuth = `Basic ${Buffer.from(`${expectedSecret}:`).toString('base64')}`;
+  assert(shipmentCreateRequest?.headers.authorization === expectedAuth, `EasyPost shipment create did not receive bearer-equivalent basic auth: ${JSON.stringify(shipmentCreateRequest?.headers)}`);
+  assert(shipmentCreateRequest?.body?.shipment?.reference, `EasyPost shipment create did not include order reference: ${JSON.stringify(shipmentCreateRequest?.body)}`);
+  assert(shipmentBuyRequest?.body?.rate?.id === 'rate_smoke_ground', `EasyPost shipment buy did not select the expected rate: ${JSON.stringify(shipmentBuyRequest?.body)}`);
+
+  const purchasedRecord = await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => (
+      values.shippinglabelstatus === 'purchased' &&
+      values.shippinglabelid === 'shp_smoke_1' &&
+      values.shippinglabelurl === 'https://labels.easypost.test/shp_smoke_1.pdf' &&
+      values.shippingservicelevel === 'Ground' &&
+      Number(values.shippinglabelcost) === 7.25
+    ),
+    'EasyPost label purchase did not persist purchased label fields',
+  );
+  const labelGetPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${purchasedRecord.id}/shipping-label`);
+  assert(labelGetPayload.data?.label?.status === 'purchased' && labelGetPayload.data?.label?.id === 'shp_smoke_1', `Shipping label GET did not return the EasyPost purchased label: ${JSON.stringify(labelGetPayload)}`);
+
+  const voidResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${purchasedRecord.id}/shipping-label`, {
+    method: 'DELETE',
+    body: JSON.stringify({ executionProvider: 'easypost' }),
+  });
+  assert(voidResponse.data?.label?.status === 'voided', `EasyPost label void did not return a voided label: ${JSON.stringify(voidResponse)}`);
+  assert(voidResponse.data?.label?.providerPayload?.executionMode === 'easypost-api', `EasyPost label void did not expose execution metadata: ${JSON.stringify(voidResponse.data?.label)}`);
+  assert(easyPostMockServer.requests.some((request) => request.url === '/v2/shipments/shp_smoke_1/refund'), `EasyPost mock did not receive shipment refund request: ${JSON.stringify(easyPostMockServer.requests)}`);
+
+  const voidedRecord = await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => values.shippinglabelstatus === 'voided' && values.shippinglabelid === 'shp_smoke_1',
+    'EasyPost label void did not persist voided label fields',
+  );
+
+  const trackingResponse = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${voidedRecord.id}/tracking`, {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'UPS',
+      executionProvider: 'easypost',
+      trackingNumber: `EZTRACK-${suffix}`,
+    }),
+  });
+  assert(trackingResponse.data?.tracking?.status === 'delivered', `EasyPost tracking did not return delivered status: ${JSON.stringify(trackingResponse)}`);
+  assert(trackingResponse.data?.tracking?.providerPayload?.executionMode === 'easypost-api', `EasyPost tracking did not expose execution metadata: ${JSON.stringify(trackingResponse.data?.tracking)}`);
+  const trackerRequest = easyPostMockServer.requests.find((request) => (
+    request.url === '/v2/trackers' && request.body?.tracker?.tracking_code === `EZTRACK-${suffix}`
+  ));
+  assert(trackerRequest?.body?.tracker?.tracking_code === `EZTRACK-${suffix}`, `EasyPost tracker request did not include tracking code: ${JSON.stringify(trackerRequest?.body)}`);
+  assert(trackerRequest?.headers.authorization === expectedAuth, `EasyPost tracker request did not receive expected auth: ${JSON.stringify(trackerRequest?.headers)}`);
+
+  await waitForOrderValue(
+    collectionId,
+    slug,
+    (values) => (
+      values.orderstatus === 'fulfilled' &&
+      values.fulfillmentstatus === 'fulfilled' &&
+      values.trackingnumber === `EZTRACK-${suffix}` &&
+      values.trackingstatus === 'delivered' &&
+      values.trackingurl === 'https://track.easypost.test/EZTRACK1' &&
+      Boolean(values.trackinglastcheckedat)
+    ),
+    'EasyPost tracking did not persist delivered tracking fields',
+  );
+};
+
 const clickReconcileProvider = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
@@ -1658,6 +1879,7 @@ const main = async () => {
   let quoteProviderServer;
   let stripeTaxMockServer;
   let stripeRefundMockServer;
+  let easyPostMockServer;
   let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
@@ -1912,15 +2134,20 @@ const main = async () => {
       'Prepare Label did not create a replacement shipment label after void',
     );
 
+    if (easyPostExecutionEnabled() && !easyPostMockServer) {
+      easyPostMockServer = await createEasyPostMockServer();
+    }
     await clickOrderCardButton(client, orderNumber, 'Refresh Tracking');
     await waitForOrderValue(
       collectionId,
       slug,
       (values) => (
-        values.fulfillmentstatus === 'processing' &&
+        values.orderstatus === (easyPostExecutionEnabled() ? 'fulfilled' : 'paid') &&
+        values.fulfillmentstatus === (easyPostExecutionEnabled() ? 'fulfilled' : 'processing') &&
         values.trackingnumber === 'WHSMOKE1' &&
-        values.trackingstatus === 'processing' &&
+        values.trackingstatus === (easyPostExecutionEnabled() ? 'delivered' : 'processing') &&
         Boolean(values.trackinglastcheckedat) &&
+        (!easyPostExecutionEnabled() || values.trackingurl === 'https://track.easypost.test/EZTRACK1') &&
         /Tracking refreshed/.test(String(values.notes || ''))
       ),
       'Refresh Tracking did not persist tracking status fields',
@@ -1928,23 +2155,29 @@ const main = async () => {
 
     const trackingRecord = await getCollectionRecordBySlug(collectionId, slug);
     const trackingPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${trackingRecord.id}/tracking`);
-    assert(trackingPayload.data?.tracking?.status === 'processing', `Tracking endpoint did not return refreshed status: ${JSON.stringify(trackingPayload)}`);
+    assert(trackingPayload.data?.tracking?.status === (easyPostExecutionEnabled() ? 'delivered' : 'processing'), `Tracking endpoint did not return refreshed status: ${JSON.stringify(trackingPayload)}`);
 
-    await clickOrderCardButton(client, orderNumber, 'Fulfill');
-    await waitForOrderValue(
-      collectionId,
-      slug,
-      (values) => (
-        values.orderstatus === 'fulfilled' &&
-        values.paymentstatus === 'paid' &&
-        values.fulfillmentstatus === 'fulfilled' &&
-        Boolean(values.paidat) &&
-        Boolean(values.fulfilledat) &&
-        (values.refundamount === null || values.refundamount === undefined) &&
-        (values.refundreason === '' || values.refundreason === undefined)
-      ),
-      'Fulfill did not persist fulfillment workflow fields',
-    );
+    if (!easyPostExecutionEnabled()) {
+      await clickOrderCardButton(client, orderNumber, 'Fulfill');
+      await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.orderstatus === 'fulfilled' &&
+          values.paymentstatus === 'paid' &&
+          values.fulfillmentstatus === 'fulfilled' &&
+          Boolean(values.paidat) &&
+          Boolean(values.fulfilledat) &&
+          (values.refundamount === null || values.refundamount === undefined) &&
+          (values.refundreason === '' || values.refundreason === undefined)
+        ),
+        'Fulfill did not persist fulfillment workflow fields',
+      );
+    }
+
+    if (easyPostExecutionEnabled()) {
+      await verifyEasyPostProviderExecution(collectionId, slug, suffix, easyPostMockServer);
+    }
 
     await clickOrderCardButton(client, orderNumber, 'Record Refund/Return');
     await waitForOrderValue(
@@ -2207,6 +2440,9 @@ const main = async () => {
     }
     if (stripeRefundMockServer) {
       await stripeRefundMockServer.close().catch(() => {});
+    }
+    if (easyPostMockServer) {
+      await easyPostMockServer.close().catch(() => {});
     }
     if (fulfillmentProviderServer) {
       await fulfillmentProviderServer.close().catch(() => {});

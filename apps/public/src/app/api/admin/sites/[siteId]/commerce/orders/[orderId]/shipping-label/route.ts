@@ -48,7 +48,6 @@ interface CollectionRecordAuditSource {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
-const EASYPOST_API_BASE = 'https://api.easypost.com/v2';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -168,6 +167,12 @@ const easyPostApiKey = () => (
   || ''
 );
 
+const easyPostApiBaseUrl = () => (
+  process.env.BACKY_EASYPOST_API_BASE_URL?.trim()
+  || process.env.EASYPOST_API_BASE_URL?.trim()
+  || 'https://api.easypost.com/v2'
+).replace(/\/$/, '');
+
 const normalizeProviderKey = (value: string): string => value.toLowerCase().replace(/[\s_-]+/g, '');
 
 const canExecuteEasyPostLabel = (body: Record<string, unknown>): boolean => {
@@ -274,7 +279,7 @@ const easyPostHeaders = () => ({
 });
 
 const easyPostRequest = async (path: string, body: Record<string, unknown>) => {
-  const response = await fetch(`${EASYPOST_API_BASE}${path}`, {
+  const response = await fetch(`${easyPostApiBaseUrl()}${path}`, {
     method: 'POST',
     headers: easyPostHeaders(),
     body: JSON.stringify(body),
