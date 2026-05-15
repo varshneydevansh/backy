@@ -773,6 +773,28 @@ const validateInfrastructureProviderSettings = (integrations: unknown): string |
   return null;
 };
 
+const validateStoragePolicySettings = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const storage = parseJsonObject(input?.storage) || {};
+  const checks = [
+    { key: 'maxFileSizeMb', label: 'Max upload size', min: 1, max: 2048, unit: 'MB' },
+    { key: 'workspaceStorageLimitGb', label: 'Workspace storage limit', min: 1, max: 102400, unit: 'GB' },
+    { key: 'warningThresholdPercent', label: 'Storage warning threshold', min: 50, max: 100, unit: 'percent' },
+  ];
+
+  for (const check of checks) {
+    if (storage[check.key] === undefined) {
+      continue;
+    }
+    const value = numberValue(storage[check.key], Number.NaN);
+    if (!Number.isFinite(value) || value < check.min || value > check.max) {
+      return `${check.label} must be from ${check.min} to ${check.max} ${check.unit}.`;
+    }
+  }
+
+  return null;
+};
+
 const validateCommerceOperationalSettings = (integrations: unknown): string | null => {
   const input = parseJsonObject(integrations);
   const commerce = parseJsonObject(input?.commerce) || {};
@@ -2586,6 +2608,13 @@ export async function PATCH(request: NextRequest) {
         'Delivery mode must be managed-hosting or custom-frontend',
         requestId,
       );
+    }
+
+    const storagePolicyError = body.integrations !== undefined
+      ? validateStoragePolicySettings(body.integrations)
+      : null;
+    if (storagePolicyError) {
+      return errorResponse(400, 'VALIDATION_ERROR', storagePolicyError, requestId);
     }
 
     if (!shouldUseDemoStoreFallback()) {

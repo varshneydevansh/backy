@@ -1569,6 +1569,66 @@ const assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings = asyn
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidStoragePolicySettings = async (settings) => {
+  const sendInvalidStoragePolicyPatch = async (label, storagePatch) => {
+    const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...(settings.integrations || {}),
+          storage: {
+            ...(settings.integrations?.storage || {}),
+            ...storagePatch,
+          },
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 400, `${label} should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'VALIDATION_ERROR', `${label} rejection should return VALIDATION_ERROR: ${JSON.stringify(payload).slice(0, 500)}`);
+
+    return {
+      status: response.status,
+      code: payload.error?.code,
+    };
+  };
+
+  const maxFileSize = await sendInvalidStoragePolicyPatch('Invalid max upload size', {
+    maxFileSizeMb: 0,
+  });
+  const workspaceLimit = await sendInvalidStoragePolicyPatch('Invalid workspace storage limit', {
+    workspaceStorageLimitGb: 102401,
+  });
+  const warningThreshold = await sendInvalidStoragePolicyPatch('Invalid storage warning threshold', {
+    warningThresholdPercent: 10,
+  });
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.storage?.maxFileSizeMb === settings.integrations?.storage?.maxFileSizeMb,
+    `Rejected max upload patch should not mutate persisted storage policy: ${JSON.stringify(after.integrations?.storage).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.storage?.workspaceStorageLimitGb === settings.integrations?.storage?.workspaceStorageLimitGb,
+    `Rejected workspace storage limit patch should not mutate persisted storage policy: ${JSON.stringify(after.integrations?.storage).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.storage?.warningThresholdPercent === settings.integrations?.storage?.warningThresholdPercent,
+    `Rejected storage warning threshold patch should not mutate persisted storage policy: ${JSON.stringify(after.integrations?.storage).slice(0, 500)}`,
+  );
+
+  return {
+    maxFileSize,
+    workspaceLimit,
+    warningThreshold,
+  };
+};
+
 const assertDirectSettingsApiRejectsInvalidOperationalSettings = async (settings) => {
   const sendInvalidSettingsPatch = async (label, body) => {
     const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
@@ -1836,6 +1896,7 @@ const main = async () => {
     const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
     const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
     const infrastructureProviderValidation = await assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings(await readSettings());
+    const storagePolicyValidation = await assertDirectSettingsApiRejectsInvalidStoragePolicySettings(await readSettings());
     const operationalSettingsValidation = await assertDirectSettingsApiRejectsInvalidOperationalSettings(await readSettings());
     const brandSeoValidation = await assertDirectSettingsApiRejectsInvalidBrandSeoSettings(await readSettings());
 
@@ -1870,6 +1931,7 @@ const main = async () => {
       providerEndpointValidation,
       callbackUrlValidation,
       infrastructureProviderValidation,
+      storagePolicyValidation,
       operationalSettingsValidation,
       brandSeoValidation,
       persisted: {
