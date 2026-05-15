@@ -206,6 +206,19 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestApiRaw = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...((endpoint.startsWith('/api/admin/') || endpoint.includes('/events?')) && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
 const commerceWebhookSignature = (body) => `sha256=${createHmac('sha256', COMMERCE_WEBHOOK_SECRET).update(body, 'utf8').digest('hex')}`;
 
 const postCommerceWebhook = async (body, headers = {}) => {
@@ -328,6 +341,21 @@ const getSettings = async () => {
   const settings = payload.data?.settings;
   assert(settings?.integrations, `Settings response did not include integrations: ${JSON.stringify(payload).slice(0, 500)}`);
   return JSON.parse(JSON.stringify(settings));
+};
+
+const getSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Site response did not include a site: ${JSON.stringify(payload).slice(0, 500)}`);
+  return JSON.parse(JSON.stringify(site));
+};
+
+const patchSite = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
 };
 
 const patchSettingsFromSnapshot = async (settings) => {
@@ -758,6 +786,71 @@ const listAllCollectionRecords = async (collectionId, query = '') => {
 const getCollectionRecordBySlug = async (collectionId, slug) => {
   const records = await listCollectionRecords(collectionId, `?slug=${encodeURIComponent(slug)}`);
   return records[0] || null;
+};
+
+const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
+  assert(productCollection?.id, 'Products collection is required for billing limit smoke.');
+  const site = await getSite();
+  const settings = await getSettings();
+  const existingProducts = await listAllCollectionRecords(productCollection.id);
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedSlug = `blocked-product-limit-${suffix}`;
+
+  await patchSettingsFromSnapshot({
+    ...settings,
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await patchSite({
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          products: existingProducts.length,
+        },
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records`, {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: blockedSlug,
+        status: 'draft',
+        values: {
+          title: `Blocked Product Limit ${suffix}`,
+          sku: `BLOCKED-${suffix.toUpperCase()}`,
+          price: 29,
+          currency: 'USD',
+          producttype: 'physical',
+          inventory: 3,
+        },
+      }),
+    });
+
+    assert(response.status === 402, `Billing product limit should reject product creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_PRODUCT_LIMIT', `Billing product limit should return BILLING_PRODUCT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const persisted = await getCollectionRecordBySlug(productCollection.id, blockedSlug);
+    assert(!persisted, `Billing-limited product creation unexpectedly persisted a product: ${JSON.stringify(persisted).slice(0, 500)}`);
+  } finally {
+    await patchSite({ settings: originalSiteSettings });
+    await patchSettingsFromSnapshot({
+      ...settings,
+      integrations: originalIntegrations,
+    });
+  }
 };
 
 const deleteCollectionRecord = async (collectionId, recordId) => {
@@ -2277,6 +2370,7 @@ const main = async () => {
 
     finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
     assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
+    await assertProductBillingLimitEnforced(finalProductCollection, suffix);
     await deleteExistingFrontendTemplateProducts(finalProductCollection);
     await clickFrontendTemplateCreateProduct(client);
     frontendTemplateProduct = await waitForFrontendTemplateProduct(finalProductCollection);

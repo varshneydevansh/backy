@@ -8,9 +8,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollection, BackyCollectionRecord, BackyJsonObject, BackyJsonValue, PublishStatus } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, type BackyCollection, type BackyCollectionRecord, type BackyJsonObject, type BackyJsonValue, type PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
+  getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
@@ -95,6 +96,50 @@ const parseStatus = (value: unknown): PublishStatus | undefined => (
     ? value
     : undefined
 );
+
+const readProductBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
+  const siteRoot = toRecord(siteSettings);
+  const workspaceRoot = toRecord(workspaceSettings);
+  const integrations = toRecord(workspaceRoot.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const billingQuota = toRecord(siteRoot.billingQuota);
+  const limits = toRecord(billingQuota.limits);
+  const limit = Number(limits.products);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    productLimit: Number.isFinite(limit) && limit >= 0
+      ? Math.round(limit)
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.products,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+const enforceProductBillingLimit = (
+  collection: CollectionAuditSource,
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  currentProductCount: number,
+  requestId: string,
+) => {
+  if (collection.slug !== 'products') {
+    return null;
+  }
+
+  const policy = readProductBillingPolicy(siteSettings, workspaceSettings);
+  if (policy.overageMode === 'block' && currentProductCount >= policy.productLimit) {
+    return errorResponse(
+      402,
+      'BILLING_PRODUCT_LIMIT',
+      `The ${policy.billingPlan} site plan allows ${policy.productLimit} product${policy.productLimit === 1 ? '' : 's'}. Update the site billing quota before creating another product.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const collectionRecordAuditMetadata = (
   collection: CollectionAuditSource,
@@ -378,6 +423,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid', requestId, validationErrors);
       }
 
+      const [settings, existingProducts] = await Promise.all([
+        repositories.settings.get(),
+        collection.slug === 'products'
+          ? repositories.collections.listRecords({
+              siteId: site.id,
+              collectionId: collection.id,
+              includeUnpublished: true,
+              status: 'all',
+              limit: 1,
+              offset: 0,
+            })
+          : Promise.resolve(null),
+      ]);
+      const billingLimitError = enforceProductBillingLimit(
+        collection,
+        site.settings,
+        settings,
+        existingProducts?.pagination.total || 0,
+        requestId,
+      );
+      if (billingLimitError) {
+        return billingLimitError;
+      }
+
       const record = (await repositories.collections.createRecord({
         siteId: site.id,
         collectionId: collection.id,
@@ -450,6 +519,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const validationErrors = validateCollectionRecordValues(collection, values);
     if (validationErrors.length > 0) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid', requestId, validationErrors);
+    }
+
+    const existingProducts = collection.slug === 'products'
+      ? listCollectionRecords(site.id, collection.id, { includeUnpublished: true, limit: 1, offset: 0 })
+      : null;
+    const billingLimitError = enforceProductBillingLimit(
+      collection,
+      site.settings,
+      getAdminSettings(),
+      existingProducts?.pagination.total || 0,
+      requestId,
+    );
+    if (billingLimitError) {
+      return billingLimitError;
     }
 
     const record = createAdminCollectionRecord(site.id, collection.id, {
