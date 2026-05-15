@@ -21,7 +21,7 @@ import {
   resolvePublicRepositoryRuntimeConfig,
   shouldUseDemoStoreFallback,
 } from '@/lib/repositoryRuntime';
-import type { BackyJsonObject, BackySettings } from '@backy-cms/core';
+import type { BackyJsonObject, BackyJsonValue, BackySettings } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -485,6 +485,17 @@ const parseJsonObject = (value: unknown): BackyJsonObject | undefined => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
 );
 
+const normalizeDeploymentHistory = (value: unknown): BackyJsonObject[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => parseJsonObject(item))
+    .filter((item): item is BackyJsonObject => Boolean(item))
+    .slice(0, 10);
+};
+
 const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
   if (!input) {
@@ -625,6 +636,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   const supabase = parseJsonObject(input.supabase) || {};
   const storage = parseJsonObject(input.storage) || {};
   const vercel = parseJsonObject(input.vercel) || {};
+  const deploymentHistory = normalizeDeploymentHistory(vercel.deploymentHistory);
   const commerce = parseJsonObject(input.commerce) || {};
   const commerceMode = stringValue(commerce.mode);
   const paymentProvider = stringValue(commerce.paymentProvider);
@@ -662,6 +674,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       productionDomain: stringValue(vercel.productionDomain),
       autoDeploy: boolValue(vercel.autoDeploy),
       previewDeployments: boolValue(vercel.previewDeployments, true),
+      ...(deploymentHistory.length > 0 ? { deploymentHistory: deploymentHistory as unknown as BackyJsonValue } : {}),
     },
     commerce: {
       mode: ['catalog-only', 'manual-orders', 'checkout-provider'].includes(commerceMode)
@@ -950,6 +963,54 @@ const buildInfrastructureDiagnostics = ({
       },
     ]),
   ];
+};
+
+const getInfrastructureStatusCounts = (diagnostics: ReturnType<typeof buildInfrastructureDiagnostics>) => ({
+  ready: diagnostics.filter((diagnostic) => diagnostic.status === 'ready').length,
+  warning: diagnostics.filter((diagnostic) => diagnostic.status === 'warning').length,
+  blocked: diagnostics.filter((diagnostic) => diagnostic.status === 'blocked').length,
+});
+
+const getInfrastructureOverallStatus = (diagnostics: ReturnType<typeof buildInfrastructureDiagnostics>) => {
+  const counts = getInfrastructureStatusCounts(diagnostics);
+  if (counts.blocked > 0) return 'blocked';
+  if (counts.warning > 0) return 'warning';
+  return 'ready';
+};
+
+const buildDeploymentHistoryEntry = ({
+  integrations,
+  diagnostics,
+  requestId,
+  generatedAt,
+}: {
+  integrations: BackyJsonObject;
+  diagnostics: ReturnType<typeof buildInfrastructureDiagnostics>;
+  requestId: string;
+  generatedAt: string;
+}): BackyJsonObject => {
+  const vercel = parseJsonObject(integrations.vercel) || {};
+  const counts = getInfrastructureStatusCounts(diagnostics);
+
+  return {
+    id: `deploy_check_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    checkedAt: generatedAt,
+    requestId,
+    status: getInfrastructureOverallStatus(diagnostics),
+    projectId: stringValue(vercel.projectId),
+    productionDomain: stringValue(vercel.productionDomain),
+    autoDeploy: boolValue(vercel.autoDeploy),
+    previewDeployments: boolValue(vercel.previewDeployments, true),
+    readyCount: counts.ready,
+    warningCount: counts.warning,
+    blockedCount: counts.blocked,
+    diagnostics: diagnostics.map((diagnostic) => ({
+      area: diagnostic.area,
+      label: diagnostic.label,
+      status: diagnostic.status,
+      summary: diagnostic.summary,
+    })) as unknown as BackyJsonValue,
+  };
 };
 
 const storageRotationFields = (provider: string) => {
@@ -1819,19 +1880,99 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const generatedAt = new Date().toISOString();
+      const diagnostics = buildInfrastructureDiagnostics({
+        deliveryMode,
+        integrations,
+        runtimeDatabase: currentSettings.runtimeDatabase,
+        runtimeStorage: currentSettings.runtimeStorage,
+        runtimeSupabase: currentSettings.runtimeSupabase,
+        runtimeVercel: currentSettings.runtimeVercel,
+      });
+      const historyEntry = body.recordHistory === true && !mediaStorageCheck
+        ? buildDeploymentHistoryEntry({
+            integrations,
+            diagnostics,
+            requestId,
+            generatedAt,
+          })
+        : undefined;
+
+      if (historyEntry) {
+        if (!shouldUseDemoStoreFallback()) {
+          const repositories = await getRequiredDatabaseRepositories();
+          const beforeSettings = await repositories.settings.get();
+          const beforeIntegrations = parseJsonObject(beforeSettings.integrations) || {};
+          const beforeVercel = parseJsonObject(beforeIntegrations.vercel) || {};
+          const deploymentHistory = [
+            historyEntry,
+            ...normalizeDeploymentHistory(beforeVercel.deploymentHistory),
+          ].slice(0, 10);
+          const settings = (await repositories.settings.update({
+            integrations: {
+              ...beforeIntegrations,
+              vercel: {
+                ...beforeVercel,
+                deploymentHistory: deploymentHistory as unknown as BackyJsonValue,
+              },
+            },
+          })).item;
+          await recordAdminAudit({
+            repositories,
+            entity: 'settings',
+            entityId: 'platform',
+            action: 'settings.infrastructure_check.recorded',
+            before: sanitizeSettingsAuditSnapshot(beforeSettings),
+            after: sanitizeSettingsAuditSnapshot(settings),
+            metadata: {
+              status: historyEntry.status,
+              blockedCount: historyEntry.blockedCount,
+              warningCount: historyEntry.warningCount,
+              readyCount: historyEntry.readyCount,
+            },
+            requestId,
+          });
+        } else {
+          const beforeSettings = getAdminSettings();
+          const beforeIntegrations = parseJsonObject(beforeSettings.integrations) || {};
+          const beforeVercel = parseJsonObject(beforeIntegrations.vercel) || {};
+          const deploymentHistory = [
+            historyEntry,
+            ...normalizeDeploymentHistory(beforeVercel.deploymentHistory),
+          ].slice(0, 10);
+          const settings = updateAdminSettings({
+            integrations: {
+              ...beforeIntegrations,
+              vercel: {
+                ...beforeVercel,
+                deploymentHistory: deploymentHistory as unknown as BackyJsonValue,
+              },
+            },
+          });
+          await recordAdminAudit({
+            entity: 'settings',
+            entityId: 'platform',
+            action: 'settings.infrastructure_check.recorded',
+            before: sanitizeSettingsAuditSnapshot(beforeSettings),
+            after: sanitizeSettingsAuditSnapshot(settings),
+            metadata: {
+              status: historyEntry.status,
+              blockedCount: historyEntry.blockedCount,
+              warningCount: historyEntry.warningCount,
+              readyCount: historyEntry.readyCount,
+            },
+            requestId,
+          });
+        }
+      }
+
       return NextResponse.json({
         success: true,
         requestId,
         data: {
-          diagnostics: buildInfrastructureDiagnostics({
-            deliveryMode,
-            integrations,
-            runtimeDatabase: currentSettings.runtimeDatabase,
-            runtimeStorage: currentSettings.runtimeStorage,
-            runtimeSupabase: currentSettings.runtimeSupabase,
-            runtimeVercel: currentSettings.runtimeVercel,
-          }),
-          generatedAt: new Date().toISOString(),
+          diagnostics,
+          generatedAt,
+          ...(historyEntry ? { historyEntry } : {}),
         },
       });
     }

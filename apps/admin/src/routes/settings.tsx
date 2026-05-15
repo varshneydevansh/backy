@@ -56,6 +56,7 @@ import {
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type IssuedAdminApiKey,
+  type SettingsDeploymentHistoryEntry,
   type SettingsNotificationWebhookDeliveryResult,
   type SiteSettingsInput,
   type SettingsInfrastructureDiagnostic,
@@ -3476,6 +3477,7 @@ function InfrastructureSettings({
   const storage: StorageSettings = integrations.storage || {};
   const supabase: SupabaseSettings = integrations.supabase || {};
   const vercel: VercelSettings = integrations.vercel || {};
+  const deploymentHistory: SettingsDeploymentHistoryEntry[] = vercel.deploymentHistory || [];
   const storageDisabled = disabled;
   const supabaseDisabled = disabled;
   const vercelDisabled = disabled || mediaOnly;
@@ -3596,8 +3598,21 @@ function InfrastructureSettings({
     try {
       const result = await validateSettingsInfrastructure(mediaOnly
         ? { deliveryMode, integrations: { storage, supabase } }
-        : { deliveryMode, integrations });
+        : { deliveryMode, integrations, recordHistory: true });
       setInfrastructureDiagnostics(result.diagnostics);
+      const historyEntry = result.historyEntry;
+      if (historyEntry) {
+        onChange((current) => ({
+          ...current,
+          vercel: {
+            ...(current.vercel || {}),
+            deploymentHistory: [
+              historyEntry,
+              ...((current.vercel?.deploymentHistory || []).filter((entry) => entry.id !== historyEntry.id)),
+            ].slice(0, 10),
+          },
+        }));
+      }
     } catch (error) {
       setInfrastructureCheckError(error instanceof Error ? error.message : 'Unable to run infrastructure check.');
     } finally {
@@ -4152,6 +4167,61 @@ function InfrastructureSettings({
                   />
                   Preview deploys
                 </label>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="settings-deployment-history">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Deployment history</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Recent infrastructure checks record Vercel deployment readiness, domain metadata, and blocking configuration gaps.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {deploymentHistory.length} recorded
+                  </span>
+                </div>
+                {deploymentHistory.length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Run an infrastructure check to record the first deployment/domain snapshot.
+                  </div>
+                ) : (
+                  <div className="mt-3 grid gap-2">
+                    {deploymentHistory.slice(0, 5).map((entry) => (
+                      <div key={entry.id} className="rounded-md border border-border bg-background px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-foreground">
+                            {formatAuditTime(entry.checkedAt)}
+                          </span>
+                          <span className={cn(
+                            'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                            entry.status === 'ready' && 'bg-emerald-50 text-emerald-700',
+                            entry.status === 'warning' && 'bg-amber-50 text-amber-700',
+                            entry.status === 'blocked' && 'bg-red-50 text-red-700',
+                          )}
+                          >
+                            {entry.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Project</span>
+                            <span className="max-w-[60%] truncate font-mono text-foreground">{entry.projectId || 'not set'}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Domain</span>
+                            <span className="max-w-[60%] truncate font-mono text-foreground">{entry.productionDomain || 'not set'}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Result</span>
+                            <span className="font-medium text-foreground">
+                              {entry.readyCount} ready / {entry.warningCount} warning / {entry.blockedCount} blocked
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               {runtimeVercel?.missing && runtimeVercel.missing.length > 0 && (
                 <Notice tone="warning">

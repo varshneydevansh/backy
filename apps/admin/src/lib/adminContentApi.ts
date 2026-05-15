@@ -1753,6 +1753,7 @@ export interface SiteSettingsInput {
       productionDomain?: string;
       autoDeploy?: boolean;
       previewDeployments?: boolean;
+      deploymentHistory?: SettingsDeploymentHistoryEntry[];
     };
     commerce?: {
       mode?: 'catalog-only' | 'manual-orders' | 'checkout-provider';
@@ -1880,10 +1881,26 @@ export interface SettingsInfrastructureDiagnostic {
   checks: SettingsInfrastructureDiagnosticCheck[];
 }
 
+export interface SettingsDeploymentHistoryEntry {
+  id: string;
+  checkedAt: string;
+  requestId?: string;
+  status: 'ready' | 'warning' | 'blocked';
+  projectId?: string;
+  productionDomain?: string;
+  autoDeploy?: boolean;
+  previewDeployments?: boolean;
+  readyCount: number;
+  warningCount: number;
+  blockedCount: number;
+  diagnostics: Array<Pick<SettingsInfrastructureDiagnostic, 'area' | 'label' | 'status' | 'summary'>>;
+}
+
 export interface SettingsInfrastructureCheckResult {
   diagnostics: SettingsInfrastructureDiagnostic[];
   generatedAt: string;
   requestId?: string;
+  historyEntry?: SettingsDeploymentHistoryEntry;
 }
 
 export interface SettingsStorageProvisioningCheck {
@@ -4158,7 +4175,7 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
   };
 }
 
-export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'>): Promise<SettingsInfrastructureCheckResult> {
+export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> & { recordHistory?: boolean }): Promise<SettingsInfrastructureCheckResult> {
   const response = await adminFetch(`${getAdminApiBase()}/settings`, {
     method: 'POST',
     headers: {

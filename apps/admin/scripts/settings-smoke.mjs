@@ -905,11 +905,17 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasSupabase: document.body?.innerText?.includes('Supabase connection') || false,
     hasVercel: document.body?.innerText?.includes('Vercel deployment') || false,
     hasBlocked: document.body?.innerText?.includes('blocked') || false,
+    hasDeploymentHistory: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('Deployment history') || false,
+    hasRecordedDeploymentCheck: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('recorded') || false,
     body: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 1200) || '',
   }))()`);
   assert(
     checkState.hasSupabase && checkState.hasVercel,
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
+  );
+  assert(
+    checkState.hasDeploymentHistory && checkState.hasRecordedDeploymentCheck,
+    `Infrastructure check did not record deployment history: ${JSON.stringify(checkState)}`,
   );
 
   await openSettingsTab(client, 'Commerce', 'tab=commerce');
@@ -1060,6 +1066,8 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.supabase?.databaseEnabled === true, 'Supabase database toggle was not persisted');
   assert(settings.integrations?.vercel?.projectId === `prj_${suffix}`, 'Vercel project id was not persisted');
   assert(settings.integrations?.vercel?.previewDeployments === true, 'Vercel preview toggle was not persisted');
+  assert(Array.isArray(settings.integrations?.vercel?.deploymentHistory), 'Vercel deployment history was not persisted');
+  assert(settings.integrations?.vercel?.deploymentHistory?.[0]?.requestId, 'Vercel deployment history request ID was not persisted');
   assert(settings.integrations?.commerce?.mode === 'checkout-provider', 'Commerce mode was not persisted');
   assert(settings.integrations?.commerce?.currency === 'EUR', 'Commerce currency was not persisted');
   assert(settings.integrations?.commerce?.paymentProvider === 'stripe', 'Commerce payment provider was not persisted');
