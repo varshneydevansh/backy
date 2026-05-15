@@ -297,15 +297,28 @@ const getNotificationRuntimeSummary = () => {
 
 const getCommerceRuntimeSummary = (settings: unknown) => {
   const resolution = resolveCommerceWebhookSecret(settings);
-  const missing = resolution.reference && !resolution.secret
-    ? [`${resolution.envKeys.join(' or ') || 'commerce webhook secret env'}`]
-    : [];
+  const integrations = parseJsonObject(settings) || {};
+  const commerce = parseJsonObject(parseJsonObject(integrations.integrations)?.commerce) || {};
+  const shippingLabelProvider = stringValue(commerce.shippingLabelProvider) === 'easypost' ? 'easypost' : 'manual';
+  const easyPostApiKey = envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']);
+  const easyPostApiBaseUrl = envValue(['BACKY_EASYPOST_API_BASE_URL', 'EASYPOST_API_BASE_URL']);
+  const missing = [
+    resolution.reference && !resolution.secret
+      ? `${resolution.envKeys.join(' or ') || 'commerce webhook secret env'}`
+      : '',
+    shippingLabelProvider === 'easypost' && !easyPostApiKey
+      ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'
+      : '',
+  ].filter(Boolean);
 
   return {
     webhookSecretReference: resolution.reference,
     webhookSecretConfigured: Boolean(resolution.secret),
     webhookSecretSource: resolution.source,
     webhookSecretEnvKeys: resolution.envKeys,
+    easyPostApiKeyConfigured: Boolean(easyPostApiKey),
+    easyPostApiBaseUrl: easyPostApiBaseUrl || 'https://api.easypost.com/v2',
+    shippingLabelProvider,
     missing,
   };
 };
@@ -1332,6 +1345,14 @@ const buildInfrastructureDiagnostics = ({
         detail: stringValue(commerce.providerWebhookUrl)
           ? 'Commerce provider webhook URL is configured in Settings.'
           : 'Add the provider webhook URL before relying on automatic settlement.',
+      },
+      {
+        label: 'EasyPost label execution',
+        ready: stringValue(commerce.shippingLabelProvider) !== 'easypost' || Boolean(runtimeCommerce.easyPostApiKeyConfigured),
+        required: stringValue(commerce.shippingLabelProvider) === 'easypost',
+        detail: runtimeCommerce.easyPostApiKeyConfigured
+          ? 'EasyPost API key is available server-side for label purchase, void, and tracking refresh.'
+          : 'Set BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY before enabling EasyPost label execution.',
       },
     ]),
   ];

@@ -3486,6 +3486,28 @@ const buildInfrastructureEnvContract = ({
     example: '<stripe-secret-key>',
   },
   {
+    provider: 'commerce',
+    key: 'BACKY_EASYPOST_API_KEY',
+    aliases: ['EASYPOST_API_KEY'],
+    label: 'EasyPost label API key',
+    description: 'Server-only EasyPost key used by Orders to purchase labels, void shipments, and refresh tracking.',
+    configured: Boolean(runtimeCommerce?.easyPostApiKeyConfigured),
+    required: commerce?.shippingLabelProvider === 'easypost',
+    secret: true,
+    example: '<easypost-api-key>',
+  },
+  {
+    provider: 'commerce',
+    key: 'BACKY_EASYPOST_API_BASE_URL',
+    aliases: ['EASYPOST_API_BASE_URL'],
+    label: 'EasyPost API base URL',
+    description: 'Optional EasyPost API base URL override for smoke tests, sandbox adapters, and private network routing.',
+    configured: Boolean(runtimeCommerce?.easyPostApiBaseUrl),
+    required: false,
+    valueHint: runtimeCommerce?.easyPostApiBaseUrl,
+    example: 'https://api.easypost.com/v2',
+  },
+  {
     provider: 'vercel',
     key: 'VERCEL_TOKEN',
     aliases: ['BACKY_VERCEL_TOKEN'],
@@ -4013,13 +4035,16 @@ function InfrastructureSettings({
         />
         <RuntimeCard
           title="Commerce runtime"
-          description="Detected payment-provider webhook secret capability."
-          status={runtimeCommerce?.webhookSecretConfigured ? 'Webhook ready' : 'Needs env'}
-          configured={Boolean(runtimeCommerce?.webhookSecretConfigured) || !runtimeCommerce?.webhookSecretReference}
+          description="Detected payment-provider webhook and shipping-label execution capability."
+          status={runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured ? 'Provider env ready' : 'Needs env'}
+          configured={Boolean(runtimeCommerce?.webhookSecretConfigured || runtimeCommerce?.easyPostApiKeyConfigured) || !runtimeCommerce?.webhookSecretReference}
           details={[
             { label: 'Secret ref', value: runtimeCommerce?.webhookSecretReference },
             { label: 'Secret source', value: runtimeCommerce?.webhookSecretSource },
             { label: 'Env keys', value: runtimeCommerce?.webhookSecretEnvKeys?.join(', ') },
+            { label: 'Label provider', value: runtimeCommerce?.shippingLabelProvider },
+            { label: 'EasyPost API key', value: runtimeCommerce?.easyPostApiKeyConfigured },
+            { label: 'EasyPost base URL', value: runtimeCommerce?.easyPostApiBaseUrl },
           ]}
         />
       </div>

@@ -2056,6 +2056,9 @@ export interface SiteSettingsInput {
     webhookSecretConfigured?: boolean;
     webhookSecretSource?: 'none' | 'env' | 'development-direct' | 'unresolved';
     webhookSecretEnvKeys?: string[];
+    easyPostApiKeyConfigured?: boolean;
+    easyPostApiBaseUrl?: string;
+    shippingLabelProvider?: 'manual' | 'easypost';
     missing: string[];
   };
   runtimeVercel?: {

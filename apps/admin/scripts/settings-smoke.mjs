@@ -1027,6 +1027,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
+    hasEasyPostLabelEnv: document.body?.innerText?.includes('EasyPost label API key') || false,
     hasStorageSecretRefs: document.body?.innerText?.includes('Storage credentials stay in deployment env') || false,
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
   }))()`);
@@ -1038,6 +1039,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasNotificationRuntime &&
     infrastructureState.hasCommerceRuntime &&
     infrastructureState.hasCommerceWebhookSecretEnv &&
+    infrastructureState.hasEasyPostLabelEnv &&
     infrastructureState.hasStorageSecretRefs,
     `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
   );
@@ -1050,13 +1052,19 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasMediaScanner: document.body?.innerText?.includes('Media scanner') || false,
     hasNotificationDelivery: document.body?.innerText?.includes('Notification delivery') || false,
     hasCommerceSecrets: document.body?.innerText?.includes('Commerce webhook secrets') || false,
+    hasEasyPostLabelExecution: document.body?.innerText?.includes('EasyPost label execution') || false,
     hasBlocked: document.body?.innerText?.includes('blocked') || false,
     hasDeploymentHistory: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('Deployment history') || false,
     hasRecordedDeploymentCheck: document.querySelector('[data-testid="settings-deployment-history"]')?.textContent?.includes('recorded') || false,
     body: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 1200) || '',
   }))()`);
   assert(
-    checkState.hasSupabase && checkState.hasVercel && checkState.hasMediaScanner && checkState.hasNotificationDelivery && checkState.hasCommerceSecrets,
+    checkState.hasSupabase &&
+      checkState.hasVercel &&
+      checkState.hasMediaScanner &&
+      checkState.hasNotificationDelivery &&
+      checkState.hasCommerceSecrets &&
+      checkState.hasEasyPostLabelExecution,
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
   );
   assert(
