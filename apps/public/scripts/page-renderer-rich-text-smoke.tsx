@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PageRenderer, type FontAsset, type PageContent } from '../src/components/PageRenderer';
+import { buildCollectionTemplateContent } from '../src/lib/renderPayload';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -926,6 +927,126 @@ assert(html.includes('alt="Repeater record title"'), `Repeater image alt was not
 assert(html.includes('Repeater record title'), `Repeater title was not rendered: ${html}`);
 assert(html.includes('Repeater record summary'), `Repeater summary was not rendered: ${html}`);
 
+const dynamicTemplateSite = {
+  id: 'site_renderer_smoke',
+  name: 'Renderer Smoke',
+  slug: 'renderer-smoke',
+  description: '',
+  customDomain: null,
+  status: 'published',
+  isPublished: true,
+  settings: {
+    frontendDesign: {
+      templates: [
+        {
+          id: 'generic-collection-template',
+          type: 'collection',
+          name: 'Generic Collection Template',
+          routePattern: '/smoke/:recordSlug',
+          content: {
+            elements: [
+              {
+                id: 'generic-collection-root',
+                type: 'text',
+                x: 0,
+                y: 0,
+                width: 320,
+                height: 48,
+                props: { content: 'Generic collection template' },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
+  theme: {
+    colors: {},
+    fonts: {},
+    customCSS: '',
+  },
+} as unknown as Parameters<typeof buildCollectionTemplateContent>[0];
+const dynamicTemplateCollection = {
+  id: 'collection_smoke',
+  siteId: dynamicTemplateSite.id,
+  name: 'Smoke Records',
+  slug: 'smoke',
+  listRoutePattern: '/smoke',
+  routePattern: '/smoke/:recordSlug',
+  description: null,
+  status: 'published',
+  fields: [
+    {
+      id: 'field_title',
+      key: 'title',
+      label: 'Title',
+      type: 'text',
+      required: true,
+      unique: false,
+      sortOrder: 10,
+      helpText: null,
+    },
+  ],
+  permissions: {
+    publicRead: true,
+    publicCreate: false,
+    publicUpdate: false,
+    publicDelete: false,
+  },
+  metadata: {
+    dynamicTemplates: {
+      item: {
+        authoredCanvas: {
+          canvasSize: { width: 1100, height: 520 },
+          customCSS: '.authored-dynamic-item{color:#123456}',
+          elements: [
+            {
+              id: 'authored-item-title',
+              type: 'heading',
+              x: 48,
+              y: 64,
+              width: 760,
+              height: 72,
+              props: {
+                content: 'Placeholder title',
+                binding: 'record.title',
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+  createdAt: new Date(0).toISOString(),
+  updatedAt: new Date(0).toISOString(),
+} as Parameters<typeof buildCollectionTemplateContent>[1];
+const dynamicTemplateRecord = {
+  id: 'record_smoke',
+  siteId: dynamicTemplateSite.id,
+  collectionId: dynamicTemplateCollection.id,
+  slug: 'record-smoke',
+  status: 'published',
+  values: { title: 'Authored Dynamic Record' },
+  createdAt: new Date(0).toISOString(),
+  updatedAt: new Date(0).toISOString(),
+  publishedAt: new Date(0).toISOString(),
+  scheduledAt: null,
+} as Parameters<typeof buildCollectionTemplateContent>[3];
+const dynamicTemplateContent = buildCollectionTemplateContent(
+  dynamicTemplateSite,
+  dynamicTemplateCollection,
+  'item',
+  dynamicTemplateRecord,
+);
+if (!dynamicTemplateContent) {
+  throw new Error('Dynamic authored template content was not built');
+}
+assert(dynamicTemplateContent.customCSS === '.authored-dynamic-item{color:#123456}', 'Authored dynamic template custom CSS was not preserved');
+assert(dynamicTemplateContent.canvasSize.width === 1100, 'Authored dynamic template canvas width was not preserved');
+assert(dynamicTemplateContent.elements.some((element) => element.id === 'authored-item-title'), 'Authored dynamic template element was not used');
+assert(!dynamicTemplateContent.elements.some((element) => element.id === 'generic-collection-root'), 'Generic frontend collection root overrode authored dynamic template');
+assert(dynamicTemplateContent.elements.some((element) => element.props.content === 'Authored Dynamic Record'), 'Authored dynamic template record binding was not resolved');
+
 console.log(JSON.stringify({
   ok: true,
   rendered: {
@@ -952,5 +1073,6 @@ console.log(JSON.stringify({
     styledCheckbox: true,
     styledForm: true,
     styledRepeater: true,
+    authoredDynamicTemplate: true,
   },
 }, null, 2));

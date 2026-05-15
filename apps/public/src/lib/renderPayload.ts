@@ -201,20 +201,37 @@ const collectionFrontendDesignTemplate = (site: StoreSite, collection: StoreColl
   ));
 };
 
+type CollectionTemplateCanvas = {
+  canvasSize?: { width: number; height: number };
+  customCSS?: string;
+  elements: unknown[];
+};
+
 const templateContentCanvas = (
   value: unknown,
-): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+): CollectionTemplateCanvas | null => {
   const content = isRecord(value) ? value : null;
   if (!content || !Array.isArray(content.elements)) {
     return null;
   }
 
-  const rawCanvasSize = isRecord(content.canvasSize) ? content.canvasSize : null;
+  const metadata = isRecord(content.metadata) ? content.metadata : null;
+  const rawCanvasSize = isRecord(content.canvasSize)
+    ? content.canvasSize
+    : isRecord(metadata?.canvasSize)
+      ? metadata.canvasSize
+      : null;
   const width = typeof rawCanvasSize?.width === 'number' ? rawCanvasSize.width : undefined;
   const height = typeof rawCanvasSize?.height === 'number' ? rawCanvasSize.height : undefined;
+  const customCSS = typeof content.customCSS === 'string' && content.customCSS.trim().length > 0
+    ? content.customCSS
+    : typeof metadata?.customCSS === 'string' && metadata.customCSS.trim().length > 0
+      ? metadata.customCSS
+      : '';
 
   return {
     ...(width && height ? { canvasSize: { width, height } } : {}),
+    ...(customCSS ? { customCSS } : {}),
     elements: content.elements,
   };
 };
@@ -222,7 +239,7 @@ const templateContentCanvas = (
 const collectionAuthoredTemplateCanvas = (
   collection: StoreCollection,
   kind: CollectionTemplateRenderKind,
-): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+): CollectionTemplateCanvas | null => {
   const metadata = isRecord(collection.metadata) ? collection.metadata : {};
   const dynamicTemplates = isRecord(metadata.dynamicTemplates) ? metadata.dynamicTemplates : {};
   const section = isRecord(dynamicTemplates[kind]) ? dynamicTemplates[kind] as JsonObject : {};
@@ -233,11 +250,16 @@ const collectionTemplateCanvas = (
   site: StoreSite,
   collection: StoreCollection,
   kind: CollectionTemplateRenderKind,
-): { canvasSize?: { width: number; height: number }; elements: unknown[] } | null => {
+): CollectionTemplateCanvas | null => {
+  const authoredCanvas = collectionAuthoredTemplateCanvas(collection, kind);
+  if (authoredCanvas) {
+    return authoredCanvas;
+  }
+
   const template = collectionFrontendDesignTemplate(site, collection);
   const content = cloneJsonObject(template?.content);
   if (!template || !content) {
-    return collectionAuthoredTemplateCanvas(collection, kind);
+    return null;
   }
 
   const candidateKeys = kind === 'list'
@@ -256,7 +278,7 @@ const collectionTemplateCanvas = (
     return rootCanvas;
   }
 
-  return collectionAuthoredTemplateCanvas(collection, kind);
+  return null;
 };
 
 const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
@@ -1717,7 +1739,7 @@ export const buildCollectionTemplateContent = (
   kind: CollectionTemplateRenderKind,
   record?: StoreCollectionRecord,
   context?: RenderPayloadContext,
-): { canvasSize: { width: number; height: number }; elements: RenderElement[] } | null => {
+): { canvasSize: { width: number; height: number }; customCSS?: string; elements: RenderElement[] } | null => {
   const canvas = collectionTemplateCanvas(site, collection, kind);
   if (!canvas) {
     return null;
@@ -1745,6 +1767,7 @@ export const buildCollectionTemplateContent = (
         return y + height + 96;
       })),
     },
+    ...(canvas.customCSS ? { customCSS: canvas.customCSS } : {}),
     elements,
   };
 };
