@@ -13,9 +13,11 @@ import { deliverAdminInviteEmail } from '@/lib/adminUserEmailDelivery';
 import {
   addAdminTeamMember,
   createAdminUser,
+  getAdminSettings,
   getAdminTeamById,
   getAdminUserByEmail,
   getAdminUserById,
+  listAdminUsers,
   listAdminTeamMembers,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -66,6 +68,44 @@ const normalizeRole = (value: unknown): TeamRole | null => (
 const nameFromEmail = (email: string) => (
   email.split('@')[0]?.replace(/[._-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()) || email
 );
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const readBillingSeatPolicy = (settings: unknown) => {
+  const root = toRecord(settings);
+  const integrations = toRecord(root.integrations);
+  const commerce = toRecord(integrations.commerce);
+  const limit = Number(commerce.seatLimit);
+  const overageMode = typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn';
+
+  return {
+    seatLimit: Number.isFinite(limit) && limit >= 1 ? Math.round(limit) : 3,
+    overageMode,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const enforceSeatBillingLimit = (
+  settings: unknown,
+  currentUserCount: number,
+  requestId: string,
+) => {
+  const policy = readBillingSeatPolicy(settings);
+  if (policy.overageMode === 'block' && currentUserCount >= policy.seatLimit) {
+    return errorResponse(
+      402,
+      'BILLING_SEAT_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.seatLimit} user seat${policy.seatLimit === 1 ? '' : 's'}. Update Settings billing limits before inviting another team member.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
 
 const enrichMembers = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -203,6 +243,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const inviteOnlyPolicy = await validateAdminInviteOnlyCreatePolicy('invited', authPolicySettings);
         if (!inviteOnlyPolicy.ok) {
           return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
+        }
+
+        const billingLimitError = repositories
+          ? enforceSeatBillingLimit(
+              await repositories.settings.get(),
+              (await repositories.users.list({ limit: 1, offset: 0 })).pagination.total,
+              requestId,
+            )
+          : enforceSeatBillingLimit(getAdminSettings(), listAdminUsers().length, requestId);
+        if (billingLimitError) {
+          return billingLimitError;
         }
 
         user = repositories ? (await repositories.users.create({

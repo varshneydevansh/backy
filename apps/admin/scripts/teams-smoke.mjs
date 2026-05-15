@@ -110,6 +110,24 @@ const listSites = async () => {
   return payload.data?.sites || [];
 };
 
+const listUsers = async () => {
+  const payload = await requestApi('/api/admin/users');
+  return payload.data?.users || [];
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const createTeam = async (name, overrides = {}) => {
   const payload = await requestApi('/api/admin/teams', {
     method: 'POST',
@@ -197,11 +215,23 @@ const cleanupPreviousSmokeRecords = async () => {
       await deleteTeam(team.id);
     }
   }
+
+  const users = await listUsers();
+  for (const user of users) {
+    if (typeof user.email === 'string' && user.email.startsWith('teams-') && user.email.endsWith('@example.com')) {
+      await deleteUser(user.id);
+    }
+  }
 };
 
 const deleteUser = async (userId) => {
   if (!userId) return;
   await requestApi(`/api/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+};
+
+const findUserByEmail = async (email) => {
+  const users = await listUsers();
+  return users.find((user) => user.email === email) || null;
 };
 
 const findTeamBySlug = async (slug) => {
@@ -227,6 +257,48 @@ const waitForTeamMissing = async (slug) => {
   }
 
   throw new Error(`Team ${slug} still exists after cleanup`);
+};
+
+const assertTeamInviteBillingSeatLimitEnforced = async (teamId, suffix) => {
+  const settings = await getSettings();
+  const existingUsers = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedEmail = `teams-seat-blocked-${suffix}@example.com`;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: Math.max(1, existingUsers.length),
+        overageMode: 'block',
+      },
+    },
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/teams/${encodeURIComponent(teamId)}/members`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        email: blockedEmail,
+        role: 'viewer',
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 402, `Billing seat limit should reject team invite creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_SEAT_LIMIT', `Billing seat-limited team invite should return BILLING_SEAT_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(!(await findUserByEmail(blockedEmail)), 'Billing-limited team invite unexpectedly persisted a user.');
+    const team = (await listTeams()).find((item) => item.id === teamId);
+    assert(!team?.members?.some((member) => member.email === blockedEmail), 'Billing-limited team invite unexpectedly persisted a member.');
+  } finally {
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const fetchJson = async (endpoint) => {
@@ -527,14 +599,30 @@ const main = async () => {
       { method: 'DELETE' },
       'SELF_TEAM_MEMBER_RESTRICTED',
     );
-    await expectApiError(
-      `/api/admin/teams/${encodeURIComponent(memberPolicyTeam.id)}/members`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ email: `teams-owner-denied-${suffix}@example.com`, role: 'owner' }),
-      },
-      'OWNER_ROLE_RESTRICTED',
-    );
+    const nonOwnerActorAccount = await createUser({
+      fullName: `Teams Non Owner Actor ${suffix}`,
+      email: `teams-non-owner-actor-${suffix}@example.com`,
+      role: 'admin',
+      status: 'invited',
+    });
+    temporaryUserIds.push(nonOwnerActorAccount.user.id);
+    assert(nonOwnerActorAccount.invite?.token, `Non-owner actor invite token missing: ${JSON.stringify(nonOwnerActorAccount).slice(0, 500)}`);
+    const nonOwnerActorSession = await acceptInvite(nonOwnerActorAccount.invite.token);
+    const ownerPolicySessionToken = apiAdminSessionToken;
+    try {
+      apiAdminSessionToken = nonOwnerActorSession.session.token;
+      await expectApiError(
+        `/api/admin/teams/${encodeURIComponent(memberPolicyTeam.id)}/members`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ email: `teams-owner-denied-${suffix}@example.com`, role: 'owner' }),
+        },
+        'OWNER_ROLE_RESTRICTED',
+      );
+    } finally {
+      apiAdminSessionToken = ownerPolicySessionToken;
+    }
+    await assertTeamInviteBillingSeatLimitEnforced(memberPolicyTeam.id, suffix);
     await deleteTeam(memberPolicyTeam.id);
     temporaryTeamIds.pop();
 
