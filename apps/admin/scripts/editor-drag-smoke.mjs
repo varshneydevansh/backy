@@ -10514,6 +10514,9 @@ const testMediaUploadModalControls = async (client, pageId) => {
         imageFit: document.querySelector('[data-testid="media-upload-image-fit"]')?.value || '',
         focalX: document.querySelector('[data-testid="media-upload-focal-x"]')?.value || '',
         focalY: document.querySelector('[data-testid="media-upload-focal-y"]')?.value || '',
+        hasFocalPreview: Boolean(document.querySelector('[data-testid="media-upload-focal-preview"]')),
+        focalPreviewX: document.querySelector('[data-testid="media-upload-focal-preview"]')?.getAttribute('data-focal-x') || '',
+        focalPreviewY: document.querySelector('[data-testid="media-upload-focal-preview"]')?.getAttribute('data-focal-y') || '',
       };
     })()`);
 
@@ -10531,7 +10534,10 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.insertPreset === 'fill-frame' &&
         opened.imageFit === 'cover' &&
         opened.focalX === '50' &&
-        opened.focalY === '50',
+        opened.focalY === '50' &&
+        opened.hasFocalPreview &&
+        opened.focalPreviewX === '50' &&
+        opened.focalPreviewY === '50',
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
     );
 
@@ -10539,6 +10545,20 @@ const testMediaUploadModalControls = async (client, pageId) => {
     await setFormControlByTestId(client, 'media-upload-image-fit', 'contain');
     await setFormControlByTestId(client, 'media-upload-focal-x', '28');
     await setFormControlByTestId(client, 'media-upload-focal-y', '72');
+    const focalPreviewState = await evaluate(client, `(() => {
+      const preview = document.querySelector('[data-testid="media-upload-focal-preview"]');
+      return {
+        hasPreview: Boolean(preview),
+        x: preview?.getAttribute('data-focal-x') || '',
+        y: preview?.getAttribute('data-focal-y') || '',
+      };
+    })()`);
+    assert(
+      focalPreviewState.hasPreview &&
+        focalPreviewState.x === '28' &&
+        focalPreviewState.y === '72',
+      `Image upload focal preview did not reflect focal controls: ${JSON.stringify(focalPreviewState)}`,
+    );
     await setFormControlByTestId(client, 'media-library-create-folder-name', imageUploadFolderName);
     await clickControlByTestId(client, 'media-library-create-folder');
     const createdImageFolder = await waitForMediaLibraryFolder(client, imageUploadFolderName);
@@ -10557,6 +10577,35 @@ const testMediaUploadModalControls = async (client, pageId) => {
     );
     const selected = await clickMediaLibraryItemByName(client, imageUploadFile.filename);
     const imageSource = await waitForImageSourceValue(client, selected.url);
+    await clickControlByTestId(client, 'editor-image-upload-media');
+    const replacementComparison = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const comparison = document.querySelector('[data-testid="media-library-replace-comparison"]');
+      const replaceInput = document.querySelector('[data-testid="media-library-replace-input"]');
+      const preview = document.querySelector('[data-testid="media-upload-focal-preview"]');
+      return {
+        hasModal: Boolean(modal),
+        replaceAssetId: modal?.getAttribute('data-replace-asset-id') || '',
+        hasReplacePanel: Boolean(document.querySelector('[data-testid="media-library-replace-current"]')),
+        currentMediaId: comparison?.getAttribute('data-current-media-id') || '',
+        currentMediaName: comparison?.getAttribute('data-current-media-name') || '',
+        currentMediaType: comparison?.getAttribute('data-current-media-type') || '',
+        hasReplaceInput: replaceInput instanceof HTMLInputElement,
+        focalPreviewMediaId: preview?.getAttribute('data-preview-media-id') || '',
+      };
+    })()`);
+    assert(
+      replacementComparison.hasModal &&
+        replacementComparison.replaceAssetId === selected.id &&
+        replacementComparison.hasReplacePanel &&
+        replacementComparison.currentMediaId === selected.id &&
+        replacementComparison.currentMediaName === selected.name &&
+        replacementComparison.currentMediaType === 'image' &&
+        replacementComparison.hasReplaceInput &&
+        replacementComparison.focalPreviewMediaId === selected.id,
+      `Image picker did not show replacement comparison for current asset: ${JSON.stringify(replacementComparison)}`,
+    );
+    await clickControlBySelector(client, 'button[aria-label="Close media library"]', 'close image replacement picker');
     await clickSave(client);
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);

@@ -1145,7 +1145,13 @@ const openCollectionRecordMediaPicker = async (client, fieldKey, expectedAllowed
         insertPreset: document.querySelector('[data-testid="media-library-insert-preset"]')?.value || '',
         hasFocalControls: Boolean(document.querySelector('[data-testid="media-library-focal-x"]')) &&
           Boolean(document.querySelector('[data-testid="media-library-focal-y"]')) &&
-          Boolean(document.querySelector('[data-testid="media-library-image-fit"]')),
+          Boolean(document.querySelector('[data-testid="media-library-image-fit"]')) &&
+          Boolean(document.querySelector('[data-testid="media-library-focal-preview"]')),
+        focalPreview: {
+          x: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-focal-x') || '',
+          y: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-focal-y') || '',
+          mediaId: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-preview-media-id') || '',
+        },
         hasFontControls: Boolean(document.querySelector('[data-testid="media-library-font-controls"]')),
         itemTypes,
         error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
@@ -1259,6 +1265,8 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
       imagePicker.hasInsertControls &&
       imagePicker.insertPreset === 'fill-frame' &&
       imagePicker.hasFocalControls &&
+      imagePicker.focalPreview.x === '50' &&
+      imagePicker.focalPreview.y === '50' &&
       !imagePicker.hasFontControls &&
       imagePicker.typeFilters.includes('media-library-type-filter-image') &&
       !imagePicker.typeFilters.includes('media-library-type-filter-all') &&

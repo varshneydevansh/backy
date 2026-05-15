@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   X,
   Upload,
@@ -138,6 +138,7 @@ export function MediaLibraryModal({
   const [isUploading, setIsUploading] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
   const [selectingMediaId, setSelectingMediaId] = useState<string | null>(null);
+  const [focalPreviewAssetId, setFocalPreviewAssetId] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -168,6 +169,7 @@ export function MediaLibraryModal({
     setFontDisplay('swap');
     setUploadProgress(null);
     setSelectingMediaId(null);
+    setFocalPreviewAssetId(null);
   }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
@@ -374,6 +376,11 @@ export function MediaLibraryModal({
       }),
     [allowedTypesSet, canView, libraryFolderFilter, libraryFolderIds, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
   );
+  const focalPreviewAsset = useMemo(() => (
+    filteredMedia.find((item) => item.id === focalPreviewAssetId && item.type === 'image') ||
+    filteredMedia.find((item) => item.type === 'image') ||
+    null
+  ), [filteredMedia, focalPreviewAssetId]);
 
   const libraryStats = useMemo(() => ({
     total: filteredMedia.length,
@@ -500,6 +507,49 @@ export function MediaLibraryModal({
         : undefined,
     };
   };
+
+  const setFocalFromPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    setImageFocalX(clampPercent(((event.clientX - rect.left) / rect.width) * 100));
+    setImageFocalY(clampPercent(((event.clientY - rect.top) / rect.height) * 100));
+  };
+
+  const renderFocalPreview = (testId: string, previewAsset: MediaAsset | null = null) => (
+    <button
+      type="button"
+      onPointerDown={setFocalFromPointer}
+      data-testid={testId}
+      data-focal-x={imageFocalX}
+      data-focal-y={imageFocalY}
+      data-preview-media-id={previewAsset?.id || ''}
+      className="relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg border border-border bg-[linear-gradient(45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(-45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(148,163,184,0.16)_75%),linear-gradient(-45deg,transparent_75%,rgba(148,163,184,0.16)_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
+      aria-label="Set image focal point"
+    >
+      {previewAsset?.url ? (
+        <img
+          src={previewAsset.url}
+          alt=""
+          className="h-full w-full"
+          style={{
+            objectFit: imageObjectFit,
+            objectPosition: `${imageFocalX}% ${imageFocalY}%`,
+          }}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+          Focal preview
+        </div>
+      )}
+      <span
+        className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow-md ring-2 ring-primary/35"
+        style={{ left: `${imageFocalX}%`, top: `${imageFocalY}%` }}
+      />
+      <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-background/90 px-2 py-1 font-mono text-[10px] text-muted-foreground shadow-sm">
+        {imageFocalX}% {imageFocalY}%
+      </span>
+    </button>
+  );
 
   const handleSelectMedia = async (item: MediaAsset) => {
     if (item.visibility === 'private') {
@@ -919,6 +969,12 @@ export function MediaLibraryModal({
                         key={item.id}
                         type="button"
                         onClick={() => void handleSelectMedia(item)}
+                        onFocus={() => {
+                          if (item.type === 'image') setFocalPreviewAssetId(item.id);
+                        }}
+                        onMouseEnter={() => {
+                          if (item.type === 'image') setFocalPreviewAssetId(item.id);
+                        }}
                         disabled={Boolean(selectingMediaId)}
                         aria-disabled={isPrivateAsset}
                         title={isPrivateAsset ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.' : undefined}
@@ -1125,6 +1181,7 @@ export function MediaLibraryModal({
                       />
                     </label>
                   </div>
+                  {renderFocalPreview('media-library-focal-preview', focalPreviewAsset)}
                   <p className="mt-2 text-xs text-muted-foreground">
                     Image selections pass focal point and fit metadata into the editor instead of forcing a generic center crop.
                   </p>
@@ -1349,9 +1406,28 @@ export function MediaLibraryModal({
                         <RefreshCw className="h-3.5 w-3.5" />
                         Replace current asset
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Keep the same media id{replaceAsset ? ` for ${replaceAsset.name}` : ''} and replace the stored file.
-                      </p>
+                      <div
+                        className="mt-3 grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-muted/20 p-2"
+                        data-testid="media-library-replace-comparison"
+                        data-current-media-id={replaceAsset?.id || replaceAssetId || ''}
+                        data-current-media-name={replaceAsset?.name || ''}
+                        data-current-media-type={replaceAsset?.type || ''}
+                      >
+                        <div className="h-[54px] overflow-hidden rounded border border-border bg-background">
+                          {replaceAsset ? renderMediaThumb(replaceAsset) : (
+                            <div className="flex h-full w-full items-center justify-center">
+                              <FileText className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 text-xs">
+                          <div className="truncate font-medium text-foreground">{replaceAsset?.name || 'Current media asset'}</div>
+                          <div className="mt-1 font-mono text-[10px] text-muted-foreground">{replaceAsset?.id || replaceAssetId}</div>
+                          <div className="mt-1 text-muted-foreground">
+                            {(replaceAsset?.type || 'asset')} · keep stable id
+                          </div>
+                        </div>
+                      </div>
                       <label className="mt-3 flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-xs font-medium text-muted-foreground transition hover:border-primary hover:text-primary">
                         {isReplacing ? 'Replacing...' : 'Choose replacement'}
                         <input
@@ -1449,6 +1525,7 @@ export function MediaLibraryModal({
                         />
                       </label>
                     </div>
+                    {renderFocalPreview('media-upload-focal-preview', replaceAsset?.type === 'image' ? replaceAsset : null)}
                   </div>
 
                   {(allowedTypes === 'any' || allowedTypes === 'font') ? (
