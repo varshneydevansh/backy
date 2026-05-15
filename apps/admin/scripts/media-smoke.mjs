@@ -101,6 +101,14 @@ const readSettings = async () => {
   return payload.data.settings;
 };
 
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
 const restoreSettings = async (settings) => {
   if (!settings) return;
 
@@ -112,6 +120,36 @@ const restoreSettings = async (settings) => {
       integrations: settings.integrations || {},
     }),
   });
+};
+
+const getSite = async (siteId = SITE_ID) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`);
+  return payload.data?.site || payload.site;
+};
+
+const updateSite = async (siteId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
+};
+
+const requestApiRaw = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !(options.body instanceof FormData) && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
 };
 
 const setAdminPermissionOverrides = async (overrides) => {
@@ -380,6 +418,58 @@ const updateMedia = async (mediaId, input) => {
 const deleteMedia = async (mediaId) => {
   if (!mediaId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/media/${mediaId}`, { method: 'DELETE' });
+};
+
+const assertMediaBillingLimitEnforced = async (suffix) => {
+  const site = await getSite();
+  const settings = await readSettings();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedName = `blocked-media-limit-${suffix}.txt`;
+  const formData = new FormData();
+  formData.append('file', new Blob([Buffer.from(`Blocked media quota smoke ${suffix}\n`, 'utf8')], { type: 'text/plain' }), blockedName);
+  formData.set('visibility', 'public');
+  formData.set('scope', 'global');
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await updateSite(SITE_ID, {
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          mediaGb: 0,
+        },
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/admin/sites/${SITE_ID}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    assert(response.status === 402, `Billing media limit should reject upload, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_MEDIA_LIMIT', `Billing media limit should return BILLING_MEDIA_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const afterMedia = await listMedia(blockedName);
+    assert(afterMedia.length === 0, `Billing-limited media upload unexpectedly persisted media: ${JSON.stringify(afterMedia).slice(0, 500)}`);
+  } finally {
+    await updateSite(SITE_ID, { settings: originalSiteSettings });
+    await updateSettings({ integrations: originalIntegrations });
+  }
 };
 
 const expectApiError = async (endpoint, options, expectedStatus, expectedCode) => {
@@ -2364,6 +2454,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    await assertMediaBillingLimitEnforced(suffix);
     await assertMediaViewPermissionIsEnforced();
     await assertMediaConfigurePermissionIsEnforced();
     await assertMediaActivityPermissionIsEnforced();
