@@ -399,6 +399,14 @@ const enableStripeCommerceSettings = async () => {
       providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
+      taxEnabled: false,
+      shippingEnabled: false,
+      discountsEnabled: false,
+      taxRatePercent: 0,
+      digitalTaxRatePercent: 0,
+      shippingBaseAmount: 0,
+      shippingWeightRate: 0,
+      discountPercent: 0,
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -1574,7 +1582,7 @@ const assertStripeCheckoutExecution = async ({
         items: [{ slug, quantity: 1 }],
         shippingAddress: '200 Provider Street, New York, NY',
         billingAddress: '200 Provider Street, New York, NY',
-        notes: 'Smoke order created through Stripe checkout execution.',
+        notes: 'Smoke subscription order created through Stripe checkout execution.',
       }),
     });
 
@@ -1585,18 +1593,23 @@ const assertStripeCheckoutExecution = async ({
     assert(/^cs_mock_/.test(checkoutSession.id), `Stripe checkout did not return provider session id: ${JSON.stringify(checkoutSession)}`);
     assert(checkoutSession.url === `${STRIPE_MOCK_BASE_URL}/checkout/${checkoutSession.id}`, `Stripe checkout did not expose provider URL: ${JSON.stringify(checkoutSession)}`);
     assert(checkoutSession.reference === `stripe:${checkoutSession.id}`, `Stripe checkout reference did not use provider session id: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.amountTotal === 49, `Stripe subscription checkout amount was unexpected: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.providerPayload?.mode === 'subscription', `Stripe provider payload did not switch to subscription mode: ${JSON.stringify(checkoutSession.providerPayload)}`);
     assert(checkoutSession.providerPayload?.providerResponse?.id === checkoutSession.id, `Stripe provider response was not exposed safely: ${JSON.stringify(checkoutSession.providerPayload)}`);
 
     const stripeRequest = stripeCheckoutMock.requests[beforeRequests];
     assert(stripeRequest?.method === 'POST' && stripeRequest.url === '/v1/checkout/sessions', `Stripe mock did not receive checkout session create: ${JSON.stringify(stripeCheckoutMock.requests)}`);
     const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
     assert(stripeRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe mock did not receive bearer auth: ${JSON.stringify(stripeRequest.headers)}`);
-    assert(stripeRequest.form.mode === 'payment', `Stripe checkout form did not request payment mode: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form.mode === 'subscription', `Stripe checkout form did not request subscription mode: ${JSON.stringify(stripeRequest.form)}`);
     assert(stripeRequest.form.client_reference_id === checkoutSession.metadata.orderNumber, `Stripe checkout form did not include order reference: ${JSON.stringify(stripeRequest.form)}`);
     assert(stripeRequest.form['metadata[siteId]'] === SITE_ID, `Stripe checkout form did not include site metadata: ${JSON.stringify(stripeRequest.form)}`);
     assert(stripeRequest.form['metadata[orderSlug]'] === checkoutSession.metadata.orderSlug, `Stripe checkout form did not include order slug metadata: ${JSON.stringify(stripeRequest.form)}`);
     assert(stripeRequest.form.success_url?.includes('{CHECKOUT_SESSION_ID}'), `Stripe checkout success URL did not include provider session placeholder: ${JSON.stringify(stripeRequest.form)}`);
-    assert(Number(stripeRequest.form['line_items[0][price_data][unit_amount]']) === Math.round(checkoutSession.amountTotal * 100), `Stripe checkout amount did not match quote total: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`);
+    assert(stripeRequest.form['line_items[0][price_data][recurring][interval]'] === 'month', `Stripe checkout did not send monthly recurring price data: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form['subscription_data[trial_period_days]'] === '14', `Stripe checkout did not send the product trial days: ${JSON.stringify(stripeRequest.form)}`);
+    assert(Number(stripeRequest.form['line_items[0][price_data][unit_amount]']) === Math.round(checkoutSession.amountTotal * 100), `Stripe checkout amount did not match subscription price: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`);
+    assert(stripeRequest.form['metadata[amountTotal]'] === String(checkoutSession.amountTotal), `Stripe checkout metadata did not include quote total: ${JSON.stringify(stripeRequest.form)}`);
 
     const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
     assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Stripe checkout session id was not persisted: ${JSON.stringify(orderRecord.values)}`);

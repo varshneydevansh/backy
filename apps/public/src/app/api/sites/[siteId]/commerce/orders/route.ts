@@ -96,13 +96,15 @@ type OrderRiskLevel = 'low' | 'medium' | 'high';
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 class CheckoutProviderError extends Error {
-  code = 'CHECKOUT_PROVIDER_ERROR';
-  status = 502;
+  code: string;
+  status: number;
   details: unknown;
 
-  constructor(message: string, details?: unknown) {
+  constructor(message: string, details?: unknown, status = 502, code = 'CHECKOUT_PROVIDER_ERROR') {
     super(message);
     this.name = 'CheckoutProviderError';
+    this.code = code;
+    this.status = status;
     this.details = details;
   }
 }
@@ -484,6 +486,7 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
     shippingProfile: product.delivery.shippingProfile,
     weight: product.delivery.weight,
     discountCode: product.checkout.discountCode,
+    subscription: product.subscription,
   };
 };
 
@@ -727,10 +730,11 @@ const buildCheckoutSessionHandoff = ({
     request: requestId,
   });
   const expiresAt = new Date(Date.parse(createdAt) + commerce.inventory.reservationMinutes * 60_000).toISOString();
+  const stripeMode = stripeCheckoutModeForLineItems(lineItems);
   const providerPayload = provider === 'stripe'
     ? {
       action: 'checkout.sessions.create',
-      mode: 'payment',
+      mode: stripeMode,
       accountId: commerce.provider.accountId,
       providerMode: commerce.provider.mode,
       successUrl,
@@ -750,6 +754,12 @@ const buildCheckoutSessionHandoff = ({
               variantSku: item.variant?.sku || '',
             },
           },
+          ...(item.subscription.enabled
+            ? {
+              recurring: stripeRecurringForInterval(item.subscription.interval),
+              trialDays: item.subscription.trialDays,
+            }
+            : {}),
         },
       })),
       metadata,
@@ -809,6 +819,95 @@ const appendStripeMetadata = (
   });
 };
 
+const stripeCheckoutModeForLineItems = (lineItems: CheckoutLineItem[]): 'payment' | 'subscription' => (
+  lineItems.length > 0 && lineItems.every((item) => item.subscription.enabled)
+    ? 'subscription'
+    : 'payment'
+);
+
+const stripeRecurringForInterval = (interval: CheckoutLineItem['subscription']['interval']) => {
+  if (interval === 'weekly') return { interval: 'week' };
+  if (interval === 'quarterly') return { interval: 'month', intervalCount: 3 };
+  if (interval === 'yearly') return { interval: 'year' };
+  return { interval: 'month' };
+};
+
+const appendStripeCheckoutMetadata = (
+  form: URLSearchParams,
+  handoff: CheckoutSessionHandoff,
+  quote: ReturnType<typeof calculateCheckoutQuote>,
+  itemCount: number,
+) => {
+  form.append('metadata[siteId]', handoff.metadata.siteId);
+  form.append('metadata[orderNumber]', handoff.metadata.orderNumber);
+  form.append('metadata[orderSlug]', handoff.metadata.orderSlug);
+  form.append('metadata[requestId]', handoff.metadata.requestId);
+  form.append('metadata[itemCount]', String(itemCount));
+  form.append('metadata[subtotal]', String(quote.subtotal));
+  form.append('metadata[discountAmount]', String(quote.discountAmount));
+  form.append('metadata[taxAmount]', String(quote.taxAmount));
+  form.append('metadata[shippingAmount]', String(quote.shippingAmount));
+  form.append('metadata[amountTotal]', String(quote.total));
+};
+
+const appendStripeProductMetadata = (
+  form: URLSearchParams,
+  prefix: string,
+  item: CheckoutLineItem,
+) => {
+  form.append(`${prefix}[product_data][metadata][productId]`, item.productId);
+  form.append(`${prefix}[product_data][metadata][slug]`, item.slug);
+  form.append(`${prefix}[product_data][metadata][variantId]`, item.variant?.id || '');
+  form.append(`${prefix}[product_data][metadata][variantSku]`, item.variant?.sku || '');
+  if (item.subscription.enabled) {
+    form.append(`${prefix}[product_data][metadata][subscriptionInterval]`, item.subscription.interval);
+    form.append(`${prefix}[product_data][metadata][subscriptionTrialDays]`, String(item.subscription.trialDays));
+  }
+};
+
+const validateStripeCheckoutMode = (
+  lineItems: CheckoutLineItem[],
+  quote: ReturnType<typeof calculateCheckoutQuote>,
+) => {
+  const subscriptionItems = lineItems.filter((item) => item.subscription.enabled);
+  if (subscriptionItems.length === 0) return 'payment';
+
+  if (subscriptionItems.length !== lineItems.length) {
+    throw new CheckoutProviderError(
+      'Stripe checkout cannot mix subscription and one-time products yet',
+      { provider: 'stripe', subscriptionItems: subscriptionItems.length, itemCount: lineItems.length },
+      409,
+      'MIXED_SUBSCRIPTION_CART',
+    );
+  }
+
+  const intervals = Array.from(new Set(subscriptionItems.map((item) => item.subscription.interval)));
+  if (intervals.length > 1) {
+    throw new CheckoutProviderError(
+      'Stripe subscription checkout requires one recurring interval per checkout',
+      { provider: 'stripe', intervals },
+      409,
+      'MIXED_SUBSCRIPTION_INTERVALS',
+    );
+  }
+
+  if (quote.discountAmount > 0 || quote.taxAmount > 0 || quote.shippingAmount > 0) {
+    throw new CheckoutProviderError(
+      'Stripe subscription checkout requires provider-priced subscriptions without local quote adjustments',
+      {
+        provider: 'stripe',
+        discountAmount: quote.discountAmount,
+        taxAmount: quote.taxAmount,
+        shippingAmount: quote.shippingAmount,
+      },
+      409,
+      'SUBSCRIPTION_PROVIDER_PRICING_UNSUPPORTED',
+    );
+  }
+
+  return 'subscription';
+};
+
 const buildStripeCheckoutSessionForm = ({
   handoff,
   orderNumber,
@@ -826,30 +925,44 @@ const buildStripeCheckoutSessionForm = ({
     .slice(0, 8)
     .map((item) => `${item.quantity}x ${item.title}`)
     .join(', ');
+  const mode = validateStripeCheckoutMode(lineItems, quote);
 
-  form.append('mode', 'payment');
+  form.append('mode', mode);
   form.append('success_url', handoff.successUrl);
   form.append('cancel_url', handoff.cancelUrl);
   form.append('client_reference_id', orderNumber);
-  form.append('line_items[0][quantity]', '1');
-  form.append('line_items[0][price_data][currency]', quote.currency.toLowerCase());
-  form.append('line_items[0][price_data][unit_amount]', String(centsValue(quote.total)));
-  form.append('line_items[0][price_data][product_data][name]', `Backy order ${orderNumber}`);
-  form.append(
-    'line_items[0][price_data][product_data][description]',
-    productSummary || `${itemCount} checkout item${itemCount === 1 ? '' : 's'}`,
-  );
-  form.append('metadata[siteId]', handoff.metadata.siteId);
-  form.append('metadata[orderNumber]', handoff.metadata.orderNumber);
-  form.append('metadata[orderSlug]', handoff.metadata.orderSlug);
-  form.append('metadata[requestId]', handoff.metadata.requestId);
-  form.append('metadata[itemCount]', String(itemCount));
-  form.append('metadata[subtotal]', String(quote.subtotal));
-  form.append('metadata[discountAmount]', String(quote.discountAmount));
-  form.append('metadata[taxAmount]', String(quote.taxAmount));
-  form.append('metadata[shippingAmount]', String(quote.shippingAmount));
-  form.append('metadata[amountTotal]', String(quote.total));
-  appendStripeMetadata(form, 'payment_intent_data', handoff.metadata);
+  appendStripeCheckoutMetadata(form, handoff, quote, itemCount);
+
+  if (mode === 'subscription') {
+    const trialDays = Math.max(...lineItems.map((item) => item.subscription.trialDays));
+    lineItems.forEach((item, index) => {
+      const priceDataPrefix = `line_items[${index}][price_data]`;
+      const recurring = stripeRecurringForInterval(item.subscription.interval);
+      form.append(`line_items[${index}][quantity]`, String(item.quantity));
+      form.append(`${priceDataPrefix}[currency]`, item.currency.toLowerCase());
+      form.append(`${priceDataPrefix}[unit_amount]`, String(centsValue(item.price)));
+      form.append(`${priceDataPrefix}[recurring][interval]`, recurring.interval);
+      if ('intervalCount' in recurring) {
+        form.append(`${priceDataPrefix}[recurring][interval_count]`, String(recurring.intervalCount));
+      }
+      form.append(`${priceDataPrefix}[product_data][name]`, item.title);
+      appendStripeProductMetadata(form, priceDataPrefix, item);
+    });
+    appendStripeMetadata(form, 'subscription_data', handoff.metadata);
+    if (trialDays > 0) {
+      form.append('subscription_data[trial_period_days]', String(trialDays));
+    }
+  } else {
+    form.append('line_items[0][quantity]', '1');
+    form.append('line_items[0][price_data][currency]', quote.currency.toLowerCase());
+    form.append('line_items[0][price_data][unit_amount]', String(centsValue(quote.total)));
+    form.append('line_items[0][price_data][product_data][name]', `Backy order ${orderNumber}`);
+    form.append(
+      'line_items[0][price_data][product_data][description]',
+      productSummary || `${itemCount} checkout item${itemCount === 1 ? '' : 's'}`,
+    );
+    appendStripeMetadata(form, 'payment_intent_data', handoff.metadata);
+  }
 
   return form;
 };
