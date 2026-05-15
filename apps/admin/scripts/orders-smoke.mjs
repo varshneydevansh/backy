@@ -1542,7 +1542,7 @@ const main = async () => {
     const pendingAfterDryRun = await getCollectionRecordBySlug(collectionId, slug);
     assert(pendingAfterDryRun.values?.paymentstatus === 'pending', `Scheduled reconciliation dry-run mutated the order: ${JSON.stringify(pendingAfterDryRun.values).slice(0, 500)}`);
 
-    const scheduledExecutionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/reconcile?limit=50`, {
+    const scheduledExecutionPayload = await requestApi(`/api/admin/commerce/reconcile?siteId=${encodeURIComponent(SITE_ID)}&limit=50`, {
       method: 'GET',
       headers: {
         'x-backy-admin-key': scheduledExecutionAdminKey,
@@ -1551,12 +1551,12 @@ const main = async () => {
       },
     });
     const scheduledExecution = scheduledExecutionPayload.data;
-    assert(scheduledExecution?.schemaVersion === 'backy.commerce-reconciliation.v1', `Scheduled reconciliation execution returned wrong schema: ${JSON.stringify(scheduledExecutionPayload).slice(0, 500)}`);
+    assert(scheduledExecution?.schemaVersion === 'backy.commerce-reconciliation-batch.v1', `Scheduled reconciliation execution returned wrong schema: ${JSON.stringify(scheduledExecutionPayload).slice(0, 500)}`);
     assert(scheduledExecution.runMode === 'scheduled', `Scheduled reconciliation execution did not use scheduled run mode: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
     assert(scheduledExecution.dryRun === false, `Scheduled reconciliation execution should mutate by default: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
     assert(scheduledExecution.updatedCount >= 1, `Scheduled reconciliation execution did not update the stale order: ${JSON.stringify(scheduledExecution).slice(0, 500)}`);
     assert(
-      scheduledExecution.updates?.some((update) => update.orderId === orderRecordId && update.paymentStatus === 'paid' && update.eventId === `evt_orders_reconcile_${suffix}`),
+      scheduledExecution.results?.some((result) => result.siteId === SITE_ID && result.updates?.some((update) => update.orderId === orderRecordId && update.paymentStatus === 'paid' && update.eventId === `evt_orders_reconcile_${suffix}`)),
       `Scheduled reconciliation execution did not report the expected order update: ${JSON.stringify(scheduledExecution).slice(0, 500)}`,
     );
     await waitForOrderValue(

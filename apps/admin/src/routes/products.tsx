@@ -2618,7 +2618,7 @@ function ProductsRoute() {
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="text-xs font-semibold text-foreground">Next commerce milestone</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture private orders, calculate quote totals, create checkout-session handoffs, link customers, settle provider webhook events, and run service-key scheduled reconciliation. Provider API execution, automated refunds, and external cron deployment remain deeper commerce backend work.
+                      Backy can capture private orders, calculate quote totals, create checkout-session handoffs, link customers, settle provider webhook events, and run platform scheduled reconciliation. Provider API execution, automated refunds, and external cron deployment remain deeper commerce backend work.
                     </p>
                     <Link
                       to="/orders"
