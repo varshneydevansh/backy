@@ -18,6 +18,7 @@ import {
   type AdminAuditLog,
   type AdminTeam,
   type AdminInviteToken,
+  type AdminUserDeliveryResult,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
@@ -58,6 +59,7 @@ interface TeamInviteDeliveryResult {
   role: TeamRole;
   teamName: string;
   invite: AdminInviteToken;
+  inviteDelivery?: AdminUserDeliveryResult | null;
 }
 
 function TeamsPage() {
@@ -280,11 +282,13 @@ function TeamsPage() {
     }
     const result = await inviteTeamMember(teamId, { email, role });
     const teamName = teams.find((team) => team.id === teamId)?.name || 'Selected team';
-    setLatestInviteDelivery(result.invite ? { email, role, teamName, invite: result.invite } : null);
+    setLatestInviteDelivery(result.invite ? { email, role, teamName, invite: result.invite, inviteDelivery: result.inviteDelivery } : null);
     setCopiedInviteUrl(false);
     await refreshAfterMutation(
       result.invite?.inviteUrl
-        ? 'Invite created. Copy the manual delivery link below.'
+        ? result.invite.deliveryConfigured
+          ? 'Team member invited and delivery was queued. Keep the link below as a manual backup.'
+          : 'Invite created, but delivery is not configured. Copy the manual delivery link below.'
         : 'Team member invited.',
     );
     await loadTeamAuditLogs(teamId);
@@ -365,11 +369,18 @@ function TeamsPage() {
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950" data-testid="team-invite-delivery-panel">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold">Manual invite delivery</h2>
+                <h2 className="text-sm font-semibold">
+                  {latestInviteDelivery.invite.deliveryConfigured ? 'Invite delivery queued' : 'Manual invite delivery'}
+                </h2>
                 <p className="mt-1 text-emerald-900/80">
-                  Send this link to {latestInviteDelivery.email} for {latestInviteDelivery.teamName} as {latestInviteDelivery.role}.
+                  {latestInviteDelivery.invite.deliveryConfigured
+                    ? `Backy queued the invite email to ${latestInviteDelivery.email} for ${latestInviteDelivery.teamName} as ${latestInviteDelivery.role}.`
+                    : `Send this link to ${latestInviteDelivery.email} for ${latestInviteDelivery.teamName} as ${latestInviteDelivery.role}.`}
                 </p>
                 <p className="mt-1 text-xs text-emerald-900/70">
+                  {latestInviteDelivery.inviteDelivery
+                    ? `Provider ${latestInviteDelivery.inviteDelivery.provider}, status ${latestInviteDelivery.inviteDelivery.status}. `
+                    : ''}
                   Expires {new Date(latestInviteDelivery.invite.expiresAt).toLocaleString()}.
                 </p>
               </div>

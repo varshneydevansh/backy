@@ -486,6 +486,7 @@ interface ApiTeamMemberResponse {
   data?: {
     member: AdminTeamMember;
     invite?: AdminInviteToken | null;
+    inviteDelivery?: AdminUserDeliveryResult | null;
   };
   error?: {
     code?: string;
@@ -3782,7 +3783,7 @@ export async function inviteTeamMember(
     role: AdminTeamRole;
     fullName?: string;
   },
-): Promise<{ member: AdminTeamMember; invite?: AdminInviteToken | null }> {
+): Promise<{ member: AdminTeamMember; invite?: AdminInviteToken | null; inviteDelivery?: AdminUserDeliveryResult | null }> {
   const response = await adminFetch(`${getAdminApiBase()}/teams/${encodeURIComponent(teamId)}/members`, {
     method: 'POST',
     headers: {
@@ -3799,6 +3800,7 @@ export async function inviteTeamMember(
   return {
     member: payload.data.member,
     invite: payload.data.invite ?? null,
+    inviteDelivery: payload.data.inviteDelivery ?? null,
   };
 }
 

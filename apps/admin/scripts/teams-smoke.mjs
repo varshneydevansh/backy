@@ -523,7 +523,10 @@ const main = async () => {
         return {
           ready: Boolean(document.querySelector('[data-testid="team-invite-delivery-panel"]')) &&
             body.includes(${JSON.stringify(inviteEmail)}) &&
-            body.includes('Manual invite delivery'),
+            (body.includes('Invite delivery queued') || body.includes('Manual invite delivery')) &&
+            body.includes('/accept-invite?token=') &&
+            body.includes('Provider ') &&
+            body.includes('status queued'),
           body: body.slice(0, 1200),
         };
       })()`,

@@ -8,6 +8,7 @@ import {
 } from '@/lib/admin-auth/emailPolicy';
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
+import { deliverAdminInviteEmail } from '@/lib/adminUserEmailDelivery';
 import {
   addAdminTeamMember,
   createAdminUser,
@@ -188,6 +189,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         : getAdminUserById(userId)
       : null;
     let invite = null;
+    let inviteDelivery = null;
 
     if (!user) {
       if (!email || !email.includes('@')) {
@@ -223,6 +225,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
           origin: request.headers.get('origin') || request.nextUrl.origin,
           persistInMemory: !repositories,
         });
+        inviteDelivery = await deliverAdminInviteEmail({
+          user,
+          invite,
+          requestId,
+          context: {
+            teamName: team.name,
+            teamRole: role,
+          },
+        });
+        invite = {
+          ...invite,
+          deliveryConfigured: inviteDelivery.deliveryConfigured === true,
+        };
         if (repositories) {
           const currentSettings = await repositories.settings.get();
           await repositories.settings.update({
@@ -261,6 +276,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         email: user.email,
         role,
         inviteTokenId: invite?.id || null,
+        inviteExpiresAt: invite?.expiresAt || null,
+        deliveryConfigured: invite?.deliveryConfigured === true,
+        deliveryProvider: inviteDelivery?.provider || null,
+        deliveryStatus: inviteDelivery?.status || null,
+        deliveryStatusCode: inviteDelivery?.statusCode || null,
+        deliveryError: inviteDelivery?.error || null,
       },
       requestId,
     });
@@ -273,6 +294,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           member: responseMember,
           user,
           invite,
+          inviteDelivery,
         },
       },
       { status: 201 },

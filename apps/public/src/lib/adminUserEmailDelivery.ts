@@ -59,6 +59,10 @@ const buildInviteMessage = (input: {
   user: AdminUserEmailTarget;
   invite: AdminInviteToken;
   requestId: string;
+  context?: {
+    teamName?: string;
+    teamRole?: string;
+  };
 }): EmailDeliveryMessage => baseAdminUserMessage({
   config: input.config,
   user: input.user,
@@ -68,9 +72,12 @@ const buildInviteMessage = (input: {
   text: [
     `Hi ${input.user.fullName || input.user.email},`,
     '',
-    'You have been invited to the Backy admin workspace.',
+    input.context?.teamName
+      ? `You have been invited to the ${input.context.teamName} team in Backy.`
+      : 'You have been invited to the Backy admin workspace.',
     '',
     `Role: ${input.user.role}`,
+    ...(input.context?.teamRole ? [`Team role: ${input.context.teamRole}`] : []),
     `Invite expires: ${input.invite.expiresAt}`,
     `Request: ${input.requestId}`,
     '',
@@ -83,6 +90,8 @@ const buildInviteMessage = (input: {
     inviteTokenId: input.invite.id,
     expiresAt: input.invite.expiresAt,
     inviteUrl: input.invite.inviteUrl,
+    ...(input.context?.teamName ? { teamName: input.context.teamName } : {}),
+    ...(input.context?.teamRole ? { teamRole: input.context.teamRole } : {}),
   },
 });
 
@@ -146,6 +155,10 @@ export const deliverAdminInviteEmail = async (input: {
   user: AdminUserEmailTarget;
   invite: AdminInviteToken;
   requestId: string;
+  context?: {
+    teamName?: string;
+    teamRole?: string;
+  };
 }): Promise<AdminUserDeliveryResult> => {
   const config = getEmailDeliveryConfig();
   return deliverAdminUserMessage(config, buildInviteMessage({ config, ...input }));
