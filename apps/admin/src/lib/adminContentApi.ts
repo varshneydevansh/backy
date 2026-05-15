@@ -2221,6 +2221,17 @@ export interface SettingsStorageProvisioningResult {
   generatedAt: string;
 }
 
+export interface SettingsStorageCredentialRotationProbeResult {
+  provider: string;
+  status: 'ready' | 'blocked';
+  summary: string;
+  probePath: string;
+  fields: SettingsStorageProvisioningField[];
+  checks: SettingsStorageProvisioningCheck[];
+  nextSteps: string[];
+  generatedAt: string;
+}
+
 interface ApiSettingsInfrastructureCheckResponse {
   success: boolean;
   requestId?: string;
@@ -2233,6 +2244,14 @@ interface ApiSettingsInfrastructureCheckResponse {
 interface ApiSettingsStorageProvisioningResponse {
   success: boolean;
   data?: SettingsStorageProvisioningResult;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiSettingsStorageCredentialRotationResponse {
+  success: boolean;
+  data?: SettingsStorageCredentialRotationProbeResult;
   error?: {
     message?: string;
   };
@@ -4544,6 +4563,25 @@ export async function runSettingsStorageProvisioningProbe(siteId?: string): Prom
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to run media storage provisioning probe');
+  }
+
+  return payload.data;
+}
+
+export async function runSettingsStorageCredentialRotationProbe(): Promise<SettingsStorageCredentialRotationProbeResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'media-storage-credential-rotation-probe',
+    }),
+  });
+  const payload = await readJson<ApiSettingsStorageCredentialRotationResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to run media storage credential rotation probe');
   }
 
   return payload.data;

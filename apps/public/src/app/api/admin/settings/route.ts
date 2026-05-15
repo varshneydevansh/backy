@@ -2779,11 +2779,12 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody(request);
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
     const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
+    const mediaStorageCredentialRotationProbe = body.action === 'media-storage-credential-rotation-probe';
     const keyManagementAction = body.action === 'regenerate-api-keys' ||
       body.action === 'issue-admin-api-key' ||
       body.action === 'revoke-admin-api-key';
     const access = await requireAdminAccess(request, requestId, {
-      permission: mediaStorageCheck || mediaStorageProvisioningProbe
+      permission: mediaStorageCheck || mediaStorageProvisioningProbe || mediaStorageCredentialRotationProbe
         ? 'media.configure'
         : keyManagementAction
           ? 'settings.manageKeys'
@@ -2821,6 +2822,34 @@ export async function POST(request: NextRequest) {
         success: true,
         requestId,
         data: result,
+      });
+    }
+
+    if (mediaStorageCredentialRotationProbe) {
+      const provider = resolveMediaStorageConfig().summary.provider;
+      const result = await runMediaStorageCredentialRotationProbe(requestId, provider);
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'media-storage',
+        action: 'settings.media_storage.credential_rotation_probe',
+        metadata: {
+          provider,
+          status: result.status,
+          probePath: result.probePath,
+          detectedReplacementFields: result.fields.filter((field) => field.detected).map((field) => field.name),
+          failedChecks: result.checks.filter((check) => !check.ready).map((check) => check.label),
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          provider,
+          ...result,
+          generatedAt: new Date().toISOString(),
+        },
       });
     }
 

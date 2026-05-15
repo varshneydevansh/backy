@@ -19,11 +19,13 @@ import {
   listBlogPosts,
   listPages,
   updateSettings as updateBackendSettings,
+  runSettingsStorageCredentialRotationProbe,
   runSettingsStorageProvisioningProbe,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type SiteSettingsInput,
+  type SettingsStorageCredentialRotationProbeResult,
   type SettingsInfrastructureDiagnostic,
   type SettingsStorageProvisioningResult,
 } from '@/lib/adminContentApi';
@@ -714,8 +716,10 @@ function MediaPage() {
   const [settingsInfrastructureInput, setSettingsInfrastructureInput] = useState<Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> | null>(null);
   const [storageDiagnostics, setStorageDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
   const [storageProvisioningResult, setStorageProvisioningResult] = useState<SettingsStorageProvisioningResult | null>(null);
+  const [storageCredentialRotationResult, setStorageCredentialRotationResult] = useState<SettingsStorageCredentialRotationProbeResult | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isRunningStorageProvisioningProbe, setIsRunningStorageProvisioningProbe] = useState(false);
+  const [isRunningStorageCredentialRotationProbe, setIsRunningStorageCredentialRotationProbe] = useState(false);
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false);
   const [storageCheckError, setStorageCheckError] = useState<string | null>(null);
   const [storageSettingsNotice, setStorageSettingsNotice] = useState<string | null>(null);
@@ -1846,6 +1850,26 @@ function MediaPage() {
       setIsRunningStorageProvisioningProbe(false);
     }
   }, [canConfigureMediaStorage, isRunningStorageProvisioningProbe, siteId]);
+
+  const runStorageCredentialRotationProbe = useCallback(async () => {
+    if (isRunningStorageCredentialRotationProbe) return;
+    if (!canConfigureMediaStorage) {
+      setStorageCheckError('This admin account needs media.configure to run the storage credential rotation probe.');
+      return;
+    }
+
+    setIsRunningStorageCredentialRotationProbe(true);
+    setStorageCheckError(null);
+    try {
+      const result = await runSettingsStorageCredentialRotationProbe();
+      setStorageCredentialRotationResult(result);
+    } catch (probeError) {
+      setStorageCredentialRotationResult(null);
+      setStorageCheckError(probeError instanceof Error ? probeError.message : 'Unable to run storage credential rotation probe.');
+    } finally {
+      setIsRunningStorageCredentialRotationProbe(false);
+    }
+  }, [canConfigureMediaStorage, isRunningStorageCredentialRotationProbe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3779,6 +3803,16 @@ function MediaPage() {
               >
                 {isRunningStorageProvisioningProbe ? 'Probing...' : 'Provision probe'}
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runStorageCredentialRotationProbe()}
+                disabled={isRunningStorageCredentialRotationProbe || !canConfigureMediaStorage}
+                iconStart={<KeyRound className={cn('size-3.5', isRunningStorageCredentialRotationProbe && 'animate-pulse')} />}
+              >
+                {isRunningStorageCredentialRotationProbe ? 'Rotating...' : 'Rotation probe'}
+              </Button>
               <Link
                 to="/settings"
                 search={{ tab: 'infrastructure' }}
@@ -4417,6 +4451,9 @@ function MediaPage() {
           )}
           {storageProvisioningResult && (
             <MediaStorageProvisioningCard result={storageProvisioningResult} />
+          )}
+          {storageCredentialRotationResult && (
+            <MediaStorageCredentialRotationCard result={storageCredentialRotationResult} />
           )}
           </div>
         </PanelContent>
@@ -7536,6 +7573,84 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
               </li>
             ))}
           </ol>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaStorageCredentialRotationCard({ result }: { result: SettingsStorageCredentialRotationProbeResult }) {
+  const detectedCount = result.fields.filter((field) => field.detected).length;
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-credential-rotation-results">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Credential rotation result</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{result.summary}</p>
+        </div>
+        <span
+          className={cn(
+            'rounded px-2.5 py-1 text-xs font-semibold capitalize',
+            result.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+          )}
+        >
+          {result.status}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+        <div>
+          <dt className="text-muted-foreground">Provider</dt>
+          <dd className="font-mono">{result.provider}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Replacement fields</dt>
+          <dd>{detectedCount} / {result.fields.length} detected</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Probe path</dt>
+          <dd className="break-all font-mono">{result.probePath}</dd>
+        </div>
+      </dl>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Replacement credential checks</h4>
+          <div className="mt-3 grid gap-2">
+            {result.checks.map((check) => (
+              <div key={check.label} className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">{check.label}</span>
+                  <span className={cn('text-[11px] font-semibold', check.ready ? 'text-success' : 'text-warning')}>
+                    {check.ready ? 'Ready' : 'Needs attention'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Promotion runbook</h4>
+          <ol className="mt-3 space-y-2">
+            {result.nextSteps.map((step, index) => (
+              <li key={`${index}:${step}`} className="flex gap-2 text-xs leading-5 text-muted-foreground">
+                <span className="font-mono text-foreground">{index + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+      <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3">
+        <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Replacement fields</h4>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          {result.fields.map((field) => (
+            <div key={field.name} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="break-all font-mono">{field.name}</span>
+              <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', field.detected ? 'bg-success/10 text-success' : field.required ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground')}>
+                {field.secret ? 'secret ' : ''}{field.detected ? 'detected' : field.required ? 'required' : 'optional'}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
