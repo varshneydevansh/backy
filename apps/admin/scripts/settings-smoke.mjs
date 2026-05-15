@@ -132,6 +132,34 @@ const readSettings = async (sessionToken = apiAdminSessionToken) => {
   return payload.data.settings;
 };
 
+const setAdminPermissionOverrides = async (overrides) => {
+  await requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({ overrides }),
+  });
+};
+
+const assertSettingsApiForbidden = async (label, { method = 'POST', body } = {}) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    method,
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiAdminSessionToken}`,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 403, `${label} should reject denied permission with 403, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `${label} should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  return {
+    label,
+    status: response.status,
+    code: payload.error?.code,
+  };
+};
+
 const assertAdminKeyRotationDenied = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
     method: 'POST',
@@ -145,6 +173,12 @@ const assertAdminKeyRotationDenied = async () => {
 
   assert(response.status === 403, `Admin without settings.manageKeys should not rotate API keys, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Key rotation denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  return {
+    label: 'settings.manageKeys regenerate',
+    status: response.status,
+    code: payload.error?.code,
+  };
 };
 
 const assertAdminApiKeyPatchDenied = async () => {
@@ -165,6 +199,79 @@ const assertAdminApiKeyPatchDenied = async () => {
 
   assert(response.status === 403, `Admin without settings.manageKeys should not patch API keys, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `API key patch denial should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  return {
+    label: 'settings.manageKeys patch',
+    status: response.status,
+    code: payload.error?.code,
+  };
+};
+
+const assertSettingsPermissionDenials = async (settings) => {
+  const deliveryMode = settings.deliveryMode === 'managed-hosting' ? 'custom-frontend' : 'managed-hosting';
+  const currentDeliveryMode = settings.deliveryMode || 'managed-hosting';
+  const permissionDenials = [];
+
+  permissionDenials.push(await assertAdminKeyRotationDenied());
+  permissionDenials.push(await assertAdminApiKeyPatchDenied());
+
+  try {
+    await setAdminPermissionOverrides({ 'settings.view': 'deny' });
+    permissionDenials.push(await assertSettingsApiForbidden('Denied settings.view GET', { method: 'GET' }));
+  } finally {
+    await setAdminPermissionOverrides({ 'settings.view': null });
+  }
+
+  try {
+    await setAdminPermissionOverrides({ 'settings.configure': 'deny' });
+    permissionDenials.push(await assertSettingsApiForbidden('Denied settings.configure PATCH', {
+      method: 'PATCH',
+      body: { deliveryMode },
+    }));
+    permissionDenials.push(await assertSettingsApiForbidden('Denied settings.configure infrastructure check', {
+      method: 'POST',
+      body: {
+        action: 'validate-infrastructure',
+        deliveryMode: currentDeliveryMode,
+        integrations: settings.integrations || {},
+      },
+    }));
+  } finally {
+    await setAdminPermissionOverrides({ 'settings.configure': null });
+  }
+
+  try {
+    await setAdminPermissionOverrides({ 'media.configure': 'deny' });
+    permissionDenials.push(await assertSettingsApiForbidden('Denied media.configure storage PATCH', {
+      method: 'PATCH',
+      body: {
+        integrations: {
+          storage: {
+            provider: 'local',
+            bucket: 'denied-settings-smoke',
+          },
+        },
+      },
+    }));
+    permissionDenials.push(await assertSettingsApiForbidden('Denied media.configure infrastructure check', {
+      method: 'POST',
+      body: {
+        action: 'validate-infrastructure',
+        deliveryMode: currentDeliveryMode,
+        integrations: {
+          storage: {
+            provider: 'local',
+            bucket: 'denied-settings-smoke',
+          },
+        },
+      },
+    }));
+  } finally {
+    await setAdminPermissionOverrides({ 'media.configure': null });
+  }
+
+  assert(permissionDenials.length === 7, `Settings permission denial coverage changed unexpectedly: ${JSON.stringify(permissionDenials).slice(0, 500)}`);
+  return permissionDenials;
 };
 
 const restoreSettings = async (settings, options = {}) => {
@@ -1240,8 +1347,7 @@ const main = async () => {
   const suffix = `settings-smoke-${Date.now().toString(36)}`;
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
-  await assertAdminKeyRotationDenied();
-  await assertAdminApiKeyPatchDenied();
+  const permissionDenials = await assertSettingsPermissionDenials(originalSettings);
   let ownerUserId = '';
   let ownerSession = null;
   let ownerOriginalSettings = null;
@@ -1323,6 +1429,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}/settings`,
       ui,
       ownerRotation,
+      permissionDenials,
       apiNormalization,
       secretStorage,
       persisted: {
