@@ -360,9 +360,11 @@ const validateCheckoutInput = (input: CheckoutOrderInput): string[] => {
     if (!textValue(item.productId) && !textValue(item.slug)) {
       errors.push(`items[${index}] requires productId or slug`);
     }
-    const quantity = Number(item.quantity);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_CHECKOUT_ITEM_QUANTITY) {
-      errors.push(`items[${index}].quantity must be a whole number between 1 and ${MAX_CHECKOUT_ITEM_QUANTITY}`);
+    if (item.quantity !== undefined) {
+      const quantity = Number(item.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_CHECKOUT_ITEM_QUANTITY) {
+        errors.push(`items[${index}].quantity must be a whole number between 1 and ${MAX_CHECKOUT_ITEM_QUANTITY}`);
+      }
     }
   });
 

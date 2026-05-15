@@ -626,9 +626,19 @@ const getCollectionRecordBySlug = async (collectionId, slug) => {
 const deleteCollectionRecord = async (collectionId, recordId) => {
   if (!collectionId || !recordId) return;
 
-  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`, {
-    method: 'DELETE',
-  });
+  try {
+    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`, {
+      method: 'DELETE',
+    });
+  } catch {
+    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'delete',
+        recordIds: [recordId],
+      }),
+    });
+  }
 };
 
 const csvEscape = (value) => {
@@ -1128,6 +1138,15 @@ const waitForFrontendTemplateProduct = async (productCollection) => {
   return null;
 };
 
+const deleteExistingFrontendTemplateProducts = async (productCollection) => {
+  const records = await listAllCollectionRecords(productCollection.id, '?limit=100&status=all');
+  const staleRecords = records.filter((record) => record.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID);
+
+  for (const record of staleRecords) {
+    await deleteCollectionRecord(productCollection.id, record.id);
+  }
+};
+
 const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
   assert(record?.values?.title === 'Smoke frontend product', `Frontend product title mismatch: ${JSON.stringify(record?.values)}`);
   assert(record.values.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID, `Frontend template id was not stored: ${JSON.stringify(record.values)}`);
@@ -1144,13 +1163,15 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
   assert(readProductValue(record.values, 'discountCode') === 'FRONTEND10', `Frontend product discount code mismatch: ${readProductValue(record.values, 'discountCode')}`);
   assert(readProductValue(record.values, 'returnPolicy') === 'Frontend template products allow returns within 30 days.', `Frontend product return policy mismatch: ${readProductValue(record.values, 'returnPolicy')}`);
 
-  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/${record.id}`, {
-    method: 'PATCH',
+  const publishPayload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/bulk`, {
+    method: 'POST',
     body: JSON.stringify({
+      action: 'updateStatus',
       status: 'published',
-      values: record.values,
+      recordIds: [record.id],
     }),
   });
+  assert(publishPayload.data?.updated === 1, `Frontend template product was not published: ${JSON.stringify(publishPayload).slice(0, 500)}`);
 
   const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(record.slug)}`);
   const product = catalog.data?.products?.[0] || catalog.products?.[0];
@@ -1220,6 +1241,27 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
     `Fractional checkout quantity did not expose the quantity validation detail: ${JSON.stringify(invalidQuantityPayload).slice(0, 500)}`,
   );
 
+  const defaultQuantityPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
+    method: 'POST',
+    body: JSON.stringify({
+      customer: {
+        name: 'Commerce Smoke Default Quantity',
+        email: 'commerce-smoke-default-quantity@example.com',
+      },
+      items: [{ slug }],
+      paymentProvider: 'manual',
+      paymentReference: `manual-default-${slug}`,
+      checkoutSessionId: `cs_default_${slug}`,
+    }),
+  });
+  const defaultQuantityOrder = defaultQuantityPayload.data?.order;
+  const defaultQuantityLineItem = defaultQuantityPayload.data?.lineItems?.[0];
+  assert(defaultQuantityOrder?.itemCount === 1, `Omitted checkout quantity did not default order item count to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`);
+  assert(defaultQuantityLineItem?.quantity === 1, `Omitted checkout quantity did not default line item quantity to 1: ${JSON.stringify(defaultQuantityPayload).slice(0, 500)}`);
+
+  const productAfterDefaultQuantity = await getCollectionRecordBySlug(productCollection.id, slug);
+  assert(productAfterDefaultQuantity.values?.inventory === 6, `Default checkout quantity did not reserve exactly one item: ${productAfterDefaultQuantity.values?.inventory}`);
+
   const orderPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
     method: 'POST',
     body: JSON.stringify({
@@ -1258,7 +1300,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
 
   const updatedProduct = await getCollectionRecordBySlug(productCollection.id, slug);
-  assert(updatedProduct.values?.inventory === 5, `Inventory reservation did not reduce stock to 5: ${updatedProduct.values?.inventory}`);
+  assert(updatedProduct.values?.inventory === 4, `Inventory reservation did not reduce stock to 4 after default and explicit checkout quantities: ${updatedProduct.values?.inventory}`);
 
   const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
   assert(orderRecord?.id, `Order record was not available in private queue by slug ${order.slug}`);
@@ -1770,6 +1812,7 @@ const main = async () => {
 
     finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
     assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
+    await deleteExistingFrontendTemplateProducts(finalProductCollection);
     await clickFrontendTemplateCreateProduct(client);
     frontendTemplateProduct = await waitForFrontendTemplateProduct(finalProductCollection);
     frontendProductRecordId = frontendTemplateProduct.id;
