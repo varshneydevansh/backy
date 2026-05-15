@@ -18,6 +18,7 @@ import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { deliverAdminInviteEmail } from '@/lib/adminUserEmailDelivery';
+import type { BackySortDirection, BackyUserSortBy } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -60,6 +61,21 @@ const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 's
   value === 'active' || value === 'inactive' || value === 'invited' || value === 'suspended' ? value : null
 );
 
+const normalizeSortBy = (value: unknown): BackyUserSortBy | undefined => (
+  value === 'fullName' ||
+  value === 'email' ||
+  value === 'role' ||
+  value === 'status' ||
+  value === 'createdAt' ||
+  value === 'updatedAt'
+    ? value
+    : undefined
+);
+
+const normalizeSortDirection = (value: unknown): BackySortDirection | undefined => (
+  value === 'asc' || value === 'desc' ? value : undefined
+);
+
 const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
   const parsed = Number.parseInt(value || '', 10);
   if (!Number.isFinite(parsed)) {
@@ -79,12 +95,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseBoundedInteger(searchParams.get('limit'), 100, 1, 200);
     const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+    const sortBy = normalizeSortBy(searchParams.get('sortBy') || searchParams.get('sort') || undefined);
+    const sortDirection = normalizeSortDirection(searchParams.get('sortDirection') || searchParams.get('direction') || undefined);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const result = await repositories.users.list({
         search: searchParams.get('search') || undefined,
         role: normalizeRole(searchParams.get('role') || undefined) || undefined,
         status: normalizeStatus(searchParams.get('status') || undefined) || undefined,
+        sortBy,
+        sortDirection,
         limit,
         offset,
       });
@@ -103,6 +123,8 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search') || undefined,
       role: searchParams.get('role') || undefined,
       status: searchParams.get('status') || undefined,
+      sortBy,
+      sortDirection,
     });
     const pagedUsers = users.slice(offset, offset + limit);
 

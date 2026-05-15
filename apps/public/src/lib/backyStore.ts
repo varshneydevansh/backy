@@ -4715,7 +4715,46 @@ const normalizeEmail = (value: unknown): string => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
 );
 
-export function listAdminUsers(options: { search?: string; role?: string; status?: string } = {}): StoreUser[] {
+type AdminUserSortBy = 'fullName' | 'email' | 'role' | 'status' | 'createdAt' | 'updatedAt';
+type AdminUserSortDirection = 'asc' | 'desc';
+
+const ADMIN_USER_SORT_FIELDS: AdminUserSortBy[] = ['fullName', 'email', 'role', 'status', 'createdAt', 'updatedAt'];
+
+const normalizeAdminUserSortBy = (value: unknown): AdminUserSortBy => (
+  typeof value === 'string' && (ADMIN_USER_SORT_FIELDS as string[]).includes(value) ? value as AdminUserSortBy : 'updatedAt'
+);
+
+const normalizeAdminUserSortDirection = (value: unknown): AdminUserSortDirection => (
+  value === 'asc' || value === 'desc' ? value : 'desc'
+);
+
+const compareAdminUsers = (
+  first: StoreUser,
+  second: StoreUser,
+  sortBy: AdminUserSortBy,
+  sortDirection: AdminUserSortDirection,
+): number => {
+  const firstValue = first[sortBy] || '';
+  const secondValue = second[sortBy] || '';
+  const compared = String(firstValue).localeCompare(String(secondValue), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+
+  if (compared !== 0) {
+    return sortDirection === 'asc' ? compared : -compared;
+  }
+
+  return first.id.localeCompare(second.id);
+};
+
+export function listAdminUsers(options: {
+  search?: string;
+  role?: string;
+  status?: string;
+  sortBy?: string;
+  sortDirection?: string;
+} = {}): StoreUser[] {
   ensurePersistedAdminContentLoaded();
 
   const search = sanitizeString(options.search).toLowerCase();
@@ -4725,6 +4764,10 @@ export function listAdminUsers(options: { search?: string; role?: string; status
   const status = options.status === 'active' || options.status === 'inactive' || options.status === 'invited' || options.status === 'suspended'
     ? options.status
     : '';
+  const sortBy = options.sortBy || options.sortDirection
+    ? normalizeAdminUserSortBy(options.sortBy)
+    : null;
+  const sortDirection = normalizeAdminUserSortDirection(options.sortDirection);
 
   const users = USER_LIST.filter((user) => {
     const matchesSearch = !search ||
@@ -4735,6 +4778,10 @@ export function listAdminUsers(options: { search?: string; role?: string; status
 
     return matchesSearch && matchesRole && matchesStatus;
   });
+
+  if (sortBy) {
+    users.sort((first, second) => compareAdminUsers(first, second, sortBy, sortDirection));
+  }
 
   return clone(users);
 }

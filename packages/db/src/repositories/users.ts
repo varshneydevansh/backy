@@ -1,6 +1,7 @@
 import {
     type BackyListResult,
     type BackyRepositoryMutationResult,
+    type BackySortDirection,
     type BackyUser,
     type BackyUserCreateInput,
     type BackyUserListInput,
@@ -8,6 +9,7 @@ import {
     type BackyUserPasswordCredentialInput,
     type BackyUserRepository,
     type BackyUserRole,
+    type BackyUserSortBy,
     type BackyUserStatus,
     type BackyUserUpdateInput,
 } from '@backy-cms/core';
@@ -111,6 +113,36 @@ const searchText = (value: string | null | undefined, search: string): boolean =
     (value || '').toLowerCase().includes(search.toLowerCase())
 );
 
+const USER_SORT_FIELDS: BackyUserSortBy[] = ['fullName', 'email', 'role', 'status', 'createdAt', 'updatedAt'];
+
+const normalizeSortBy = (value: unknown): BackyUserSortBy => (
+    typeof value === 'string' && (USER_SORT_FIELDS as string[]).includes(value) ? value as BackyUserSortBy : 'updatedAt'
+);
+
+const normalizeSortDirection = (value: unknown): BackySortDirection => (
+    value === 'asc' || value === 'desc' ? value : 'desc'
+);
+
+const compareUsers = (
+    first: BackyUser,
+    second: BackyUser,
+    sortBy: BackyUserSortBy,
+    sortDirection: BackySortDirection,
+): number => {
+    const firstValue = first[sortBy] || '';
+    const secondValue = second[sortBy] || '';
+    const compared = String(firstValue).localeCompare(String(secondValue), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+    });
+
+    if (compared !== 0) {
+        return sortDirection === 'asc' ? compared : -compared;
+    }
+
+    return first.id.localeCompare(second.id);
+};
+
 const toUser = (row: UserRow): BackyUser => ({
     id: row.id,
     email: row.email,
@@ -136,11 +168,14 @@ export function createUserRepository(db: DatabaseInstance): BackyUserRepository 
     return {
         async list(input: BackyUserListInput = {}): Promise<BackyListResult<BackyUser>> {
             const rows = await database.select().from(profiles).orderBy(desc(profiles.updatedAt)) as UserRow[];
+            const sortBy = normalizeSortBy(input.sortBy);
+            const sortDirection = normalizeSortDirection(input.sortDirection);
             const filtered = rows
                 .map(toUser)
                 .filter((user) => input.role && input.role !== 'all' ? user.role === input.role : true)
                 .filter((user) => input.status && input.status !== 'all' ? user.status === input.status : true)
-                .filter((user) => input.search ? searchText(`${user.fullName} ${user.email}`, input.search) : true);
+                .filter((user) => input.search ? searchText(`${user.fullName} ${user.email}`, input.search) : true)
+                .sort((first, second) => compareUsers(first, second, sortBy, sortDirection));
             return paginate(filtered, input.limit, input.offset);
         },
 

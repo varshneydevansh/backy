@@ -207,6 +207,47 @@ const assertUsersApiFilters = async ({ search, adminUserId, viewerUserId }) => {
   };
 };
 
+const assertUsersApiSorting = async ({ search, adminUserId, viewerUserId }) => {
+  const byNameAsc = await listUsersPage({
+    search,
+    sortBy: 'fullName',
+    sortDirection: 'asc',
+    limit: 1,
+    offset: 0,
+  });
+  const byNameDesc = await listUsersPage({
+    search,
+    sortBy: 'fullName',
+    sortDirection: 'desc',
+    limit: 1,
+    offset: 0,
+  });
+  const byRoleAsc = await listUsersPage({
+    search,
+    sortBy: 'role',
+    sortDirection: 'asc',
+    limit: 2,
+    offset: 0,
+  });
+
+  assert(byNameAsc.pagination?.total === 2, `Users API sorted name asc total was wrong: ${JSON.stringify(byNameAsc).slice(0, 500)}`);
+  assert(byNameDesc.pagination?.total === 2, `Users API sorted name desc total was wrong: ${JSON.stringify(byNameDesc).slice(0, 500)}`);
+  assert(byNameAsc.users[0]?.id === viewerUserId, `Users API fullName asc did not put bulk viewer first: ${JSON.stringify(byNameAsc).slice(0, 500)}`);
+  assert(byNameDesc.users[0]?.id === adminUserId, `Users API fullName desc did not put smoke admin first: ${JSON.stringify(byNameDesc).slice(0, 500)}`);
+
+  const roleSortedIds = byRoleAsc.users.map((user) => user.id);
+  assert(
+    JSON.stringify(roleSortedIds) === JSON.stringify([adminUserId, viewerUserId]),
+    `Users API role asc sort was wrong: ${JSON.stringify({ roleSortedIds, byRoleAsc }).slice(0, 500)}`,
+  );
+
+  return {
+    fullNameAscFirst: byNameAsc.users[0]?.id,
+    fullNameDescFirst: byNameDesc.users[0]?.id,
+    roleAscIds: roleSortedIds,
+  };
+};
+
 const createUser = async ({ fullName, email, role = 'admin', status = 'invited' }) => {
   const payload = await requestApi('/api/admin/users', {
     method: 'POST',
@@ -1473,6 +1514,11 @@ const main = async () => {
       adminUserId: createdUserId,
       viewerUserId: bulkUserId,
     });
+    const sorting = await assertUsersApiSorting({
+      search: suffix,
+      adminUserId: createdUserId,
+      viewerUserId: bulkUserId,
+    });
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1630,6 +1676,7 @@ const main = async () => {
       fullName,
       pagination,
       filters,
+      sorting,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

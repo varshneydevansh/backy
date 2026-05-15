@@ -699,6 +699,8 @@ export interface BackyPreviewTokenCreateInput {
 
 export type BackyUserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 export type BackyUserStatus = 'active' | 'inactive' | 'invited' | 'suspended';
+export type BackyUserSortBy = 'fullName' | 'email' | 'role' | 'status' | 'createdAt' | 'updatedAt';
+export type BackySortDirection = 'asc' | 'desc';
 
 export interface BackyUser {
   id: string;
@@ -744,6 +746,8 @@ export interface BackyUserListInput extends BackyPaginationInput {
   role?: BackyUserRole | 'all';
   status?: BackyUserStatus | 'all';
   search?: string;
+  sortBy?: BackyUserSortBy;
+  sortDirection?: BackySortDirection;
 }
 
 export interface BackySettings {
