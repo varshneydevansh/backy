@@ -17,6 +17,7 @@ import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/back
 import { createAdminInviteToken } from '@/lib/admin-auth/sessionStore';
 import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { deliverAdminInviteEmail } from '@/lib/adminUserEmailDelivery';
 
 export const runtime = 'nodejs';
 
@@ -182,10 +183,16 @@ export async function POST(request: NextRequest) {
           persistInMemory: false,
         })
         : null;
+      const inviteDelivery = invite
+        ? await deliverAdminInviteEmail({ user, invite, requestId })
+        : null;
+      const deliveredInvite = invite
+        ? { ...invite, deliveryConfigured: inviteDelivery?.deliveryConfigured === true }
+        : null;
       if (invite) {
         const currentSettings = await repositories.settings.get();
         await repositories.settings.update({
-          auth: addPersistedInviteToken(currentSettings.auth, invite),
+          auth: addPersistedInviteToken(currentSettings.auth, deliveredInvite || invite),
         });
       }
       await recordAdminAudit({
@@ -198,9 +205,13 @@ export async function POST(request: NextRequest) {
           email: user.email,
           role: user.role,
           status: user.status,
-          inviteTokenId: invite?.id || null,
-          inviteExpiresAt: invite?.expiresAt || null,
-          deliveryConfigured: false,
+          inviteTokenId: deliveredInvite?.id || null,
+          inviteExpiresAt: deliveredInvite?.expiresAt || null,
+          deliveryConfigured: deliveredInvite?.deliveryConfigured === true,
+          deliveryProvider: inviteDelivery?.provider || null,
+          deliveryStatus: inviteDelivery?.status || null,
+          deliveryStatusCode: inviteDelivery?.statusCode || null,
+          deliveryError: inviteDelivery?.error || null,
         },
         requestId,
       });
@@ -211,7 +222,8 @@ export async function POST(request: NextRequest) {
           requestId,
           data: {
             user,
-            invite,
+            invite: deliveredInvite,
+            inviteDelivery,
           },
         },
         { status: 201 },
@@ -236,6 +248,12 @@ export async function POST(request: NextRequest) {
         origin: request.headers.get('origin') || request.nextUrl.origin,
       })
       : null;
+    const inviteDelivery = invite
+      ? await deliverAdminInviteEmail({ user, invite, requestId })
+      : null;
+    const deliveredInvite = invite
+      ? { ...invite, deliveryConfigured: inviteDelivery?.deliveryConfigured === true }
+      : null;
     await recordAdminAudit({
       entity: 'user',
       entityId: user.id,
@@ -245,9 +263,13 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         status: user.status,
-        inviteTokenId: invite?.id || null,
-        inviteExpiresAt: invite?.expiresAt || null,
-        deliveryConfigured: false,
+        inviteTokenId: deliveredInvite?.id || null,
+        inviteExpiresAt: deliveredInvite?.expiresAt || null,
+        deliveryConfigured: deliveredInvite?.deliveryConfigured === true,
+        deliveryProvider: inviteDelivery?.provider || null,
+        deliveryStatus: inviteDelivery?.status || null,
+        deliveryStatusCode: inviteDelivery?.statusCode || null,
+        deliveryError: inviteDelivery?.error || null,
       },
       requestId,
     });
@@ -258,7 +280,8 @@ export async function POST(request: NextRequest) {
         requestId,
         data: {
           user,
-          invite,
+          invite: deliveredInvite,
+          inviteDelivery,
         },
       },
       { status: 201 },

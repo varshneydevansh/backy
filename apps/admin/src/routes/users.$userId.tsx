@@ -1476,7 +1476,7 @@ function EditUserPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Account recovery</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Generate temporary invite or reset handoffs, then use permission-gated copy actions until transactional email delivery is wired.
+                  Generate invite or reset links, queue transactional email delivery, and keep permission-gated copy actions as a backup.
                 </p>
               </div>
             </div>

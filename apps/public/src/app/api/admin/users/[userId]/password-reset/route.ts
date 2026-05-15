@@ -6,6 +6,7 @@ import {
   createAdminPasswordResetToken,
 } from '@/lib/admin-auth/sessionStore';
 import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence';
+import { deliverAdminPasswordResetEmail } from '@/lib/adminUserEmailDelivery';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -87,10 +88,15 @@ export async function POST(
       expiresInMinutes,
       persistInMemory: !repositories,
     });
+    const resetDelivery = await deliverAdminPasswordResetEmail({ user, reset, requestId });
+    const deliveredReset = {
+      ...reset,
+      deliveryConfigured: resetDelivery.deliveryConfigured === true,
+    };
     if (repositories) {
       const currentSettings = await repositories.settings.get();
       await repositories.settings.update({
-        auth: addPersistedPasswordResetToken(currentSettings.auth, reset),
+        auth: addPersistedPasswordResetToken(currentSettings.auth, deliveredReset),
       });
     }
 
@@ -103,11 +109,15 @@ export async function POST(
         email: user.email,
         role: user.role,
         status: user.status,
-        resetTokenId: reset.id,
-        expiresAt: reset.expiresAt,
+        resetTokenId: deliveredReset.id,
+        expiresAt: deliveredReset.expiresAt,
         expiresInMinutes,
         requestedById: access.session?.user.id || null,
-        deliveryConfigured: false,
+        deliveryConfigured: deliveredReset.deliveryConfigured,
+        deliveryProvider: resetDelivery.provider,
+        deliveryStatus: resetDelivery.status,
+        deliveryStatusCode: resetDelivery.statusCode || null,
+        deliveryError: resetDelivery.error || null,
       },
       requestId,
     });
@@ -116,7 +126,8 @@ export async function POST(
       success: true,
       requestId,
       data: {
-        reset,
+        reset: deliveredReset,
+        resetDelivery,
       },
     });
   } catch (error) {

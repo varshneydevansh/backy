@@ -42,7 +42,7 @@ const toResetToken = (value: unknown): PersistedResetToken | null => {
     createdAt: value.createdAt,
     expiresAt: value.expiresAt,
     requestedById: typeof value.requestedById === 'string' ? value.requestedById : null,
-    deliveryConfigured: false,
+    deliveryConfigured: value.deliveryConfigured === true,
     resetUrl: typeof value.resetUrl === 'string' ? value.resetUrl : '',
   };
 };
@@ -68,7 +68,7 @@ const toInviteToken = (value: unknown): PersistedInviteToken | null => {
     createdAt: value.createdAt,
     expiresAt: value.expiresAt,
     requestedById: typeof value.requestedById === 'string' ? value.requestedById : null,
-    deliveryConfigured: false,
+    deliveryConfigured: value.deliveryConfigured === true,
     inviteUrl: typeof value.inviteUrl === 'string' ? value.inviteUrl : '',
   };
 };

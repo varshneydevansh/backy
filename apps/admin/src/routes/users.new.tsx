@@ -166,8 +166,8 @@ function NewUserPage() {
         label: 'Email delivery',
         detail: formData.status === 'active'
           ? 'Active users need an already-provisioned auth account.'
-          : 'Auth email delivery is still a future integration pass.',
-        ready: false,
+          : 'Invite email is queued through the configured Backy transactional provider.',
+        ready: formData.status === 'invited',
       },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
@@ -216,13 +216,12 @@ function NewUserPage() {
     returnRoute: search.siteId ? `/users?siteId=${encodeURIComponent(search.siteId)}` : '/users',
     guardrails: [
       'Backend rejects duplicate emails.',
-      'New collaborators start as invited until auth delivery and activation are connected.',
+      'New collaborators start as invited until they accept the emailed invite link.',
       'Owners should be assigned only when billing, destructive settings, or workspace transfer authority is required.',
     ],
     missingInfrastructure: [
-      'Transactional invite email delivery.',
       'Auth-provider accept-invite flow.',
-      'Resend and expiry controls.',
+      'Workspace/site ownership scoping.',
     ],
   }), [
     invitePayload,
@@ -329,7 +328,9 @@ function NewUserPage() {
       setUsers([created.user, ...users.filter((user) => user.id !== created.user.id)]);
       if (created.invite) {
         setCreatedInvite(created.invite);
-        setNoticeMessage('Invited user created. Copy the invite link below for manual delivery.');
+        setNoticeMessage(created.invite.deliveryConfigured
+          ? 'Invited user created and invite email delivery was queued. Copy the link below if you need a manual backup.'
+          : 'Invited user created, but invite email delivery is not configured. Copy the invite link below for manual delivery.');
         setIsLoading(false);
         return;
       }
@@ -463,7 +464,9 @@ function NewUserPage() {
                 <div className="min-w-0">
                   <div className="font-semibold text-foreground">Invite link ready</div>
                   <p className="mt-1 text-muted-foreground">
-                    Delivery is still manual. Copy this link and send it to the collaborator through your trusted channel.
+                    {createdInvite.deliveryConfigured
+                      ? 'Transactional delivery was queued. Keep this link available as a manual backup.'
+                      : 'Delivery is still manual. Copy this link and send it to the collaborator through your trusted channel.'}
                   </p>
                   <code className="mt-3 block overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
                     {createdInvite.inviteUrl}

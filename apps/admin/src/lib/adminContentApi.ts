@@ -424,6 +424,7 @@ interface ApiUserResponse {
   data?: {
     user: ApiUser;
     invite?: AdminInviteToken | null;
+    inviteDelivery?: AdminUserDeliveryResult | null;
   };
   invite?: AdminInviteToken | null;
   error?: {
@@ -1514,8 +1515,19 @@ export interface AdminInviteToken {
   createdAt?: string;
   expiresAt: string;
   requestedById?: string | null;
-  deliveryConfigured?: false;
+  deliveryConfigured?: boolean;
   inviteUrl: string;
+  delivery?: AdminUserDeliveryResult | null;
+}
+
+export interface AdminUserDeliveryResult {
+  attempted: boolean;
+  provider: 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
+  status: 'queued' | 'failed';
+  deliveryConfigured: boolean;
+  statusCode?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UserCreateResult {

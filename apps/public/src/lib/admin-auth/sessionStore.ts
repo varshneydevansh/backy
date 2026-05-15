@@ -38,7 +38,7 @@ export interface AdminPasswordResetToken {
   createdAt: string;
   expiresAt: string;
   requestedById?: string | null;
-  deliveryConfigured: false;
+  deliveryConfigured: boolean;
   resetUrl: string;
 }
 
@@ -50,7 +50,7 @@ export interface AdminInviteToken {
   createdAt: string;
   expiresAt: string;
   requestedById?: string | null;
-  deliveryConfigured: false;
+  deliveryConfigured: boolean;
   inviteUrl: string;
 }
 

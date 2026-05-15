@@ -13,7 +13,8 @@ export interface EmailDeliveryMessage {
   formId?: string;
   submissionId?: string;
   commentId?: string;
-  entityType?: 'form-submission' | 'comment';
+  userId?: string;
+  entityType?: 'form-submission' | 'comment' | 'admin-invite' | 'admin-password-reset';
   status: string;
   requestId: string;
   values?: Record<string, unknown>;
@@ -242,6 +243,7 @@ const buildSmtpMessage = (message: EmailDeliveryMessage): string => {
     ...(message.formId ? [`X-Backy-Form-ID: ${escapeSmtpHeader(message.formId)}`] : []),
     ...(message.submissionId ? [`X-Backy-Submission-ID: ${escapeSmtpHeader(message.submissionId)}`] : []),
     ...(message.commentId ? [`X-Backy-Comment-ID: ${escapeSmtpHeader(message.commentId)}`] : []),
+    ...(message.userId ? [`X-Backy-Admin-User-ID: ${escapeSmtpHeader(message.userId)}`] : []),
     '',
     escapeSmtpBody(message.text),
   ].join('\r\n');
@@ -357,6 +359,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
     if (message.formId) headers['x-backy-form-id'] = message.formId;
     if (message.submissionId) headers['x-backy-submission-id'] = message.submissionId;
     if (message.commentId) headers['x-backy-comment-id'] = message.commentId;
+    if (message.userId) headers['x-backy-admin-user-id'] = message.userId;
 
     const response = await fetch(config.endpoint, {
       method: 'POST',
@@ -370,6 +373,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
         formId: message.formId,
         submissionId: message.submissionId,
         commentId: message.commentId,
+        userId: message.userId,
         entityType: message.entityType,
         status: message.status,
         requestId: message.requestId,
@@ -402,6 +406,7 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
           ...(message.formId ? { 'X-Backy-Form-ID': message.formId } : {}),
           ...(message.submissionId ? { 'X-Backy-Submission-ID': message.submissionId } : {}),
           ...(message.commentId ? { 'X-Backy-Comment-ID': message.commentId } : {}),
+          ...(message.userId ? { 'X-Backy-Admin-User-ID': message.userId } : {}),
         },
       }),
     });

@@ -144,6 +144,13 @@ const createUser = async ({ fullName, email, role = 'admin', status = 'invited' 
   });
   const user = payload.data?.user || payload.user;
   assert(user?.id, `Create user did not return a user: ${JSON.stringify(payload).slice(0, 500)}`);
+  if (status === 'invited') {
+    const invite = payload.data?.invite || payload.invite;
+    const inviteDelivery = payload.data?.inviteDelivery;
+    assert(invite?.inviteUrl?.includes('/accept-invite?token='), `Invited user create did not return an invite URL: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(invite.deliveryConfigured === true, `Invited user create did not queue invite delivery: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(inviteDelivery?.provider && inviteDelivery.status === 'queued', `Invited user create did not expose delivery metadata: ${JSON.stringify(inviteDelivery).slice(0, 500)}`);
+  }
   return user;
 };
 
@@ -519,7 +526,9 @@ const submitInviteFormAndAssertLink = async (client, email) => {
       const text = panel?.textContent || '';
       return {
         hasPanel: Boolean(panel),
-        hasNotice: (document.body?.innerText || '').includes('Invited user created. Copy the invite link below for manual delivery.'),
+        hasNotice: (document.body?.innerText || '').includes('Invited user created and invite email delivery was queued') ||
+          (document.body?.innerText || '').includes('Invited user created. Copy the invite link below for manual delivery.'),
+        hasDeliveryBackup: text.includes('Transactional delivery was queued') || text.includes('Delivery is still manual'),
         hasLink: text.includes('/accept-invite?token='),
         hasCopy: text.includes('Copy link'),
         hasEmail: (document.body?.innerText || '').includes(${JSON.stringify(email)}),
@@ -527,7 +536,7 @@ const submitInviteFormAndAssertLink = async (client, email) => {
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
-    if (state.hasPanel && state.hasNotice && state.hasLink && state.hasCopy && state.hasEmail) {
+    if (state.hasPanel && state.hasNotice && state.hasDeliveryBackup && state.hasLink && state.hasCopy && state.hasEmail) {
       return state;
     }
     if (attempt === 79) {

@@ -6,6 +6,7 @@ import {
   createAdminInviteToken,
 } from '@/lib/admin-auth/sessionStore';
 import { addPersistedInviteToken } from '@/lib/adminAuthTokenPersistence';
+import { deliverAdminInviteEmail } from '@/lib/adminUserEmailDelivery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -81,10 +82,15 @@ export async function POST(
       expiresInMinutes,
       persistInMemory: !repositories,
     });
+    const inviteDelivery = await deliverAdminInviteEmail({ user, invite, requestId });
+    const deliveredInvite = {
+      ...invite,
+      deliveryConfigured: inviteDelivery.deliveryConfigured === true,
+    };
     if (repositories) {
       const currentSettings = await repositories.settings.get();
       await repositories.settings.update({
-        auth: addPersistedInviteToken(currentSettings.auth, invite),
+        auth: addPersistedInviteToken(currentSettings.auth, deliveredInvite),
       });
     }
 
@@ -97,11 +103,15 @@ export async function POST(
         email: user.email,
         role: user.role,
         status: user.status,
-        inviteTokenId: invite.id,
-        expiresAt: invite.expiresAt,
+        inviteTokenId: deliveredInvite.id,
+        expiresAt: deliveredInvite.expiresAt,
         expiresInMinutes,
         requestedById: access.session?.user.id || null,
-        deliveryConfigured: false,
+        deliveryConfigured: deliveredInvite.deliveryConfigured,
+        deliveryProvider: inviteDelivery.provider,
+        deliveryStatus: inviteDelivery.status,
+        deliveryStatusCode: inviteDelivery.statusCode || null,
+        deliveryError: inviteDelivery.error || null,
       },
       requestId,
     });
@@ -110,7 +120,8 @@ export async function POST(
       success: true,
       requestId,
       data: {
-        invite,
+        invite: deliveredInvite,
+        inviteDelivery,
       },
     });
   } catch (error) {
