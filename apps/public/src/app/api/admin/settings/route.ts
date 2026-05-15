@@ -83,6 +83,8 @@ const stringValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
+const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
 const SECRET_LIKE_VALUE_REGEXES = [
   /^(AKIA|ASIA)[A-Z0-9]{16}$/i,
@@ -726,6 +728,44 @@ const validateCommerceProviderEndpoints = (integrations: unknown): string | null
     if (check.url.trim() && !validateWebhookUrl(check.url).ok) {
       return `${check.label} must be an http or https URL.`;
     }
+  }
+
+  return null;
+};
+
+const validateInfrastructureProviderSettings = (integrations: unknown): string | null => {
+  const input = parseJsonObject(integrations);
+  const storage = parseJsonObject(input?.storage) || {};
+  const supabase = parseJsonObject(input?.supabase) || {};
+  const vercel = parseJsonObject(input?.vercel) || {};
+  const urlChecks = [
+    {
+      url: stringValue(storage.publicBaseUrl),
+      label: 'Storage public base URL',
+    },
+    {
+      url: stringValue(supabase.projectUrl),
+      label: 'Supabase project URL',
+    },
+  ];
+
+  for (const check of urlChecks) {
+    if (check.url && !validateWebhookUrl(check.url).ok) {
+      return `${check.label} must be an http or https URL.`;
+    }
+  }
+
+  const supabaseProjectRef = stringValue(supabase.projectRef);
+  if (supabaseProjectRef && !SUPABASE_PROJECT_REF_REGEX.test(supabaseProjectRef)) {
+    return 'Supabase project ref must use lowercase letters, numbers, and hyphens only.';
+  }
+
+  const vercelProductionDomain = stringValue(vercel.productionDomain);
+  if (
+    vercelProductionDomain
+    && (vercelProductionDomain.includes('://') || !SIMPLE_DOMAIN_REGEX.test(vercelProductionDomain))
+  ) {
+    return 'Vercel production domain must be a bare hostname without protocol or path.';
   }
 
   return null;
@@ -2447,6 +2487,10 @@ export async function PATCH(request: NextRequest) {
       if (secretReferenceError) {
         return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
       }
+      const infrastructureSettingsError = validateInfrastructureProviderSettings(integrations);
+      if (infrastructureSettingsError) {
+        return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
+      }
       const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
       if (commerceEndpointError) {
         return errorResponse(400, 'VALIDATION_ERROR', commerceEndpointError, requestId);
@@ -2499,6 +2543,10 @@ export async function PATCH(request: NextRequest) {
     const secretReferenceError = validateSecretReferencePolicy(integrations);
     if (secretReferenceError) {
       return errorResponse(400, 'SECRET_REFERENCE_REQUIRED', secretReferenceError, requestId);
+    }
+    const infrastructureSettingsError = validateInfrastructureProviderSettings(integrations);
+    if (infrastructureSettingsError) {
+      return errorResponse(400, 'VALIDATION_ERROR', infrastructureSettingsError, requestId);
     }
     const commerceEndpointError = validateCommerceProviderEndpoints(integrations);
     if (commerceEndpointError) {

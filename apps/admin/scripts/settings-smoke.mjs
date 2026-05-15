@@ -1503,6 +1503,72 @@ const assertDirectSettingsApiRejectsInvalidCallbackUrls = async (settings) => {
   };
 };
 
+const assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings = async (settings) => {
+  const sendInvalidInfrastructurePatch = async (label, integrationsPatch) => {
+    const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        integrations: {
+          ...(settings.integrations || {}),
+          ...integrationsPatch,
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 400, `${label} should be rejected, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'VALIDATION_ERROR', `${label} rejection should return VALIDATION_ERROR: ${JSON.stringify(payload).slice(0, 500)}`);
+
+    return {
+      status: response.status,
+      code: payload.error?.code,
+    };
+  };
+
+  const storage = await sendInvalidInfrastructurePatch('Invalid storage public base URL', {
+    storage: {
+      ...(settings.integrations?.storage || {}),
+      publicBaseUrl: 'not-a-valid-url',
+    },
+  });
+  const supabase = await sendInvalidInfrastructurePatch('Invalid Supabase project URL', {
+    supabase: {
+      ...(settings.integrations?.supabase || {}),
+      projectUrl: 'ftp://settings-smoke.invalid.supabase.co',
+    },
+  });
+  const vercel = await sendInvalidInfrastructurePatch('Invalid Vercel production domain', {
+    vercel: {
+      ...(settings.integrations?.vercel || {}),
+      productionDomain: 'https://settings-smoke.invalid/path',
+    },
+  });
+
+  const after = await readSettings();
+  assert(
+    after.integrations?.storage?.publicBaseUrl === settings.integrations?.storage?.publicBaseUrl,
+    `Rejected storage URL patch should not mutate persisted storage settings: ${JSON.stringify(after.integrations?.storage).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.supabase?.projectUrl === settings.integrations?.supabase?.projectUrl,
+    `Rejected Supabase URL patch should not mutate persisted Supabase settings: ${JSON.stringify(after.integrations?.supabase).slice(0, 500)}`,
+  );
+  assert(
+    after.integrations?.vercel?.productionDomain === settings.integrations?.vercel?.productionDomain,
+    `Rejected Vercel domain patch should not mutate persisted Vercel settings: ${JSON.stringify(after.integrations?.vercel).slice(0, 500)}`,
+  );
+
+  return {
+    storage,
+    supabase,
+    vercel,
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -1605,6 +1671,7 @@ const main = async () => {
     const secretStorage = await assertDirectSettingsApiRejectsRawSecrets(await readSettings());
     const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
     const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
+    const infrastructureProviderValidation = await assertDirectSettingsApiRejectsInvalidInfrastructureProviderSettings(await readSettings());
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -1636,6 +1703,7 @@ const main = async () => {
       secretStorage,
       providerEndpointValidation,
       callbackUrlValidation,
+      infrastructureProviderValidation,
       persisted: {
         deliveryMode: persisted.deliveryMode,
         general: persisted.integrations?.general,
