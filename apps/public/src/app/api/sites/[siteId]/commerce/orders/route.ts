@@ -446,6 +446,100 @@ const requireGuestCheckoutAllowed = (
   return null;
 };
 
+const currentMonthStart = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+};
+
+const readMonthlyOrderBillingPolicy = (settings: unknown) => {
+  const root = settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? settings as Record<string, unknown>
+    : {};
+  const commerce = root.commerce && typeof root.commerce === 'object' && !Array.isArray(root.commerce)
+    ? root.commerce as Record<string, unknown>
+    : root;
+  const limit = Number(commerce.monthlyOrderLimit);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    monthlyOrderLimit: Number.isFinite(limit) && limit >= 0 ? Math.round(limit) : 100,
+    billingPlan: typeof commerce.billingPlan === 'string' ? commerce.billingPlan : 'free',
+  };
+};
+
+const isRecordInCurrentMonth = (record: { createdAt?: string; values?: Record<string, unknown> }, monthStart: Date) => {
+  const createdAt = textValue(record.createdAt || record.values?.createdat || record.values?.createdAt);
+  const timestamp = createdAt ? Date.parse(createdAt) : Number.NaN;
+  return Number.isFinite(timestamp) && timestamp >= monthStart.getTime();
+};
+
+const countRepositoryMonthlyOrders = async ({
+  siteId,
+  collectionId,
+  repositories,
+}: {
+  siteId: string;
+  collectionId: string;
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
+}) => {
+  const monthStart = currentMonthStart();
+  let offset = 0;
+  let count = 0;
+
+  for (;;) {
+    const page = await repositories.collections.listRecords({
+      siteId,
+      collectionId,
+      includeUnpublished: true,
+      status: 'all',
+      limit: 100,
+      offset,
+    });
+    count += page.items.filter((record) => isRecordInCurrentMonth(record, monthStart)).length;
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.pagination.total) {
+      return count;
+    }
+  }
+};
+
+const countDemoMonthlyOrders = (siteId: string, collectionId: string) => {
+  const monthStart = currentMonthStart();
+  let offset = 0;
+  let count = 0;
+
+  for (;;) {
+    const page = listCollectionRecords(siteId, collectionId, {
+      includeUnpublished: true,
+      limit: 100,
+      offset,
+    });
+    count += page.records.filter((record) => isRecordInCurrentMonth(record, monthStart)).length;
+    offset += page.records.length;
+    if (page.records.length === 0 || offset >= page.pagination.total) {
+      return count;
+    }
+  }
+};
+
+const enforceMonthlyOrderBillingLimit = (
+  settings: unknown,
+  currentOrderCount: number,
+  requestId: string,
+) => {
+  const policy = readMonthlyOrderBillingPolicy(settings);
+  if (policy.overageMode === 'block' && currentOrderCount >= policy.monthlyOrderLimit) {
+    return errorResponse(
+      402,
+      'BILLING_ORDER_LIMIT',
+      `The ${policy.billingPlan} billing policy allows ${policy.monthlyOrderLimit} order${policy.monthlyOrderLimit === 1 ? '' : 's'} this month. Update Settings billing limits before accepting another checkout order.`,
+      requestId,
+    );
+  }
+
+  return null;
+};
+
 const selectProductVariant = (product: CommerceProduct, item: CheckoutItemInput) => {
   const variantId = textValue(item.variantId);
   const variantSku = textValue(item.variantSku);
@@ -1675,6 +1769,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
         return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
       }
+      const monthlyOrderCount = await countRepositoryMonthlyOrders({
+        siteId: site.id,
+        collectionId: ordersCollection.id,
+        repositories,
+      });
+      const orderLimitResponse = enforceMonthlyOrderBillingLimit(settings.integrations?.commerce, monthlyOrderCount, requestId);
+      if (orderLimitResponse) return orderLimitResponse;
       const commerce = buildCommerceStorefrontContract({
         siteId: site.id,
         settings: settings.integrations?.commerce,
@@ -1933,9 +2034,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (hasPublicOrderCollectionAccess(ordersCollection.permissions)) {
       return errorResponse(409, 'ORDER_QUEUE_NOT_PRIVATE', 'Orders collection must remain private before public checkout intake is enabled', requestId);
     }
+    const adminSettings = getAdminSettings();
+    const orderLimitResponse = enforceMonthlyOrderBillingLimit(
+      adminSettings.integrations?.commerce,
+      countDemoMonthlyOrders(site.id, ordersCollection.id),
+      requestId,
+    );
+    if (orderLimitResponse) return orderLimitResponse;
     const commerce = buildCommerceStorefrontContract({
       siteId: site.id,
-      settings: getAdminSettings().integrations?.commerce,
+      settings: adminSettings.integrations?.commerce,
       hasCatalog: true,
       hasOrderIntake: true,
     });

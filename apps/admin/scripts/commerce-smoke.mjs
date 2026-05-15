@@ -853,6 +853,70 @@ const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
   }
 };
 
+const currentMonthStartMs = () => {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+};
+
+const currentMonthRecords = (records) => {
+  const monthStart = currentMonthStartMs();
+  return records.filter((record) => {
+    const timestamp = Date.parse(record.createdAt || record.values?.createdat || record.values?.createdAt || '');
+    return Number.isFinite(timestamp) && timestamp >= monthStart;
+  });
+};
+
+const assertOrderBillingLimitEnforced = async ({ productCollection, ordersCollection, slug, suffix }) => {
+  assert(productCollection?.id, 'Products collection is required for order billing limit smoke.');
+  assert(ordersCollection?.id, 'Orders collection is required for order billing limit smoke.');
+  const settings = await getSettings();
+  const existingOrders = currentMonthRecords(await listAllCollectionRecords(ordersCollection.id, '?limit=100&status=all'));
+  const productBefore = await getCollectionRecordBySlug(productCollection.id, slug);
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedSessionId = `cs_blocked_order_limit_${suffix}`;
+
+  await patchSettingsFromSnapshot({
+    ...settings,
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+        monthlyOrderLimit: existingOrders.length,
+      },
+    },
+  });
+
+  try {
+    const { response, payload } = await requestApiRaw(`/api/sites/${SITE_ID}/commerce/orders`, {
+      method: 'POST',
+      body: JSON.stringify({
+        customer: {
+          name: 'Blocked Order Limit Buyer',
+          email: `blocked-order-limit-${suffix}@example.com`,
+        },
+        items: [{ slug, quantity: 1 }],
+        paymentProvider: 'manual',
+        paymentReference: `manual-blocked-order-limit-${suffix}`,
+        checkoutSessionId: blockedSessionId,
+      }),
+    });
+
+    assert(response.status === 402, `Billing order limit should reject checkout order creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'BILLING_ORDER_LIMIT', `Billing order limit should return BILLING_ORDER_LIMIT: ${JSON.stringify(payload).slice(0, 500)}`);
+    const ordersAfter = await listAllCollectionRecords(ordersCollection.id, '?limit=100&status=all');
+    assert(!ordersAfter.some((record) => record.values?.checkoutsessionid === blockedSessionId), `Billing-limited checkout unexpectedly persisted an order: ${JSON.stringify(ordersAfter.slice(-3)).slice(0, 900)}`);
+    const productAfter = await getCollectionRecordBySlug(productCollection.id, slug);
+    assert(productAfter?.values?.inventory === productBefore?.values?.inventory, `Billing-limited checkout unexpectedly reserved inventory: before=${productBefore?.values?.inventory} after=${productAfter?.values?.inventory}`);
+  } finally {
+    await patchSettingsFromSnapshot({
+      ...settings,
+      integrations: originalIntegrations,
+    });
+  }
+};
+
 const deleteCollectionRecord = async (collectionId, recordId) => {
   if (!collectionId || !recordId) return;
 
@@ -2398,6 +2462,12 @@ const main = async () => {
     });
     importedProductRecordId = importedProduct.id;
     await assertDigitalStockFilters(client, `Imported Commerce ${suffix}`);
+    await assertOrderBillingLimitEnforced({
+      productCollection: finalProductCollection,
+      ordersCollection: finalOrdersCollection,
+      slug,
+      suffix,
+    });
 
     const publicCommerce = await assertPublicCommerce({
       productCollection: finalProductCollection,
