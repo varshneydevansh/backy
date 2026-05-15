@@ -414,6 +414,8 @@ const main = async () => {
   const adminFullName = `Teams Admin ${suffix}`;
   const editorEmail = `teams-editor-${suffix}@example.com`;
   const editorFullName = `Teams Editor ${suffix}`;
+  const defaultViewerEmail = `teams-viewer-${suffix}@example.com`;
+  const defaultViewerFullName = `Teams Viewer ${suffix}`;
   const readOnlyEmail = `teams-readonly-${suffix}@example.com`;
   const readOnlyFullName = `Teams Readonly ${suffix}`;
   let activeAuthPreload = null;
@@ -671,6 +673,45 @@ const main = async () => {
       'Editor Teams permission block',
     );
 
+    const defaultViewerAccount = await createUser({
+      fullName: defaultViewerFullName,
+      email: defaultViewerEmail,
+      role: 'viewer',
+      status: 'invited',
+    });
+    temporaryUserIds.push(defaultViewerAccount.user.id);
+    assert(defaultViewerAccount.invite?.token, `Default viewer invite token missing: ${JSON.stringify(defaultViewerAccount).slice(0, 500)}`);
+    const defaultViewerSession = await acceptInvite(defaultViewerAccount.invite.token);
+    await removeBrowserPreload(client, activeAuthPreload);
+    activeAuthPreload = await installBrowserAuthPreload(client, defaultViewerSession.session.token, defaultViewerSession.user);
+    await setBrowserAuthStorage(client, defaultViewerSession.session.token, defaultViewerSession.user);
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}/teams`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        const createButton = document.querySelector('[data-testid="teams-create-button"]');
+        const refreshButton = Array.from(document.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').trim() === 'Refresh'
+        ));
+        return {
+          ready: window.location.pathname === '/teams' &&
+            body.includes('Teams unavailable') &&
+            body.includes('viewer role does not include this capability.') &&
+            body.includes('No teams yet') &&
+            createButton instanceof HTMLButtonElement &&
+            createButton.disabled === true &&
+            refreshButton instanceof HTMLButtonElement &&
+            refreshButton.disabled === true,
+          path: window.location.pathname,
+          body: body.slice(0, 1600),
+          createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+          refreshDisabled: refreshButton instanceof HTMLButtonElement ? refreshButton.disabled : null,
+        };
+      })()`,
+      'Default viewer Teams permission block',
+    );
+
     const readOnlyAccount = await createUser({
       fullName: readOnlyFullName,
       email: readOnlyEmail,
@@ -742,6 +783,7 @@ const main = async () => {
       invitedEmail: inviteEmail,
       adminEmail,
       editorEmail,
+      defaultViewerEmail,
       readOnlyEmail,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
