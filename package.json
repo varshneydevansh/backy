@@ -21,6 +21,7 @@
     "test:smoke:sdk": "npm run test:smoke --workspace @backy/sdk-js",
     "test:smoke:storage": "npm run test:smoke --workspace @backy/storage",
     "test:smoke:all": "npm run test:smoke:admin && npm run test:smoke:public && npm run test:smoke:sdk && npm run test:smoke:storage",
+    "ci:blog-api-contract": "node scripts/blog-api-contract-ci.mjs",
     "ci:sdk-smoke": "node scripts/sdk-smoke-ci.mjs",
     "smoke": "npm run test:smoke:all",
     "clean": "turbo run clean && rm -rf node_modules",

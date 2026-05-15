@@ -373,7 +373,7 @@ async function cleanup() {
 
 try {
   await loginAdminApi();
-  const unique = Date.now();
+  const unique = Date.now().toString();
   const siteSlug = `admin-contract-site-${unique}`;
   const customDomain = `${siteSlug}.example.test`;
   const pageSlug = `admin-contract-page-${unique}`;

@@ -338,6 +338,15 @@
             "params": {
               "type": "object",
               "additionalProperties": { "type": "string" }
+            },
+            "dataset": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                { "type": "null" }
+              ]
             }
           },
           "required": ["type", "path", "status", "canonical"]

@@ -1,0 +1,28 @@
+name: Blog API Contract
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  blog-api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run blog/API contract smoke
+        run: npm run ci:blog-api-contract

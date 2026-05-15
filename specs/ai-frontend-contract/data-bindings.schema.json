@@ -115,6 +115,15 @@
     "bindings": {
       "type": "array",
       "items": { "$ref": "#/$defs/binding" }
+    },
+    "collectionDataset": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        { "type": "null" }
+      ]
     }
   },
   "required": ["schemaVersion", "datasets", "bindings"]
