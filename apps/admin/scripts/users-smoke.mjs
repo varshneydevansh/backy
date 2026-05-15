@@ -152,7 +152,7 @@ const assertUsersApiPagination = async ({ search, expectedIds }) => {
 
   assert(firstPage.pagination?.limit === 1, `Users API first page limit metadata was wrong: ${JSON.stringify(firstPage).slice(0, 500)}`);
   assert(firstPage.pagination?.offset === 0, `Users API first page offset metadata was wrong: ${JSON.stringify(firstPage).slice(0, 500)}`);
-  assert(firstPage.pagination?.total >= expectedIds.length, `Users API first page total did not include created users: ${JSON.stringify(firstPage).slice(0, 500)}`);
+  assert(firstPage.pagination?.total === expectedIds.length, `Users API first page total did not match created users: ${JSON.stringify(firstPage).slice(0, 500)}`);
   assert(firstPage.pagination?.hasMore === true, `Users API first page should report hasMore: ${JSON.stringify(firstPage).slice(0, 500)}`);
   assert(firstPage.users.length === 1, `Users API first page should return exactly one user: ${JSON.stringify(firstPage).slice(0, 500)}`);
 
@@ -172,6 +172,38 @@ const assertUsersApiPagination = async ({ search, expectedIds }) => {
     firstId: firstPage.users[0]?.id,
     secondId: secondPage.users[0]?.id,
     hasMore: firstPage.pagination.hasMore,
+  };
+};
+
+const assertUsersApiFilters = async ({ search, adminUserId, viewerUserId }) => {
+  const all = await listUsersPage({ search, limit: 10, offset: 0 });
+  const admin = await listUsersPage({ search, role: 'admin', limit: 10, offset: 0 });
+  const viewer = await listUsersPage({ search, role: 'viewer', limit: 10, offset: 0 });
+  const invited = await listUsersPage({ search, status: 'invited', limit: 10, offset: 0 });
+  const active = await listUsersPage({ search, status: 'active', limit: 10, offset: 0 });
+  const viewerActive = await listUsersPage({ search, role: 'viewer', status: 'active', limit: 10, offset: 0 });
+
+  const assertIds = (label, result, expectedIds) => {
+    const ids = result.users.map((user) => user.id).sort();
+    const expected = [...expectedIds].sort();
+    assert(result.pagination?.total === expected.length, `${label} total was wrong: ${JSON.stringify(result).slice(0, 500)}`);
+    assert(JSON.stringify(ids) === JSON.stringify(expected), `${label} ids were wrong: ${JSON.stringify({ ids, expected, result }).slice(0, 500)}`);
+  };
+
+  assertIds('Users API search filter', all, [adminUserId, viewerUserId]);
+  assertIds('Users API role=admin filter', admin, [adminUserId]);
+  assertIds('Users API role=viewer filter', viewer, [viewerUserId]);
+  assertIds('Users API status=invited filter', invited, [adminUserId]);
+  assertIds('Users API status=active filter', active, [viewerUserId]);
+  assertIds('Users API role+status filter', viewerActive, [viewerUserId]);
+
+  return {
+    searchTotal: all.pagination.total,
+    adminTotal: admin.pagination.total,
+    viewerTotal: viewer.pagination.total,
+    invitedTotal: invited.pagination.total,
+    activeTotal: active.pagination.total,
+    viewerActiveTotal: viewerActive.pagination.total,
   };
 };
 
@@ -1436,6 +1468,11 @@ const main = async () => {
       search: suffix,
       expectedIds: [createdUserId, bulkUserId],
     });
+    const filters = await assertUsersApiFilters({
+      search: suffix,
+      adminUserId: createdUserId,
+      viewerUserId: bulkUserId,
+    });
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1592,6 +1629,7 @@ const main = async () => {
       createdEmail: email,
       fullName,
       pagination,
+      filters,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
