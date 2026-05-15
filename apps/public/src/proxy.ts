@@ -34,6 +34,13 @@ const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.sta
 const isAdminAuthRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/auth/');
 const isUploadRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/uploads/');
 const hostedSeoMatch = (pathname: string) => pathname.match(/^\/sites\/([^/]+)\/(sitemap\.xml|robots\.txt)$/);
+const isHostedBlogRssRequest = (pathname: string) => /^\/sites\/[^/]+\/blog\/rss\.xml$/.test(pathname);
+const isHostedHtmlRequest = (request: NextRequest) => (
+  (request.method === 'GET' || request.method === 'HEAD')
+  && request.nextUrl.pathname.startsWith('/sites/')
+  && !hostedSeoMatch(request.nextUrl.pathname)
+  && !isHostedBlogRssRequest(request.nextUrl.pathname)
+);
 
 const shouldRequireAdminApiKey = () => (
   process.env.BACKY_REQUIRE_ADMIN_API_KEY === 'true'
@@ -98,6 +105,14 @@ const applyAdminHeaders = (headers: Headers) => {
   headers.set('x-backy-admin-contract-version', BACKY_ADMIN_CONTRACT_VERSION);
 };
 
+const applyHostedHtmlHeaders = (headers: Headers, request: NextRequest) => {
+  const isPreview = request.nextUrl.searchParams.has('previewToken');
+  headers.set('Cache-Control', 'no-store');
+  headers.set('x-backy-cache-scope', isPreview ? 'private' : 'hosted-html');
+  headers.set('x-backy-hosted-cache-policy', isPreview ? 'preview-no-store' : 'html-no-store');
+  headers.set('x-backy-render-surface', 'hosted-html');
+};
+
 export function proxy(request: NextRequest) {
   const origin = request.headers.get('origin');
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -151,6 +166,9 @@ export function proxy(request: NextRequest) {
   applyCorsHeaders(response.headers, origin);
   if (isAdminApiRequest(request)) {
     applyAdminHeaders(response.headers);
+  }
+  if (isHostedHtmlRequest(request)) {
+    applyHostedHtmlHeaders(response.headers, request);
   }
   response.headers.set('x-backy-request-id', requestId);
   return response;

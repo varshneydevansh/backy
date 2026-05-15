@@ -59,6 +59,11 @@ async function record(name, fn) {
   checks.push({ name, ms: Date.now() - startedAt });
 }
 
+function assertNoStoreCache(response, url, label) {
+  const cacheControl = response.headers.get('cache-control') || '';
+  assert(cacheControl.split(',').map((part) => part.trim().toLowerCase()).includes('no-store'), `${url} expected ${label} no-store cache`);
+}
+
 async function createPreview(path) {
   const sessionToken = await loginAdminApi();
   const { response, json, url } = await request(path, {
@@ -108,6 +113,9 @@ await record('render preview API exposes draft route only with token', async () 
 await record('hosted page preview renders draft HTML with noindex', async () => {
   const { response, text, url } = await request(pagePreview.hostedUrl);
   assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+  assertNoStoreCache(response, url, 'hosted preview');
+  assert(response.headers.get('x-backy-cache-scope') === 'private', `${url} expected hosted preview private cache scope`);
+  assert(response.headers.get('x-backy-hosted-cache-policy') === 'preview-no-store', `${url} expected hosted preview cache policy`);
   assert(text.includes('Draft-only page'), `${url} missing draft page content`);
   assert(text.includes('noindex'), `${url} missing noindex metadata`);
 });
@@ -146,12 +154,18 @@ await record('hosted post preview renders draft HTML with noindex', async () => 
 await record('published hosted post remains public', async () => {
   const { response, text, url } = await request('/sites/demo/blog/welcome');
   assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+  assertNoStoreCache(response, url, 'hosted post');
+  assert(response.headers.get('x-backy-cache-scope') === 'hosted-html', `${url} expected hosted post cache scope`);
+  assert(response.headers.get('x-backy-hosted-cache-policy') === 'html-no-store', `${url} expected hosted post cache policy`);
   assert(text.includes('Backy CMS helps you ship'), `${url} missing published post content`);
 });
 
 await record('hosted blog archive renders published post cards and filters', async () => {
   const { response, text, url } = await request('/sites/demo/blog');
   assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+  assertNoStoreCache(response, url, 'hosted archive');
+  assert(response.headers.get('x-backy-cache-scope') === 'hosted-html', `${url} expected hosted archive cache scope`);
+  assert(response.headers.get('x-backy-hosted-cache-policy') === 'html-no-store', `${url} expected hosted archive cache policy`);
   assert(text.includes('backy-blog-archive'), `${url} missing archive shell`);
   assert(text.includes('Welcome to Backy'), `${url} missing published post card`);
   assert(text.includes('href="/sites/demo/blog/welcome"'), `${url} missing hosted post link`);
