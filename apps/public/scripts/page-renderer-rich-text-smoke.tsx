@@ -1,6 +1,6 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PageRenderer, type PageContent } from '../src/components/PageRenderer';
+import { PageRenderer, type FontAsset, type PageContent } from '../src/components/PageRenderer';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -666,9 +666,60 @@ const content: PageContent = {
 };
 
 const html = renderToStaticMarkup(
-  <PageRenderer content={content} isPreview siteId="site_renderer_smoke" pageId="page_renderer_smoke" />,
+  <PageRenderer
+    content={content}
+    isPreview
+    siteId="site_renderer_smoke"
+    pageId="page_renderer_smoke"
+    theme={{
+      colors: {
+        primary: '#0ea5e9',
+        background: '#fdf2f8',
+        text: '#111827',
+      },
+      fonts: {
+        heading: '"Theme Heading", serif',
+        body: '"Theme Body", sans-serif',
+        mono: '"Theme Mono", monospace',
+        custom: [
+          { name: 'Theme Upload', url: '/fonts/theme-upload.woff2' },
+          { name: 'Theme Css Import', url: '/fonts/theme-import.css' },
+        ],
+      },
+      spacing: {
+        unit: 8,
+        section: '24px',
+      },
+      customCSS: '.theme-probe{color:var(--color-primary);font-family:var(--font-heading);}',
+    }}
+    fontAssets={[
+      {
+        id: 'uploaded-font',
+        family: 'Uploaded Renderer Font',
+        source: 'uploaded',
+        url: '/api/sites/site_renderer_smoke/media/uploaded-font/file',
+        weights: ['700'],
+        styles: ['italic'],
+        display: 'swap',
+      } satisfies FontAsset,
+    ]}
+  />,
 );
 
+assert(html.includes('class="backy-render-root"'), `Theme root class was not rendered: ${html}`);
+assert(html.includes('--color-primary: #0ea5e9;'), `Theme primary variable was not rendered: ${html}`);
+assert(html.includes('--color-background: #fdf2f8;'), `Theme background variable was not rendered: ${html}`);
+assert(html.includes('--font-heading: &quot;Theme Heading&quot;, serif;') || html.includes('--font-heading: "Theme Heading", serif;'), `Theme heading font variable was not rendered: ${html}`);
+assert(html.includes('--font-body: &quot;Theme Body&quot;, sans-serif;') || html.includes('--font-body: "Theme Body", sans-serif;'), `Theme body font variable was not rendered: ${html}`);
+assert(html.includes('--font-mono: &quot;Theme Mono&quot;, monospace;') || html.includes('--font-mono: "Theme Mono", monospace;'), `Theme mono font variable was not rendered: ${html}`);
+assert(html.includes('--spacing-unit: 8px;'), `Numeric spacing token was not rendered with a unit: ${html}`);
+assert(html.includes('--spacing-section: 24px;'), `String spacing token was not rendered: ${html}`);
+assert(html.includes('.theme-probe{color:var(--color-primary);font-family:var(--font-heading);}'), `Theme custom CSS was not rendered: ${html}`);
+assert(html.includes('font-family: "Theme Upload"'), `Theme custom font-face was not rendered: ${html}`);
+assert(html.includes('@import url("/fonts/theme-import.css");'), `Theme CSS font import was not rendered: ${html}`);
+assert(html.includes('font-family: "Uploaded Renderer Font"'), `Uploaded font-face was not rendered: ${html}`);
+assert(html.includes('font-weight: 700'), `Uploaded font weight was not rendered: ${html}`);
+assert(html.includes('font-style: italic'), `Uploaded font style was not rendered: ${html}`);
 assert(html.includes('Slate Heading Rendered'), `Heading Slate content was not rendered: ${html}`);
 assert(html.includes('font-size:42px'), `Heading font size was not rendered: ${html}`);
 assert(html.includes('font-weight:700'), `Heading font weight was not rendered: ${html}`);

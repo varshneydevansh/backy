@@ -119,12 +119,17 @@ export interface ThemeConfig {
   fonts?: {
     heading?: string;
     body?: string;
+    mono?: string;
+    custom?: Array<{
+      name: string;
+      url: string;
+    }>;
   };
   spacing?: Record<string, string | number>;
   customCSS?: string;
 }
 
-interface FontAsset {
+export interface FontAsset {
   id: string;
   family: string;
   source: 'system' | 'google' | 'uploaded' | 'external';
@@ -138,6 +143,14 @@ interface FontAsset {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const cssString = (value: string) => value.replace(/["\\]/g, '');
+
+const cssUrl = (value: string) => value.replace(/["\\()\n\r]/g, '');
+
+const spacingTokenValue = (value: string | number) => (
+  typeof value === 'number' ? `${value}px` : value
 );
 
 const animationFromMetadata = (element: CanvasElement): AnimationConfig | undefined => {
@@ -4112,31 +4125,58 @@ export function PageRenderer({
     if (theme.fonts.body) {
       (themeVars as Record<string, string>)['--font-body'] = theme.fonts.body;
     }
+    if (theme.fonts.mono) {
+      (themeVars as Record<string, string>)['--font-mono'] = theme.fonts.mono;
+    }
   }
 
   if (theme?.spacing) {
     Object.entries(theme.spacing).forEach(([key, value]) => {
-      (themeVars as Record<string, string>)[`--spacing-${key}`] = `${value}`;
+      (themeVars as Record<string, string>)[`--spacing-${key}`] = spacingTokenValue(value);
     });
   }
 
-  const fontFaceCss = fontAssets
-    .filter((font) => font.source === 'uploaded' && font.family && font.url)
-    .map((font) => {
-      const family = font.family.replace(/["\\]/g, '');
+  const themeFontAssets: FontAsset[] = (theme?.fonts?.custom || [])
+    .filter((font) => typeof font.name === 'string' && font.name.trim() && typeof font.url === 'string' && font.url.trim())
+    .map((font, index) => ({
+      id: `theme-font-${index}-${font.name}`,
+      family: font.name,
+      source: 'external' as const,
+      url: font.url,
+      weights: ['400'],
+      styles: ['normal' as const],
+      display: 'swap',
+      cssFamily: `"${cssString(font.name)}", ${theme?.fonts?.body || 'system-ui, sans-serif'}`,
+    }));
+
+  const fontCssRules = [...themeFontAssets, ...fontAssets]
+    .filter((font) => font.family && font.url)
+    .reduce<{ imports: string[]; faces: string[] }>((rules, font) => {
+      const family = cssString(font.family);
       const weight = font.weights?.[0] || '400';
       const style = font.styles?.[0] || 'normal';
       const display = font.display || 'swap';
+      const url = cssUrl(font.url || '');
 
-      return `@font-face {
+      if (!url) {
+        return rules;
+      }
+
+      if (font.source === 'google' || /\.css($|\?)/i.test(url)) {
+        rules.imports.push(`@import url("${url}");`);
+        return rules;
+      }
+
+      rules.faces.push(`@font-face {
         font-family: "${family}";
-        src: url("${font.url}");
+        src: url("${url}");
         font-style: ${style};
         font-weight: ${weight};
         font-display: ${display};
-      }`;
-    })
-    .join('\n');
+      }`);
+      return rules;
+    }, { imports: [], faces: [] });
+  const fontFaceCss = [...fontCssRules.imports, ...fontCssRules.faces].join('\n');
 
   return (
     <>
@@ -4149,13 +4189,34 @@ export function PageRenderer({
                 .map(([k, v]) => `${k}: ${v};`)
                 .join('\n')}
             }
+            .backy-render-root {
+              ${Object.entries(themeVars)
+                .map(([k, v]) => `${k}: ${v};`)
+                .join('\n')}
+              font-family: var(--font-body, system-ui, sans-serif);
+              color: var(--color-text, #1e293b);
+              background: var(--color-background, transparent);
+            }
+            .backy-render-root .backy-canvas {
+              font-family: inherit;
+              color: inherit;
+              background: var(--color-background, transparent);
+            }
+            .backy-render-root .backy-canvas h1,
+            .backy-render-root .backy-canvas h2,
+            .backy-render-root .backy-canvas h3,
+            .backy-render-root .backy-canvas h4,
+            .backy-render-root .backy-canvas h5,
+            .backy-render-root .backy-canvas h6 {
+              font-family: var(--font-heading, var(--font-body, system-ui, sans-serif));
+            }
             ${theme?.customCSS || ''}
             ${customCSS || ''}
           `,
         }}
       />
 
-      <div ref={viewportRef} style={viewportStyle}>
+      <div ref={viewportRef} className="backy-render-root" style={{ ...viewportStyle, ...themeVars }}>
         <div className="backy-canvas-frame" style={canvasFrameStyle}>
           <div className="backy-canvas" style={canvasStyle}>
             {elements.map((element) => (
