@@ -1498,6 +1498,40 @@ const main = async () => {
     const labelPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${preparedLabelRecord.id}/shipping-label`);
     assert(labelPayload.data?.label?.id === preparedLabelRecord.values.shippinglabelid, `Shipping label endpoint did not return the prepared label: ${JSON.stringify(labelPayload)}`);
 
+    await clickOrderCardButton(client, orderNumber, 'Void Label');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.fulfillmentstatus === 'unfulfilled' &&
+        values.shippinglabelstatus === 'voided' &&
+        values.shippinglabelid === preparedLabelRecord.values.shippinglabelid &&
+        /Shipping label voided/.test(String(values.notes || ''))
+      ),
+      'Void Label did not persist shipment label void fields',
+    );
+
+    const voidedLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
+    const voidedLabelPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${voidedLabelRecord.id}/shipping-label`);
+    assert(voidedLabelPayload.data?.label?.status === 'voided', `Shipping label endpoint did not return the voided label: ${JSON.stringify(voidedLabelPayload)}`);
+
+    await clickOrderCardButton(client, orderNumber, 'Prepare Label');
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.fulfillmentstatus === 'processing' &&
+        values.shippinglabelstatus === 'draft' &&
+        values.shippinglabelprovider === 'UPS' &&
+        Boolean(values.shippinglabelid) &&
+        values.shippinglabelid !== preparedLabelRecord.values.shippinglabelid &&
+        String(values.shippinglabelurl || '').includes('/shipping-label') &&
+        values.shippingservicelevel === 'standard' &&
+        Boolean(values.shippinglabelcreatedat)
+      ),
+      'Prepare Label did not create a replacement shipment label after void',
+    );
+
     await clickOrderCardButton(client, orderNumber, 'Fulfill');
     await waitForOrderValue(
       collectionId,

@@ -6208,6 +6208,30 @@ export async function createOrderShippingLabel(
   };
 }
 
+export async function voidOrderShippingLabel(
+  siteId: string,
+  orderId: string,
+  input: { provider?: string; executionProvider?: string; labelProvider?: string } = {},
+): Promise<{ record: CollectionRecord; label: AdminOrderShippingLabel }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/shipping-label`, {
+    method: 'DELETE',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiOrderShippingLabelResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to void shipping label');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    label: payload.data.label,
+  };
+}
+
 export async function createOrderProviderRefund(
   siteId: string,
   orderId: string,

@@ -43,6 +43,7 @@ import {
   reconcileCommerceOrders,
   updateCollection,
   updateCollectionRecord,
+  voidOrderShippingLabel,
   type CommerceReconciliationResult,
   type CommerceCronReadiness,
   type Collection,
@@ -1673,6 +1674,32 @@ function OrdersRoute() {
     }
   };
 
+  const voidOrderShippingLabelAction = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot void shipping labels.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { record: updated, label } = await voidOrderShippingLabel(activeSiteId, order.id);
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Shipping label ${label.id} voided.`);
+    } catch (labelError) {
+      setError(labelError instanceof Error ? labelError.message : 'Unable to void shipping label');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const requestOrderProviderRefund = async (order: CollectionRecord) => {
     if (isOrdersBusy) return;
     if (!canEditOrders) {
@@ -2970,6 +2997,7 @@ function OrdersRoute() {
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, buildPaidWorkflowUpdates(order))}
                       onShippingLabel={() => void prepareOrderShippingLabel(order)}
+                      onVoidShippingLabel={() => void voidOrderShippingLabelAction(order)}
                       onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onProviderRefund={() => void requestOrderProviderRefund(order)}
@@ -3882,6 +3910,7 @@ function OrderCard({
   onEdit,
   onPaid,
   onShippingLabel,
+  onVoidShippingLabel,
   onFulfilled,
   onRefunded,
   onProviderRefund,
@@ -3900,6 +3929,7 @@ function OrderCard({
   onEdit: () => void;
   onPaid: () => void;
   onShippingLabel: () => void;
+  onVoidShippingLabel: () => void;
   onFulfilled: () => void;
   onRefunded: () => void;
   onProviderRefund: () => void;
@@ -4031,9 +4061,15 @@ function OrderCard({
         <StatePill label="Risk review" value={riskReviewStatus.replace(/_/g, ' ')} />
       </div>
       {shippingLabelId ? (
-        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-blue-800">
+        <div className={cn(
+          'mt-3 rounded-lg border px-3 py-2 text-xs',
+          shippingLabelStatus === 'voided'
+            ? 'border-slate-200 bg-slate-50 text-slate-700'
+            : 'border-blue-100 bg-blue-50/60 text-blue-800',
+        )}
+        >
           <Truck className="mr-1 inline size-3.5" />
-          Label {shippingLabelId} prepared with {shippingLabelProvider || 'manual'}
+          Label {shippingLabelId} {shippingLabelStatus === 'voided' ? 'voided' : 'prepared'} with {shippingLabelProvider || 'manual'}
           {shippingServiceLevel ? ` ${shippingServiceLevel}` : ''}
           {shippingLabelCost > 0 ? ` for ${formatMoney(shippingLabelCost, currency)}` : ''}
           {shippingLabelCreatedAt ? ` on ${formatWorkflowDate(shippingLabelCreatedAt)}` : ''}.
@@ -4087,7 +4123,10 @@ function OrderCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
-        <Button size="sm" variant="outline" onClick={onShippingLabel} disabled={disabled || Boolean(shippingLabelId) || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<Truck className="size-4" />}>Prepare Label</Button>
+        <Button size="sm" variant="outline" onClick={onShippingLabel} disabled={disabled || (Boolean(shippingLabelId) && shippingLabelStatus !== 'voided') || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<Truck className="size-4" />}>Prepare Label</Button>
+        {shippingLabelId ? (
+          <Button size="sm" variant="outline" onClick={onVoidShippingLabel} disabled={disabled || shippingLabelStatus === 'voided' || fulfillmentStatus === 'fulfilled'} iconStart={<Archive className="size-4" />}>Void Label</Button>
+        ) : null}
         {shippingLabelUrl ? (
           <a
             href={shippingLabelUrl}
