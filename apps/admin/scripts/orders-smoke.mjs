@@ -514,6 +514,36 @@ const enableCommerceFulfillmentProvider = async (settings, providerBaseUrl) => {
   return patchSettingsFromSnapshot(next);
 };
 
+const enableCommerceEasyPostLabelSettings = async (settings) => {
+  const next = JSON.parse(JSON.stringify(settings));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      shippingLabelProvider: 'easypost',
+      shippingOriginAddress: JSON.stringify({
+        name: 'Backy Warehouse',
+        street1: '100 Fulfillment Way',
+        city: 'Austin',
+        state: 'TX',
+        zip: '78701',
+        country: 'US',
+        phone: '5555550100',
+      }),
+      shippingDefaultParcel: JSON.stringify({
+        length: 8,
+        width: 6,
+        height: 2,
+        weight: 12,
+      }),
+      shippingDefaultCarrier: 'UPS',
+      shippingDefaultServiceLevel: 'Ground',
+      shippingDefaultRateId: 'rate_smoke_ground',
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
 const issueScheduledReconciliationServiceKey = async (suffix) => {
   const configuredKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
   if (configuredKey) {
@@ -1395,7 +1425,15 @@ const fillOrderEditor = async (client, suffix, customerRecord) => {
   await setAriaControl(client, 'Line item SKU', `ORDER-SMOKE-${suffix.toUpperCase()}`);
   await clickByText(client, 'Add', { exact: true, rootSelector: '#orders-editor' });
 
-  await setLabeledControl(client, 'Shipping address', '100 Commerce Smoke Street, New York, NY', { exact: true });
+  await setLabeledControl(client, 'Shipping address', JSON.stringify({
+    name: 'Orders Smoke Customer',
+    street1: '200 Customer Lane',
+    city: 'San Francisco',
+    state: 'CA',
+    zip: '94105',
+    country: 'US',
+    phone: '5555550101',
+  }), { exact: true });
   await setLabeledControl(client, 'Billing address', '100 Commerce Smoke Street, New York, NY', { exact: true });
   await setLabeledControl(client, 'Notes', 'Order smoke initial private note.', { exact: true });
   await setLabeledControl(client, 'Refund amount', '0', { exact: true });
@@ -2079,19 +2117,28 @@ const main = async () => {
     assert(fulfillmentProviderServer.requests[0]?.url === '/dispatch', `Fulfillment provider server received unexpected path: ${JSON.stringify(fulfillmentProviderServer.requests)}`);
     assert(fulfillmentProviderServer.requests[0]?.body?.fulfillment?.schemaVersion === 'backy.fulfillment-dispatch.v1', `Fulfillment provider request did not include dispatch payload: ${JSON.stringify(fulfillmentProviderServer.requests[0]?.body).slice(0, 500)}`);
 
+    if (easyPostExecutionEnabled() && !easyPostMockServer) {
+      easyPostMockServer = await createEasyPostMockServer();
+      const preEasyPostSettings = await getSettings();
+      await enableCommerceEasyPostLabelSettings(preEasyPostSettings);
+    }
     await clickOrderCardButton(client, orderNumber, 'Prepare Label');
     await waitForOrderValue(
       collectionId,
       slug,
       (values) => (
         values.fulfillmentstatus === 'processing' &&
-        values.shippinglabelstatus === 'draft' &&
+        values.shippinglabelstatus === (easyPostExecutionEnabled() ? 'purchased' : 'draft') &&
         values.shippinglabelprovider === 'UPS' &&
         Boolean(values.shippinglabelid) &&
-        String(values.shippinglabelurl || '').includes('/shipping-label') &&
-        values.shippingservicelevel === 'standard' &&
+        (easyPostExecutionEnabled()
+          ? values.shippinglabelid === 'shp_smoke_1' && values.shippinglabelurl === 'https://labels.easypost.test/shp_smoke_1.pdf'
+          : String(values.shippinglabelurl || '').includes('/shipping-label')) &&
+        values.shippingservicelevel === (easyPostExecutionEnabled() ? 'Ground' : 'standard') &&
         Boolean(values.shippinglabelcreatedat) &&
-        /Shipping label handoff prepared/.test(String(values.notes || ''))
+        (easyPostExecutionEnabled()
+          ? /Shipping label purchased/.test(String(values.notes || ''))
+          : /Shipping label handoff prepared/.test(String(values.notes || '')))
       ),
       'Prepare Label did not persist shipment label handoff fields',
     );
@@ -2099,6 +2146,10 @@ const main = async () => {
     const preparedLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
     const labelPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${preparedLabelRecord.id}/shipping-label`);
     assert(labelPayload.data?.label?.id === preparedLabelRecord.values.shippinglabelid, `Shipping label endpoint did not return the prepared label: ${JSON.stringify(labelPayload)}`);
+    if (easyPostExecutionEnabled()) {
+      assert(easyPostMockServer.requests.some((request) => request.url === '/v2/shipments'), `Rendered Prepare Label did not call EasyPost shipment create: ${JSON.stringify(easyPostMockServer.requests)}`);
+      assert(easyPostMockServer.requests.some((request) => request.url === '/v2/shipments/shp_smoke_1/buy'), `Rendered Prepare Label did not call EasyPost shipment buy: ${JSON.stringify(easyPostMockServer.requests)}`);
+    }
 
     await clickOrderCardButton(client, orderNumber, 'Void Label');
     await waitForOrderValue(
@@ -2116,6 +2167,9 @@ const main = async () => {
     const voidedLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
     const voidedLabelPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${voidedLabelRecord.id}/shipping-label`);
     assert(voidedLabelPayload.data?.label?.status === 'voided', `Shipping label endpoint did not return the voided label: ${JSON.stringify(voidedLabelPayload)}`);
+    if (easyPostExecutionEnabled()) {
+      assert(easyPostMockServer.requests.some((request) => request.url === '/v2/shipments/shp_smoke_1/refund'), `Rendered Void Label did not call EasyPost shipment refund: ${JSON.stringify(easyPostMockServer.requests)}`);
+    }
 
     await clickOrderCardButton(client, orderNumber, 'Prepare Label');
     await waitForOrderValue(
@@ -2123,20 +2177,17 @@ const main = async () => {
       slug,
       (values) => (
         values.fulfillmentstatus === 'processing' &&
-        values.shippinglabelstatus === 'draft' &&
+        values.shippinglabelstatus === (easyPostExecutionEnabled() ? 'purchased' : 'draft') &&
         values.shippinglabelprovider === 'UPS' &&
         Boolean(values.shippinglabelid) &&
-        values.shippinglabelid !== preparedLabelRecord.values.shippinglabelid &&
-        String(values.shippinglabelurl || '').includes('/shipping-label') &&
-        values.shippingservicelevel === 'standard' &&
+        (!easyPostExecutionEnabled() ? values.shippinglabelid !== preparedLabelRecord.values.shippinglabelid : values.shippinglabelid === 'shp_smoke_1') &&
+        (easyPostExecutionEnabled() ? values.shippinglabelurl === 'https://labels.easypost.test/shp_smoke_1.pdf' : String(values.shippinglabelurl || '').includes('/shipping-label')) &&
+        values.shippingservicelevel === (easyPostExecutionEnabled() ? 'Ground' : 'standard') &&
         Boolean(values.shippinglabelcreatedat)
       ),
       'Prepare Label did not create a replacement shipment label after void',
     );
 
-    if (easyPostExecutionEnabled() && !easyPostMockServer) {
-      easyPostMockServer = await createEasyPostMockServer();
-    }
     await clickOrderCardButton(client, orderNumber, 'Refresh Tracking');
     await waitForOrderValue(
       collectionId,

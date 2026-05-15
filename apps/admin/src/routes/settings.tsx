@@ -2625,6 +2625,12 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   shippingProviderUrl: '',
   discountProvider: 'manual',
   discountProviderUrl: '',
+  shippingLabelProvider: 'manual',
+  shippingOriginAddress: '',
+  shippingDefaultParcel: '',
+  shippingDefaultCarrier: '',
+  shippingDefaultServiceLevel: '',
+  shippingDefaultRateId: '',
   fulfillmentProvider: 'manual',
   fulfillmentProviderUrl: '',
   inventoryReservations: true,
@@ -4977,6 +4983,76 @@ function CommerceSettings({
                   onChange={(event) => update({ fulfillmentProviderUrl: event.target.value })}
                   placeholder="https://api.example.com/fulfillment-dispatch"
                   className={inputClassName}
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 border-t border-border pt-4">
+              <div>
+                <h4 className="text-sm font-semibold">Shipping label execution</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Optional carrier purchase defaults used by the Orders Prepare Label action when server credentials are configured.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Label provider</span>
+                  <select
+                    value={resolved.shippingLabelProvider || 'manual'}
+                    onChange={(event) => update({ shippingLabelProvider: event.target.value as 'manual' | 'easypost' })}
+                    className={inputClassName}
+                  >
+                    <option value="manual">Manual handoff</option>
+                    <option value="easypost">EasyPost</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Default carrier</span>
+                  <input
+                    value={resolved.shippingDefaultCarrier || ''}
+                    onChange={(event) => update({ shippingDefaultCarrier: event.target.value })}
+                    placeholder="UPS"
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Default service</span>
+                  <input
+                    value={resolved.shippingDefaultServiceLevel || ''}
+                    onChange={(event) => update({ shippingDefaultServiceLevel: event.target.value })}
+                    placeholder="Ground"
+                    className={inputClassName}
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Origin address JSON</span>
+                  <textarea
+                    value={resolved.shippingOriginAddress || ''}
+                    onChange={(event) => update({ shippingOriginAddress: event.target.value })}
+                    rows={3}
+                    placeholder='{"name":"Warehouse","street1":"100 Fulfillment Way","city":"Austin","state":"TX","zip":"78701","country":"US"}'
+                    className={`${inputClassName} resize-y font-mono text-xs`}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Rate ID</span>
+                  <input
+                    value={resolved.shippingDefaultRateId || ''}
+                    onChange={(event) => update({ shippingDefaultRateId: event.target.value })}
+                    placeholder="rate_..."
+                    className={inputClassName}
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Default parcel JSON</span>
+                <textarea
+                  value={resolved.shippingDefaultParcel || ''}
+                  onChange={(event) => update({ shippingDefaultParcel: event.target.value })}
+                  rows={2}
+                  placeholder='{"length":8,"width":6,"height":2,"weight":12}'
+                  className={`${inputClassName} resize-y font-mono text-xs`}
                 />
               </label>
             </div>

@@ -10,6 +10,7 @@ import type { BackyCollection, BackyJsonObject, BackyJsonValue } from '@backy-cm
 import {
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
+  getAdminSettings,
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
   validateCollectionRecordValues,
@@ -175,17 +176,6 @@ const easyPostApiBaseUrl = () => (
 
 const normalizeProviderKey = (value: string): string => value.toLowerCase().replace(/[\s_-]+/g, '');
 
-const canExecuteEasyPostLabel = (body: Record<string, unknown>): boolean => {
-  const executionProvider = textValue(body.executionProvider)
-    || textValue(body.labelProvider)
-    || textValue(body.provider);
-  if (normalizeProviderKey(executionProvider) !== 'easypost') return false;
-  if (!easyPostApiKey()) return false;
-  return Object.keys(toRecord(body.fromAddress)).length > 0
-    && Object.keys(toRecord(body.toAddress)).length > 0
-    && Object.keys(toRecord(body.parcel)).length > 0;
-};
-
 const safeProviderField = (value: unknown): string | number | boolean | null => {
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -200,6 +190,95 @@ const safeProviderRecord = (value: unknown): Record<string, string | number | bo
       .map(([key, entry]) => [key, safeProviderField(entry)] as const)
       .filter(([, entry]) => entry !== null && entry !== ''),
   );
+};
+
+const hasProviderRecordFields = (value: unknown): boolean => Object.keys(safeProviderRecord(value)).length > 0;
+
+const parseJsonRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  const text = textValue(value);
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const commerceSettings = (settings: unknown): Record<string, unknown> => {
+  const source = toRecord(settings);
+  const integrations = toRecord(source.integrations);
+  return toRecord(integrations.commerce || source.commerce);
+};
+
+const nestedProviderRecord = (source: Record<string, unknown>, key: string): Record<string, unknown> => (
+  parseJsonRecord(source[key])
+);
+
+const resolveEasyPostShipmentInput = (
+  body: Record<string, unknown>,
+  values: Record<string, unknown>,
+  settings: unknown,
+  fallback: {
+    provider: string;
+    serviceLevel: string;
+  },
+) => {
+  const commerce = commerceSettings(settings);
+  const shippingAddress = parseJsonRecord(values.shippingaddress);
+  const provider = textValue(body.executionProvider)
+    || textValue(body.labelProvider)
+    || textValue(commerce.shippingLabelProvider)
+    || textValue(body.provider)
+    || fallback.provider;
+  const carrier = textValue(body.carrier)
+    || textValue(shippingAddress.carrier)
+    || textValue(commerce.shippingDefaultCarrier)
+    || fallback.provider;
+  const serviceLevel = textValue(body.serviceLevel)
+    || textValue(shippingAddress.serviceLevel)
+    || textValue(commerce.shippingDefaultServiceLevel)
+    || fallback.serviceLevel;
+  const rateId = textValue(body.rateId)
+    || textValue(body.easypostRateId)
+    || textValue(shippingAddress.rateId)
+    || textValue(commerce.shippingDefaultRateId);
+  const directToAddress = hasProviderRecordFields(shippingAddress) && !shippingAddress.toAddress && !shippingAddress.fromAddress && !shippingAddress.parcel
+    ? shippingAddress
+    : {};
+
+  return {
+    executionProvider: provider,
+    carrier,
+    serviceLevel,
+    rateId,
+    fromAddress: hasProviderRecordFields(body.fromAddress)
+      ? toRecord(body.fromAddress)
+      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'fromAddress'))
+        ? nestedProviderRecord(shippingAddress, 'fromAddress')
+        : parseJsonRecord(commerce.shippingOriginAddress),
+    toAddress: hasProviderRecordFields(body.toAddress)
+      ? toRecord(body.toAddress)
+      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'toAddress'))
+        ? nestedProviderRecord(shippingAddress, 'toAddress')
+        : directToAddress,
+    parcel: hasProviderRecordFields(body.parcel)
+      ? toRecord(body.parcel)
+      : hasProviderRecordFields(nestedProviderRecord(shippingAddress, 'parcel'))
+        ? nestedProviderRecord(shippingAddress, 'parcel')
+        : parseJsonRecord(commerce.shippingDefaultParcel),
+  };
+};
+
+const canExecuteEasyPostLabel = (input: ReturnType<typeof resolveEasyPostShipmentInput>): boolean => {
+  if (normalizeProviderKey(input.executionProvider) !== 'easypost') return false;
+  if (!easyPostApiKey()) return false;
+  return hasProviderRecordFields(input.fromAddress)
+    && hasProviderRecordFields(input.toAddress)
+    && hasProviderRecordFields(input.parcel);
 };
 
 const safeEasyPostRatePayload = (value: unknown): EasyPostRatePayload | null => {
@@ -534,11 +613,13 @@ const buildShippingLabelUpdate = async ({
   origin,
   record,
   body,
+  settings,
 }: {
   siteId: string;
   origin: string;
   record: CollectionRecordAuditSource;
   body: Record<string, unknown>;
+  settings: unknown;
 }) => {
   const now = new Date().toISOString();
   const values = toRecord(record.values);
@@ -550,6 +631,8 @@ const buildShippingLabelUpdate = async ({
     ? textValue(body.carrier) || textValue(values.fulfillmentcarrier) || 'easypost'
     : requestedProvider;
   const serviceLevel = textValue(body.serviceLevel) || textValue(values.shippingservicelevel) || 'standard';
+  const easyPostInput = resolveEasyPostShipmentInput(body, values, settings, { provider, serviceLevel });
+  const executeEasyPost = canExecuteEasyPostLabel(easyPostInput);
   const labelId = reusableExisting?.id || `lbl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const labelUrl = buildLabelUrl(origin, siteId, record.id);
   const cost = numberValue(body.cost, numberValue(values.shippinglabelcost, numberValue(values.shippingamount)));
@@ -560,9 +643,9 @@ const buildShippingLabelUpdate = async ({
   const createdAt = reusableExisting?.createdAt || now;
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.shipping-label.v1',
-    provider: requestedProviderIsEasyPost ? 'easypost' : provider,
-    action: requestedProviderIsEasyPost ? 'shipments.buy' : 'provider.shipping_label.create',
-    executionMode: canExecuteEasyPostLabel(body) ? 'easypost-api' : 'handoff',
+    provider: executeEasyPost || requestedProviderIsEasyPost ? 'easypost' : provider,
+    action: executeEasyPost || requestedProviderIsEasyPost ? 'shipments.buy' : 'provider.shipping_label.create',
+    executionMode: executeEasyPost ? 'easypost-api' : 'handoff',
     orderId: record.id,
     orderNumber: textValue(values.ordernumber),
     requestedCarrier: provider,
@@ -581,17 +664,17 @@ const buildShippingLabelUpdate = async ({
     providerPayload,
   };
 
-  if (canExecuteEasyPostLabel(body)) {
+  if (executeEasyPost) {
     const result = await executeEasyPostLabel({
       orderId: record.id,
       orderNumber: textValue(values.ordernumber),
       labelId,
-      carrier: provider,
-      serviceLevel,
-      rateId: textValue(body.rateId) || textValue(body.easypostRateId),
-      fromAddress: toRecord(body.fromAddress),
-      toAddress: toRecord(body.toAddress),
-      parcel: toRecord(body.parcel),
+      carrier: easyPostInput.carrier,
+      serviceLevel: easyPostInput.serviceLevel,
+      rateId: easyPostInput.rateId,
+      fromAddress: easyPostInput.fromAddress,
+      toAddress: easyPostInput.toAddress,
+      parcel: easyPostInput.parcel,
     });
     label = {
       ...label,
@@ -691,7 +774,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
       if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-      const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
+      const settings = await repositories.settings.get();
+      const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body, settings });
       const values = normalizeCollectionRecordMediaValues(collection, rawValues);
       const validationErrors = await validateRepositoryCollectionRecordValues({
         repository: repositories.collections,
@@ -743,7 +827,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
     if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
 
-    const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body });
+    const settings = getAdminSettings();
+    const { label, values: rawValues } = await buildShippingLabelUpdate({ siteId: site.id, origin, record, body, settings });
     const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
     const validationErrors = validateCollectionRecordValues(collection, values, {
       existingValues: record.values,

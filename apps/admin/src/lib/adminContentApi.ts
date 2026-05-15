@@ -1953,6 +1953,12 @@ export interface SiteSettingsInput {
       shippingProviderUrl?: string;
       discountProvider?: 'manual' | 'http';
       discountProviderUrl?: string;
+      shippingLabelProvider?: 'manual' | 'easypost';
+      shippingOriginAddress?: string;
+      shippingDefaultParcel?: string;
+      shippingDefaultCarrier?: string;
+      shippingDefaultServiceLevel?: string;
+      shippingDefaultRateId?: string;
       fulfillmentProvider?: 'manual' | 'http';
       fulfillmentProviderUrl?: string;
       inventoryReservations?: boolean;
