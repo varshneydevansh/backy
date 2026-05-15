@@ -783,11 +783,13 @@ const assertOrdersLayout = async (client) => {
       command: Boolean(document.querySelector('[data-testid="orders-command-center"]')),
       api: Boolean(document.querySelector('#orders-api')),
       metrics: Boolean(document.querySelector('#orders-metrics')),
+      analytics: Boolean(document.querySelector('[data-testid="orders-analytics-panel"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
       checkout: document.body?.innerText?.includes('/commerce/orders') || false,
       privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
+      analyticsEndpoint: document.body?.innerText?.includes('/commerce/orders/analytics') || false,
       hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
         Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
@@ -799,7 +801,7 @@ const assertOrdersLayout = async (client) => {
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
     }))()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.queue && layout.editor && layout.hasCustomerProfileManager && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -1353,6 +1355,13 @@ const main = async () => {
     );
     orderRecordId = createdOrder.id;
 
+    const initialAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
+    const initialAnalytics = initialAnalyticsPayload.data?.analytics;
+    assert(initialAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Order analytics returned wrong schema: ${JSON.stringify(initialAnalyticsPayload).slice(0, 500)}`);
+    assert(initialAnalytics.orderCount >= 1, `Order analytics did not count the created order: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
+    assert(initialAnalytics.payment?.pending?.count >= 1, `Order analytics did not report pending payment state: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
+    assert(initialAnalytics.operations?.manualOrderCount >= 1, `Order analytics did not report manual orders: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
+
     await assertOrderCustomerProfileManagement(client, customerFixture.collection, customerFixture.record);
 
     await exerciseFilters(client, orderNumber);
@@ -1565,6 +1574,12 @@ const main = async () => {
       (values) => values.orderstatus === 'paid' && values.paymentstatus === 'paid' && values.paymentreference === `pi_reconcile_${suffix}` && /Commerce reconciliation applied/.test(String(values.notes || '')),
       'Scheduled reconciliation execution did not repair stale payment state',
     );
+    const reconciledAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
+    const reconciledAnalytics = reconciledAnalyticsPayload.data?.analytics;
+    assert(reconciledAnalytics?.schemaVersion === 'backy.order-analytics.v1', `Reconciled order analytics returned wrong schema: ${JSON.stringify(reconciledAnalyticsPayload).slice(0, 500)}`);
+    assert(reconciledAnalytics.payment?.paid?.count >= 1, `Order analytics did not report paid orders after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.revenue?.paidTotal >= 85, `Order analytics paid revenue was too low after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
+    assert(reconciledAnalytics.operations?.fulfillmentBacklogCount >= 1, `Order analytics did not report fulfillment backlog after reconciliation: ${JSON.stringify(reconciledAnalytics).slice(0, 500)}`);
 
     await clickReconcileProvider(client);
     await waitForReconciliationPanel(client);

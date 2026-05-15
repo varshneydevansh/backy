@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
+  BarChart3,
   CheckCircle2,
   ClipboardCheck,
   Code2,
@@ -30,6 +31,7 @@ import {
   createCollectionRecord,
   deleteCollectionRecord,
   getUserPermissions,
+  getOrderAnalytics,
   adminFetch,
   importCollectionRecordsCsv,
   listCollectionRecords,
@@ -42,6 +44,7 @@ import {
   type CollectionField,
   type CollectionRecord,
   type CollectionRecordPagination,
+  type OrderAnalytics,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { useStore, type ContentStatus } from '@/stores/mockStore';
@@ -71,6 +74,11 @@ const ORDER_CONTROL_AREAS = [
     title: 'Order health',
     detail: 'Revenue, paid orders, fulfillment queue, processing, and refunds.',
     href: '#orders-metrics',
+  },
+  {
+    title: 'Analytics',
+    detail: 'Backend totals by payment state, fulfillment state, order source, and recent trend.',
+    href: '#orders-analytics',
   },
   {
     title: 'Order queue',
@@ -466,6 +474,9 @@ function OrdersRoute() {
   const [isImportingOrders, setIsImportingOrders] = useState(false);
   const [isReconcilingOrders, setIsReconcilingOrders] = useState(false);
   const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
+  const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
+  const [isOrderAnalyticsLoading, setIsOrderAnalyticsLoading] = useState(false);
+  const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
   const isOrdersBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingOrders || isReconcilingOrders;
   const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -522,6 +533,7 @@ function OrdersRoute() {
     : '';
   const publicOrdersApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${ORDERS_COLLECTION_SLUG}/records`;
   const publicOrderIntakeUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
+  const orderAnalyticsApiUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/orders/analytics`;
   const missingOrderFields = useMemo(() => (
     ordersCollection ? getMissingOrderFieldKeys(ordersCollection) : []
   ), [ordersCollection]);
@@ -745,6 +757,7 @@ function OrdersRoute() {
     endpoints: {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
+      orderAnalytics: orderAnalyticsApiUrl,
       checkoutIntake: publicOrderIntakeUrl,
       publicBlocked: publicOrdersApiUrl,
     },
@@ -772,6 +785,7 @@ function OrdersRoute() {
       checks: orderReadiness.checks,
     },
     metrics,
+    analytics: orderAnalytics,
     filters: {
       search: searchQuery,
       workflow: filter,
@@ -857,6 +871,8 @@ function OrdersRoute() {
     missingOrderFields,
     orderReadiness.checks,
     orderReadiness.score,
+    orderAnalytics,
+    orderAnalyticsApiUrl,
     orders,
     ordersApiReady,
     ordersCollection,
@@ -896,6 +912,28 @@ function OrdersRoute() {
     navigate({ to: '/orders', search: normalized, replace: true });
   };
 
+  const loadOrderAnalytics = async () => {
+    if (!canViewCommerce) {
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(null);
+      return null;
+    }
+
+    setIsOrderAnalyticsLoading(true);
+    try {
+      const analytics = await getOrderAnalytics(activeSiteId);
+      setOrderAnalytics(analytics);
+      setOrderAnalyticsError(null);
+      return analytics;
+    } catch (loadError) {
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(loadError instanceof Error ? loadError.message : 'Unable to load order analytics');
+      return null;
+    } finally {
+      setIsOrderAnalyticsLoading(false);
+    }
+  };
+
   const loadOrders = async () => {
     if (isOrdersBusy) return;
     if (isPermissionMatrixPending) return;
@@ -905,6 +943,8 @@ function OrdersRoute() {
       setOrders([]);
       setCustomerProfiles([]);
       setOrderPagination(null);
+      setOrderAnalytics(null);
+      setOrderAnalyticsError(null);
       clearOrderEditorState();
       setError(viewPermissionTitle || 'Your account cannot view commerce orders.');
       return;
@@ -924,6 +964,8 @@ function OrdersRoute() {
         setOrders([]);
         setCustomerProfiles([]);
         setOrderPagination(null);
+        setOrderAnalytics(null);
+        setOrderAnalyticsError(null);
         clearOrderEditorState();
         return;
       }
@@ -947,6 +989,7 @@ function OrdersRoute() {
       setOrders(result.records);
       setCustomerProfiles(customersResult?.records || []);
       setOrderPagination(result.pagination);
+      void loadOrderAnalytics();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load orders');
     } finally {
@@ -1342,6 +1385,7 @@ function OrdersRoute() {
       }
       setSelectedOrderId(saved.id);
       updateOrdersRouteSearch({ orderId: saved.id });
+      void loadOrderAnalytics();
       setNotice(selectedOrder ? 'Order updated.' : 'Order recorded.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save order');
@@ -1374,6 +1418,7 @@ function OrdersRoute() {
       if (selectedOrderId === updated.id) {
         setFormState(orderToForm(updated));
       }
+      void loadOrderAnalytics();
       const workflowNotice = updates.orderStatus === 'refunded'
         ? 'Manual refund/return state recorded in Backy. Complete the provider refund separately if payment was captured outside Backy.'
         : updates.orderStatus === 'cancelled'
@@ -1437,6 +1482,7 @@ function OrdersRoute() {
         customer.id === updated.id ? updated : customer
       )));
       setSelectedCustomerProfileId(updated.id);
+      void loadOrderAnalytics();
       setNotice('Customer profile updated.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update customer profile');
@@ -1544,6 +1590,7 @@ function OrdersRoute() {
       if (updatedSelectedOrder) {
         setFormState(orderToForm(updatedSelectedOrder));
       }
+      void loadOrderAnalytics();
       setNotice(`${updatedOrders.length} selected order${updatedOrders.length === 1 ? '' : 's'} ${actionLabel}.`);
       if (failedResults.length > 0) {
         const failedOrderNumbers = failedResults
@@ -1582,6 +1629,7 @@ function OrdersRoute() {
       });
       setOrders(refreshed.records);
       setOrderPagination(refreshed.pagination);
+      void loadOrderAnalytics();
       const updateLabel = `${result.updatedCount} order${result.updatedCount === 1 ? '' : 's'}`;
       const eventLabel = `${result.eventCount} event${result.eventCount === 1 ? '' : 's'}`;
       setNotice(`Reconciled ${eventLabel}; updated ${updateLabel}.`);
@@ -1611,6 +1659,7 @@ function OrdersRoute() {
         ...current,
         total: Math.max(0, current.total - 1),
       } : current));
+      void loadOrderAnalytics();
       if (selectedOrderId === order.id) {
         clearOrderEditorState({
           ...EMPTY_ORDER_FORM,
@@ -1787,6 +1836,7 @@ function OrdersRoute() {
       });
       setOrders(refreshed.records);
       setOrderPagination(refreshed.pagination);
+      void loadOrderAnalytics();
       setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
@@ -1841,6 +1891,8 @@ function OrdersRoute() {
     setPaymentFilter('all');
     setFulfillmentFilter('all');
     setSourceFilter('all');
+    setOrderAnalytics(null);
+    setOrderAnalyticsError(null);
     navigate({ to: '/orders', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -1986,7 +2038,7 @@ function OrdersRoute() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Order control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, checkout intake, private API, order health, queue, and editor controls.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {ORDER_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -2072,6 +2124,7 @@ function OrdersRoute() {
                   <OrderApiSnippet icon={<ShoppingCart className="size-4" />} label="Checkout intake" value={publicOrderIntakeUrl} />
                   <OrderApiSnippet icon={<Code2 className="size-4" />} label="List and create orders" value={adminOrdersApiUrl} />
                   <OrderApiSnippet icon={<Receipt className="size-4" />} label="Read or update order" value={adminOrderDetailApiUrl} />
+                  <OrderApiSnippet icon={<BarChart3 className="size-4" />} label="Order analytics" value={orderAnalyticsApiUrl} />
                 </div>
                 <div className="rounded-lg border border-border bg-muted/40 p-3">
                   <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -2194,6 +2247,110 @@ function OrdersRoute() {
         <Metric label="Processing" value={metrics.processing} icon={<Truck className="size-4" />} />
         <Metric label="Refunded" value={metrics.refunded} icon={<RotateCcw className="size-4" />} />
       </div>
+
+      {ordersCollection && (
+        <Panel id="orders-analytics" className="mb-6 scroll-mt-24" data-testid="orders-analytics-panel">
+          <PanelHeader
+            title="Order Analytics"
+            description="Backend totals across the private order queue, independent of the currently loaded page."
+            icon={<BarChart3 className="size-4" />}
+            action={
+              <Button
+                variant="outline"
+                onClick={() => void loadOrderAnalytics()}
+                disabled={isOrderAnalyticsLoading || isPermissionMatrixPending || !canViewCommerce}
+                title={!canViewCommerce ? viewPermissionTitle : undefined}
+                iconStart={<RefreshCw className={cn('size-4', isOrderAnalyticsLoading && 'animate-spin')} />}
+              >
+                Refresh analytics
+              </Button>
+            }
+          />
+          <PanelContent>
+            {orderAnalyticsError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {orderAnalyticsError}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Metric label="Backend Orders" value={orderAnalytics?.orderCount ?? totalOrderCount} icon={<Receipt className="size-4" />} />
+                  <Metric label="Gross Total" value={formatMoney(orderAnalytics?.revenue.grossTotal ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')} icon={<CreditCard className="size-4" />} />
+                  <Metric label="Avg Order" value={formatMoney(orderAnalytics?.revenue.averageOrderValue ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')} icon={<BarChart3 className="size-4" />} />
+                  <Metric label="Needs Attention" value={orderAnalytics?.operations.paymentAttentionCount ?? 0} icon={<AlertTriangle className="size-4" />} />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.72fr)]">
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">Payment and fulfillment mix</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {orderAnalytics?.generatedAt ? `Updated ${formatDate(orderAnalytics.generatedAt)}` : 'Loading analytics...'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {(['pending', 'paid', 'failed', 'refunded'] as const).map((status) => (
+                        <div key={status} className="rounded-lg border border-border bg-card p-3">
+                          <div className="text-xs font-medium uppercase text-muted-foreground">{status}</div>
+                          <div className="mt-1 font-mono text-xl font-semibold">{orderAnalytics?.payment[status]?.count ?? 0}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {formatMoney(orderAnalytics?.payment[status]?.total ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {(['unfulfilled', 'processing', 'fulfilled', 'cancelled'] as const).map((status) => (
+                        <div key={status} className="rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="text-xs font-medium uppercase text-muted-foreground">{status}</div>
+                          <div className="mt-1 font-mono text-xl font-semibold">{orderAnalytics?.fulfillment[status]?.count ?? 0}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {formatMoney(orderAnalytics?.fulfillment[status]?.total ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <h3 className="text-sm font-semibold">Operations signal</h3>
+                    <div className="mt-3 grid gap-2 text-sm">
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Fulfillment backlog</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.fulfillmentBacklogCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Manual orders</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.manualOrderCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Checkout orders</span>
+                        <span className="font-mono font-semibold">{orderAnalytics?.operations.checkoutOrderCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="text-muted-foreground">Refund amount</span>
+                        <span className="font-mono font-semibold">{formatMoney(orderAnalytics?.revenue.refundAmountTotal ?? 0, orderAnalytics?.currencies[0]?.currency || 'USD')}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <h4 className="text-xs font-semibold uppercase text-muted-foreground">Top sources</h4>
+                      <div className="mt-2 space-y-2">
+                        {(orderAnalytics?.sources || []).slice(0, 4).map((source) => (
+                          <div key={source.source} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="truncate text-muted-foreground">{source.source}</span>
+                            <span className="font-mono">{source.count} / {formatMoney(source.total, orderAnalytics?.currencies[0]?.currency || 'USD')}</span>
+                          </div>
+                        ))}
+                        {(!orderAnalytics || orderAnalytics.sources.length === 0) && (
+                          <div className="text-sm text-muted-foreground">No order source data yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </PanelContent>
+        </Panel>
+      )}
 
       {!ordersCollection ? (
         <EmptyState

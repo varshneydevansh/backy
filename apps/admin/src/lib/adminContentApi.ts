@@ -808,6 +808,16 @@ interface ApiFormsAnalyticsResponse {
   };
 }
 
+interface ApiOrderAnalyticsResponse {
+  success: boolean;
+  data?: {
+    analytics: OrderAnalytics;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListFormDeliveryEventsResponse {
   success: boolean;
   data?: {
@@ -6064,6 +6074,69 @@ export interface CommerceReconciliationResult {
     eventId: string;
   }>;
   unmatchedEvents: Array<Record<string, unknown>>;
+}
+
+export interface OrderAnalytics {
+  schemaVersion: 'backy.order-analytics.v1';
+  generatedAt: string;
+  recordLimit: number;
+  orderCount: number;
+  revenue: {
+    grossTotal: number;
+    paidTotal: number;
+    pendingTotal: number;
+    failedTotal: number;
+    refundedTotal: number;
+    refundAmountTotal: number;
+    taxTotal: number;
+    shippingTotal: number;
+    discountTotal: number;
+    averageOrderValue: number;
+    paidAverageOrderValue: number;
+  };
+  payment: Record<string, { count: number; total: number }>;
+  fulfillment: Record<string, { count: number; total: number }>;
+  operations: {
+    fulfillmentBacklogCount: number;
+    paymentAttentionCount: number;
+    refundCount: number;
+    manualOrderCount: number;
+    checkoutOrderCount: number;
+  };
+  sources: Array<{ source: string; count: number; total: number }>;
+  currencies: Array<{ currency: string; count: number; total: number }>;
+  trend: Array<{
+    date: string;
+    orders: number;
+    paid: number;
+    grossTotal: number;
+    paidTotal: number;
+  }>;
+  recentOrders: Array<{
+    id: string;
+    slug: string;
+    status: string;
+    orderNumber: string;
+    customerName: string;
+    total: number;
+    currency: string;
+    paymentStatus: string;
+    fulfillmentStatus: string;
+    orderSource: string;
+    updatedAt: string | null;
+  }>;
+}
+
+export async function getOrderAnalytics(siteId: string): Promise<OrderAnalytics> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/analytics`);
+  const payload = await readJson<ApiOrderAnalyticsResponse>(response);
+  const analytics = payload.data?.analytics;
+
+  if (!response.ok || !payload.success || !analytics) {
+    throw new Error(payload.error?.message || 'Unable to load order analytics');
+  }
+
+  return analytics;
 }
 
 export async function reconcileCommerceOrders(siteId: string, limit = 100): Promise<CommerceReconciliationResult> {

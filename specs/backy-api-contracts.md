@@ -610,6 +610,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - send `x-backy-request-id` for debug parity.
   - Admin API key enforcement is opt-in with `BACKY_REQUIRE_ADMIN_API_KEY=true` plus `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`. Admin clients can send the key with `X-Backy-Admin-Key` or `Authorization: Bearer ...`; the Vite admin app reads `VITE_BACKY_ADMIN_API_KEY` or `VITE_ADMIN_API_KEY` and attaches the header to admin API requests.
   - Scheduled commerce reconciliation is wired through root `vercel.json` to call `GET /api/admin/commerce/reconcile?limit=100` daily. Set `CRON_SECRET` to the same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY` so Vercel's bearer cron request authenticates as an admin-key request.
+  - Private order analytics are available to admin clients through `GET /api/admin/sites/:siteId/commerce/orders/analytics`. The response uses `backy.order-analytics.v1` and aggregates private order records into revenue totals, payment/fulfillment buckets, source/currency breakdowns, operations counts, 14-day trend points, and recent order summaries without exposing raw order collections publicly.
 
 ---
 
