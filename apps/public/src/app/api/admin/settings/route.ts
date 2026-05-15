@@ -762,6 +762,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       pathPrefix: stringValue(storage.pathPrefix),
       privateFilesEnabled: boolValue(storage.privateFilesEnabled),
       imageTransformsEnabled: boolValue(storage.imageTransformsEnabled, true),
+      lifecyclePolicyEnabled: boolValue(storage.lifecyclePolicyEnabled),
+      lifecycleTempRetentionDays: Math.max(1, Math.min(365, Math.round(numberValue(storage.lifecycleTempRetentionDays, 7)))),
+      lifecycleNoncurrentVersionDays: Math.max(1, Math.min(3650, Math.round(numberValue(storage.lifecycleNoncurrentVersionDays, 90)))),
       maxFileSizeMb: Math.min(Math.max(numberValue(storage.maxFileSizeMb, 25), 1), 2048),
       workspaceStorageLimitGb: Math.min(Math.max(numberValue(storage.workspaceStorageLimitGb, 10), 1), 102400),
       warningThresholdPercent: Math.min(Math.max(numberValue(storage.warningThresholdPercent, 80), 50), 100),
@@ -924,6 +927,20 @@ interface StorageCredentialRotationProbe {
   }>;
   checks: StorageProvisioningCheck[];
   nextSteps: string[];
+}
+
+interface StorageLifecyclePolicyAutomation {
+  provider: string;
+  action: 'apply-lifecycle-policy';
+  status: StorageProvisioningStatus;
+  applied: boolean;
+  checked: boolean;
+  target: string;
+  detail: string;
+  policy?: {
+    tempRetentionDays: number;
+    noncurrentVersionDays: number;
+  };
 }
 
 const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
@@ -1282,6 +1299,153 @@ const hasStorageRotationCandidate = (provider: string) => (
 
 type ResolvedMediaStorage = ReturnType<typeof resolveMediaStorageConfig>;
 
+const getStoragePolicySettings = (settings: AdminSettingsSource): BackyJsonObject => {
+  const integrations = parseJsonObject(settings.integrations) || {};
+  return parseJsonObject(integrations.storage) || {};
+};
+
+const runStorageLifecyclePolicyAutomation = async (
+  settings: AdminSettingsSource,
+  resolved: ResolvedMediaStorage = resolveMediaStorageConfig(),
+): Promise<StorageLifecyclePolicyAutomation> => {
+  const storage = getStoragePolicySettings(settings);
+  const enabled = boolValue(storage.lifecyclePolicyEnabled);
+  const tempRetentionDays = Math.max(1, Math.min(365, Math.round(numberValue(storage.lifecycleTempRetentionDays, 7))));
+  const noncurrentVersionDays = Math.max(1, Math.min(3650, Math.round(numberValue(storage.lifecycleNoncurrentVersionDays, 90))));
+  const target = resolved.summary.bucket || resolved.summary.basePath || 'storage container';
+
+  if (!enabled) {
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'blocked',
+      applied: false,
+      checked: false,
+      target,
+      detail: 'Lifecycle policy automation is disabled in Media storage settings.',
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  }
+
+  if (!resolved.config) {
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'blocked',
+      applied: false,
+      checked: false,
+      target,
+      detail: resolved.summary.error || `Missing ${resolved.summary.missing.join(', ') || 'storage configuration'}.`,
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  }
+
+  if (resolved.config.provider === 'local') {
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'ready',
+      applied: false,
+      checked: true,
+      target,
+      detail: 'Local storage lifecycle is managed by filesystem cleanup; no provider-native lifecycle policy is available.',
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  }
+
+  if (resolved.config.provider === 'supabase') {
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'blocked',
+      applied: false,
+      checked: true,
+      target,
+      detail: 'Supabase Storage lifecycle automation is not available through the current storage client; configure retention from the Supabase project or scheduled cleanup worker.',
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  }
+
+  try {
+    const s3Module = await optionalRuntimeImport<{
+      S3Client: new (input: Record<string, unknown>) => { send: (command: unknown) => Promise<unknown> };
+      PutBucketLifecycleConfigurationCommand: new (input: Record<string, unknown>) => unknown;
+    }>('@aws-sdk/client-s3');
+    const { S3Client, PutBucketLifecycleConfigurationCommand } = s3Module;
+    const config = resolved.config;
+    const client = new S3Client({
+      region: config.region,
+      endpoint: config.endpoint,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+      forcePathStyle: config.forcePathStyle,
+    });
+
+    await client.send(new PutBucketLifecycleConfigurationCommand({
+      Bucket: config.bucket,
+      LifecycleConfiguration: {
+        Rules: [
+          {
+            ID: 'backy-internal-probe-cleanup',
+            Status: 'Enabled',
+            Filter: { Prefix: 'sites/_backy/' },
+            Expiration: { Days: tempRetentionDays },
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: Math.min(tempRetentionDays, 7) },
+          },
+          {
+            ID: 'backy-noncurrent-media-version-retention',
+            Status: 'Enabled',
+            Filter: { Prefix: 'sites/' },
+            NoncurrentVersionExpiration: { NoncurrentDays: noncurrentVersionDays },
+          },
+        ],
+      },
+    }));
+
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'ready',
+      applied: true,
+      checked: true,
+      target: config.bucket,
+      detail: `S3-compatible lifecycle policy applied to bucket "${config.bucket}".`,
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  } catch (error) {
+    return {
+      provider: resolved.summary.provider,
+      action: 'apply-lifecycle-policy',
+      status: 'blocked',
+      applied: false,
+      checked: false,
+      target,
+      detail: error instanceof Error ? error.message : 'S3 lifecycle policy automation failed.',
+      policy: {
+        tempRetentionDays,
+        noncurrentVersionDays,
+      },
+    };
+  }
+};
+
 const runStorageContainerAutomation = async (
   resolved: ResolvedMediaStorage = resolveMediaStorageConfig(),
 ): Promise<StorageProvisioningAutomation> => {
@@ -1594,9 +1758,23 @@ const runMediaStorageCredentialRotationProbe = async (
   };
 };
 
+const getSettingsForStorageProbe = async (): Promise<AdminSettingsSource> => {
+  if (!shouldUseDemoStoreFallback()) {
+    const repositories = await getRequiredDatabaseRepositories();
+    return repositories.settings.get();
+  }
+
+  return getAdminSettings();
+};
+
 const runMediaStorageProvisioningProbe = async (requestId: string) => {
-  const summary = getMediaStorageConfigSummary();
-  const automation = await runStorageContainerAutomation();
+  const settings = await getSettingsForStorageProbe();
+  const resolved = resolveMediaStorageConfig();
+  const summary = resolved.summary;
+  const storagePolicy = getStoragePolicySettings(settings);
+  const lifecyclePolicyRequested = boolValue(storagePolicy.lifecyclePolicyEnabled);
+  const automation = await runStorageContainerAutomation(resolved);
+  const lifecyclePolicy = await runStorageLifecyclePolicyAutomation(settings, resolved);
   const credentialRotation = await runMediaStorageCredentialRotationProbe(requestId, summary.provider);
   const checks: StorageProvisioningCheck[] = [
     {
@@ -1618,6 +1796,7 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
       runtimeStorage: summary,
       probePath,
       automation,
+      lifecyclePolicy,
       checks,
       credentialRotation,
       rotation: {
@@ -1644,17 +1823,21 @@ const runMediaStorageProvisioningProbe = async (requestId: string) => {
   }
 
   const blocked = checks.some((check) => !check.ready);
+  const lifecycleBlocked = lifecyclePolicyRequested && lifecyclePolicy.status === 'blocked';
   return {
     provider: summary.provider,
-    status: blocked || automation.status === 'blocked' ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
+    status: blocked || automation.status === 'blocked' || lifecycleBlocked ? 'blocked' as StorageProvisioningStatus : 'ready' as StorageProvisioningStatus,
     summary: blocked
       ? 'Storage provisioning probe found an operation that needs attention.'
+      : lifecycleBlocked
+        ? 'Storage lifecycle policy automation needs attention before accepting production uploads.'
       : automation.status === 'blocked'
         ? 'Storage container automation needs attention before accepting production uploads.'
         : 'Storage container is provisioned and the bucket/path accepts upload, readback, metadata, listing, and cleanup operations.',
     runtimeStorage: summary,
     probePath,
     automation,
+    lifecyclePolicy,
     checks,
     credentialRotation,
     rotation: {

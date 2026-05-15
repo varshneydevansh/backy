@@ -4117,6 +4117,17 @@ function MediaPage() {
                   <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 text-sm">
                     <input
                       type="checkbox"
+                      aria-label="Enable storage lifecycle policy"
+                      checked={Boolean(storageSettings.lifecyclePolicyEnabled)}
+                      disabled={storageSettingsControlsDisabled}
+                      onChange={(event) => updateMediaStorageSettingsDraft({ lifecyclePolicyEnabled: event.target.checked })}
+                      className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    Lifecycle policy
+                  </label>
+                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 text-sm">
+                    <input
+                      type="checkbox"
                       aria-label="Enable Supabase storage"
                       checked={Boolean(supabaseSettings.storageEnabled)}
                       disabled={storageSettingsControlsDisabled}
@@ -4126,6 +4137,32 @@ function MediaPage() {
                     Supabase storage
                   </label>
                 </div>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Probe retention days</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    aria-label="Probe retention days"
+                    value={storageSettings.lifecycleTempRetentionDays || 7}
+                    disabled={storageSettingsControlsDisabled}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ lifecycleTempRetentionDays: Number(event.target.value) || 7 })}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Noncurrent version days</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    aria-label="Noncurrent version days"
+                    value={storageSettings.lifecycleNoncurrentVersionDays || 90}
+                    disabled={storageSettingsControlsDisabled}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ lifecycleNoncurrentVersionDays: Number(event.target.value) || 90 })}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
               </div>
 
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -4156,6 +4193,10 @@ function MediaPage() {
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Transforms</dt>
                     <dd>{storageSettings.imageTransformsEnabled === false ? 'off' : 'enabled'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Lifecycle policy</dt>
+                    <dd>{storageSettings.lifecyclePolicyEnabled ? 'enabled' : 'off'}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Supabase storage</dt>
@@ -7301,6 +7342,31 @@ function MediaStorageProvisioningCard({ result }: { result: SettingsStorageProvi
             </div>
           </dl>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.automation.detail}</p>
+        </div>
+      )}
+      {result.lifecyclePolicy && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3" data-testid="media-storage-lifecycle-policy">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Lifecycle policy automation</h4>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', result.lifecyclePolicy.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+              {result.lifecyclePolicy.applied ? 'applied' : result.lifecyclePolicy.checked ? 'checked' : 'not applied'}
+            </span>
+          </div>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Target</dt>
+              <dd className="break-all font-mono">{result.lifecyclePolicy.target}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Policy</dt>
+              <dd>
+                {result.lifecyclePolicy.policy
+                  ? `${result.lifecyclePolicy.policy.tempRetentionDays}d probes / ${result.lifecyclePolicy.policy.noncurrentVersionDays}d versions`
+                  : 'not configured'}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{result.lifecyclePolicy.detail}</p>
         </div>
       )}
       <div className="mt-4 grid gap-2 md:grid-cols-2">

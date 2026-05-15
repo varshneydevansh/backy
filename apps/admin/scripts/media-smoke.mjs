@@ -1139,6 +1139,7 @@ const runMediaStorageProvisioningProbe = async (client) => {
         ready: Boolean(panel) &&
           text.includes('Provisioning and rotation probe') &&
           text.includes('Bucket automation') &&
+          text.includes('Lifecycle policy automation') &&
           text.includes('Probe upload') &&
           text.includes('Readback') &&
           text.includes('Probe cleanup') &&
@@ -1373,6 +1374,9 @@ const saveMediaStorageSettingsFromUi = async (client, suffix) => {
   await setMediaStorageField(client, 'Supabase project ref', suffix);
   await setMediaStorageCheckbox(client, 'Private file delivery', true);
   await setMediaStorageCheckbox(client, 'Image transforms', true);
+  await setMediaStorageCheckbox(client, 'Lifecycle policy', true);
+  await setMediaStorageField(client, 'Probe retention days', '9');
+  await setMediaStorageField(client, 'Noncurrent version days', '120');
   await setMediaStorageCheckbox(client, 'Supabase storage', true);
 
   const envContract = await evaluate(client, `(() => {
@@ -2544,6 +2548,9 @@ const main = async () => {
     assert(savedStorageSettings.integrations?.storage?.bucket === `media-${suffix}`, 'Media storage bucket was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.storage?.privateFilesEnabled === true, 'Media private file setting was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.storage?.imageTransformsEnabled === true, 'Media image transform setting was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.lifecyclePolicyEnabled === true, 'Media lifecycle policy setting was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.lifecycleTempRetentionDays === 9, 'Media lifecycle probe retention was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.lifecycleNoncurrentVersionDays === 120, 'Media lifecycle noncurrent version retention was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.supabase?.projectRef === suffix, 'Media Supabase project ref was not persisted through the Media page.');
     assert(savedStorageSettings.integrations?.supabase?.storageEnabled === true, 'Media Supabase storage toggle was not persisted through the Media page.');
     await runMediaStorageCheck(client);

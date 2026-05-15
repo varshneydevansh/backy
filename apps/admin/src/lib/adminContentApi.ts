@@ -1895,6 +1895,9 @@ export interface SiteSettingsInput {
       pathPrefix?: string;
       privateFilesEnabled?: boolean;
       imageTransformsEnabled?: boolean;
+      lifecyclePolicyEnabled?: boolean;
+      lifecycleTempRetentionDays?: number;
+      lifecycleNoncurrentVersionDays?: number;
       maxFileSizeMb?: number;
       workspaceStorageLimitGb?: number;
       warningThresholdPercent?: number;
@@ -2102,6 +2105,19 @@ export interface SettingsStorageProvisioningResult {
     checked: boolean;
     target: string;
     detail: string;
+  };
+  lifecyclePolicy?: {
+    provider: string;
+    action: 'apply-lifecycle-policy';
+    status: 'ready' | 'blocked';
+    applied: boolean;
+    checked: boolean;
+    target: string;
+    detail: string;
+    policy?: {
+      tempRetentionDays: number;
+      noncurrentVersionDays: number;
+    };
   };
   checks: SettingsStorageProvisioningCheck[];
   credentialRotation?: {
