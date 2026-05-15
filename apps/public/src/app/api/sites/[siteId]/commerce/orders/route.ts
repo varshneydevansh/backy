@@ -73,7 +73,7 @@ interface CheckoutSessionHandoff {
   provider: 'manual' | 'stripe';
   providerMode: 'test' | 'live';
   accountId: string | null;
-  status: 'requires_action' | 'provider_ready';
+  status: 'requires_action' | 'provider_ready' | 'provider_created';
   handoffMode: 'manual' | 'provider';
   url: string | null;
   successUrl: string;
@@ -94,6 +94,18 @@ const MAX_CHECKOUT_ITEM_QUANTITY = 999;
 type OrderRiskLevel = 'low' | 'medium' | 'high';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+class CheckoutProviderError extends Error {
+  code = 'CHECKOUT_PROVIDER_ERROR';
+  status = 502;
+  details: unknown;
+
+  constructor(message: string, details?: unknown) {
+    super(message);
+    this.name = 'CheckoutProviderError';
+    this.details = details;
+  }
+}
 
 const hasPublicOrderCollectionAccess = (permissions: {
   publicRead?: boolean;
@@ -136,6 +148,18 @@ const textValue = (value: unknown): string => (
 const moneyValue = (value: number): number => (
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 );
+
+const centsValue = (value: number): number => (
+  Math.max(0, Math.round(moneyValue(value) * 100))
+);
+
+const envValue = (keys: string[]): string => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+};
 
 const normalizeCheckoutInput = (body: Record<string, unknown>): CheckoutOrderInput => {
   const customer = body.customer && typeof body.customer === 'object' && !Array.isArray(body.customer)
@@ -679,7 +703,7 @@ const buildCheckoutSessionHandoff = ({
   createdAt: string;
 }): CheckoutSessionHandoff => {
   const requestedProvider = textValue(input.paymentProvider).toLowerCase();
-  const provider: CheckoutSessionHandoff['provider'] = requestedProvider === 'stripe'
+  const provider: CheckoutSessionHandoff['provider'] = requestedProvider === 'stripe' && commerce.paymentProvider === 'stripe'
     ? 'stripe'
     : commerce.paymentProvider === 'stripe'
       ? 'stripe'
@@ -691,11 +715,12 @@ const buildCheckoutSessionHandoff = ({
     orderSlug,
     requestId,
   };
+  const successSessionId = provider === 'stripe' ? '{CHECKOUT_SESSION_ID}' : id;
   const successUrl = buildAbsoluteUrl(request, commerce.checkout.successPath, {
     order: orderNumber,
-    session: id,
+    session: successSessionId,
     request: requestId,
-  });
+  }).replace('%7BCHECKOUT_SESSION_ID%7D', '{CHECKOUT_SESSION_ID}');
   const cancelUrl = buildAbsoluteUrl(request, commerce.checkout.cancelPath, {
     order: orderNumber,
     session: id,
@@ -728,6 +753,13 @@ const buildCheckoutSessionHandoff = ({
         },
       })),
       metadata,
+      quote: {
+        subtotal: quote.subtotal,
+        discountAmount: quote.discountAmount,
+        taxAmount: quote.taxAmount,
+        shippingAmount: quote.shippingAmount,
+        total: quote.total,
+      },
     }
     : null;
 
@@ -747,6 +779,147 @@ const buildCheckoutSessionHandoff = ({
     currency: quote.currency,
     metadata,
     providerPayload,
+  };
+};
+
+const stripeCheckoutApiUrl = () => {
+  const baseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']) || 'https://api.stripe.com';
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return new URL('v1/checkout/sessions', normalizedBase).toString();
+};
+
+const replaceCheckoutSessionInUrl = (url: string, checkoutSessionId: string): string => {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('session', checkoutSessionId);
+    return parsed.toString();
+  } catch {
+    return url.replace('{CHECKOUT_SESSION_ID}', checkoutSessionId);
+  }
+};
+
+const appendStripeMetadata = (
+  form: URLSearchParams,
+  prefix: string,
+  metadata: Record<string, string>,
+) => {
+  Object.entries(metadata).forEach(([key, value]) => {
+    form.append(`${prefix}[metadata][${key}]`, value);
+  });
+};
+
+const buildStripeCheckoutSessionForm = ({
+  handoff,
+  orderNumber,
+  quote,
+  lineItems,
+}: {
+  handoff: CheckoutSessionHandoff;
+  orderNumber: string;
+  quote: ReturnType<typeof calculateCheckoutQuote>;
+  lineItems: CheckoutLineItem[];
+}) => {
+  const form = new URLSearchParams();
+  const itemCount = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+  const productSummary = lineItems
+    .slice(0, 8)
+    .map((item) => `${item.quantity}x ${item.title}`)
+    .join(', ');
+
+  form.append('mode', 'payment');
+  form.append('success_url', handoff.successUrl);
+  form.append('cancel_url', handoff.cancelUrl);
+  form.append('client_reference_id', orderNumber);
+  form.append('line_items[0][quantity]', '1');
+  form.append('line_items[0][price_data][currency]', quote.currency.toLowerCase());
+  form.append('line_items[0][price_data][unit_amount]', String(centsValue(quote.total)));
+  form.append('line_items[0][price_data][product_data][name]', `Backy order ${orderNumber}`);
+  form.append(
+    'line_items[0][price_data][product_data][description]',
+    productSummary || `${itemCount} checkout item${itemCount === 1 ? '' : 's'}`,
+  );
+  form.append('metadata[siteId]', handoff.metadata.siteId);
+  form.append('metadata[orderNumber]', handoff.metadata.orderNumber);
+  form.append('metadata[orderSlug]', handoff.metadata.orderSlug);
+  form.append('metadata[requestId]', handoff.metadata.requestId);
+  form.append('metadata[itemCount]', String(itemCount));
+  form.append('metadata[subtotal]', String(quote.subtotal));
+  form.append('metadata[discountAmount]', String(quote.discountAmount));
+  form.append('metadata[taxAmount]', String(quote.taxAmount));
+  form.append('metadata[shippingAmount]', String(quote.shippingAmount));
+  form.append('metadata[amountTotal]', String(quote.total));
+  appendStripeMetadata(form, 'payment_intent_data', handoff.metadata);
+
+  return form;
+};
+
+const executeStripeCheckoutSession = async ({
+  handoff,
+  orderNumber,
+  quote,
+  lineItems,
+}: {
+  handoff: CheckoutSessionHandoff;
+  orderNumber: string;
+  quote: ReturnType<typeof calculateCheckoutQuote>;
+  lineItems: CheckoutLineItem[];
+}): Promise<CheckoutSessionHandoff> => {
+  if (handoff.provider !== 'stripe') return handoff;
+
+  const secretKey = envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
+  if (!secretKey) return handoff;
+
+  const response = await fetch(stripeCheckoutApiUrl(), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      'content-type': 'application/x-www-form-urlencoded',
+      ...(handoff.accountId ? { 'stripe-account': handoff.accountId } : {}),
+      ...(envValue(['BACKY_STRIPE_API_VERSION', 'STRIPE_API_VERSION'])
+        ? { 'stripe-version': envValue(['BACKY_STRIPE_API_VERSION', 'STRIPE_API_VERSION']) }
+        : {}),
+    },
+    body: buildStripeCheckoutSessionForm({ handoff, orderNumber, quote, lineItems }).toString(),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+
+  if (!response.ok) {
+    const providerError = payload.error && typeof payload.error === 'object' && !Array.isArray(payload.error)
+      ? payload.error as Record<string, unknown>
+      : {};
+    throw new CheckoutProviderError('Checkout provider session creation failed', {
+      provider: 'stripe',
+      status: response.status,
+      type: textValue(providerError.type),
+      code: textValue(providerError.code),
+      message: textValue(providerError.message) || response.statusText,
+    });
+  }
+
+  const providerSessionId = textValue(payload.id) || handoff.id;
+  const providerUrl = textValue(payload.url) || handoff.url;
+  const reference = handoff.reference === `stripe:${handoff.id}`
+    ? `stripe:${providerSessionId}`
+    : handoff.reference;
+
+  return {
+    ...handoff,
+    id: providerSessionId,
+    status: 'provider_created',
+    url: providerUrl,
+    successUrl: replaceCheckoutSessionInUrl(handoff.successUrl, providerSessionId),
+    reference,
+    providerPayload: {
+      ...(handoff.providerPayload || {}),
+      providerResponse: {
+        id: providerSessionId,
+        url: providerUrl,
+        status: textValue(payload.status),
+        paymentStatus: textValue(payload.payment_status),
+        livemode: typeof payload.livemode === 'boolean' ? payload.livemode : null,
+      },
+    },
   };
 };
 
@@ -1459,17 +1632,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         suffix += 1;
       }
       const orderCreatedAt = new Date().toISOString();
-      const checkoutSession = buildCheckoutSessionHandoff({
-        request,
-        siteId: site.id,
-        commerce,
-        input,
+      const checkoutSession = await executeStripeCheckoutSession({
+        handoff: buildCheckoutSessionHandoff({
+          request,
+          siteId: site.id,
+          commerce,
+          input,
+          orderNumber,
+          orderSlug: slug,
+          quote,
+          lineItems,
+          requestId,
+          createdAt: orderCreatedAt,
+        }),
         orderNumber,
-        orderSlug: slug,
         quote,
         lineItems,
-        requestId,
-        createdAt: orderCreatedAt,
       });
       const risk = assessCheckoutRisk({ input, quote, lineItems, checkoutSession });
       let customerProfile = await upsertRepositoryCheckoutCustomer({
@@ -1714,17 +1892,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       suffix += 1;
     }
     const orderCreatedAt = new Date().toISOString();
-    const checkoutSession = buildCheckoutSessionHandoff({
-      request,
-      siteId: site.id,
-      commerce,
-      input,
+    const checkoutSession = await executeStripeCheckoutSession({
+      handoff: buildCheckoutSessionHandoff({
+        request,
+        siteId: site.id,
+        commerce,
+        input,
+        orderNumber,
+        orderSlug: slug,
+        quote,
+        lineItems,
+        requestId,
+        createdAt: orderCreatedAt,
+      }),
       orderNumber,
-      orderSlug: slug,
       quote,
       lineItems,
-      requestId,
-      createdAt: orderCreatedAt,
     });
     const risk = assessCheckoutRisk({ input, quote, lineItems, checkoutSession });
     let customerProfile = upsertDemoCheckoutCustomer({
@@ -1878,6 +2061,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
     });
   } catch (error) {
+    if (error instanceof CheckoutProviderError) {
+      return errorResponse(error.status, error.code, error.message, requestId, error.details);
+    }
     console.error('Public commerce order intake API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

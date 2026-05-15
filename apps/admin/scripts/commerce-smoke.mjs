@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -12,6 +13,8 @@ const SITE_ID = process.env.BACKY_COMMERCE_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_COMMERCE_CDP_PORT || 9378);
 const SCREENSHOT_PATH = process.env.BACKY_COMMERCE_SCREENSHOT || path.join(os.tmpdir(), 'backy-commerce-smoke.png');
+const STRIPE_MOCK_PORT = Number(process.env.BACKY_STRIPE_MOCK_PORT || 45678);
+const STRIPE_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_MOCK_PORT}`;
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
@@ -23,6 +26,7 @@ const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 let apiAdminSessionToken = '';
+let stripeCheckoutMock = null;
 
 const PRODUCT_VALUE_KEYS = {
   title: 'title',
@@ -216,6 +220,71 @@ const postCommerceWebhook = async (body, headers = {}) => {
   });
 };
 
+const stripeCheckoutExecutionEnabled = () => {
+  const secret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY || '';
+  const apiBaseUrl = process.env.BACKY_STRIPE_API_BASE_URL || process.env.STRIPE_API_BASE_URL || '';
+  return Boolean(secret && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
+const readRequestBody = (request) => new Promise((resolve, reject) => {
+  const chunks = [];
+  request.on('data', (chunk) => chunks.push(chunk));
+  request.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+  request.on('error', reject);
+});
+
+const startStripeCheckoutMock = async () => {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const body = await readRequestBody(request);
+    requests.push({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body,
+      form: Object.fromEntries(new URLSearchParams(body).entries()),
+    });
+
+    if (request.method !== 'POST' || request.url !== '/v1/checkout/sessions') {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'Not found' } }));
+      return;
+    }
+
+    const form = new URLSearchParams(body);
+    const id = `cs_mock_${requests.length}`;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({
+      id,
+      object: 'checkout.session',
+      url: `${STRIPE_MOCK_BASE_URL}/checkout/${id}`,
+      status: 'open',
+      payment_status: 'unpaid',
+      livemode: false,
+      client_reference_id: form.get('client_reference_id'),
+      metadata: {
+        siteId: form.get('metadata[siteId]'),
+        orderNumber: form.get('metadata[orderNumber]'),
+        orderSlug: form.get('metadata[orderSlug]'),
+        requestId: form.get('metadata[requestId]'),
+      },
+    }));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(STRIPE_MOCK_PORT, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -308,6 +377,28 @@ const enableCommercePricingSettings = async (settings) => {
         productLowStock: true,
         recipient: 'commerce-ops@example.com',
       },
+    },
+  };
+  return patchSettingsFromSnapshot(next);
+};
+
+const enableStripeCommerceSettings = async () => {
+  const current = await getSettings();
+  const next = JSON.parse(JSON.stringify(current));
+  next.integrations = {
+    ...(next.integrations || {}),
+    commerce: {
+      ...(next.integrations?.commerce || {}),
+      mode: 'checkout-provider',
+      paymentProvider: 'stripe',
+      providerMode: 'test',
+      checkoutSuccessPath: '/checkout/success',
+      checkoutCancelPath: '/checkout/cancel',
+      providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
+      providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      webhookEventsEnabled: true,
+      reconciliationMode: 'webhook',
     },
   };
   return patchSettingsFromSnapshot(next);
@@ -1448,7 +1539,90 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(commerceEvent?.status === 'succeeded', `Commerce webhook event was not exposed through /events: ${JSON.stringify(commerceEventsPayload)}`);
   assert(commerceEvent.metadata?.orderId === order.id, `Commerce webhook event did not include order id: ${JSON.stringify(commerceEvent)}`);
 
-  return { productRecord, updatedProduct, order, orderRecord: settledOrderRecord, customersCollection, customerRecord };
+  const stripeCheckoutExecution = await assertStripeCheckoutExecution({
+    productCollection,
+    ordersCollection,
+    customersCollection,
+    slug,
+  });
+
+  return { productRecord, updatedProduct, order, orderRecord: settledOrderRecord, customersCollection, customerRecord, stripeCheckoutExecution };
+};
+
+const assertStripeCheckoutExecution = async ({
+  productCollection,
+  ordersCollection,
+  customersCollection,
+  slug,
+}) => {
+  if (!stripeCheckoutExecutionEnabled()) {
+    return { skipped: true, reason: 'BACKY_STRIPE_SECRET_KEY and BACKY_STRIPE_API_BASE_URL mock env were not configured' };
+  }
+
+  const beforeRequests = stripeCheckoutMock?.requests.length || 0;
+  const settingsBefore = await getSettings();
+  await enableStripeCommerceSettings();
+
+  try {
+    const stripePayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
+      method: 'POST',
+      body: JSON.stringify({
+        customer: {
+          name: 'Commerce Stripe Smoke Buyer',
+          email: 'commerce-stripe-smoke@example.com',
+        },
+        items: [{ slug, quantity: 1 }],
+        shippingAddress: '200 Provider Street, New York, NY',
+        billingAddress: '200 Provider Street, New York, NY',
+        notes: 'Smoke order created through Stripe checkout execution.',
+      }),
+    });
+
+    const checkoutSession = stripePayload.data?.checkoutSession;
+    const order = stripePayload.data?.order;
+    assert(checkoutSession?.provider === 'stripe', `Stripe checkout did not select Stripe provider: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.status === 'provider_created', `Stripe checkout was not executed: ${JSON.stringify(checkoutSession)}`);
+    assert(/^cs_mock_/.test(checkoutSession.id), `Stripe checkout did not return provider session id: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.url === `${STRIPE_MOCK_BASE_URL}/checkout/${checkoutSession.id}`, `Stripe checkout did not expose provider URL: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.reference === `stripe:${checkoutSession.id}`, `Stripe checkout reference did not use provider session id: ${JSON.stringify(checkoutSession)}`);
+    assert(checkoutSession.providerPayload?.providerResponse?.id === checkoutSession.id, `Stripe provider response was not exposed safely: ${JSON.stringify(checkoutSession.providerPayload)}`);
+
+    const stripeRequest = stripeCheckoutMock.requests[beforeRequests];
+    assert(stripeRequest?.method === 'POST' && stripeRequest.url === '/v1/checkout/sessions', `Stripe mock did not receive checkout session create: ${JSON.stringify(stripeCheckoutMock.requests)}`);
+    const expectedSecret = process.env.BACKY_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    assert(stripeRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe mock did not receive bearer auth: ${JSON.stringify(stripeRequest.headers)}`);
+    assert(stripeRequest.form.mode === 'payment', `Stripe checkout form did not request payment mode: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form.client_reference_id === checkoutSession.metadata.orderNumber, `Stripe checkout form did not include order reference: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form['metadata[siteId]'] === SITE_ID, `Stripe checkout form did not include site metadata: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form['metadata[orderSlug]'] === checkoutSession.metadata.orderSlug, `Stripe checkout form did not include order slug metadata: ${JSON.stringify(stripeRequest.form)}`);
+    assert(stripeRequest.form.success_url?.includes('{CHECKOUT_SESSION_ID}'), `Stripe checkout success URL did not include provider session placeholder: ${JSON.stringify(stripeRequest.form)}`);
+    assert(Number(stripeRequest.form['line_items[0][price_data][unit_amount]']) === Math.round(checkoutSession.amountTotal * 100), `Stripe checkout amount did not match quote total: ${JSON.stringify({ form: stripeRequest.form, checkoutSession })}`);
+
+    const orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.checkoutsessionid === checkoutSession.id, `Stripe checkout session id was not persisted: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentprovider === 'stripe', `Stripe payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `stripe:${checkoutSession.id}`, `Stripe payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
+
+    const stripeCustomerRecord = customersCollection?.id
+      ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
+      : null;
+    if (stripeCustomerRecord?.id) {
+      await deleteCollectionRecord(customersCollection.id, stripeCustomerRecord.id);
+    }
+    if (orderRecord?.id) {
+      await deleteCollectionRecord(ordersCollection.id, orderRecord.id);
+    }
+
+    return {
+      skipped: false,
+      sessionId: checkoutSession.id,
+      providerUrl: checkoutSession.url,
+      amountTotal: checkoutSession.amountTotal,
+      requestCount: stripeCheckoutMock.requests.length - beforeRequests,
+    };
+  } finally {
+    await patchSettingsFromSnapshot(settingsBefore);
+  }
 };
 
 const assertProductCsvImport = async ({ productCollection, suffix }) => {
@@ -1892,6 +2066,7 @@ const main = async () => {
   let managedCustomerProfile = null;
 
   try {
+    stripeCheckoutMock = stripeCheckoutExecutionEnabled() ? await startStripeCheckoutMock() : null;
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -2040,6 +2215,7 @@ const main = async () => {
         total: publicCommerce.order.total,
         itemCount: publicCommerce.order.itemCount,
       },
+      stripeCheckoutExecution: publicCommerce.stripeCheckoutExecution,
       customer: {
         id: publicCommerce.customerRecord.id,
         slug: publicCommerce.customerRecord.slug,
@@ -2119,6 +2295,10 @@ const main = async () => {
     });
 
     await cleanupBrowser({ client, childProcess, userDataDir });
+    if (stripeCheckoutMock) {
+      await stripeCheckoutMock.close();
+      stripeCheckoutMock = null;
+    }
   }
 };
 
