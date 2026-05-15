@@ -189,11 +189,16 @@ const amountFromProvider = (value: unknown): number | null => {
   return Number.isFinite(amount) && amount >= 0 ? moneyValue(amount / 100) : null;
 };
 
+const subscriptionLifecycleStatus = (object: Record<string, unknown>): string => (
+  textValue(object.status || object.subscriptionStatus || object.subscription_status).toLowerCase()
+);
+
 const settlementForEvent = (type: string, object: Record<string, unknown>, currentValues: Record<string, unknown>) => {
   const lowerType = type.toLowerCase();
   const now = new Date().toISOString();
   const providerReference = eventProviderReference({}, object, type);
   const refundAmount = amountFromProvider(object.amount_refunded || object.amountRefunded) ?? Number(currentValues.total || 0);
+  const subscriptionStatus = subscriptionLifecycleStatus(object);
 
   if (
     lowerType === 'checkout.session.completed' ||
@@ -241,7 +246,11 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
     lowerType === 'payment_intent.payment_failed' ||
     lowerType === 'checkout.session.expired' ||
     lowerType === 'payment.failed' ||
-    lowerType === 'invoice.payment_failed'
+    lowerType === 'invoice.payment_failed' ||
+    (
+      lowerType === 'customer.subscription.updated' &&
+      ['past_due', 'unpaid', 'incomplete_expired'].includes(subscriptionStatus)
+    )
   ) {
     return {
       status: 'failed' as const,
@@ -252,12 +261,30 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
     };
   }
 
+  if (
+    lowerType === 'customer.subscription.deleted' ||
+    (
+      lowerType === 'customer.subscription.updated' &&
+      ['canceled', 'cancelled'].includes(subscriptionStatus)
+    )
+  ) {
+    const fulfillmentStatus = textValue(currentValues.fulfillmentstatus);
+    return {
+      status: 'cancelled' as const,
+      values: {
+        orderstatus: 'cancelled',
+        ...(fulfillmentStatus === 'fulfilled' ? {} : { fulfillmentstatus: 'cancelled' }),
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
   return null;
 };
 
 const appendSettlementNote = (notes: unknown, type: string, eventIdValue: string, status: string): string => {
   const existing = textValue(notes);
-  const entry = `[${new Date().toISOString()}] Commerce webhook ${type} (${eventIdValue}) marked payment ${status}.`;
+  const entry = `[${new Date().toISOString()}] Commerce webhook ${type} (${eventIdValue}) marked order ${status}.`;
   return existing ? `${existing}\n${entry}` : entry;
 };
 

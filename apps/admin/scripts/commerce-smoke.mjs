@@ -356,7 +356,7 @@ const enableCommercePricingSettings = async (settings) => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.deleted',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: true,
@@ -396,7 +396,7 @@ const enableStripeCommerceSettings = async () => {
       checkoutCancelPath: '/checkout/cancel',
       providerWebhookUrl: 'https://hooks.example.com/backy-commerce-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed,invoice.payment_succeeded,customer.subscription.updated,customer.subscription.deleted',
       webhookEventsEnabled: true,
       reconciliationMode: 'webhook',
       taxEnabled: false,
@@ -1663,6 +1663,51 @@ const assertStripeCheckoutExecution = async ({
     assert(orderRecord.values?.paymentstatus === 'paid', `Stripe subscription renewal invoice changed paid status unexpectedly: ${JSON.stringify(orderRecord.values)}`);
     assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription renewal invoice did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
     assert(String(orderRecord.values?.notes || '').includes('invoice.payment_succeeded'), `Stripe subscription renewal invoice settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+
+    const dunningPayload = await postCommerceWebhook({
+      id: `evt_subscription_past_due_${slug}`,
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: `sub_${slug}`,
+          object: 'subscription',
+          status: 'past_due',
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-dunning-${slug}` });
+    assert(dunningPayload.data?.event?.status === 'failed', `Stripe subscription dunning webhook did not mark payment failed: ${JSON.stringify(dunningPayload)}`);
+    assert(dunningPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription dunning webhook should keep the subscription reference: ${JSON.stringify(dunningPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.paymentstatus === 'failed', `Stripe subscription dunning webhook did not persist failed payment state: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription dunning webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.updated'), `Stripe subscription dunning settlement note missing: ${JSON.stringify(orderRecord.values)}`);
+
+    const cancellationPayload = await postCommerceWebhook({
+      id: `evt_subscription_deleted_${slug}`,
+      type: 'customer.subscription.deleted',
+      data: {
+        object: {
+          id: `sub_${slug}`,
+          object: 'subscription',
+          status: 'canceled',
+          metadata: {
+            orderNumber: order.orderNumber,
+            orderSlug: order.slug,
+          },
+        },
+      },
+    }, { 'x-request-id': `commerce-subscription-cancelled-${slug}` });
+    assert(cancellationPayload.data?.event?.status === 'cancelled', `Stripe subscription cancellation webhook did not cancel the order: ${JSON.stringify(cancellationPayload)}`);
+    assert(cancellationPayload.data?.order?.paymentReference === `sub_${slug}`, `Stripe subscription cancellation webhook should keep the subscription reference: ${JSON.stringify(cancellationPayload)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(orderRecord.values?.orderstatus === 'cancelled', `Stripe subscription cancellation webhook did not persist cancelled order state: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.fulfillmentstatus === 'cancelled', `Stripe subscription cancellation webhook did not cancel fulfillment: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values?.paymentreference === `sub_${slug}`, `Stripe subscription cancellation webhook did not preserve subscription reference: ${JSON.stringify(orderRecord.values)}`);
+    assert(String(orderRecord.values?.notes || '').includes('customer.subscription.deleted'), `Stripe subscription cancellation settlement note missing: ${JSON.stringify(orderRecord.values)}`);
 
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
