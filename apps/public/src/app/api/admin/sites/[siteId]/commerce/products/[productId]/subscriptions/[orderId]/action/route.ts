@@ -55,7 +55,7 @@ interface SubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;
@@ -183,6 +183,29 @@ const canExecuteStripeSubscriptionAction = (provider: string, subscriptionRefere
   subscriptionReference.startsWith('sub_')
 );
 
+const paypalAccessToken = () => (
+  process.env.BACKY_PAYPAL_ACCESS_TOKEN?.trim()
+  || process.env.PAYPAL_ACCESS_TOKEN?.trim()
+  || ''
+);
+
+const paypalApiBaseUrl = () => (
+  process.env.BACKY_PAYPAL_API_BASE_URL?.trim()
+  || process.env.PAYPAL_API_BASE_URL?.trim()
+  || 'https://api-m.paypal.com'
+).replace(/\/$/, '');
+
+const paypalSubscriptionEndpoint = (subscriptionReference: string, action: SubscriptionLifecycleAction['action']) => {
+  const paypalAction = action === 'pause' ? 'suspend' : action === 'resume' ? 'activate' : 'cancel';
+  return `${paypalApiBaseUrl()}/v1/billing/subscriptions/${encodeURIComponent(subscriptionReference)}/${paypalAction}`;
+};
+
+const canExecutePayPalSubscriptionAction = (provider: string, subscriptionReference: string) => (
+  provider.toLowerCase() === 'paypal' &&
+  Boolean(paypalAccessToken()) &&
+  Boolean(subscriptionReference)
+);
+
 const safeStripeSubscriptionPayload = (value: Record<string, unknown>) => ({
   id: textValue(value.id),
   object: textValue(value.object),
@@ -203,6 +226,14 @@ const safeStripeErrorPayload = (value: Record<string, unknown>) => {
     requestLogUrl: textValue(error.request_log_url || error.requestLogUrl),
   };
 };
+
+const safePayPalErrorPayload = (value: Record<string, unknown>) => ({
+  name: textValue(value.name),
+  message: textValue(value.message) || 'PayPal subscription action failed.',
+  debugId: textValue(value.debug_id || value.debugId),
+  issue: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).issue),
+  description: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).description),
+});
 
 const executeStripeSubscriptionAction = async (input: {
   action: SubscriptionLifecycleAction['action'];
@@ -250,6 +281,44 @@ const executeStripeSubscriptionAction = async (input: {
   return {
     ok: true as const,
     payload: safeStripeSubscriptionPayload(payloadRecord),
+  };
+};
+
+const executePayPalSubscriptionAction = async (input: {
+  action: SubscriptionLifecycleAction['action'];
+  actionId: string;
+  subscriptionReference: string;
+  reason: string;
+}) => {
+  const response = await fetch(paypalSubscriptionEndpoint(input.subscriptionReference, input.action), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${paypalAccessToken()}`,
+      'content-type': 'application/json',
+      'paypal-request-id': input.actionId,
+    },
+    body: JSON.stringify({
+      reason: input.reason.slice(0, 128),
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok && response.status !== 204) {
+    return {
+      ok: false as const,
+      payload: safePayPalErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: {
+      id: input.subscriptionReference,
+      status: input.action === 'pause' ? 'SUSPENDED' : input.action === 'resume' ? 'ACTIVE' : 'CANCELLED',
+      httpStatus: response.status,
+    },
   };
 };
 
@@ -318,14 +387,15 @@ const buildSubscriptionActionUpdate = async (
   const product = productRecordToCommerceProduct(sourceRecordFromRecord(productRecord));
   const provider = (textValue(body.provider) || textValue(values.paymentprovider) || 'manual').toLowerCase();
   const subscriptionReference = textValue(body.subscriptionReference) || textValue(values.paymentreference);
-  if (!subscriptionReference.startsWith('sub_')) {
+  if (!subscriptionReference) {
     return { error: { status: 400, code: 'SUBSCRIPTION_REFERENCE_REQUIRED', message: 'A provider subscription reference is required before running lifecycle actions.' } };
   }
 
   const reason = textValue(body.reason) || `Backy operator requested subscription ${actionName}.`;
   const actionId = `subact_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const shouldExecuteStripe = canExecuteStripeSubscriptionAction(provider, subscriptionReference);
-  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : 'handoff';
+  const shouldExecutePayPal = canExecutePayPalSubscriptionAction(provider, subscriptionReference);
+  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.product-subscription-action.v1',
     action: `subscription.${actionName}`,
@@ -339,12 +409,29 @@ const buildSubscriptionActionUpdate = async (
     reason,
     idempotencyKey: actionId,
   };
-  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe ? 'requested' : 'requires_action';
+  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal ? 'requested' : 'requires_action';
   let completedAt: string | null = null;
-  let statusNote = shouldExecuteStripe ? 'requested' : 'handoff';
+  let statusNote = shouldExecuteStripe || shouldExecutePayPal ? 'requested' : 'handoff';
 
   if (shouldExecuteStripe) {
     const result = await executeStripeSubscriptionAction({
+      action: actionName,
+      actionId,
+      subscriptionReference,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      status = 'succeeded';
+      completedAt = new Date().toISOString();
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      completedAt = new Date().toISOString();
+      statusNote = 'failed';
+    }
+  } else if (shouldExecutePayPal) {
+    const result = await executePayPalSubscriptionAction({
       action: actionName,
       actionId,
       subscriptionReference,

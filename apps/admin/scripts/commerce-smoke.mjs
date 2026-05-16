@@ -244,6 +244,12 @@ const stripeCheckoutExecutionEnabled = () => {
   return Boolean(secret && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const paypalSubscriptionExecutionEnabled = () => {
+  const token = process.env.BACKY_PAYPAL_ACCESS_TOKEN || process.env.PAYPAL_ACCESS_TOKEN || '';
+  const apiBaseUrl = process.env.BACKY_PAYPAL_API_BASE_URL || process.env.PAYPAL_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const readRequestBody = (request) => new Promise((resolve, reject) => {
   const chunks = [];
   request.on('data', (chunk) => chunks.push(chunk));
@@ -317,6 +323,13 @@ const startStripeCheckoutMock = async () => {
         current_period_end: Math.floor(Date.now() / 1000) + 86400,
         pause_collection: status === 'paused' ? { behavior: form.get('pause_collection[behavior]') || 'void' } : null,
       }));
+      return;
+    }
+
+    const paypalSubscriptionMatch = request.url.match(/^\/v1\/billing\/subscriptions\/([^/]+)\/(suspend|activate|cancel)$/);
+    if (paypalSubscriptionMatch && request.method === 'POST') {
+      response.writeHead(204, { 'content-type': 'application/json' });
+      response.end();
       return;
     }
 
@@ -2201,6 +2214,27 @@ const assertStripeCheckoutExecution = async ({
     assert(actionRequest.form['metadata[backy_subscription_action]'] === 'cancel', `Stripe subscription action omitted action metadata: ${JSON.stringify(actionRequest.form)}`);
     orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
     assert(String(orderRecord.values?.notes || '').includes('Subscription action executed succeeded'), `Subscription action note was not persisted: ${JSON.stringify(orderRecord.values)}`);
+
+    if (paypalSubscriptionExecutionEnabled()) {
+      const beforePayPalActionRequests = stripeCheckoutMock.requests.length;
+      const paypalActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'cancel',
+          provider: 'paypal',
+          subscriptionReference: `I-${slug}`,
+          reason: 'Smoke PayPal subscription cancellation action.',
+        }),
+      });
+      const paypalSubscriptionAction = paypalActionPayload.data?.action || paypalActionPayload.action;
+      assert(paypalSubscriptionAction?.status === 'succeeded', `PayPal subscription action did not execute against mock: ${JSON.stringify(paypalActionPayload).slice(0, 500)}`);
+      assert(paypalSubscriptionAction.executionMode === 'paypal-api', `PayPal subscription action did not use PayPal execution: ${JSON.stringify(paypalSubscriptionAction)}`);
+      assert(paypalSubscriptionAction.subscriptionReference === `I-${slug}`, `PayPal subscription action used the wrong subscription reference: ${JSON.stringify(paypalSubscriptionAction)}`);
+      const paypalActionRequest = stripeCheckoutMock.requests.slice(beforePayPalActionRequests).find((request) => request.method === 'POST' && request.url === `/v1/billing/subscriptions/I-${slug}/cancel`);
+      assert(paypalActionRequest, `PayPal mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePayPalActionRequests))}`);
+      assert(paypalActionRequest.headers.authorization === 'Bearer paypal_smoke_access_token', `PayPal subscription action did not send bearer auth: ${JSON.stringify(paypalActionRequest.headers)}`);
+      assert(paypalActionRequest.headers['paypal-request-id'], `PayPal subscription action did not send idempotency header: ${JSON.stringify(paypalActionRequest.headers)}`);
+    }
 
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')

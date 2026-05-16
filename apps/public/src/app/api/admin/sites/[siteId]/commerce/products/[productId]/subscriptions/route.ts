@@ -187,7 +187,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         paymentStatus: textValue(values.paymentstatus).toLowerCase() || 'pending',
         fulfillmentStatus: textValue(values.fulfillmentstatus).toLowerCase() || 'unfulfilled',
         lifecycleStatus: status,
-        subscriptionReference: textValue(values.paymentreference).startsWith('sub_') ? textValue(values.paymentreference) : '',
+        subscriptionReference: textValue(values.paymentreference),
         checkoutSessionId: textValue(values.checkoutsessionid),
         total: numberValue(values.total),
         currency: normalizeCurrency(values.currency),
