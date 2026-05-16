@@ -1506,6 +1506,30 @@ export interface ProductSubscriptionLifecycle {
     lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
     subscriptionReference: string;
     actionExecutionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+    actionHistory: Array<{
+      id: string;
+      schemaVersion: string;
+      action: string;
+      status: string;
+      provider: string;
+      executionMode: string;
+      subscriptionReference: string;
+      reason: string;
+      requestedAt: string;
+      completedAt: string | null;
+    }>;
+    lastAction: {
+      id: string;
+      schemaVersion: string;
+      action: string;
+      status: string;
+      provider: string;
+      executionMode: string;
+      subscriptionReference: string;
+      reason: string;
+      requestedAt: string;
+      completedAt: string | null;
+    } | null;
     checkoutSessionId: string;
     total: number;
     currency: string;

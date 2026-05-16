@@ -2246,6 +2246,15 @@ const assertStripeCheckoutExecution = async ({
     assert(actionRequest.form['metadata[backy_subscription_action]'] === 'cancel', `Stripe subscription action omitted action metadata: ${JSON.stringify(actionRequest.form)}`);
     orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
     assert(String(orderRecord.values?.notes || '').includes('Subscription action executed succeeded'), `Subscription action note was not persisted: ${JSON.stringify(orderRecord.values)}`);
+    assert(Array.isArray(orderRecord.values?.subscriptionactionhistory), `Subscription action history was not persisted: ${JSON.stringify(orderRecord.values)}`);
+    assert(orderRecord.values.subscriptionactionhistory[0]?.id === subscriptionAction.id, `Subscription action history did not store the latest action id: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`);
+    assert(orderRecord.values.subscriptionactionhistory[0]?.executionMode === 'stripe-api', `Subscription action history did not store execution mode: ${JSON.stringify(orderRecord.values.subscriptionactionhistory)}`);
+
+    const lifecycleAfterActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`);
+    const lifecycleAfterAction = lifecycleAfterActionPayload.data?.lifecycle || lifecycleAfterActionPayload.lifecycle;
+    const lifecycleActionEntry = lifecycleAfterAction?.subscriptions?.find((entry) => entry.subscriptionReference === `sub_${slug}`);
+    assert(lifecycleActionEntry?.lastAction?.id === subscriptionAction.id, `Product lifecycle did not expose last subscription action: ${JSON.stringify(lifecycleActionEntry)}`);
+    assert(lifecycleActionEntry?.actionHistory?.[0]?.executionMode === 'stripe-api', `Product lifecycle did not expose subscription action history: ${JSON.stringify(lifecycleActionEntry)}`);
 
     if (paypalSubscriptionExecutionEnabled()) {
       const beforePayPalActionRequests = stripeCheckoutMock.requests.length;

@@ -423,6 +423,54 @@ const appendNote = (current: unknown, note: string): string => {
   return existing ? `${existing}\n${note}` : note;
 };
 
+const parseSubscriptionActionHistory = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is Record<string, unknown> => (
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+    ));
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return parseSubscriptionActionHistory(JSON.parse(value) as unknown);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const compactSubscriptionAction = (action: SubscriptionLifecycleAction): Record<string, BackyJsonValue> => ({
+  id: action.id,
+  schemaVersion: action.schemaVersion,
+  action: action.action,
+  status: action.status,
+  provider: action.provider,
+  executionMode: action.executionMode,
+  subscriptionReference: action.subscriptionReference,
+  reason: action.reason,
+  requestedAt: action.requestedAt,
+  completedAt: action.completedAt,
+});
+
+const appendSubscriptionActionHistory = (
+  current: unknown,
+  action: SubscriptionLifecycleAction,
+): Array<Record<string, BackyJsonValue>> => [
+  compactSubscriptionAction(action),
+  ...parseSubscriptionActionHistory(current).map((entry) => ({
+    id: textValue(entry.id),
+    schemaVersion: textValue(entry.schemaVersion) || 'backy.product-subscription-action.v1',
+    action: textValue(entry.action),
+    status: textValue(entry.status),
+    provider: textValue(entry.provider),
+    executionMode: textValue(entry.executionMode),
+    subscriptionReference: textValue(entry.subscriptionReference),
+    reason: textValue(entry.reason),
+    requestedAt: textValue(entry.requestedAt),
+    completedAt: textValue(entry.completedAt) || null,
+  })),
+].filter((entry) => entry.id).slice(0, 20);
+
 const lifecycleEventName = (action: SubscriptionLifecycleAction['action']) => {
   if (action === 'pause') return 'customer.subscription.paused';
   if (action === 'resume') return 'customer.subscription.resumed';
@@ -607,6 +655,7 @@ const buildSubscriptionActionUpdate = async (
         paidat: textValue(values.paidat) || now,
       } : {}),
       paymentreference: subscriptionReference,
+      subscriptionactionhistory: appendSubscriptionActionHistory(values.subscriptionactionhistory, action),
       notes: appendNote(values.notes, lifecycleNote),
     },
   };

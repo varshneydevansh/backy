@@ -73,6 +73,40 @@ const parseItems = (value: unknown): Array<Record<string, unknown>> => {
   return [];
 };
 
+const parseSubscriptionActionHistory = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is Record<string, unknown> => (
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+    ));
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return parseSubscriptionActionHistory(JSON.parse(value) as unknown);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const subscriptionActionHistory = (value: unknown, subscriptionReference: string) => (
+  parseSubscriptionActionHistory(value)
+    .map((entry) => ({
+      id: textValue(entry.id),
+      schemaVersion: textValue(entry.schemaVersion) || 'backy.product-subscription-action.v1',
+      action: textValue(entry.action),
+      status: textValue(entry.status),
+      provider: textValue(entry.provider),
+      executionMode: textValue(entry.executionMode),
+      subscriptionReference: textValue(entry.subscriptionReference),
+      reason: textValue(entry.reason),
+      requestedAt: textValue(entry.requestedAt),
+      completedAt: textValue(entry.completedAt) || null,
+    }))
+    .filter((entry) => entry.id && (!subscriptionReference || entry.subscriptionReference === subscriptionReference))
+    .slice(0, 10)
+);
+
 const sourceRecordFromRecord = (record: SourceRecord): CommerceSourceRecord => ({
   id: record.id,
   slug: record.slug,
@@ -232,6 +266,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       const subscriptionReference = textValue(values.paymentreference);
       const paymentProvider = inferSubscriptionProvider(values, subscriptionReference);
       const actionExecutionMode = subscriptionActionExecutionMode(paymentProvider, subscriptionReference);
+      const actionHistory = subscriptionActionHistory(values.subscriptionactionhistory, subscriptionReference);
 
       return {
         id: order.id,
@@ -245,6 +280,8 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         lifecycleStatus: status,
         subscriptionReference,
         actionExecutionMode,
+        actionHistory,
+        lastAction: actionHistory[0] || null,
         checkoutSessionId: textValue(values.checkoutsessionid),
         total: numberValue(values.total),
         currency: normalizeCurrency(values.currency),
