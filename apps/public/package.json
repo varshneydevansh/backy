@@ -14,6 +14,7 @@
         "test:blog-api": "npm run test:preview-contract && npm run test:admin-contract && npm run test:public-security",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
         "test:admin-site-scope": "node scripts/admin-site-scope-smoke.mjs",
+        "test:admin-site-scope:repository": "tsx --tsconfig tsconfig.json scripts/admin-site-scope-repository-smoke.mts",
         "test:admin-rbac-coverage": "node scripts/admin-rbac-coverage-smoke.mjs",
         "test:admin-auth-supabase": "tsx scripts/admin-supabase-auth-smoke.ts",
         "test:admin-auth-supabase-route": "node scripts/admin-supabase-login-route-smoke.mjs",

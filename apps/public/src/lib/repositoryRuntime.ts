@@ -92,3 +92,7 @@ export async function getRequiredDatabaseRepositories(): Promise<DatabaseReposit
 export function resetPublicRepositoryRuntimeForTests(): void {
   cachedRuntime = null;
 }
+
+export function setPublicRepositoryRuntimeForTests(runtime: PublicRepositoryRuntime): void {
+  cachedRuntime = Promise.resolve(runtime);
+}

@@ -8,31 +8,38 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./schema": {
       "types": "./dist/schema/index.d.ts",
-      "import": "./dist/schema/index.js"
+      "import": "./dist/schema/index.js",
+      "default": "./dist/schema/index.js"
     },
     "./adapters": {
       "types": "./dist/adapters/index.d.ts",
-      "import": "./dist/adapters/index.js"
+      "import": "./dist/adapters/index.js",
+      "default": "./dist/adapters/index.js"
     },
     "./adapters/demo": {
       "types": "./dist/adapters/demo.d.ts",
-      "import": "./dist/adapters/demo.js"
+      "import": "./dist/adapters/demo.js",
+      "default": "./dist/adapters/demo.js"
     },
     "./runtime": {
       "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
+      "import": "./dist/runtime.js",
+      "default": "./dist/runtime.js"
     },
     "./runtime-config": {
       "types": "./dist/runtime-config.d.ts",
-      "import": "./dist/runtime-config.js"
+      "import": "./dist/runtime-config.js",
+      "default": "./dist/runtime-config.js"
     },
     "./repositories": {
       "types": "./dist/repositories/index.d.ts",
-      "import": "./dist/repositories/index.js"
+      "import": "./dist/repositories/index.js",
+      "default": "./dist/repositories/index.js"
     }
   },
   "scripts": {
