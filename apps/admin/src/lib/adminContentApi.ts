@@ -2285,6 +2285,32 @@ export interface SettingsStorageCredentialRotationProbeResult {
   generatedAt: string;
 }
 
+export interface SettingsStorageSecretManagerResult {
+  provider: string;
+  secretManager: 'vercel-env';
+  mode: 'plan' | 'promote' | 'revoke-replacement';
+  dryRun: boolean;
+  status: 'ready' | 'blocked';
+  executed: boolean;
+  projectId?: string;
+  teamId?: string;
+  targetEnvironments: string[];
+  summary: string;
+  checks: SettingsStorageProvisioningCheck[];
+  operations: Array<{
+    action: 'upsert' | 'delete';
+    name: string;
+    source?: string;
+    secret: boolean;
+    required: boolean;
+    ready: boolean;
+    executed: boolean;
+    detail: string;
+  }>;
+  nextSteps: string[];
+  generatedAt: string;
+}
+
 interface ApiSettingsInfrastructureCheckResponse {
   success: boolean;
   requestId?: string;
@@ -2305,6 +2331,14 @@ interface ApiSettingsStorageProvisioningResponse {
 interface ApiSettingsStorageCredentialRotationResponse {
   success: boolean;
   data?: SettingsStorageCredentialRotationProbeResult;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiSettingsStorageSecretManagerResponse {
+  success: boolean;
+  data?: SettingsStorageSecretManagerResult;
   error?: {
     message?: string;
   };
@@ -4619,6 +4653,32 @@ export async function runSettingsStorageCredentialRotationProbe(): Promise<Setti
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to run media storage credential rotation probe');
+  }
+
+  return payload.data;
+}
+
+export async function runSettingsStorageSecretManager(input: {
+  mode?: SettingsStorageSecretManagerResult['mode'];
+  dryRun?: boolean;
+  targetEnvironments?: string[];
+} = {}): Promise<SettingsStorageSecretManagerResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'media-storage-secret-manager',
+      mode: input.mode || 'plan',
+      dryRun: input.dryRun !== false,
+      targetEnvironments: input.targetEnvironments,
+    }),
+  });
+  const payload = await readJson<ApiSettingsStorageSecretManagerResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to run media storage secret manager');
   }
 
   return payload.data;

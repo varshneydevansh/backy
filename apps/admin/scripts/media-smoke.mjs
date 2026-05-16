@@ -320,6 +320,10 @@ const assertMediaConfigurePermissionIsEnforced = async () => {
       method: 'POST',
       body: JSON.stringify({ action: 'media-storage-credential-rotation-probe' }),
     }, 'Denied media.configure credential rotation probe');
+    await expectForbiddenPermission('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'media-storage-secret-manager', mode: 'plan', dryRun: true }),
+    }, 'Denied media.configure storage secret manager');
   } finally {
     await setAdminPermissionOverrides({
       'media.configure': null,
@@ -681,12 +685,12 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = () => `
+const authStorageScript = (sessionToken = apiAdminSessionToken) => `
 localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   state: {
     user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
     session: {
-      token: apiAdminSessionToken,
+      token: sessionToken,
       issuedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
       authMode: 'local-demo',
@@ -695,6 +699,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   version: 0,
 }))});
 `;
+
+const setBrowserSession = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -1015,6 +1031,9 @@ const assertMediaLayout = async (client, expectedText) => {
       document.body?.innerText?.includes('Provider env contract'),
     hasStorageProvisioning: document.body?.innerText?.includes('Provision probe') || false,
     hasStorageCredentialRotation: document.body?.innerText?.includes('Rotation probe') || false,
+    hasStorageSecretManager: document.body?.innerText?.includes('Secret plan') &&
+      document.body?.innerText?.includes('Promote secrets') &&
+      document.body?.innerText?.includes('Revoke NEXT vars'),
     hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
       document.body?.innerText?.includes('Upload scanner'),
     hasScannerEnvContract: Boolean(document.querySelector('[data-testid="media-scanner-env-contract"]')) &&
@@ -1034,7 +1053,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -1390,6 +1409,58 @@ const runMediaStorageCredentialRotationProbe = async (client) => {
     }
     if (attempt === 99) {
       throw new Error(`Media storage credential rotation probe did not render expected results: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const runMediaStorageSecretManagerPlan = async (client) => {
+  let clicked = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-storage-operations"]');
+      if (!(panel instanceof HTMLElement)) return { ok: false, reason: 'panel-not-found' };
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        /Secret plan|Planning/.test(candidate.textContent || '')
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'button-not-found', buttons: Array.from(document.querySelectorAll('button')).map((item) => item.textContent?.trim()).slice(0, 90) };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    await sleep(250);
+  }
+  assert(clicked.ok, `Unable to start media storage secret manager plan: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-storage-secret-manager-results"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel) &&
+          text.includes('Vercel secret manager') &&
+          text.includes('vercel-env') &&
+          text.includes('Secret operations') &&
+          text.includes('Connection checks') &&
+          text.includes('Execution runbook') &&
+          (
+            text.includes('secret value redacted') ||
+            text.includes('BACKY_LOCAL_UPLOADS_DIR') ||
+            text.includes('BACKY_LOCAL_PUBLIC_URL')
+          ),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media storage secret manager did not render expected results: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -2696,7 +2767,8 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript() });
+    await setBrowserSession(client, apiAdminSessionToken);
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
 
     await navigateToMedia(client, marker);
     await waitForMediaPageAsset(client, imageName);
@@ -2815,6 +2887,7 @@ const main = async () => {
     await runMediaStorageCheck(client);
     await runMediaStorageProvisioningProbe(client);
     await runMediaStorageCredentialRotationProbe(client);
+    await runMediaStorageSecretManagerPlan(client);
 
     await navigateToMedia(client, marker);
     await waitForMediaGridFilter(client, { searchText: marker, assetName: imageName });

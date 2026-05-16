@@ -1350,6 +1350,36 @@ interface StorageCredentialRotationProbe {
   nextSteps: string[];
 }
 
+type StorageSecretManagerMode = 'plan' | 'promote' | 'revoke-replacement';
+
+interface StorageSecretManagerOperation {
+  action: 'upsert' | 'delete';
+  name: string;
+  source?: string;
+  secret: boolean;
+  required: boolean;
+  ready: boolean;
+  executed: boolean;
+  detail: string;
+}
+
+interface StorageSecretManagerResult {
+  provider: string;
+  secretManager: 'vercel-env';
+  mode: StorageSecretManagerMode;
+  dryRun: boolean;
+  status: StorageProvisioningStatus;
+  executed: boolean;
+  projectId?: string;
+  teamId?: string;
+  targetEnvironments: string[];
+  summary: string;
+  checks: StorageProvisioningCheck[];
+  operations: StorageSecretManagerOperation[];
+  nextSteps: string[];
+  generatedAt: string;
+}
+
 interface StorageLifecyclePolicyAutomation {
   provider: string;
   action: 'apply-lifecycle-policy';
@@ -1737,6 +1767,37 @@ const storageRotationCandidateFields = (provider: string) => {
   return [
     { name: 'BACKY_NEXT_LOCAL_UPLOADS_DIR', secret: false, required: false, detected: Boolean(envValue(['BACKY_NEXT_LOCAL_UPLOADS_DIR', 'BACKY_NEXT_STORAGE_LOCAL_PATH'])) },
     { name: 'BACKY_NEXT_LOCAL_PUBLIC_URL', secret: false, required: false, detected: Boolean(envValue(['BACKY_NEXT_LOCAL_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL'])) },
+  ];
+};
+
+const storageSecretManagerMappings = (provider: string): Array<{
+  sourceNames: string[];
+  targetName: string;
+  secret: boolean;
+  required: boolean;
+}> => {
+  if (provider === 's3') {
+    return [
+      { sourceNames: ['BACKY_S3_NEXT_ACCESS_KEY_ID', 'AWS_NEXT_ACCESS_KEY_ID'], targetName: 'BACKY_S3_ACCESS_KEY_ID', secret: true, required: true },
+      { sourceNames: ['BACKY_S3_NEXT_SECRET_ACCESS_KEY', 'AWS_NEXT_SECRET_ACCESS_KEY'], targetName: 'BACKY_S3_SECRET_ACCESS_KEY', secret: true, required: true },
+      { sourceNames: ['BACKY_S3_NEXT_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET'], targetName: 'BACKY_S3_BUCKET', secret: false, required: false },
+      { sourceNames: ['BACKY_S3_NEXT_REGION', 'AWS_NEXT_REGION'], targetName: 'BACKY_S3_REGION', secret: false, required: false },
+      { sourceNames: ['BACKY_S3_NEXT_ENDPOINT', 'BACKY_NEXT_STORAGE_ENDPOINT'], targetName: 'BACKY_S3_ENDPOINT', secret: false, required: false },
+      { sourceNames: ['BACKY_S3_NEXT_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL'], targetName: 'BACKY_S3_PUBLIC_URL', secret: false, required: false },
+    ];
+  }
+
+  if (provider === 'supabase') {
+    return [
+      { sourceNames: ['BACKY_SUPABASE_NEXT_URL', 'SUPABASE_NEXT_URL'], targetName: 'BACKY_SUPABASE_URL', secret: false, required: false },
+      { sourceNames: ['BACKY_SUPABASE_NEXT_SERVICE_ROLE_KEY', 'SUPABASE_NEXT_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_NEXT_ANON_KEY', 'SUPABASE_NEXT_ANON_KEY'], targetName: 'BACKY_SUPABASE_SERVICE_ROLE_KEY', secret: true, required: true },
+      { sourceNames: ['BACKY_SUPABASE_NEXT_STORAGE_BUCKET', 'BACKY_NEXT_STORAGE_BUCKET'], targetName: 'BACKY_SUPABASE_STORAGE_BUCKET', secret: false, required: false },
+    ];
+  }
+
+  return [
+    { sourceNames: ['BACKY_NEXT_LOCAL_UPLOADS_DIR', 'BACKY_NEXT_STORAGE_LOCAL_PATH'], targetName: 'BACKY_LOCAL_UPLOADS_DIR', secret: false, required: false },
+    { sourceNames: ['BACKY_NEXT_LOCAL_PUBLIC_URL', 'BACKY_NEXT_MEDIA_PUBLIC_URL'], targetName: 'BACKY_LOCAL_PUBLIC_URL', secret: false, required: false },
   ];
 };
 
@@ -2425,6 +2486,221 @@ const runMediaStorageCredentialRotationProbe = async (
   };
 };
 
+const vercelSecretManagerConfig = () => {
+  const runtime = getVercelRuntimeSummary();
+  return {
+    token: envValue(['VERCEL_TOKEN', 'BACKY_VERCEL_TOKEN']),
+    projectId: runtime.projectId || envValue(['VERCEL_PROJECT_ID', 'BACKY_VERCEL_PROJECT_ID']),
+    teamId: runtime.teamId || envValue(['VERCEL_TEAM_ID', 'BACKY_VERCEL_TEAM_ID']),
+  };
+};
+
+const vercelProjectEnvUrl = (projectId: string, path = '') => {
+  const url = new URL(`https://api.vercel.com/v9/projects/${encodeURIComponent(projectId)}/env${path}`);
+  const teamId = vercelSecretManagerConfig().teamId;
+  if (teamId) {
+    url.searchParams.set('teamId', teamId);
+  }
+  return url;
+};
+
+const vercelEnvRequest = async (
+  url: URL | string,
+  init: RequestInit,
+): Promise<unknown> => {
+  const { token } = vercelSecretManagerConfig();
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(init.body ? { 'content-type': 'application/json' } : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = parseJsonObject(payload)?.error
+      ? stringValue(parseJsonObject(parseJsonObject(payload)?.error)?.message)
+      : '';
+    throw new Error(message || `Vercel environment API returned ${response.status}`);
+  }
+  return payload;
+};
+
+const listVercelEnvVariables = async (projectId: string): Promise<Array<{ id: string; key: string }>> => {
+  const payload = parseJsonObject(await vercelEnvRequest(vercelProjectEnvUrl(projectId), { method: 'GET' })) || {};
+  const envs = Array.isArray(payload.envs) ? payload.envs : [];
+  return envs
+    .map((item) => parseJsonObject(item))
+    .filter((item): item is BackyJsonObject => Boolean(item))
+    .map((item) => ({
+      id: stringValue(item.id),
+      key: stringValue(item.key),
+    }))
+    .filter((item) => item.id && item.key);
+};
+
+const deleteVercelEnvKey = async (projectId: string, key: string, existing?: Array<{ id: string; key: string }>) => {
+  const envs = existing || await listVercelEnvVariables(projectId);
+  const matches = envs.filter((env) => env.key === key);
+  for (const env of matches) {
+    await vercelEnvRequest(vercelProjectEnvUrl(projectId, `/${encodeURIComponent(env.id)}`), { method: 'DELETE' });
+  }
+  return matches.length;
+};
+
+const createVercelEnvKey = async (
+  projectId: string,
+  input: {
+    key: string;
+    value: string;
+    secret: boolean;
+    targetEnvironments: string[];
+  },
+) => {
+  const url = new URL(`https://api.vercel.com/v10/projects/${encodeURIComponent(projectId)}/env`);
+  const { teamId } = vercelSecretManagerConfig();
+  if (teamId) {
+    url.searchParams.set('teamId', teamId);
+  }
+  await vercelEnvRequest(url, {
+    method: 'POST',
+    body: JSON.stringify({
+      key: input.key,
+      value: input.value,
+      type: input.secret ? 'encrypted' : 'plain',
+      target: input.targetEnvironments,
+    }),
+  });
+};
+
+const runMediaStorageSecretManager = async (input: {
+  provider: string;
+  mode: StorageSecretManagerMode;
+  dryRun: boolean;
+  targetEnvironments?: string[];
+}): Promise<StorageSecretManagerResult> => {
+  const { token, projectId, teamId } = vercelSecretManagerConfig();
+  const targetEnvironments = (input.targetEnvironments?.length ? input.targetEnvironments : ['production', 'preview'])
+    .filter((target) => ['production', 'preview', 'development'].includes(target));
+  const mappings = storageSecretManagerMappings(input.provider);
+  const managerChecks: StorageProvisioningCheck[] = [
+    {
+      label: 'Vercel project',
+      ready: Boolean(projectId),
+      detail: projectId
+        ? 'Vercel project id resolved from runtime environment.'
+        : 'Set VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID before executing provider-native secret operations.',
+    },
+    {
+      label: 'Vercel API token',
+      ready: Boolean(token),
+      detail: token
+        ? 'Vercel API token is configured without exposing the token value.'
+        : 'Set VERCEL_TOKEN or BACKY_VERCEL_TOKEN before executing provider-native secret operations.',
+    },
+  ];
+  const operations: StorageSecretManagerOperation[] = mappings.map((mapping) => {
+    const sourceName = mapping.sourceNames.find((name) => Boolean(process.env[name]));
+    const sourceValue = sourceName ? process.env[sourceName] : undefined;
+    const ready = input.mode === 'revoke-replacement' ? Boolean(sourceName) || !mapping.required : Boolean(sourceValue) || !mapping.required;
+    return {
+      action: input.mode === 'revoke-replacement' ? 'delete' : 'upsert',
+      name: input.mode === 'revoke-replacement' ? (sourceName || mapping.sourceNames[0]) : mapping.targetName,
+      source: input.mode === 'revoke-replacement' ? undefined : sourceName || mapping.sourceNames[0],
+      secret: mapping.secret,
+      required: mapping.required,
+      ready,
+      executed: false,
+      detail: ready
+        ? input.mode === 'revoke-replacement'
+          ? `Replacement variable ${sourceName || mapping.sourceNames[0]} is eligible for removal after promotion.`
+          : `Replacement value from ${sourceName || mapping.sourceNames[0]} can be promoted to ${mapping.targetName}.`
+        : `Missing required replacement value for ${mapping.targetName}.`,
+    };
+  });
+  const missingRequired = operations.some((operation) => operation.required && !operation.ready);
+  const canExecute = Boolean(projectId && token && !missingRequired && targetEnvironments.length > 0);
+  const nextSteps = [
+    'Run the credential rotation probe and confirm the replacement credential reaches ready.',
+    'Use this Vercel env manager in dry-run mode to review the create/update/delete operations.',
+    'Execute promotion to upsert active BACKY_* storage variables in Vercel.',
+    'Redeploy Backy so the runtime picks up promoted storage variables.',
+    'Run the provisioning probe again, then revoke the replacement BACKY_*_NEXT_* variables.',
+  ];
+
+  if (!input.dryRun && canExecute && projectId) {
+    if (input.mode === 'promote') {
+      const existing = await listVercelEnvVariables(projectId);
+      for (const operation of operations.filter((operation) => operation.ready)) {
+        const mapping = mappings.find((item) => item.targetName === operation.name);
+        const sourceName = mapping?.sourceNames.find((name) => Boolean(process.env[name]));
+        const sourceValue = sourceName ? process.env[sourceName] : undefined;
+        if (!sourceValue || !mapping) continue;
+        await deleteVercelEnvKey(projectId, operation.name, existing);
+        await createVercelEnvKey(projectId, {
+          key: operation.name,
+          value: sourceValue,
+          secret: operation.secret,
+          targetEnvironments,
+        });
+        operation.executed = true;
+        operation.detail = `${operation.name} was upserted in Vercel for ${targetEnvironments.join(', ')}.`;
+      }
+    } else if (input.mode === 'revoke-replacement') {
+      const existing = await listVercelEnvVariables(projectId);
+      for (const operation of operations.filter((operation) => operation.ready)) {
+        const deleted = await deleteVercelEnvKey(projectId, operation.name, existing);
+        operation.executed = deleted > 0;
+        operation.detail = deleted > 0
+          ? `${operation.name} was removed from Vercel.`
+          : `${operation.name} was not present in Vercel.`;
+      }
+    }
+  }
+
+  const executed = operations.some((operation) => operation.executed);
+  const blocked = missingRequired || (!input.dryRun && !canExecute);
+  return {
+    provider: input.provider,
+    secretManager: 'vercel-env',
+    mode: input.mode,
+    dryRun: input.dryRun,
+    status: blocked ? 'blocked' : 'ready',
+    executed,
+    projectId,
+    teamId,
+    targetEnvironments,
+    summary: input.dryRun
+      ? 'Vercel environment secret manager plan generated without writing secret values.'
+      : blocked
+        ? 'Vercel environment secret manager could not execute because configuration or replacement values are missing.'
+        : executed
+          ? 'Vercel environment secret manager executed the requested storage credential operation.'
+          : 'Vercel environment secret manager completed without changes.',
+    checks: [
+      ...managerChecks,
+      {
+        label: 'Replacement values',
+        ready: !missingRequired,
+        detail: missingRequired
+          ? 'One or more required replacement variables are missing.'
+          : 'Required replacement variables are present or not required for this operation.',
+      },
+      {
+        label: 'Target environments',
+        ready: targetEnvironments.length > 0,
+        detail: targetEnvironments.length > 0
+          ? `Targeting ${targetEnvironments.join(', ')}.`
+          : 'Select at least one Vercel environment target.',
+      },
+    ],
+    operations,
+    nextSteps,
+    generatedAt: new Date().toISOString(),
+  };
+};
+
 const getSettingsForStorageProbe = async (): Promise<AdminSettingsSource> => {
   if (!shouldUseDemoStoreFallback()) {
     const repositories = await getRequiredDatabaseRepositories();
@@ -2798,11 +3074,12 @@ export async function POST(request: NextRequest) {
     const mediaStorageCheck = isMediaStorageInfrastructureCheck(body);
     const mediaStorageProvisioningProbe = body.action === 'media-storage-provisioning-probe';
     const mediaStorageCredentialRotationProbe = body.action === 'media-storage-credential-rotation-probe';
+    const mediaStorageSecretManager = body.action === 'media-storage-secret-manager';
     const keyManagementAction = body.action === 'regenerate-api-keys' ||
       body.action === 'issue-admin-api-key' ||
       body.action === 'revoke-admin-api-key';
     const access = await requireAdminAccess(request, requestId, {
-      permission: mediaStorageCheck || mediaStorageProvisioningProbe || mediaStorageCredentialRotationProbe
+      permission: mediaStorageCheck || mediaStorageProvisioningProbe || mediaStorageCredentialRotationProbe || mediaStorageSecretManager
         ? 'media.configure'
         : keyManagementAction
           ? 'settings.manageKeys'
@@ -2868,6 +3145,54 @@ export async function POST(request: NextRequest) {
           ...result,
           generatedAt: new Date().toISOString(),
         },
+      });
+    }
+
+    if (mediaStorageSecretManager) {
+      const requestedMode = stringValue(body.mode);
+      const mode: StorageSecretManagerMode = requestedMode === 'promote' || requestedMode === 'revoke-replacement'
+        ? requestedMode
+        : 'plan';
+      const rawTargets = Array.isArray(body.targetEnvironments)
+        ? body.targetEnvironments.map((target) => stringValue(target)).filter(Boolean)
+        : undefined;
+      const provider = resolveMediaStorageConfig().summary.provider;
+      const result = await runMediaStorageSecretManager({
+        provider,
+        mode,
+        dryRun: body.dryRun !== false || mode === 'plan',
+        targetEnvironments: rawTargets,
+      });
+      await recordAdminAudit({
+        entity: 'settings',
+        entityId: 'media-storage',
+        action: 'settings.media_storage.secret_manager',
+        metadata: {
+          provider,
+          mode: result.mode,
+          dryRun: result.dryRun,
+          status: result.status,
+          executed: result.executed,
+          secretManager: result.secretManager,
+          projectId: result.projectId || null,
+          teamId: result.teamId || null,
+          targetEnvironments: result.targetEnvironments,
+          operations: result.operations.map((operation) => ({
+            action: operation.action,
+            name: operation.name,
+            source: operation.source || null,
+            ready: operation.ready,
+            executed: operation.executed,
+            secret: operation.secret,
+          })),
+        },
+        requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: result,
       });
     }
 

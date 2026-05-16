@@ -21,12 +21,14 @@ import {
   updateSettings as updateBackendSettings,
   runSettingsStorageCredentialRotationProbe,
   runSettingsStorageProvisioningProbe,
+  runSettingsStorageSecretManager,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type AdminUserPermissionMatrix,
   type SiteSettingsInput,
   type SettingsStorageCredentialRotationProbeResult,
   type SettingsInfrastructureDiagnostic,
+  type SettingsStorageSecretManagerResult,
   type SettingsStorageProvisioningResult,
 } from '@/lib/adminContentApi';
 import {
@@ -717,9 +719,11 @@ function MediaPage() {
   const [storageDiagnostics, setStorageDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
   const [storageProvisioningResult, setStorageProvisioningResult] = useState<SettingsStorageProvisioningResult | null>(null);
   const [storageCredentialRotationResult, setStorageCredentialRotationResult] = useState<SettingsStorageCredentialRotationProbeResult | null>(null);
+  const [storageSecretManagerResult, setStorageSecretManagerResult] = useState<SettingsStorageSecretManagerResult | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isRunningStorageProvisioningProbe, setIsRunningStorageProvisioningProbe] = useState(false);
   const [isRunningStorageCredentialRotationProbe, setIsRunningStorageCredentialRotationProbe] = useState(false);
+  const [isRunningStorageSecretManager, setIsRunningStorageSecretManager] = useState(false);
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false);
   const [storageCheckError, setStorageCheckError] = useState<string | null>(null);
   const [storageSettingsNotice, setStorageSettingsNotice] = useState<string | null>(null);
@@ -1795,6 +1799,7 @@ function MediaPage() {
       });
       setStorageDiagnostics(null);
       setStorageProvisioningResult(null);
+      setStorageSecretManagerResult(null);
       setStorageSettingsNotice('Storage metadata saved. Run check to validate the current runtime.');
     } catch (saveError) {
       setStorageCheckError(saveError instanceof Error ? saveError.message : 'Unable to save storage settings.');
@@ -1870,6 +1875,41 @@ function MediaPage() {
       setIsRunningStorageCredentialRotationProbe(false);
     }
   }, [canConfigureMediaStorage, isRunningStorageCredentialRotationProbe]);
+
+  const runStorageSecretManager = useCallback(async (
+    mode: SettingsStorageSecretManagerResult['mode'] = 'plan',
+    dryRun = true,
+  ) => {
+    if (isRunningStorageSecretManager) return;
+    if (!canConfigureMediaStorage) {
+      setStorageCheckError('This admin account needs media.configure to run the storage secret manager.');
+      return;
+    }
+    if (!dryRun) {
+      const confirmed = window.confirm(
+        mode === 'revoke-replacement'
+          ? 'Remove replacement storage environment variables from the connected Vercel project?'
+          : 'Promote replacement storage credentials into active Vercel environment variables?',
+      );
+      if (!confirmed) return;
+    }
+
+    setIsRunningStorageSecretManager(true);
+    setStorageCheckError(null);
+    try {
+      const result = await runSettingsStorageSecretManager({
+        mode,
+        dryRun,
+        targetEnvironments: ['production', 'preview'],
+      });
+      setStorageSecretManagerResult(result);
+    } catch (managerError) {
+      setStorageSecretManagerResult(null);
+      setStorageCheckError(managerError instanceof Error ? managerError.message : 'Unable to run storage secret manager.');
+    } finally {
+      setIsRunningStorageSecretManager(false);
+    }
+  }, [canConfigureMediaStorage, isRunningStorageSecretManager]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3813,6 +3853,34 @@ function MediaPage() {
               >
                 {isRunningStorageCredentialRotationProbe ? 'Rotating...' : 'Rotation probe'}
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runStorageSecretManager('plan', true)}
+                disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+                iconStart={<KeyRound className={cn('size-3.5', isRunningStorageSecretManager && 'animate-pulse')} />}
+              >
+                {isRunningStorageSecretManager ? 'Planning...' : 'Secret plan'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => void runStorageSecretManager('promote', false)}
+                disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+              >
+                Promote secrets
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => void runStorageSecretManager('revoke-replacement', false)}
+                disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+              >
+                Revoke NEXT vars
+              </Button>
               <Link
                 to="/settings"
                 search={{ tab: 'infrastructure' }}
@@ -4454,6 +4522,9 @@ function MediaPage() {
           )}
           {storageCredentialRotationResult && (
             <MediaStorageCredentialRotationCard result={storageCredentialRotationResult} />
+          )}
+          {storageSecretManagerResult && (
+            <MediaStorageSecretManagerCard result={storageSecretManagerResult} />
           )}
           </div>
         </PanelContent>
@@ -7652,6 +7723,97 @@ function MediaStorageCredentialRotationCard({ result }: { result: SettingsStorag
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaStorageSecretManagerCard({ result }: { result: SettingsStorageSecretManagerResult }) {
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-secret-manager-results">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Vercel secret manager</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{result.summary}</p>
+        </div>
+        <span
+          className={cn(
+            'rounded px-2.5 py-1 text-xs font-semibold capitalize',
+            result.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+          )}
+        >
+          {result.dryRun ? 'dry run' : result.status}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">Provider</dt>
+          <dd className="font-mono">{result.provider}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Manager</dt>
+          <dd className="font-mono">{result.secretManager}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Mode</dt>
+          <dd className="font-mono">{result.mode}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Targets</dt>
+          <dd>{result.targetEnvironments.join(', ') || 'none'}</dd>
+        </div>
+      </dl>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Connection checks</h4>
+          <div className="mt-3 grid gap-2">
+            {result.checks.map((check) => (
+              <div key={check.label} className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">{check.label}</span>
+                  <span className={cn('text-[11px] font-semibold', check.ready ? 'text-success' : 'text-warning')}>
+                    {check.ready ? 'Ready' : 'Needs attention'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Secret operations</h4>
+          <div className="mt-3 grid gap-2">
+            {result.operations.map((operation) => (
+              <div key={`${operation.action}:${operation.name}`} className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="break-all font-mono text-xs font-semibold">{operation.name}</span>
+                  <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase', operation.executed ? 'bg-success/10 text-success' : operation.ready ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning')}>
+                    {operation.executed ? 'executed' : operation.action}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {operation.source ? `${operation.source} -> ` : ''}{operation.detail}
+                </p>
+                {operation.secret && (
+                  <span className="mt-2 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                    secret value redacted
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-3">
+        <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Execution runbook</h4>
+        <ol className="mt-3 space-y-2">
+          {result.nextSteps.map((step, index) => (
+            <li key={`${index}:${step}`} className="flex gap-2 text-xs leading-5 text-muted-foreground">
+              <span className="font-mono text-foreground">{index + 1}.</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
