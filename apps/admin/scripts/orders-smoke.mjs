@@ -767,7 +767,7 @@ const enableCommerceWebhookSettings = async (settings) => {
       providerMode: 'test',
       providerWebhookUrl: 'https://hooks.example.com/backy-orders-smoke',
       providerWebhookSecretId: COMMERCE_WEBHOOK_SECRET_REFERENCE,
-      providerWebhookEvents: 'checkout.session.completed,charge.refunded,payment_intent.payment_failed',
+      providerWebhookEvents: 'checkout.session.completed,charge.refunded,refund.failed,refund.requires_action,REFUND,REFUND_FAILED,REFUNDED_REVERSED,payment_intent.payment_failed',
       webhookEventsEnabled: true,
       taxEnabled: true,
       shippingEnabled: true,
@@ -2967,6 +2967,91 @@ const main = async () => {
       assert(refreshedManualProviderPayload.refresh?.ok === false, `Manual provider refund refresh should persist a handoff result: ${JSON.stringify(refreshedManualProviderPayload)}`);
     }
 
+    const refundFailureSeed = await getCollectionRecordBySlug(collectionId, slug);
+    await postCommerceWebhook(
+      {
+        id: `evt_orders_refund_failed_${suffix}`,
+        type: 'refund.failed',
+        data: {
+          object: {
+            id: refundFailureSeed.values.providerrefundid,
+            paymentReference: refundFailureSeed.values.paymentreference,
+            provider: refundFailureSeed.values.providerrefundprovider || providerRefundExecutionProvider,
+            amount_refunded: Math.round(expectedProviderTotal * 100),
+            failure_reason: 'Provider refund failed in smoke.',
+            metadata: {
+              orderNumber,
+              orderSlug: slug,
+            },
+          },
+        },
+      },
+    );
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.providerrefundstatus === 'failed' &&
+        values.providerrefundid === refundFailureSeed.values.providerrefundid &&
+        values.providerrefundreason === 'Provider refund failed in smoke.' &&
+        values.paymentstatus === 'paid' &&
+        /Commerce webhook refund.failed/.test(String(values.notes || ''))
+      ),
+      'Provider refund failure webhook did not persist failed refund status',
+    );
+
+    const refundReversalSeed = await getCollectionRecordBySlug(collectionId, slug);
+    await updateCollectionRecord(collectionId, refundReversalSeed.id, {
+      status: 'published',
+      values: {
+        ...refundReversalSeed.values,
+        paymentstatus: 'paid',
+        providerrefundstatus: 'requested',
+        providerrefundprovider: 'adyen',
+        providerrefundid: `adyen_refund_pending_${suffix}`,
+        providerrefundreference: `adyen:adyen_refund_pending_${suffix}`,
+        providerrefundcompletedat: '',
+        providerrefundpayload: JSON.stringify({
+          schemaVersion: 'backy.provider-refund.v1',
+          provider: 'adyen',
+          executionMode: 'adyen-api',
+        }),
+        notes: 'Order smoke reset to pending Adyen refund before reversed webhook.',
+      },
+    });
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => values.providerrefundstatus === 'requested' && values.providerrefundprovider === 'adyen',
+      'Adyen refund reversal setup did not persist',
+    );
+    await postCommerceWebhook(
+      {
+        notificationItems: [{
+          NotificationRequestItem: {
+            eventCode: 'REFUNDED_REVERSED',
+            pspReference: `adyen_refund_reversed_${suffix}`,
+            originalReference: refundReversalSeed.values.paymentreference,
+            merchantReference: orderNumber,
+            success: 'true',
+            reason: 'Adyen refund reversed in smoke.',
+          },
+        }],
+      },
+    );
+    await waitForOrderValue(
+      collectionId,
+      slug,
+      (values) => (
+        values.providerrefundstatus === 'requires_action' &&
+        values.providerrefundprovider === 'adyen' &&
+        values.providerrefundid === `adyen_refund_reversed_${suffix}` &&
+        values.providerrefundreason === 'Adyen refund reversed in smoke.' &&
+        /Commerce webhook REFUNDED_REVERSED/.test(String(values.notes || ''))
+      ),
+      'Adyen refund reversed webhook did not persist requires-action refund status',
+    );
+
     await editOrderAfterWorkflow(client, orderNumber);
     await waitForOrderValue(
       collectionId,
@@ -3044,7 +3129,7 @@ const main = async () => {
         ...(await getCollectionRecordBySlug(collectionId, slug)).values,
         orderstatus: 'open',
         paymentstatus: 'pending',
-        paymentreference: `pi_reconcile_${suffix}`,
+        paymentreference: '',
         paidat: '',
         notes: 'Order smoke reset to pending before reconciliation.',
       },

@@ -176,6 +176,14 @@ const isOrderMatchedByEvent = (
   (event.paymentReference && String(record.values.paymentreference || '') === event.paymentReference)
 );
 
+const newestEventsFirst = (events: CommerceReconciliationEvent[]): CommerceReconciliationEvent[] => (
+  [...events].sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt) || 0;
+    const rightTime = Date.parse(right.createdAt) || 0;
+    return rightTime - leftTime;
+  })
+);
+
 const reconcileValues = (
   record: { id: string; slug: string; values: Record<string, unknown> },
   event: CommerceReconciliationEvent,
@@ -246,12 +254,15 @@ async function handleCommerceReconciliation(
       const updates = [];
       const unmatchedEvents = [];
 
-      for (const event of events) {
+      const processedOrderIds = new Set<string>();
+      for (const event of newestEventsFirst(events)) {
         const record = recordsResult.items.find((candidate) => isOrderMatchedByEvent(candidate, event));
         if (!record) {
           unmatchedEvents.push(event);
           continue;
         }
+        if (processedOrderIds.has(record.id)) continue;
+        processedOrderIds.add(record.id);
         const nextValues = reconcileValues(record, event);
         if (!nextValues) continue;
         if (runOptions.dryRun) {
@@ -353,12 +364,15 @@ async function handleCommerceReconciliation(
     const updates = [];
     const unmatchedEvents = [];
 
-    for (const event of uniqueEvents) {
+    const processedOrderIds = new Set<string>();
+    for (const event of newestEventsFirst(uniqueEvents)) {
       const record = records.find((candidate) => isOrderMatchedByEvent(candidate, event));
       if (!record) {
         unmatchedEvents.push(event);
         continue;
       }
+      if (processedOrderIds.has(record.id)) continue;
+      processedOrderIds.add(record.id);
       const nextValues = reconcileValues(record, event);
       if (!nextValues) continue;
       if (runOptions.dryRun) {

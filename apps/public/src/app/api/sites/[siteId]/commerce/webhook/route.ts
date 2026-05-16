@@ -121,17 +121,32 @@ const verifyWebhookSignature = (rawBody: string, secret: string, header: string)
   return timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
 };
 
+const adyenNotificationItem = (payload: Record<string, unknown>): Record<string, unknown> => {
+  if (isRecord(payload.NotificationRequestItem)) return payload.NotificationRequestItem;
+  if (Array.isArray(payload.notificationItems)) {
+    const first = payload.notificationItems.map((item) => (
+      isRecord(item) && isRecord(item.NotificationRequestItem)
+        ? item.NotificationRequestItem
+        : item
+    )).find(isRecord);
+    return first || {};
+  }
+  return {};
+};
+
 const eventObject = (payload: Record<string, unknown>): Record<string, unknown> => {
   const data = isRecord(payload.data) ? payload.data : {};
+  const adyenItem = adyenNotificationItem(payload);
+  if (Object.keys(adyenItem).length > 0) return adyenItem;
   return isRecord(data.object) ? data.object : payload;
 };
 
 const eventType = (payload: Record<string, unknown>): string => (
-  textValue(payload.type || payload.eventType || payload.kind)
+  textValue(payload.type || payload.eventType || payload.eventCode || payload.kind || adyenNotificationItem(payload).eventCode)
 );
 
 const eventId = (payload: Record<string, unknown>): string => (
-  textValue(payload.id || payload.eventId) || `commerce_evt_${Date.now().toString(36)}`
+  textValue(payload.id || payload.eventId || payload.pspReference || adyenNotificationItem(payload).pspReference) || `commerce_evt_${Date.now().toString(36)}`
 );
 
 const metadataRecord = (object: Record<string, unknown>): Record<string, unknown> => (
@@ -143,7 +158,7 @@ const eventSessionId = (payload: Record<string, unknown>, object: Record<string,
 );
 
 const eventPaymentReference = (payload: Record<string, unknown>, object: Record<string, unknown>): string => (
-  textValue(object.payment_intent || object.paymentIntent || object.paymentReference || object.charge || payload.paymentReference)
+  textValue(object.payment_intent || object.paymentIntent || object.paymentReference || object.originalReference || object.charge || payload.paymentReference)
 );
 
 const eventSubscriptionReference = (payload: Record<string, unknown>, object: Record<string, unknown>, type = ''): string => {
@@ -176,7 +191,7 @@ const eventProviderReference = (payload: Record<string, unknown>, object: Record
 
 const eventOrderNumber = (object: Record<string, unknown>): string => {
   const metadata = metadataRecord(object);
-  return textValue(metadata.orderNumber || metadata.order_number || object.orderNumber);
+  return textValue(metadata.orderNumber || metadata.order_number || object.orderNumber || object.merchantReference);
 };
 
 const eventOrderSlug = (object: Record<string, unknown>): string => {
@@ -191,6 +206,14 @@ const amountFromProvider = (value: unknown): number | null => {
 
 const subscriptionLifecycleStatus = (object: Record<string, unknown>): string => (
   textValue(object.status || object.subscriptionStatus || object.subscription_status).toLowerCase()
+);
+
+const providerRefundId = (object: Record<string, unknown>, currentValues: Record<string, unknown>): string => (
+  textValue(object.refund || object.refundId || object.refund_id || object.pspReference || object.id) || textValue(currentValues.providerrefundid)
+);
+
+const providerRefundReason = (object: Record<string, unknown>, fallback: string): string => (
+  textValue(object.failure_reason || object.failureReason || object.reason || object.statusReason || object.status_reason) || fallback
 );
 
 const settlementForEvent = (type: string, object: Record<string, unknown>, currentValues: Record<string, unknown>) => {
@@ -218,10 +241,18 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
     };
   }
 
-  if (lowerType === 'charge.refunded' || lowerType === 'refund.created' || lowerType === 'payment.refunded') {
+  if (
+    lowerType === 'charge.refunded' ||
+    lowerType === 'refund.created' ||
+    lowerType === 'payment.refunded' ||
+    (
+      lowerType === 'refund' &&
+      textValue(object.success).toLowerCase() !== 'false'
+    )
+  ) {
     const refundProvider = textValue(object.provider) || textValue(currentValues.paymentprovider) || 'provider';
-    const refundId = textValue(object.refund || object.refundId || object.id) || textValue(currentValues.providerrefundid);
-    const refundReason = textValue(object.reason) || 'Provider refund webhook processed.';
+    const refundId = providerRefundId(object, currentValues);
+    const refundReason = providerRefundReason(object, 'Provider refund webhook processed.');
     return {
       status: 'refunded' as const,
       values: {
@@ -237,6 +268,67 @@ const settlementForEvent = (type: string, object: Record<string, unknown>, curre
         providerrefundreason: refundReason,
         providerrefundrequestedat: textValue(currentValues.providerrefundrequestedat) || now,
         providerrefundcompletedat: now,
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
+  if (
+    lowerType === 'refund.failed' ||
+    lowerType === 'refund.canceled' ||
+    lowerType === 'refund.cancelled' ||
+    lowerType === 'refund_failed' ||
+    lowerType === 'payment.refund.failed' ||
+    lowerType === 'charge.refund.failed' ||
+    (
+      lowerType === 'refund' &&
+      textValue(object.success).toLowerCase() === 'false'
+    )
+  ) {
+    const currentOrderStatus = textValue(currentValues.orderstatus);
+    const currentPaymentStatus = textValue(currentValues.paymentstatus);
+    const refundProvider = textValue(object.provider) || textValue(currentValues.providerrefundprovider) || textValue(currentValues.paymentprovider) || 'provider';
+    const refundId = providerRefundId(object, currentValues);
+    const refundReason = providerRefundReason(object, 'Provider refund failed in the payment provider.');
+    return {
+      status: 'refund_failed' as const,
+      values: {
+        ...(currentOrderStatus === 'refunded' ? { orderstatus: 'paid' } : {}),
+        ...(currentPaymentStatus === 'refunded' ? { paymentstatus: 'paid' } : {}),
+        providerrefundstatus: 'failed',
+        providerrefundprovider: refundProvider,
+        providerrefundid: refundId,
+        providerrefundreference: providerReference || textValue(currentValues.providerrefundreference),
+        providerrefundamount: moneyValue(refundAmount),
+        providerrefundreason: refundReason,
+        providerrefundrequestedat: textValue(currentValues.providerrefundrequestedat) || now,
+        providerrefundcompletedat: now,
+        ...(providerReference ? { paymentreference: providerReference } : {}),
+      },
+    };
+  }
+
+  if (
+    lowerType === 'refund.requires_action' ||
+    lowerType === 'payment.refund.requires_action' ||
+    lowerType === 'charge.refund.requires_action' ||
+    lowerType === 'refund.reversed' ||
+    lowerType === 'refunded_reversed'
+  ) {
+    const refundProvider = textValue(object.provider) || textValue(currentValues.providerrefundprovider) || textValue(currentValues.paymentprovider) || 'provider';
+    const refundId = providerRefundId(object, currentValues);
+    const refundReason = providerRefundReason(object, 'Provider refund requires manual review in the payment provider.');
+    return {
+      status: 'refund_requires_action' as const,
+      values: {
+        providerrefundstatus: 'requires_action',
+        providerrefundprovider: refundProvider,
+        providerrefundid: refundId,
+        providerrefundreference: providerReference || textValue(currentValues.providerrefundreference),
+        providerrefundamount: moneyValue(refundAmount),
+        providerrefundreason: refundReason,
+        providerrefundrequestedat: textValue(currentValues.providerrefundrequestedat) || now,
+        providerrefundcompletedat: '',
         ...(providerReference ? { paymentreference: providerReference } : {}),
       },
     };
