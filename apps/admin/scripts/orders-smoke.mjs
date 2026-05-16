@@ -23,6 +23,8 @@ const STRIPE_TAX_MOCK_PORT = Number(process.env.BACKY_STRIPE_TAX_MOCK_PORT || 45
 const STRIPE_TAX_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_TAX_MOCK_PORT}`;
 const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT || 45680);
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
+const PAYPAL_REFUND_MOCK_PORT = Number(process.env.BACKY_PAYPAL_REFUND_MOCK_PORT || 45685);
+const PAYPAL_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${PAYPAL_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
@@ -286,6 +288,49 @@ const createStripeRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(STRIPE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const paypalRefundExecutionEnabled = () => {
+  const token = process.env.BACKY_PAYPAL_ACCESS_TOKEN || process.env.PAYPAL_ACCESS_TOKEN || '';
+  const apiBaseUrl = process.env.BACKY_PAYPAL_API_BASE_URL || process.env.PAYPAL_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === PAYPAL_REFUND_MOCK_BASE_URL);
+};
+
+const createPayPalRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `paypal_refund_smoke_${requests.length}`,
+        status: 'COMPLETED',
+        amount: body.amount || {},
+        invoice_id: body.invoice_id || '',
+        custom_id: body.custom_id || '',
+        update_time: '2026-05-16T00:00:00Z',
+        links: [{
+          href: `https://api.paypal.test/v2/payments/refunds/paypal_refund_smoke_${requests.length}`,
+          rel: 'self',
+          method: 'GET',
+        }],
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(PAYPAL_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -990,27 +1035,15 @@ const evaluate = async (client, expression) => {
 };
 
 const setBrowserSession = async (client, sessionToken) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/login` });
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
-      ready: document.readyState === 'complete' || document.readyState === 'interactive',
-      href: location.href,
-    }))()`);
-    if (state.ready && state.href.startsWith(ADMIN_BASE_URL)) {
-      break;
-    }
-    await sleep(100);
-  }
-
-  const state = await evaluate(client, `(() => {
-    ${authStorageScript(sessionToken)}
-    const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
-    return {
-      hasToken: Boolean(stored?.state?.session?.token),
-      hasUser: Boolean(stored?.state?.user?.id),
-    };
-  })()`);
-  assert(state.hasToken && state.hasUser, `Unable to seed browser admin session: ${JSON.stringify(state)}`);
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
 };
 
 const navigateToOrders = async (client) => {
@@ -1724,6 +1757,30 @@ const prepareStripeProviderRefundThroughUi = async (client, orderNumber, suffix)
   return null;
 };
 
+const preparePayPalProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'paypal', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `cap_refund_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('paypal') && document.body?.innerText?.includes(${JSON.stringify(`cap_refund_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`PayPal provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyPostMockServer) => {
   const expectedSecret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY;
   const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
@@ -2077,6 +2134,7 @@ const main = async () => {
   let quoteProviderServer;
   let stripeTaxMockServer;
   let stripeRefundMockServer;
+  let paypalRefundMockServer;
   let easyPostMockServer;
   let shippoMockServer;
   let fulfillmentProviderServer;
@@ -2411,7 +2469,16 @@ const main = async () => {
       'Refund/Return did not persist refund workflow fields',
     );
 
-    if (stripeRefundExecutionEnabled()) {
+    const providerRefundExecutionProvider = paypalRefundExecutionEnabled()
+      ? 'paypal'
+      : stripeRefundExecutionEnabled()
+        ? 'stripe'
+        : 'manual';
+
+    if (providerRefundExecutionProvider === 'paypal') {
+      paypalRefundMockServer = await createPayPalRefundMockServer();
+      await preparePayPalProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'stripe') {
       stripeRefundMockServer = await createStripeRefundMockServer();
       await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
     }
@@ -2423,17 +2490,17 @@ const main = async () => {
         values.orderstatus === 'refunded' &&
         values.paymentstatus === 'refunded' &&
         values.fulfillmentstatus === 'cancelled' &&
-        values.providerrefundstatus === (stripeRefundExecutionEnabled() ? 'succeeded' : 'requires_action') &&
-        values.providerrefundprovider === (stripeRefundExecutionEnabled() ? 'stripe' : 'manual') &&
+        values.providerrefundstatus === (providerRefundExecutionProvider === 'manual' ? 'requires_action' : 'succeeded') &&
+        values.providerrefundprovider === providerRefundExecutionProvider &&
         Boolean(values.providerrefundid) &&
         String(values.providerrefundreference || '').includes(String(values.providerrefundid || '')) &&
         Number(values.providerrefundamount) === expectedProviderTotal &&
         values.providerrefundreason === 'Customer return/refund manually recorded from Backy order workflow.' &&
         Boolean(values.providerrefundrequestedat) &&
-        (!stripeRefundExecutionEnabled() || Boolean(values.providerrefundcompletedat)) &&
+        (providerRefundExecutionProvider === 'manual' || Boolean(values.providerrefundcompletedat)) &&
         String(values.providerrefundpayload || '').includes('backy.provider-refund.v1') &&
-        (stripeRefundExecutionEnabled()
-          ? /Provider refund executed succeeded/.test(String(values.notes || '')) && String(values.providerrefundpayload || '').includes('stripe-api')
+        (providerRefundExecutionProvider !== 'manual'
+          ? /Provider refund executed succeeded/.test(String(values.notes || '')) && String(values.providerrefundpayload || '').includes(`${providerRefundExecutionProvider}-api`)
           : /Provider refund handoff/.test(String(values.notes || '')))
       ),
       'Provider Refund did not persist provider refund fields',
@@ -2441,7 +2508,23 @@ const main = async () => {
 
     const providerRefundPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerRefundRecord.id}/provider-refund`);
     assert(providerRefundPayload.data?.refund?.id === providerRefundRecord.values.providerrefundid, `Provider refund endpoint did not return the prepared refund: ${JSON.stringify(providerRefundPayload)}`);
-    if (stripeRefundExecutionEnabled()) {
+    if (providerRefundExecutionProvider === 'paypal') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(paypalRefundMockServer.requests.length >= 1, `PayPal refund mock did not receive a refund request: ${paypalRefundMockServer.requests.length}`);
+      const paypalRefundRequest = paypalRefundMockServer.requests[0];
+      const expectedToken = process.env.BACKY_PAYPAL_ACCESS_TOKEN || process.env.PAYPAL_ACCESS_TOKEN;
+      assert(paypalRefundRequest.url === `/v2/payments/captures/cap_refund_${suffix}/refund`, `PayPal refund mock received unexpected URL: ${JSON.stringify(paypalRefundMockServer.requests)}`);
+      assert(paypalRefundRequest.headers.authorization === `Bearer ${expectedToken}`, `PayPal refund mock did not receive bearer auth: ${JSON.stringify(paypalRefundRequest.headers)}`);
+      assert(/^rf_/.test(String(paypalRefundRequest.headers['paypal-request-id'] || '')), `PayPal refund request did not include idempotency header: ${JSON.stringify(paypalRefundRequest.headers)}`);
+      assert(paypalRefundRequest.body.amount?.value === expectedProviderTotal.toFixed(2), `PayPal refund body amount did not match order total: ${JSON.stringify(paypalRefundRequest.body)}`);
+      assert(paypalRefundRequest.body.amount?.currency_code === 'USD', `PayPal refund body currency did not match order currency: ${JSON.stringify(paypalRefundRequest.body)}`);
+      assert(/^rf_/.test(String(paypalRefundRequest.body.custom_id || '')), `PayPal refund body did not include the internal refund id: ${JSON.stringify(paypalRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('paypal_refund_smoke_'), `Provider refund did not persist the PayPal refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'payments.captures.refund', `Provider refund payload did not persist the PayPal refund action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful PayPal execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned PayPal refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'paypal-api', `Provider refund payload did not persist PayPal execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'stripe') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
       const stripeRefundRequest = stripeRefundMockServer.requests[0];
@@ -2656,6 +2739,9 @@ const main = async () => {
     }
     if (stripeRefundMockServer) {
       await stripeRefundMockServer.close().catch(() => {});
+    }
+    if (paypalRefundMockServer) {
+      await paypalRefundMockServer.close().catch(() => {});
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});

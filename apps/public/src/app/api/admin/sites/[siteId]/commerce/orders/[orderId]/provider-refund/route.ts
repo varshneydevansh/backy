@@ -140,6 +140,27 @@ const canExecuteStripeRefund = (provider: string, paymentReference: string) => (
   (isStripePaymentIntent(paymentReference) || isStripeCharge(paymentReference))
 );
 
+const paypalAccessToken = () => (
+  process.env.BACKY_PAYPAL_ACCESS_TOKEN?.trim()
+  || process.env.PAYPAL_ACCESS_TOKEN?.trim()
+  || ''
+);
+
+const paypalRefundEndpoint = (captureId: string) => {
+  const baseUrl = (
+    process.env.BACKY_PAYPAL_API_BASE_URL?.trim()
+    || process.env.PAYPAL_API_BASE_URL?.trim()
+    || 'https://api-m.paypal.com'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`;
+};
+
+const canExecutePayPalRefund = (provider: string, paymentReference: string) => (
+  provider.toLowerCase() === 'paypal' &&
+  Boolean(paypalAccessToken()) &&
+  Boolean(paymentReference)
+);
+
 const toStripeAmount = (amount: number, currency: string): number => {
   const normalizedCurrency = currency.toUpperCase();
   return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
@@ -244,6 +265,52 @@ const safeStripeErrorPayload = (value: Record<string, unknown>) => {
   };
 };
 
+const safePayPalRefundPayload = (value: Record<string, unknown>) => {
+  const amount = toRecord(value.amount);
+  const links = Array.isArray(value.links)
+    ? value.links
+      .map((link) => toRecord(link))
+      .map((link) => ({
+        href: textValue(link.href),
+        rel: textValue(link.rel),
+        method: textValue(link.method),
+      }))
+    : [];
+
+  return {
+    id: textValue(value.id),
+    status: textValue(value.status),
+    amount: {
+      value: textValue(amount.value),
+      currency_code: textValue(amount.currency_code),
+    },
+    invoice_id: textValue(value.invoice_id),
+    custom_id: textValue(value.custom_id),
+    update_time: textValue(value.update_time),
+    links,
+  };
+};
+
+const safePayPalErrorPayload = (value: Record<string, unknown>) => {
+  const details = Array.isArray(value.details)
+    ? value.details.map((detail) => {
+      const detailRecord = toRecord(detail);
+      return {
+        issue: textValue(detailRecord.issue),
+        description: textValue(detailRecord.description),
+        field: textValue(detailRecord.field),
+      };
+    })
+    : [];
+
+  return {
+    name: textValue(value.name),
+    message: textValue(value.message) || 'PayPal refund request failed.',
+    debug_id: textValue(value.debug_id),
+    details,
+  };
+};
+
 const executeStripeRefund = async (input: {
   refundId: string;
   orderId: string;
@@ -292,6 +359,49 @@ const executeStripeRefund = async (input: {
   };
 };
 
+const executePayPalRefund = async (input: {
+  refundId: string;
+  orderId: string;
+  orderNumber: string;
+  paymentReference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+}) => {
+  const response = await fetch(paypalRefundEndpoint(input.paymentReference), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${paypalAccessToken()}`,
+      'content-type': 'application/json',
+      'paypal-request-id': input.refundId,
+    },
+    body: JSON.stringify({
+      amount: {
+        value: input.amount.toFixed(2),
+        currency_code: input.currency.toUpperCase(),
+      },
+      invoice_id: input.orderNumber || input.orderId,
+      custom_id: input.refundId,
+      note_to_payer: input.reason.slice(0, 255),
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safePayPalErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safePayPalRefundPayload(payloadRecord),
+  };
+};
+
 const buildProviderRefundUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
@@ -306,12 +416,22 @@ const buildProviderRefundUpdate = async (
   const refundId = existing?.id || `rf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const paymentReference = textValue(values.paymentreference);
   const shouldExecuteStripeRefund = canExecuteStripeRefund(provider, paymentReference);
+  const shouldExecutePayPalRefund = canExecutePayPalRefund(provider, paymentReference);
   const orderNumber = textValue(values.ordernumber);
+  const executionMode = shouldExecuteStripeRefund
+    ? 'stripe-api'
+    : shouldExecutePayPalRefund
+      ? 'paypal-api'
+      : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.provider-refund.v1',
-    action: provider === 'stripe' ? 'refunds.create' : 'provider.refund.create',
+    action: provider === 'stripe'
+      ? 'refunds.create'
+      : provider === 'paypal'
+        ? 'payments.captures.refund'
+        : 'provider.refund.create',
     provider,
-    executionMode: shouldExecuteStripeRefund ? 'stripe-api' : 'handoff',
+    executionMode,
     orderId: record.id,
     orderNumber,
     paymentReference,
@@ -353,6 +473,34 @@ const buildProviderRefundUpdate = async (
       status = 'failed';
       statusNote = 'failed';
     }
+  } else if (shouldExecutePayPalRefund) {
+    const result = await executePayPalRefund({
+      refundId,
+      orderId: record.id,
+      orderNumber,
+      paymentReference,
+      amount,
+      currency,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const paypalStatus = result.payload.status.toUpperCase();
+      if (paypalStatus === 'COMPLETED') {
+        status = 'succeeded';
+        completedAt = new Date().toISOString();
+      } else if (paypalStatus === 'FAILED' || paypalStatus === 'CANCELLED' || paypalStatus === 'DENIED') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerRefundId = result.payload.id || refundId;
+      providerReference = `${provider}:${result.payload.id || refundId}`;
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      statusNote = 'failed';
+    }
   }
 
   const refund: ProviderRefundPayload = {
@@ -367,7 +515,7 @@ const buildProviderRefundUpdate = async (
     completedAt,
     providerPayload,
   };
-  const shouldMarkRefunded = !shouldExecuteStripeRefund || status === 'succeeded';
+  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund) || status === 'succeeded';
 
   return {
     refund,
