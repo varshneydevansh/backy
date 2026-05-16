@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   authenticateAdminCredentials,
   authenticateAdminCredentialsWithPersistence,
+  createAdminSessionForExternalUser,
+  type AdminSession,
 } from '@/lib/admin-auth/sessionStore';
 import {
   isProductionAdminLocalAuthAllowed,
@@ -9,6 +11,12 @@ import {
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
 } from '@/lib/admin-auth/productionPolicy';
 import { attachAdminSessionCookie } from '@/lib/admin-auth/sessionCookie';
+import {
+  authenticateSupabaseAdminCredentials,
+  isSupabaseAdminAuthConfigured,
+  SupabaseAdminAuthUnavailableError,
+} from '@/lib/admin-auth/supabaseAuth';
+import { getAdminUserByEmail } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -46,6 +54,20 @@ const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => 
     : undefined
 );
 
+const successResponse = (requestId: string, session: AdminSession) => attachAdminSessionCookie(NextResponse.json({
+  success: true,
+  requestId,
+  data: {
+    user: session.user,
+    session: {
+      token: session.token,
+      issuedAt: session.issuedAt,
+      expiresAt: session.expiresAt,
+      authMode: session.authMode,
+    },
+  },
+}), session);
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
@@ -56,7 +78,51 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
   }
 
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
+  const supabaseAuthConfigured = isSupabaseAdminAuthConfigured();
+  let supabaseAuthUnavailable = false;
+  if (supabaseAuthConfigured) {
+    try {
+      const supabaseIdentity = await authenticateSupabaseAdminCredentials(email, password);
+      if (supabaseIdentity) {
+        const user = repositories
+          ? await repositories.users.getByEmail(supabaseIdentity.email)
+          : getAdminUserByEmail(supabaseIdentity.email);
+        if (user?.status === 'active') {
+          return successResponse(requestId, createAdminSessionForExternalUser({
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            status: user.status,
+          }, 'supabase', authSettings));
+        }
+      }
+    } catch (error) {
+      if (error instanceof SupabaseAdminAuthUnavailableError) {
+        supabaseAuthUnavailable = true;
+      } else {
+        throw error;
+      }
+    }
+  }
+
   if (!isProductionAdminLocalAuthAllowed()) {
+    if (supabaseAuthUnavailable) {
+      return errorResponse(
+        503,
+        'ADMIN_AUTH_PROVIDER_UNAVAILABLE',
+        'Supabase Auth is configured but could not be reached. Check the Supabase URL and server network connectivity.',
+        requestId,
+      );
+    }
+    if (supabaseAuthConfigured) {
+      return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
+    }
+
     return errorResponse(
       503,
       PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
@@ -65,10 +131,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const repositories = !shouldUseDemoStoreFallback()
-    ? await getRequiredDatabaseRepositories()
-    : null;
-  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
   const session = repositories
     ? await authenticateAdminCredentialsWithPersistence(email, password, {
       getPasswordCredentialByEmail: (userEmail) => repositories.users.getPasswordCredentialByEmail(userEmail),
@@ -79,17 +141,5 @@ export async function POST(request: NextRequest) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
-  return attachAdminSessionCookie(NextResponse.json({
-    success: true,
-    requestId,
-    data: {
-      user: session.user,
-      session: {
-        token: session.token,
-        issuedAt: session.issuedAt,
-        expiresAt: session.expiresAt,
-        authMode: session.authMode,
-      },
-    },
-  }), session);
+  return successResponse(requestId, session);
 }

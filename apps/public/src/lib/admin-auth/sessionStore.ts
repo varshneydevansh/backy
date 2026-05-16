@@ -12,12 +12,14 @@ export interface AdminAuthUser {
   status: 'active' | 'inactive' | 'invited' | 'suspended';
 }
 
+export type AdminAuthMode = 'local-demo' | 'supabase';
+
 export interface AdminSession {
   token: string;
   user: AdminAuthUser;
   issuedAt: string;
   expiresAt: string;
-  authMode: 'local-demo';
+  authMode: AdminAuthMode;
 }
 
 export interface AdminSessionSummary {
@@ -26,7 +28,7 @@ export interface AdminSessionSummary {
   issuedAt: string;
   expiresAt: string;
   lastSeenAt: string;
-  authMode: 'local-demo';
+  authMode: AdminAuthMode;
   current: boolean;
 }
 
@@ -125,7 +127,7 @@ type AdminAuthUserPersistence = {
   consumeInviteToken?: (token: string) => Promise<void>;
 };
 
-type AdminAuthSessionSettings = {
+export type AdminAuthSessionSettings = {
   sessionTimeoutMinutes?: unknown;
   userPermissionOverrides?: unknown;
   permissionOverrides?: unknown;
@@ -246,8 +248,12 @@ const getSessionTimeoutMinutes = (authSettings?: AdminAuthSessionSettings) => {
 const createAdminSessionForUser = (
   user: AdminAuthUser,
   authSettings?: AdminAuthSessionSettings,
+  options: { authMode?: AdminAuthMode } = {},
 ): AdminSession => {
-  assertProductionAdminLocalAuthAllowed();
+  const authMode = options.authMode || 'local-demo';
+  if (authMode === 'local-demo') {
+    assertProductionAdminLocalAuthAllowed();
+  }
 
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes(authSettings) * 60 * 1000);
@@ -259,7 +265,7 @@ const createAdminSessionForUser = (
     user,
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
-    authMode: 'local-demo',
+    authMode,
     lastSeenAt: issuedAt.toISOString(),
     ...(permissionOverrides ? { permissionOverrides } : {}),
   };
@@ -273,6 +279,12 @@ const createAdminSessionForUser = (
     authMode: session.authMode,
   };
 };
+
+export const createAdminSessionForExternalUser = (
+  user: AdminAuthUser,
+  authMode: Exclude<AdminAuthMode, 'local-demo'>,
+  authSettings?: AdminAuthSessionSettings,
+): AdminSession => createAdminSessionForUser(user, authSettings, { authMode });
 
 export function listAdminSessionPermissionOverrides(
   token: string | null | undefined,
