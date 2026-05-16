@@ -14,6 +14,7 @@
         "test:blog-api": "npm run test:preview-contract && npm run test:admin-contract && npm run test:public-security",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
         "test:admin-auth-supabase": "tsx scripts/admin-supabase-auth-smoke.ts",
+        "test:admin-auth-supabase-route": "node scripts/admin-supabase-login-route-smoke.mjs",
         "test:admin-auth-production-policy": "tsx scripts/admin-auth-production-policy-smoke.ts",
         "test:form-captcha": "tsx scripts/form-captcha-smoke.ts",
         "test:media-quota": "node scripts/media-quota-smoke.mjs",
