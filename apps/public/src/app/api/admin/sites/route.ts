@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site } from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { filterAdminTeamScopedResources, requireAdminAccess, requireAdminTeamScopeAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { createAdminSite, getAdminSettings, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -163,19 +163,25 @@ export async function GET(request: NextRequest) {
       const result = await repositories.sites.list({
         status: includeUnpublished ? 'all' : 'published',
       });
-      const sites = result.items.map((site) => adminSiteFromRepositorySite(site));
+      const scopedItems = await filterAdminTeamScopedResources(access, result.items, { action: 'view' });
+      const sites = scopedItems.map((site) => adminSiteFromRepositorySite(site));
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           sites,
-          pagination: result.pagination,
+          pagination: {
+            total: sites.length,
+            limit: sites.length,
+            offset: 0,
+            hasMore: false,
+          },
         },
       });
     }
 
-    const sites = getSites({ includeUnpublished });
+    const sites = await filterAdminTeamScopedResources(access, getSites({ includeUnpublished }), { action: 'view' });
 
     return NextResponse.json({
       success: true,
@@ -227,6 +233,10 @@ export async function POST(request: NextRequest) {
           'Database mode site creation requires a teamId, BACKY_DEFAULT_TEAM_ID, or exactly one existing site team to infer from.',
           requestId,
         );
+      }
+      const scopeError = await requireAdminTeamScopeAccess(access, requestId, { teamId }, { action: 'manage' });
+      if (scopeError) {
+        return scopeError;
       }
 
       const slugCheck = await repositories.sites.checkSlug({ slug, teamId });
@@ -298,6 +308,13 @@ export async function POST(request: NextRequest) {
     const billingLimitError = enforceSiteBillingLimit(getAdminSettings(), getSites({ includeUnpublished: true }).length, requestId);
     if (billingLimitError) {
       return billingLimitError;
+    }
+    const demoTeamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0
+      ? body.teamId.trim()
+      : null;
+    const scopeError = await requireAdminTeamScopeAccess(access, requestId, { teamId: demoTeamId }, { action: 'manage' });
+    if (scopeError) {
+      return scopeError;
     }
 
     const site = createAdminSite({

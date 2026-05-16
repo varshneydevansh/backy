@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type Site, type SiteSettings, type SiteWebhookEventKind, type ThemeConfig } from '@backy-cms/core';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminTeamScopeAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   deleteAdminSite,
@@ -514,6 +514,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
+      const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'view' });
+      if (scopeError) {
+        return scopeError;
+      }
 
       return NextResponse.json({
         success: true,
@@ -528,6 +532,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+    const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'view' });
+    if (scopeError) {
+      return scopeError;
     }
 
     return NextResponse.json({
@@ -566,6 +574,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+      const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'manage' });
+      if (scopeError) {
+        return scopeError;
       }
 
       const settings = mergeSiteSettings(site.settings, body.settings);
@@ -673,6 +685,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+    const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'manage' });
+    if (scopeError) {
+      return scopeError;
     }
 
     if (customDomainBillingPatch) {
@@ -785,6 +801,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
+      const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'manage' });
+      if (scopeError) {
+        return scopeError;
+      }
 
       await recordAdminAudit({
         repositories,
@@ -818,6 +838,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+    const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, { action: 'manage' });
+    if (scopeError) {
+      return scopeError;
     }
 
     await recordAdminAudit({

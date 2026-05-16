@@ -3,14 +3,24 @@ import { createHash } from 'node:crypto';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
-import { getAdminSettings, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
+import { getAdminSettings, listAdminTeamMembers, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 type AdminRole = AdminSession['user']['role'];
+type AdminTeamScopeAction = 'view' | 'manage';
 
 export type AdminAccessContext = {
   type: 'session' | 'api-key';
   session: AdminSession | null;
+};
+
+export type AdminTeamScopedResource = {
+  teamId?: string | null;
+};
+
+const scopedTeamRoles: Record<AdminTeamScopeAction, AdminRole[]> = {
+  view: ['owner', 'admin', 'editor', 'viewer'],
+  manage: ['owner', 'admin'],
 };
 
 const getProvidedAdminKey = (request: NextRequest) => {
@@ -147,6 +157,10 @@ const resolveConfiguredAdminKey = async (providedKey: string): Promise<Configure
 
 const hasRequiredRole = (role: AdminRole, allowedRoles: AdminRole[]) => allowedRoles.includes(role);
 
+const normalizeTeamId = (teamId: string | null | undefined) => (
+  typeof teamId === 'string' ? teamId.trim() : ''
+);
+
 export const adminAccessError = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
     {
@@ -160,6 +174,109 @@ export const adminAccessError = (status: number, code: string, message: string, 
     { status },
   )
 );
+
+const getScopedTeamMemberRole = async (
+  access: AdminAccessContext,
+  teamId: string,
+): Promise<AdminRole | null> => {
+  if (access.type !== 'session' || !access.session) {
+    return null;
+  }
+
+  if (shouldUseDemoStoreFallback()) {
+    const member = listAdminTeamMembers(teamId).find((candidate) => candidate.userId === access.session?.user.id);
+    return member?.role || null;
+  }
+
+  const repositories = await getRequiredDatabaseRepositories();
+  const members = await repositories.teams.listMembers({ teamId });
+  const member = members.items.find((candidate) => candidate.userId === access.session?.user.id);
+  return member?.role || null;
+};
+
+export async function canAdminAccessTeamScope(
+  access: AdminAccessContext,
+  teamId: string | null | undefined,
+  options: {
+    action?: AdminTeamScopeAction;
+    allowUnowned?: boolean;
+  } = {},
+): Promise<boolean> {
+  const normalizedTeamId = normalizeTeamId(teamId);
+  if (!normalizedTeamId) {
+    return options.allowUnowned !== false;
+  }
+
+  if (access.type === 'api-key') {
+    return true;
+  }
+
+  if (!access.session) {
+    return false;
+  }
+
+  if (access.session.user.role === 'owner') {
+    return true;
+  }
+
+  const action = options.action || 'view';
+  const memberRole = await getScopedTeamMemberRole(access, normalizedTeamId);
+  return memberRole ? scopedTeamRoles[action].includes(memberRole) : false;
+}
+
+export async function filterAdminTeamScopedResources<T extends AdminTeamScopedResource>(
+  access: AdminAccessContext,
+  resources: T[],
+  options: {
+    action?: AdminTeamScopeAction;
+    allowUnowned?: boolean;
+  } = {},
+): Promise<T[]> {
+  if (access.type === 'api-key' || access.session?.user.role === 'owner') {
+    return resources;
+  }
+
+  const decisionCache = new Map<string, boolean>();
+  const filtered: T[] = [];
+  for (const resource of resources) {
+    const teamId = normalizeTeamId(resource.teamId);
+    const cacheKey = teamId || '__unowned__';
+    const allowed = decisionCache.has(cacheKey)
+      ? decisionCache.get(cacheKey) === true
+      : await canAdminAccessTeamScope(access, teamId || null, options);
+    decisionCache.set(cacheKey, allowed);
+
+    if (allowed) {
+      filtered.push(resource);
+    }
+  }
+
+  return filtered;
+}
+
+export async function requireAdminTeamScopeAccess(
+  access: AdminAccessContext,
+  requestId: string,
+  resource: AdminTeamScopedResource,
+  options: {
+    action?: AdminTeamScopeAction;
+    allowUnowned?: boolean;
+    code?: string;
+    message?: string;
+  } = {},
+): Promise<NextResponse | null> {
+  const allowed = await canAdminAccessTeamScope(access, resource.teamId, options);
+  if (allowed) {
+    return null;
+  }
+
+  return adminAccessError(
+    403,
+    options.code || 'FORBIDDEN_SITE_SCOPE',
+    options.message || 'This admin account is not a member of the team that owns this site.',
+    requestId,
+  );
+}
 
 export async function requireAdminAccess(
   request: NextRequest,
