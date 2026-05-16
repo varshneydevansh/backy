@@ -787,7 +787,7 @@ function SettingsPage() {
       const result = await listAdminAuditLogs({
         entity: 'settings',
         entityId: 'platform',
-        limit: 8,
+        limit: 30,
       });
       setSettingsAuditLogs(result.logs);
     } catch {
@@ -6152,6 +6152,34 @@ const textFromRecord = (value: Record<string, unknown> | undefined, key: string)
   return typeof raw === 'string' && raw.trim() ? raw : null;
 };
 
+type AuditTrailFilter = 'all' | 'auth' | 'api-keys' | 'settings';
+
+const AUDIT_FILTER_OPTIONS: Array<{ value: AuditTrailFilter; label: string }> = [
+  { value: 'all', label: 'All events' },
+  { value: 'auth', label: 'Auth events' },
+  { value: 'api-keys', label: 'API key events' },
+  { value: 'settings', label: 'Settings changes' },
+];
+
+const auditTrailCategory = (log: AdminAuditLog): Exclude<AuditTrailFilter, 'all'> | 'other' => {
+  if (log.action.startsWith('auth.')) return 'auth';
+  if (log.action.startsWith('settings.api_keys')) return 'api-keys';
+  if (log.action === 'settings.update') return 'settings';
+  return 'other';
+};
+
+const auditDetailPayload = (log: AdminAuditLog) => JSON.stringify({
+  id: log.id,
+  action: log.action,
+  actorId: log.actorId,
+  entity: log.entity,
+  entityId: log.entityId,
+  requestId: log.requestId,
+  metadata: log.metadata || {},
+  before: log.before || null,
+  after: log.after || null,
+}, null, 2);
+
 function formatAuditTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -6261,8 +6289,17 @@ function AuditTrail({
   disabledTitle?: string;
   onRefresh: () => void;
 }) {
+  const [filter, setFilter] = useState<AuditTrailFilter>('all');
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const filteredLogs = logs.filter((log) => (
+    filter === 'all' ? true : auditTrailCategory(log) === filter
+  ));
+  const selectedLog = selectedLogId
+    ? filteredLogs.find((log) => log.id === selectedLogId) || null
+    : null;
+
   return (
-    <div className="rounded-xl border border-border p-4">
+    <div className="rounded-xl border border-border p-4" data-testid="settings-audit-trail">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -6270,22 +6307,54 @@ function AuditTrail({
             <h3 className="text-lg font-semibold">Settings Audit Trail</h3>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Recent settings and API-key changes recorded by the backend.
+            Recent settings, API-key, and auth events recorded by the backend.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading || disabled}
-          title={disabledTitle}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium',
-            'hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
-          )}
-        >
-          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Filter</span>
+            <select
+              value={filter}
+              onChange={(event) => {
+                setFilter(event.target.value as AuditTrailFilter);
+                setSelectedLogId(null);
+              }}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              data-testid="settings-audit-filter"
+            >
+              {AUDIT_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading || disabled}
+            title={disabledTitle}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium',
+              'hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+            )}
+          >
+            <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4" data-testid="settings-audit-summary">
+        {AUDIT_FILTER_OPTIONS.map((option) => {
+          const count = option.value === 'all'
+            ? logs.length
+            : logs.filter((log) => auditTrailCategory(log) === option.value).length;
+          return (
+            <div key={option.value} className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <p className="text-xs text-muted-foreground">{option.label}</p>
+              <p className="mt-1 text-lg font-semibold">{count}</p>
+            </div>
+          );
+        })}
       </div>
 
       {notice && (
@@ -6294,17 +6363,17 @@ function AuditTrail({
         </div>
       )}
 
-      <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+      <div className="mt-4 divide-y divide-border rounded-lg border border-border" data-testid="settings-audit-results">
         {isLoading && logs.length === 0 ? (
           <div className="px-4 py-5 text-sm text-muted-foreground">
             Loading audit trail...
           </div>
-        ) : logs.length === 0 ? (
+        ) : filteredLogs.length === 0 ? (
           <div className="px-4 py-5 text-sm text-muted-foreground">
-            No settings audit events have been recorded yet.
+            No matching audit events have been recorded yet.
           </div>
         ) : (
-          logs.map((log) => (
+          filteredLogs.map((log) => (
             <div key={log.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="font-medium">{auditTitle(log)}</p>
@@ -6316,6 +6385,14 @@ function AuditTrail({
                     {log.requestId}
                   </p>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedLogId((current) => (current === log.id ? null : log.id))}
+                  className="mt-2 text-xs font-medium text-primary hover:underline"
+                  data-testid="settings-audit-view-detail"
+                >
+                  {selectedLogId === log.id ? 'Hide detail' : 'View detail'}
+                </button>
               </div>
               <div className="text-right text-xs text-muted-foreground">
                 <p>{formatAuditTime(log.createdAt)}</p>
@@ -6325,6 +6402,27 @@ function AuditTrail({
           ))
         )}
       </div>
+
+      {selectedLog ? (
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4" data-testid="settings-audit-detail">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Audit event detail</p>
+              <p className="mt-1 text-sm text-muted-foreground">{auditTitle(selectedLog)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedLogId(null)}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+          <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+            {auditDetailPayload(selectedLog)}
+          </pre>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -933,6 +933,52 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   assert(auditState?.hasRotationHistory, `API key rotation history did not render: ${JSON.stringify(auditState)}`);
   assert(auditState?.hasRevocationHistory, `API key revocation history did not render: ${JSON.stringify(auditState)}`);
 
+  const filterState = await evaluate(client, `(() => {
+    const select = document.querySelector('[data-testid="settings-audit-filter"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'filter-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    descriptor?.set?.call(select, 'auth');
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: select.value };
+  })()`);
+  assert(filterState.ok && filterState.value === 'auth', `Unable to select auth audit filter: ${JSON.stringify(filterState)}`);
+
+  let authAuditState = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    authAuditState = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        hasAuthFilter: body.includes('Auth events'),
+        hasAuthEvent: body.includes('Admin login accepted'),
+        hasAuthDescription: body.includes('admin@backy.io signed in with local-demo'),
+        body: body.slice(0, 1800),
+      };
+    })()`);
+    if (authAuditState.hasAuthFilter && authAuditState.hasAuthEvent && authAuditState.hasAuthDescription) break;
+    await sleep(250);
+  }
+  assert(
+    authAuditState?.hasAuthFilter && authAuditState?.hasAuthEvent && authAuditState?.hasAuthDescription,
+    `Auth audit filter did not render login event: ${JSON.stringify(authAuditState)}`,
+  );
+  await clickByTestId(client, 'settings-audit-view-detail');
+  const authDetailState = await evaluate(client, `(() => {
+    const detail = document.querySelector('[data-testid="settings-audit-detail"]');
+    const text = detail?.textContent || '';
+    return {
+      hasDetail: Boolean(detail),
+      hasPayload: text.includes('Audit event detail') &&
+        text.includes('auth.login.success') &&
+        text.includes('admin@backy.io') &&
+        text.includes('local-demo'),
+      text: text.slice(0, 1200),
+    };
+  })()`);
+  assert(authDetailState.hasDetail && authDetailState.hasPayload, `Auth audit detail did not expose payload: ${JSON.stringify(authDetailState)}`);
+
   assert(
     ownerOriginalSettings.apiKeys?.publicApiKey === beforePublicKey &&
       ownerOriginalSettings.apiKeys?.adminApiKey === beforeAdminKey,
@@ -947,6 +993,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     rotationHistoryPersisted: true,
     revocationHistoryPersisted: true,
     auditRendered: true,
+    authAuditFilterRendered: true,
   };
 };
 
