@@ -67,6 +67,17 @@ export interface BackyConditionalRequestOptions {
 
 export type BackyConditionalOptions = BackyConditionalRequestOptions;
 
+export interface BackyRenderRequestOptions {
+  previewToken?: string;
+  siteId?: string;
+  schemaVersion?: string;
+}
+
+export type BackyRenderConditionalOptions = BackyConditionalOptions & {
+  previewToken?: string;
+  schemaVersion?: string;
+};
+
 export interface BackyListOptions {
   /**
    * Public list endpoints cap limits at 100. Finite SDK inputs are clamped to 1..100.
@@ -1383,18 +1394,18 @@ export class BackyClient {
     });
   }
 
-  render<TPayload = BackyRenderPayload>(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<TPayload>> {
+  render<TPayload = BackyRenderPayload>(path: string, options: BackyRenderRequestOptions = {}): Promise<BackyEnvelope<TPayload>> {
     return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
-      query: { path, previewToken: options.previewToken },
+      query: { path, previewToken: options.previewToken, schemaVersion: options.schemaVersion },
     });
   }
 
   renderCached<TPayload = BackyRenderPayload>(
     path: string,
-    options: BackyConditionalOptions & { previewToken?: string } = {},
+    options: BackyRenderConditionalOptions = {},
   ): Promise<BackyConditionalResult<BackyEnvelope<TPayload>>> {
     return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
-      query: { path, previewToken: options.previewToken },
+      query: { path, previewToken: options.previewToken, schemaVersion: options.schemaVersion },
       ifNoneMatch: options.etag,
       requestId: options.requestId,
     });

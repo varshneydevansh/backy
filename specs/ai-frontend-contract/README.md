@@ -69,6 +69,7 @@ Canvas-authored forms can now declare a collection write target in their form pr
 The first implementation-backed endpoint is:
 
 - `GET /api/sites/:siteId/render?path=/about`
+- `GET /api/sites/:siteId/render?path=/about&schemaVersion=backy.content-payload.v1`
 - `GET /api/sites/:siteId/render?path=/blog/example-post`
 - `GET /api/sites/:siteId/render?path=/team/ada-lovelace`
 
@@ -76,7 +77,7 @@ It returns the `content-payload.schema.json` shape for pages, blog posts, and co
 
 `npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, collection-record editable map entry, and uploaded public font asset manifests.
 
-Published render responses now include short public cache headers, ETags with `If-None-Match` 304 support, plus `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id` so custom frontends can safely key caches and diagnostics. Preview-token render responses and error envelopes are `no-store`.
+Published render responses now include short public cache headers, ETags with `If-None-Match` 304 support, plus `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-supported-schema-versions`, `x-backy-request-id`, and `x-backy-site-id` so custom frontends can safely key caches and diagnostics. Clients can request the render payload schema with `schemaVersion=backy.content-payload.v1` or `x-backy-accept-schema-version`; unsupported schema requests return `406 UNSUPPORTED_RENDER_SCHEMA_VERSION` with the supported versions in the response details. In database mode, published render responses use the latest site invalidation revision for `x-backy-cache-revision`, so page, blog, collection, media, navigation, SEO, settings, and frontend-design mutations can invalidate custom frontend render caches through one stable header. Preview-token render responses and error envelopes are `no-store`.
 
 ## Current frontend manifest endpoint
 

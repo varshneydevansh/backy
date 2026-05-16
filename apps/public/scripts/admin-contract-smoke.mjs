@@ -1867,6 +1867,7 @@ try {
     assert(renderPayload.response.headers.get('x-backy-cache-scope') === 'render', `${renderPayload.url} missing render cache scope`);
     assert(renderPayload.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${renderPayload.url} missing contract version header`);
     assert(renderPayload.response.headers.get('x-backy-schema-version') === 'backy.content-payload.v1', `${renderPayload.url} missing render schema version header`);
+    assert(renderPayload.response.headers.get('x-backy-supported-schema-versions')?.includes('backy.content-payload.v1'), `${renderPayload.url} missing supported render schema versions header`);
     assert(renderPayload.response.headers.get('x-backy-site-id') === createdSiteId, `${renderPayload.url} missing site id header`);
     const renderCacheRevision = renderPayload.response.headers.get('x-backy-cache-revision');
     assert(renderCacheRevision, `${renderPayload.url} missing render cache revision`);
@@ -1902,6 +1903,19 @@ try {
       renderPayload.json?.data?.seo?.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Admin Contract Page'),
       `${renderPayload.url} missing route JSON-LD in render SEO`,
     );
+
+    const negotiatedRenderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}&schemaVersion=backy.content-payload.v1`);
+    assert(negotiatedRenderPayload.response.status === 200, `${negotiatedRenderPayload.url} expected negotiated render 200`);
+    assert(negotiatedRenderPayload.response.headers.get('x-backy-schema-version') === 'backy.content-payload.v1', `${negotiatedRenderPayload.url} returned wrong negotiated schema version`);
+    validateAiRenderPayload(negotiatedRenderPayload.json, 'negotiated page render payload');
+
+    const unsupportedRenderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}&schemaVersion=backy.content-payload.v0`);
+    assert(unsupportedRenderPayload.response.status === 406, `${unsupportedRenderPayload.url} expected unsupported schema 406`);
+    assertBackyContract(unsupportedRenderPayload, 'error');
+    assert(unsupportedRenderPayload.response.headers.get('x-backy-schema-version') === 'backy.content-payload.v1', `${unsupportedRenderPayload.url} missing fallback schema version header`);
+    assert(unsupportedRenderPayload.response.headers.get('x-backy-supported-schema-versions')?.includes('backy.content-payload.v1'), `${unsupportedRenderPayload.url} missing supported schema versions header`);
+    assert(unsupportedRenderPayload.json?.error?.code === 'UNSUPPORTED_RENDER_SCHEMA_VERSION', `${unsupportedRenderPayload.url} returned wrong unsupported schema error`);
+    assert(unsupportedRenderPayload.json?.error?.details?.supportedSchemaVersions?.includes('backy.content-payload.v1'), `${unsupportedRenderPayload.url} missing supported schema details`);
 
     const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
     assert(resolvedPage.response.status === 200, `${resolvedPage.url} expected 200, got ${resolvedPage.response.status}`);

@@ -465,14 +465,15 @@ assert(revalidatedOpenapi.notModified === true, 'openapiCached() did not return 
 const resolved = await client.resolve(smokePath);
 assert(resolved.data.route, 'resolve() did not return a route');
 
-const rendered = await client.render(smokePath);
+const rendered = await client.render(smokePath, { schemaVersion: 'backy.content-payload.v1' });
 assert(rendered.data, 'render() did not return a payload envelope');
 
-const cachedRender = await client.renderCached(smokePath);
+const cachedRender = await client.renderCached(smokePath, { schemaVersion: 'backy.content-payload.v1' });
 assert(cachedRender.notModified === false, 'renderCached() first request should return a body');
 assert(cachedRender.meta.etag, 'renderCached() missing response ETag');
+assert(cachedRender.meta.schemaVersion === 'backy.content-payload.v1', 'renderCached() missing negotiated schema version metadata');
 assert(cachedRender.body.data.content?.elements, 'renderCached() did not return a render payload');
-const revalidatedRender = await client.renderCached(smokePath, { etag: cachedRender.meta.etag });
+const revalidatedRender = await client.renderCached(smokePath, { etag: cachedRender.meta.etag, schemaVersion: 'backy.content-payload.v1' });
 assert(revalidatedRender.notModified === true, 'renderCached() did not return notModified for matching ETag');
 
 const pageDetail = await client.pages({ path: smokePath });

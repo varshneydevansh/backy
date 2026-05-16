@@ -76,13 +76,16 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - When a matching site frontend design template exists and no explicit content is provided, Backy seeds editable canvas content from the captured template, preserves site chrome/tokens/custom CSS/binding hints in `meta.frontendDesign*`, and returns the normal admin page resource.
 
 - `GET /api/sites/:siteId/render?path=/about`
+- `GET /api/sites/:siteId/render?path=/about&schemaVersion=backy.content-payload.v1`
 - `GET /api/sites/:siteId/render?path=/blog/:slug`
 - `GET /api/sites/:siteId/render?path=/:collectionSlug/:recordSlug`
 - `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
   - Returns the external page/post/dynamic item render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current data bindings include normalized collection dataset manifests, resolved public collection fields/records, and element binding metadata when canvas elements declare collection `dataBindings`.
-  - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
+  - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-supported-schema-versions`, `x-backy-request-id`, and `x-backy-site-id`.
+  - Clients can request the current render schema with `schemaVersion=backy.content-payload.v1` or `x-backy-accept-schema-version`; unsupported render schema requests return `406 UNSUPPORTED_RENDER_SCHEMA_VERSION` with supported versions in `error.details`.
+  - Database-mode published render responses emit `x-backy-cache-revision` from the latest site invalidation event, not only the response body hash, so custom frontends can revalidate after content, route, media, navigation, SEO, settings, and frontend-design mutations.
   - Preview-token responses and error envelopes use `Cache-Control: no-store`.
   - Collection dynamic list paths resolve after normal pages and blog posts using `/:collectionSlug` by default and return a generated `dynamicList` content document with a hydrated collection dataset. Collection dynamic item paths use `/:collectionSlug/:recordSlug` by default and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.

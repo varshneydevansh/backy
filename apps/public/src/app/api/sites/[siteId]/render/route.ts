@@ -41,8 +41,19 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const RENDER_SCHEMA_VERSION = 'backy.content-payload.v1';
+const SUPPORTED_RENDER_SCHEMA_VERSIONS = [RENDER_SCHEMA_VERSION] as const;
+const RENDER_VERSION_HEADERS = {
+  'x-backy-supported-schema-versions': SUPPORTED_RENDER_SCHEMA_VERSIONS.join(', '),
+};
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: Record<string, unknown>,
+) => (
   publicContractJson(
     {
       success: false,
@@ -50,9 +61,16 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       error: {
         code,
         message,
+        ...(details ? { details } : {}),
       },
     },
-    { status, requestId, cache: 'error' },
+    {
+      status,
+      requestId,
+      cache: 'error',
+      schemaVersion: RENDER_SCHEMA_VERSION,
+      headers: RENDER_VERSION_HEADERS,
+    },
   )
 );
 
@@ -69,6 +87,33 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
     && Date.parse(item.scheduledAt || '') <= Date.now()
   )
 );
+
+const requestedSchemaVersions = (request: NextRequest, searchParams: URLSearchParams) => {
+  const raw = searchParams.get('schemaVersion')
+    || searchParams.get('renderSchemaVersion')
+    || request.headers.get('x-backy-accept-schema-version')
+    || request.headers.get('x-backy-schema-version')
+    || '';
+
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const negotiateRenderSchemaVersion = (request: NextRequest, searchParams: URLSearchParams) => {
+  const requested = requestedSchemaVersions(request, searchParams);
+  if (requested.length === 0) {
+    return { supported: true as const, schemaVersion: RENDER_SCHEMA_VERSION };
+  }
+
+  const schemaVersion = requested.find((entry) => SUPPORTED_RENDER_SCHEMA_VERSIONS.includes(entry as typeof SUPPORTED_RENDER_SCHEMA_VERSIONS[number]));
+  if (schemaVersion) {
+    return { supported: true as const, schemaVersion };
+  }
+
+  return { supported: false as const, requested };
+};
 
 const repositorySiteToStoreSite = (site: Site): StoreSite => ({
   id: site.id,
@@ -324,6 +369,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
     const previewToken = searchParams.get('previewToken');
+    const negotiatedSchema = negotiateRenderSchemaVersion(request, searchParams);
+    if (!negotiatedSchema.supported) {
+      return errorResponse(
+        406,
+        'UNSUPPORTED_RENDER_SCHEMA_VERSION',
+        'Unsupported render schema version',
+        requestId,
+        {
+          requestedSchemaVersions: negotiatedSchema.requested,
+          supportedSchemaVersions: SUPPORTED_RENDER_SCHEMA_VERSIONS,
+        },
+      );
+    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -335,6 +393,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       const storeSite = repositorySiteToStoreSite(site);
       const dataSource = await buildRepositoryRenderDataSource(repositories, site);
+      const renderCacheRevision = previewToken
+        ? undefined
+        : await repositories.cacheInvalidations.latestRevision({ siteId: site.id }) || undefined;
       const blogMatch = path.match(/^\/blog\/([^/]+)$/);
       if (blogMatch) {
         const slug = decodeURIComponent(blogMatch[1]);
@@ -357,8 +418,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             requestId,
             request,
             cache: previewToken ? 'private' : 'render',
-            schemaVersion: 'backy.content-payload.v1',
+            schemaVersion: negotiatedSchema.schemaVersion,
             siteId: site.id,
+            cacheRevision: renderCacheRevision,
+            headers: RENDER_VERSION_HEADERS,
           },
         );
       }
@@ -379,8 +442,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             requestId,
             request,
             cache: previewToken ? 'private' : 'render',
-            schemaVersion: 'backy.content-payload.v1',
+            schemaVersion: negotiatedSchema.schemaVersion,
             siteId: site.id,
+            cacheRevision: renderCacheRevision,
+            headers: RENDER_VERSION_HEADERS,
           },
         );
       }
@@ -419,8 +484,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             requestId,
             request,
             cache: 'render',
-            schemaVersion: 'backy.content-payload.v1',
+            schemaVersion: negotiatedSchema.schemaVersion,
             siteId: site.id,
+            cacheRevision: renderCacheRevision,
+            headers: RENDER_VERSION_HEADERS,
           },
         );
       }
@@ -452,8 +519,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               requestId,
               request,
               cache: 'render',
-              schemaVersion: 'backy.content-payload.v1',
+              schemaVersion: negotiatedSchema.schemaVersion,
               siteId: site.id,
+              cacheRevision: renderCacheRevision,
+              headers: RENDER_VERSION_HEADERS,
             },
           );
         }
@@ -490,8 +559,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           requestId,
           request,
           cache: previewToken ? 'private' : 'render',
-          schemaVersion: 'backy.content-payload.v1',
+          schemaVersion: negotiatedSchema.schemaVersion,
           siteId: site.id,
+          headers: RENDER_VERSION_HEADERS,
         },
       );
     }
@@ -512,8 +582,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           requestId,
           request,
           cache: previewToken ? 'private' : 'render',
-          schemaVersion: 'backy.content-payload.v1',
+          schemaVersion: negotiatedSchema.schemaVersion,
           siteId: site.id,
+          headers: RENDER_VERSION_HEADERS,
         },
       );
     }
@@ -530,8 +601,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           requestId,
           request,
           cache: 'render',
-          schemaVersion: 'backy.content-payload.v1',
+          schemaVersion: negotiatedSchema.schemaVersion,
           siteId: site.id,
+          headers: RENDER_VERSION_HEADERS,
         },
       );
     }
@@ -548,8 +620,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             requestId,
             request,
             cache: 'render',
-            schemaVersion: 'backy.content-payload.v1',
+            schemaVersion: negotiatedSchema.schemaVersion,
             siteId: site.id,
+            headers: RENDER_VERSION_HEADERS,
           },
         );
       }
