@@ -216,6 +216,27 @@ const canExecuteAdyenRefund = (provider: string, paymentReference: string) => (
   Boolean(paymentReference)
 );
 
+const mollieApiKey = () => (
+  process.env.BACKY_MOLLIE_API_KEY?.trim()
+  || process.env.MOLLIE_API_KEY?.trim()
+  || ''
+);
+
+const mollieRefundEndpoint = (paymentId: string) => {
+  const baseUrl = (
+    process.env.BACKY_MOLLIE_API_BASE_URL?.trim()
+    || process.env.MOLLIE_API_BASE_URL?.trim()
+    || 'https://api.mollie.com/v2'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/payments/${encodeURIComponent(paymentId)}/refunds`;
+};
+
+const canExecuteMollieRefund = (provider: string, paymentReference: string) => (
+  provider.toLowerCase() === 'mollie' &&
+  Boolean(mollieApiKey()) &&
+  Boolean(paymentReference)
+);
+
 const toStripeAmount = (amount: number, currency: string): number => {
   const normalizedCurrency = currency.toUpperCase();
   return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
@@ -430,6 +451,23 @@ const safeAdyenErrorPayload = (value: Record<string, unknown>) => ({
   pspReference: textValue(value.pspReference),
 });
 
+const safeMollieRefundPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id),
+  status: textValue(value.status),
+  amount: safeSquareMoneyPayload(value.amount),
+  paymentId: textValue(value.paymentId),
+  description: textValue(value.description),
+  createdAt: textValue(value.createdAt),
+});
+
+const safeMollieErrorPayload = (value: Record<string, unknown>) => ({
+  status: Number(value.status || 0),
+  title: textValue(value.title),
+  detail: textValue(value.detail) || textValue(value.message) || 'Mollie refund request failed.',
+  field: textValue(value.field),
+  type: textValue(value.type),
+});
+
 const executeStripeRefund = async (input: {
   refundId: string;
   orderId: string;
@@ -605,6 +643,48 @@ const executeAdyenRefund = async (input: {
   };
 };
 
+const executeMollieRefund = async (input: {
+  refundId: string;
+  paymentReference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+}) => {
+  const response = await fetch(mollieRefundEndpoint(input.paymentReference), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${mollieApiKey()}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      amount: {
+        currency: input.currency.toUpperCase(),
+        value: input.amount.toFixed(2),
+      },
+      description: input.reason.slice(0, 255),
+      metadata: {
+        backyRefundId: input.refundId,
+        backyRefundReason: input.reason.slice(0, 500),
+      },
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeMollieErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeMollieRefundPayload(payloadRecord),
+  };
+};
+
 const buildProviderRefundUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
@@ -622,6 +702,7 @@ const buildProviderRefundUpdate = async (
   const shouldExecutePayPalRefund = canExecutePayPalRefund(provider, paymentReference);
   const shouldExecuteSquareRefund = canExecuteSquareRefund(provider, paymentReference);
   const shouldExecuteAdyenRefund = canExecuteAdyenRefund(provider, paymentReference);
+  const shouldExecuteMollieRefund = canExecuteMollieRefund(provider, paymentReference);
   const orderNumber = textValue(values.ordernumber);
   const executionMode = shouldExecuteStripeRefund
     ? 'stripe-api'
@@ -631,7 +712,9 @@ const buildProviderRefundUpdate = async (
         ? 'square-api'
         : shouldExecuteAdyenRefund
           ? 'adyen-api'
-          : 'handoff';
+          : shouldExecuteMollieRefund
+            ? 'mollie-api'
+            : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.provider-refund.v1',
     action: provider === 'stripe'
@@ -642,7 +725,9 @@ const buildProviderRefundUpdate = async (
           ? 'refunds.create'
           : provider === 'adyen'
             ? 'payments.refunds.create'
-            : 'provider.refund.create',
+            : provider === 'mollie'
+              ? 'payments.refunds.create'
+              : 'provider.refund.create',
     provider,
     executionMode,
     orderId: record.id,
@@ -766,6 +851,32 @@ const buildProviderRefundUpdate = async (
       status = 'failed';
       statusNote = 'failed';
     }
+  } else if (shouldExecuteMollieRefund) {
+    const result = await executeMollieRefund({
+      refundId,
+      paymentReference,
+      amount,
+      currency,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const mollieStatus = result.payload.status.toLowerCase();
+      if (mollieStatus === 'refunded') {
+        status = 'succeeded';
+        completedAt = new Date().toISOString();
+      } else if (mollieStatus === 'failed' || mollieStatus === 'canceled') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerRefundId = result.payload.id || refundId;
+      providerReference = `${provider}:${result.payload.id || refundId}`;
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      statusNote = 'failed';
+    }
   }
 
   const refund: ProviderRefundPayload = {
@@ -780,7 +891,7 @@ const buildProviderRefundUpdate = async (
     completedAt,
     providerPayload,
   };
-  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund || shouldExecuteSquareRefund || shouldExecuteAdyenRefund) || status === 'succeeded';
+  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund || shouldExecuteSquareRefund || shouldExecuteAdyenRefund || shouldExecuteMollieRefund) || status === 'succeeded';
 
   return {
     refund,

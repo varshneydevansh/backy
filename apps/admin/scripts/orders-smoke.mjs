@@ -29,6 +29,8 @@ const SQUARE_REFUND_MOCK_PORT = Number(process.env.BACKY_SQUARE_REFUND_MOCK_PORT
 const SQUARE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${SQUARE_REFUND_MOCK_PORT}`;
 const ADYEN_REFUND_MOCK_PORT = Number(process.env.BACKY_ADYEN_REFUND_MOCK_PORT || 45687);
 const ADYEN_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${ADYEN_REFUND_MOCK_PORT}`;
+const MOLLIE_REFUND_MOCK_PORT = Number(process.env.BACKY_MOLLIE_REFUND_MOCK_PORT || 45688);
+const MOLLIE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${MOLLIE_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
@@ -415,6 +417,44 @@ const createAdyenRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(ADYEN_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const mollieRefundExecutionEnabled = () => {
+  const key = process.env.BACKY_MOLLIE_API_KEY || process.env.MOLLIE_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_MOLLIE_API_BASE_URL || process.env.MOLLIE_API_BASE_URL || '';
+  return Boolean(key && apiBaseUrl === MOLLIE_REFUND_MOCK_BASE_URL);
+};
+
+const createMollieRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(201, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `re_mollie_smoke_${requests.length}`,
+        status: 'refunded',
+        amount: body.amount || {},
+        paymentId: String(request.url || '').split('/')[3] || '',
+        description: body.description || '',
+        createdAt: '2026-05-16T00:00:00+00:00',
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(MOLLIE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1913,6 +1953,30 @@ const prepareAdyenProviderRefundThroughUi = async (client, orderNumber, suffix) 
   return null;
 };
 
+const prepareMollieProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'mollie', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `tr_mollie_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('mollie') && document.body?.innerText?.includes(${JSON.stringify(`tr_mollie_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Mollie provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyPostMockServer) => {
   const expectedSecret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY;
   const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
@@ -2269,6 +2333,7 @@ const main = async () => {
   let paypalRefundMockServer;
   let squareRefundMockServer;
   let adyenRefundMockServer;
+  let mollieRefundMockServer;
   let easyPostMockServer;
   let shippoMockServer;
   let fulfillmentProviderServer;
@@ -2609,9 +2674,11 @@ const main = async () => {
         ? 'square'
         : adyenRefundExecutionEnabled()
           ? 'adyen'
-          : stripeRefundExecutionEnabled()
-            ? 'stripe'
-            : 'manual';
+          : mollieRefundExecutionEnabled()
+            ? 'mollie'
+            : stripeRefundExecutionEnabled()
+              ? 'stripe'
+              : 'manual';
 
     if (providerRefundExecutionProvider === 'paypal') {
       paypalRefundMockServer = await createPayPalRefundMockServer();
@@ -2622,6 +2689,9 @@ const main = async () => {
     } else if (providerRefundExecutionProvider === 'adyen') {
       adyenRefundMockServer = await createAdyenRefundMockServer();
       await prepareAdyenProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'mollie') {
+      mollieRefundMockServer = await createMollieRefundMockServer();
+      await prepareMollieProviderRefundThroughUi(client, orderNumber, suffix);
     } else if (providerRefundExecutionProvider === 'stripe') {
       stripeRefundMockServer = await createStripeRefundMockServer();
       await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
@@ -2703,6 +2773,21 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Adyen execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.pspReference === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Adyen refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'adyen-api', `Provider refund payload did not persist Adyen execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'mollie') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(mollieRefundMockServer.requests.length >= 1, `Mollie refund mock did not receive a refund request: ${mollieRefundMockServer.requests.length}`);
+      const mollieRefundRequest = mollieRefundMockServer.requests[0];
+      const expectedKey = process.env.BACKY_MOLLIE_API_KEY || process.env.MOLLIE_API_KEY;
+      assert(mollieRefundRequest.url === `/payments/tr_mollie_${suffix}/refunds`, `Mollie refund mock received unexpected URL: ${JSON.stringify(mollieRefundMockServer.requests)}`);
+      assert(mollieRefundRequest.headers.authorization === `Bearer ${expectedKey}`, `Mollie refund mock did not receive bearer auth: ${JSON.stringify(mollieRefundRequest.headers)}`);
+      assert(mollieRefundRequest.body.amount?.value === expectedProviderTotal.toFixed(2), `Mollie refund body amount did not match order total: ${JSON.stringify(mollieRefundRequest.body)}`);
+      assert(mollieRefundRequest.body.amount?.currency === 'USD', `Mollie refund body currency did not match order currency: ${JSON.stringify(mollieRefundRequest.body)}`);
+      assert(/^rf_/.test(String(mollieRefundRequest.body.metadata?.backyRefundId || '')), `Mollie refund body did not include internal refund metadata: ${JSON.stringify(mollieRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('re_mollie_smoke_'), `Provider refund did not persist the Mollie refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'payments.refunds.create', `Provider refund payload did not persist the Mollie refund action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Mollie execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Mollie refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'mollie-api', `Provider refund payload did not persist Mollie execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'stripe') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
@@ -2927,6 +3012,9 @@ const main = async () => {
     }
     if (adyenRefundMockServer) {
       await adyenRefundMockServer.close().catch(() => {});
+    }
+    if (mollieRefundMockServer) {
+      await mollieRefundMockServer.close().catch(() => {});
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});
