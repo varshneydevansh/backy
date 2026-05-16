@@ -15,6 +15,8 @@ const PORT = Number(process.env.BACKY_COMMERCE_CDP_PORT || 9378);
 const SCREENSHOT_PATH = process.env.BACKY_COMMERCE_SCREENSHOT || path.join(os.tmpdir(), 'backy-commerce-smoke.png');
 const STRIPE_MOCK_PORT = Number(process.env.BACKY_STRIPE_MOCK_PORT || 45678);
 const STRIPE_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_MOCK_PORT}`;
+const COMMERCE_PROVIDER_MOCK_PORT = Number(process.env.BACKY_COMMERCE_PROVIDER_MOCK_PORT || 45679);
+const COMMERCE_PROVIDER_MOCK_BASE_URL = `http://127.0.0.1:${COMMERCE_PROVIDER_MOCK_PORT}`;
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
@@ -332,6 +334,68 @@ const startStripeCheckoutMock = async () => {
   };
 };
 
+const startCommerceProviderMock = async () => {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const body = await readRequestBody(request);
+    const payload = JSON.parse(body || '{}');
+    const quote = payload.quote || {};
+    const checkout = payload.checkout || {};
+    requests.push({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body,
+      payload,
+    });
+
+    if (request.method !== 'POST' || !request.url?.startsWith('/quote/')) {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'Not found' } }));
+      return;
+    }
+
+    const kind = request.url.split('/').pop();
+    const discountAmount = checkout.discountCode ? 13.25 : 0;
+    const fixedAmounts = {
+      tax: 7.75,
+      shipping: 9.5,
+      discount: discountAmount,
+    };
+    const amount = fixedAmounts[kind];
+    if (typeof amount !== 'number') {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'Unknown provider kind' } }));
+      return;
+    }
+
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({
+      [`${kind}Amount`]: amount,
+      reference: `provider_${kind}_${requests.length}`,
+      lines: [{
+        provider: 'commerce-smoke-http',
+        kind,
+        subtotal: quote.subtotal,
+        amount,
+      }],
+    }));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(COMMERCE_PROVIDER_MOCK_PORT, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
 const loginAdminApi = async () => {
   const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -424,6 +488,12 @@ const enableCommercePricingSettings = async (settings) => {
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: true,
+      taxProvider: 'http',
+      taxProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/tax`,
+      shippingProvider: 'http',
+      shippingProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/shipping`,
+      discountProvider: 'http',
+      discountProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/discount`,
       taxRatePercent: 10,
       digitalTaxRatePercent: 5,
       shippingBaseAmount: 12,
@@ -1511,7 +1581,7 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
   return product;
 };
 
-const assertPublicCommerce = async ({ productCollection, ordersCollection, slug }) => {
+const assertPublicCommerce = async ({ productCollection, ordersCollection, slug, commerceProviderMock }) => {
   const productRecord = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(productRecord, `Created product record was not found by slug ${slug}`);
   assert(productRecord.status === 'published', `Created product was not published: ${productRecord.status}`);
@@ -1590,6 +1660,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   const productAfterDefaultQuantity = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(productAfterDefaultQuantity.values?.inventory === 6, `Default checkout quantity did not reserve exactly one item: ${productAfterDefaultQuantity.values?.inventory}`);
 
+  const providerRequestStart = commerceProviderMock?.requests.length || 0;
   const orderPayload = await requestApi(`/api/sites/${SITE_ID}/commerce/orders`, {
     method: 'POST',
     body: JSON.stringify({
@@ -1620,13 +1691,21 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(deliveries.some((delivery) => delivery.channel === 'email' && delivery.event === 'product.low_stock' && delivery.status === 'succeeded' && delivery.provider === 'local-outbox'), `Public order intake did not report product low-stock email delivery: ${JSON.stringify(deliveries)}`);
   assert(checkoutSession?.id === `cs_${slug}`, `Checkout session id was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.provider === 'manual', `Checkout session provider was unexpected: ${JSON.stringify(checkoutSession)}`);
-  assert(checkoutSession.amountTotal === 106.86, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
+  assert(checkoutSession.amountTotal === 102, `Checkout session amount was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(checkoutSession.url?.includes('/checkout/success'), `Checkout session handoff URL was unexpected: ${JSON.stringify(checkoutSession)}`);
   assert(quote?.subtotal === 98, `Quote subtotal was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.discountAmount === 11.76, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.shippingAmount === 12, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
-  assert(quote.taxAmount === 8.62, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
-  assert(order.total === 106.86, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
+  assert(quote.discountAmount === 13.25, `Quote discount was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.shippingAmount === 9.5, `Quote shipping was unexpected: ${JSON.stringify(quote)}`);
+  assert(quote.taxAmount === 7.75, `Quote tax was unexpected: ${JSON.stringify(quote)}`);
+  assert(order.total === 102, `Order total was unexpected: ${JSON.stringify({ order, quote })}`);
+  const providerAdjustments = quote.providerAdjustments || [];
+  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'tax' && adjustment.status === 'succeeded' && adjustment.amount === 7.75), `Public quote did not include succeeded tax provider adjustment: ${JSON.stringify(quote)}`);
+  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'shipping' && adjustment.status === 'succeeded' && adjustment.amount === 9.5), `Public quote did not include succeeded shipping provider adjustment: ${JSON.stringify(quote)}`);
+  assert(providerAdjustments.some((adjustment) => adjustment.kind === 'discount' && adjustment.status === 'succeeded' && adjustment.amount === 13.25), `Public quote did not include succeeded discount provider adjustment: ${JSON.stringify(quote)}`);
+  const checkoutProviderRequests = (commerceProviderMock?.requests || []).slice(providerRequestStart);
+  assert(checkoutProviderRequests.some((request) => request.url === '/quote/tax' && request.headers['x-backy-provider-kind'] === 'tax'), `Tax quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
+  assert(checkoutProviderRequests.some((request) => request.url === '/quote/shipping' && request.headers['x-backy-provider-kind'] === 'shipping'), `Shipping quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
+  assert(checkoutProviderRequests.some((request) => request.url === '/quote/discount' && request.headers['x-backy-provider-kind'] === 'discount'), `Discount quote provider was not called during public checkout: ${JSON.stringify(checkoutProviderRequests)}`);
   assert(quote.pricing?.rules?.taxRatePercent === 10, `Quote pricing rules were not exposed: ${JSON.stringify(quote)}`);
   assert(order.itemCount === 2, `Order item count was unexpected: ${order.itemCount}`);
   assert(orderPayload.data?.risk?.level === 'medium' && orderPayload.data?.risk?.reviewStatus === 'pending_review', `Order risk assessment was not returned: ${JSON.stringify(orderPayload.data?.risk)}`);
@@ -1642,9 +1721,9 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(orderRecord.values?.paymentprovider === checkoutSession.provider, `Order payment provider was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.paymentreference === checkoutSession.reference, `Order payment reference was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.subtotal === 98, `Order subtotal was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.discountamount === 11.76, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.shippingamount === 12, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
-  assert(orderRecord.values?.taxamount === 8.62, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.discountamount === 13.25, `Order discount was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.shippingamount === 9.5, `Order shipping was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.taxamount === 7.75, `Order tax was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.riskscore === 25, `Order risk score was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.risklevel === 'medium', `Order risk level was not persisted: ${JSON.stringify(orderRecord.values)}`);
   assert(orderRecord.values?.riskreviewstatus === 'pending_review', `Order risk review status was not persisted: ${JSON.stringify(orderRecord.values)}`);
@@ -1671,7 +1750,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(succeededProductEmailEvent?.metadata?.provider === 'local-outbox', `Product low-stock provider metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
   assert(succeededProductEmailEvent?.metadata?.inventory === 4, `Product low-stock inventory metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
   assert(succeededProductEmailEvent?.metadata?.lowStockThreshold === 4, `Product low-stock threshold metadata was unexpected: ${JSON.stringify(succeededProductEmailEvent)}`);
-  assert(orderRecord.values?.total === 106.86, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
+  assert(orderRecord.values?.total === 102, `Order quote total was not persisted: ${JSON.stringify(orderRecord.values)}`);
 
   const customersCollection = await findCollection(CUSTOMERS_COLLECTION_SLUG);
   assert(customersCollection?.id, 'Private customers collection was not created from checkout intake');
@@ -1680,7 +1759,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   assert(customerRecord?.id === customer.id, `Customer record was not available by slug ${customer.slug}: ${JSON.stringify(customerRecord)}`);
   assert(customerRecord.values?.email === 'commerce-smoke@example.com', `Customer email was not persisted: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.ordercount === 1, `Customer order count was unexpected: ${JSON.stringify(customerRecord.values)}`);
-  assert(customerRecord.values?.totalspent === 106.86, `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`);
+  assert(customerRecord.values?.totalspent === 102, `Customer total spent was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.lastorderid === order.id, `Customer last order id was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.lastordernumber === order.orderNumber, `Customer last order number was unexpected: ${JSON.stringify(customerRecord.values)}`);
   assert(customerRecord.values?.sourcevalues?.lastCheckoutOrder?.orderId === order.id, `Customer source order id was unexpected: ${JSON.stringify(customerRecord.values?.sourcevalues)}`);
@@ -2489,8 +2568,10 @@ const main = async () => {
   let frontendTemplateProduct = null;
   let frontendCatalogProduct = null;
   let managedCustomerProfile = null;
+  let commerceProviderMock = null;
 
   try {
+    commerceProviderMock = await startCommerceProviderMock();
     stripeCheckoutMock = stripeCheckoutExecutionEnabled() ? await startStripeCheckoutMock() : null;
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -2502,6 +2583,15 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await client.send('Network.enable');
+    await client.send('Network.setCookie', {
+      url: API_BASE_URL,
+      name: 'backy_admin_session',
+      value: apiAdminSessionToken,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+    });
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
@@ -2550,6 +2640,7 @@ const main = async () => {
       productCollection: finalProductCollection,
       ordersCollection: finalOrdersCollection,
       slug,
+      commerceProviderMock,
     });
     productRecordId = publicCommerce.productRecord.id;
     await assertProductProviderSync({
@@ -2734,6 +2825,10 @@ const main = async () => {
     if (stripeCheckoutMock) {
       await stripeCheckoutMock.close();
       stripeCheckoutMock = null;
+    }
+    if (commerceProviderMock) {
+      await commerceProviderMock.close();
+      commerceProviderMock = null;
     }
   }
 };

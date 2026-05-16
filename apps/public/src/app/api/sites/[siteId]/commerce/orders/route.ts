@@ -86,6 +86,20 @@ interface CheckoutSessionHandoff {
   providerPayload: Record<string, unknown> | null;
 }
 
+type QuoteProviderKind = 'tax' | 'shipping' | 'discount';
+
+interface CheckoutQuoteProviderAdjustment {
+  kind: QuoteProviderKind;
+  provider: 'http';
+  status: 'succeeded' | 'failed' | 'skipped';
+  url?: string;
+  statusCode?: number;
+  amount?: number;
+  lines?: Array<Record<string, unknown>>;
+  reference?: string;
+  error?: string;
+}
+
 const ORDERS_COLLECTION_SLUG = 'orders';
 const CUSTOMERS_COLLECTION_SLUG = 'customers';
 const ORDER_CONTRACT_VERSION = 'backy.commerce-orders.v1';
@@ -154,6 +168,15 @@ const moneyValue = (value: number): number => (
 const centsValue = (value: number): number => (
   Math.max(0, Math.round(moneyValue(value) * 100))
 );
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+);
+
+const numberValue = (value: unknown, fallback = 0): number => {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
 
 const envValue = (keys: string[]): string => {
   for (const key of keys) {
@@ -772,7 +795,169 @@ const calculateCheckoutQuote = (
     discountLines,
     taxLines,
     shippingLines,
+    providerAdjustments: [] as CheckoutQuoteProviderAdjustment[],
     pricing: commerce.pricing,
+  };
+};
+
+type CheckoutQuote = ReturnType<typeof calculateCheckoutQuote>;
+
+const quoteProviderMode = (settings: Record<string, unknown>, kind: QuoteProviderKind): 'manual' | 'http' => (
+  textValue(settings[`${kind}Provider`]).toLowerCase() === 'http' ? 'http' : 'manual'
+);
+
+const quoteProviderUrl = (settings: Record<string, unknown>, kind: QuoteProviderKind): string => {
+  if (quoteProviderMode(settings, kind) !== 'http') return '';
+  const url = textValue(settings[`${kind}ProviderUrl`]);
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const quoteProviderAmount = (payload: Record<string, unknown>, kind: QuoteProviderKind): number | null => {
+  const parsed = numberValue(payload[`${kind}Amount`] ?? payload.amount, Number.NaN);
+  return Number.isFinite(parsed) && parsed >= 0 ? moneyValue(parsed) : null;
+};
+
+const quoteProviderLines = (payload: Record<string, unknown>): Array<Record<string, unknown>> => (
+  Array.isArray(payload.lines) ? payload.lines.map(toRecord) : []
+);
+
+const callCheckoutQuoteProvider = async ({
+  kind,
+  url,
+  input,
+  lineItems,
+  quote,
+  requestId,
+}: {
+  kind: QuoteProviderKind;
+  url: string;
+  input: CheckoutOrderInput;
+  lineItems: CheckoutLineItem[];
+  quote: CheckoutQuote;
+  requestId: string;
+}): Promise<CheckoutQuoteProviderAdjustment> => {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-request-id': requestId,
+        'x-backy-provider-kind': kind,
+      },
+      body: JSON.stringify({
+        schemaVersion: 'backy.checkout-quote-provider-request.v1',
+        kind,
+        checkout: {
+          customer: input.customer || {},
+          shippingAddress: input.shippingAddress || '',
+          billingAddress: input.billingAddress || '',
+          discountCode: input.discountCode || '',
+        },
+        lineItems,
+        quote,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = toRecord(await response.json().catch(() => ({})));
+    if (!response.ok) {
+      return {
+        kind,
+        provider: 'http',
+        status: 'failed',
+        url,
+        statusCode: response.status,
+        error: textValue(payload.error) || textValue(toRecord(payload.error).message) || `Provider returned HTTP ${response.status}.`,
+      };
+    }
+    const amount = quoteProviderAmount(payload, kind);
+    if (amount === null) {
+      return {
+        kind,
+        provider: 'http',
+        status: 'failed',
+        url,
+        statusCode: response.status,
+        error: 'Provider response did not include a non-negative amount.',
+      };
+    }
+    return {
+      kind,
+      provider: 'http',
+      status: 'succeeded',
+      url,
+      statusCode: response.status,
+      amount,
+      lines: quoteProviderLines(payload),
+      reference: textValue(payload.reference || payload.providerReference),
+    };
+  } catch (error) {
+    return {
+      kind,
+      provider: 'http',
+      status: 'failed',
+      url,
+      error: error instanceof Error ? error.message : 'Provider quote request failed.',
+    };
+  }
+};
+
+const applyCheckoutQuoteProviders = async ({
+  settings,
+  input,
+  lineItems,
+  quote,
+  requestId,
+}: {
+  settings: unknown;
+  input: CheckoutOrderInput;
+  lineItems: CheckoutLineItem[];
+  quote: CheckoutQuote;
+  requestId: string;
+}): Promise<CheckoutQuote> => {
+  const commerceSettings = toRecord(settings);
+  const providerAdjustments = (await Promise.all(([
+    ['tax', quote.pricing.taxes],
+    ['shipping', quote.pricing.shipping],
+    ['discount', quote.pricing.discounts],
+  ] as Array<[QuoteProviderKind, boolean]>).map(async ([kind, enabled]) => {
+    if (!enabled) return null;
+    const url = quoteProviderUrl(commerceSettings, kind);
+    if (!url) return null;
+    return callCheckoutQuoteProvider({ kind, url, input, lineItems, quote, requestId });
+  }))).filter(Boolean) as CheckoutQuoteProviderAdjustment[];
+
+  if (providerAdjustments.length === 0) return quote;
+
+  const providerAmount = (kind: QuoteProviderKind, fallback: number): number => {
+    const adjustment = providerAdjustments.find((item) => item.kind === kind && item.status === 'succeeded' && typeof item.amount === 'number');
+    if (!adjustment) return fallback;
+    if (kind === 'discount') return moneyValue(Math.min(quote.subtotal, Math.max(0, adjustment.amount || 0)));
+    return moneyValue(Math.max(0, adjustment.amount || 0));
+  };
+  const providerLines = <T extends Array<Record<string, unknown>>>(kind: QuoteProviderKind, fallback: T): T => {
+    const adjustment = providerAdjustments.find((item) => item.kind === kind && item.status === 'succeeded' && item.lines && item.lines.length > 0);
+    return (adjustment?.lines || fallback) as T;
+  };
+  const discountAmount = providerAmount('discount', quote.discountAmount);
+  const shippingAmount = providerAmount('shipping', quote.shippingAmount);
+  const taxAmount = providerAmount('tax', quote.taxAmount);
+
+  return {
+    ...quote,
+    discountAmount,
+    shippingAmount,
+    taxAmount,
+    total: moneyValue(Math.max(0, quote.subtotal - discountAmount + taxAmount + shippingAmount)),
+    discountLines: providerLines('discount', quote.discountLines),
+    shippingLines: providerLines('shipping', quote.shippingLines),
+    taxLines: providerLines('tax', quote.taxLines),
+    providerAdjustments,
   };
 };
 
@@ -1832,7 +2017,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const currency = lineItems[0]?.currency || 'USD';
-      const quote = calculateCheckoutQuote(lineItems, input.discountCode || '', commerce);
+      const quote = await applyCheckoutQuoteProviders({
+        settings: settings.integrations?.commerce,
+        input,
+        lineItems,
+        quote: calculateCheckoutQuote(lineItems, input.discountCode || '', commerce),
+        requestId,
+      });
       if (lineItems.some((item) => item.currency !== currency)) {
         return errorResponse(409, 'MIXED_CURRENCY_CART', 'All checkout items must use the same currency', requestId, {
           currencies: Array.from(new Set(lineItems.map((item) => item.currency))),
@@ -2099,7 +2290,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const currency = lineItems[0]?.currency || 'USD';
-    const quote = calculateCheckoutQuote(lineItems, input.discountCode || '', commerce);
+    const quote = await applyCheckoutQuoteProviders({
+      settings: adminSettings.integrations?.commerce,
+      input,
+      lineItems,
+      quote: calculateCheckoutQuote(lineItems, input.discountCode || '', commerce),
+      requestId,
+    });
     if (lineItems.some((item) => item.currency !== currency)) {
       return errorResponse(409, 'MIXED_CURRENCY_CART', 'All checkout items must use the same currency', requestId, {
         currencies: Array.from(new Set(lineItems.map((item) => item.currency))),
