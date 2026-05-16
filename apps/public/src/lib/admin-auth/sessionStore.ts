@@ -520,6 +520,35 @@ export function revokeAdminSession(token: string | null | undefined): boolean {
   return ADMIN_SESSIONS.delete(token.trim());
 }
 
+export function rotateAdminSession(token: string | null | undefined, authSettings?: AdminAuthSessionSettings): {
+  session: AdminSession;
+  previousSessionId: string;
+  newSessionId: string;
+} | null {
+  pruneExpiredSessions();
+  if (!token) return null;
+
+  const normalizedToken = token.trim();
+  const current = ADMIN_SESSIONS.get(normalizedToken);
+  if (!current) return null;
+
+  const user = toAuthUser(getAdminUserById(current.user.id)) || current.user;
+  if (!user || user.status !== 'active') {
+    ADMIN_SESSIONS.delete(normalizedToken);
+    return null;
+  }
+
+  const previousSessionId = current.token.slice(-12);
+  const next = createAdminSessionForUser(user, authSettings, { authMode: current.authMode });
+  ADMIN_SESSIONS.delete(normalizedToken);
+
+  return {
+    session: next,
+    previousSessionId,
+    newSessionId: next.token.slice(-12),
+  };
+}
+
 export function listAdminSessions(options: {
   currentToken?: string | null;
   userId?: string;

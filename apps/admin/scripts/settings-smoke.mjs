@@ -933,6 +933,48 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   assert(auditState?.hasRotationHistory, `API key rotation history did not render: ${JSON.stringify(auditState)}`);
   assert(auditState?.hasRevocationHistory, `API key revocation history did not render: ${JSON.stringify(auditState)}`);
 
+  const beforeSessionToken = ownerSession.session.token;
+  await clickByTestId(client, 'settings-session-rotate');
+  await waitForText(client, 'Current session rotated.');
+  const rotatedSessionState = await evaluate(client, `(() => {
+    const raw = localStorage.getItem('backy-auth-storage') || '{}';
+    const parsed = JSON.parse(raw);
+    const session = parsed?.state?.session || null;
+    const panel = document.querySelector('[data-testid="settings-session-rotation"]');
+    const text = panel?.textContent || '';
+    return {
+      hasPanel: Boolean(panel),
+      hasNotice: text.includes('Current session rotated.'),
+      token: session?.token || '',
+      issuedAt: session?.issuedAt || '',
+      expiresAt: session?.expiresAt || '',
+      authMode: session?.authMode || '',
+    };
+  })()`);
+  assert(
+    rotatedSessionState.hasPanel &&
+      rotatedSessionState.hasNotice &&
+      rotatedSessionState.token &&
+      rotatedSessionState.token !== beforeSessionToken,
+    `Current session did not rotate through Settings UI: ${JSON.stringify(rotatedSessionState)}`,
+  );
+  ownerSession.session = {
+    ...ownerSession.session,
+    token: rotatedSessionState.token,
+    issuedAt: rotatedSessionState.issuedAt,
+    expiresAt: rotatedSessionState.expiresAt,
+    authMode: rotatedSessionState.authMode,
+  };
+  const oldSessionResponse = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+    headers: {
+      authorization: `Bearer ${beforeSessionToken}`,
+    },
+  });
+  assert(
+    oldSessionResponse.status === 401,
+    `Rotated session should revoke the previous token, got ${oldSessionResponse.status}`,
+  );
+
   const filterState = await evaluate(client, `(() => {
     const select = document.querySelector('[data-testid="settings-audit-filter"]');
     if (!(select instanceof HTMLSelectElement)) {
@@ -954,14 +996,24 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
         hasAuthFilter: body.includes('Auth events'),
         hasAuthEvent: body.includes('Admin login accepted'),
         hasAuthDescription: body.includes('admin@backy.io signed in with local-demo'),
+        hasSessionRotation: body.includes('Admin session rotated') &&
+          body.includes('rotated local-demo session'),
         body: body.slice(0, 1800),
       };
     })()`);
-    if (authAuditState.hasAuthFilter && authAuditState.hasAuthEvent && authAuditState.hasAuthDescription) break;
+    if (
+      authAuditState.hasAuthFilter &&
+      authAuditState.hasAuthEvent &&
+      authAuditState.hasAuthDescription &&
+      authAuditState.hasSessionRotation
+    ) break;
     await sleep(250);
   }
   assert(
-    authAuditState?.hasAuthFilter && authAuditState?.hasAuthEvent && authAuditState?.hasAuthDescription,
+    authAuditState?.hasAuthFilter &&
+      authAuditState?.hasAuthEvent &&
+      authAuditState?.hasAuthDescription &&
+      authAuditState?.hasSessionRotation,
     `Auth audit filter did not render login event: ${JSON.stringify(authAuditState)}`,
   );
   await clickByTestId(client, 'settings-audit-view-detail');
@@ -971,8 +1023,8 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     return {
       hasDetail: Boolean(detail),
       hasPayload: text.includes('Audit event detail') &&
-        text.includes('auth.login.success') &&
-        text.includes('admin@backy.io') &&
+        text.includes('auth.session.rotate') &&
+        text.includes(${JSON.stringify(ownerSession.user.email)}) &&
         text.includes('local-demo'),
       text: text.slice(0, 1200),
     };
@@ -990,6 +1042,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     adminKeyPreserved: after.apiKeys.adminApiKey === beforeAdminKey,
     serviceKeyIssued: true,
     serviceKeyRevoked: true,
+    sessionRotated: true,
     rotationHistoryPersisted: true,
     revocationHistoryPersisted: true,
     auditRendered: true,

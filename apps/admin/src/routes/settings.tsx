@@ -42,6 +42,7 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import { useAuthStore } from '@/stores/authStore';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import type { AdminSession } from '@/lib/adminAuthApi';
 import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
@@ -661,6 +662,8 @@ function SettingsPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const currentUser = useAuthStore((state) => state.user);
+  const currentSession = useAuthStore((state) => state.session);
+  const rotateCurrentSession = useAuthStore((state) => state.rotateSession);
   const [activeTab, setActiveTab] = useState<SettingsTab>(search.tab || 'general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [authSettings, setAuthSettings] = useState<SiteSettingsInput['auth']>();
@@ -675,6 +678,8 @@ function SettingsPage() {
   const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditNotice, setAuditNotice] = useState<string | null>(null);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [isRotatingSession, setIsRotatingSession] = useState(false);
+  const [sessionRotationNotice, setSessionRotationNotice] = useState<string | null>(null);
   const [notificationWebhookDelivery, setNotificationWebhookDelivery] = useState<SettingsNotificationWebhookDeliveryResult | null>(null);
   const [isNotificationWebhookTesting, setIsNotificationWebhookTesting] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -927,6 +932,27 @@ function SettingsPage() {
       await loadSettingsAuditLogs();
     } catch {
       setNotice('Backend key revoke failed. The admin API key was not changed.');
+    }
+  };
+
+  const handleRotateCurrentSession = async () => {
+    setNotice(null);
+    setSessionRotationNotice(null);
+
+    if (!currentSession?.token) {
+      setSessionRotationNotice('Sign in with a valid admin session before rotating it.');
+      return;
+    }
+
+    setIsRotatingSession(true);
+    try {
+      await rotateCurrentSession();
+      setSessionRotationNotice('Current session rotated. The previous token was revoked and the browser now uses the new session.');
+      await loadSettingsAuditLogs();
+    } catch (error) {
+      setSessionRotationNotice(error instanceof Error ? error.message : 'Unable to rotate the current admin session.');
+    } finally {
+      setIsRotatingSession(false);
     }
   };
 
@@ -1711,6 +1737,10 @@ function SettingsPage() {
             onRegenerateKeys={handleRegenerateKeys}
             onIssueAdminApiKey={handleIssueAdminApiKey}
             onRevokeAdminApiKey={handleRevokeAdminApiKey}
+            currentSession={currentSession}
+            onRotateCurrentSession={handleRotateCurrentSession}
+            isRotatingSession={isRotatingSession}
+            sessionRotationNotice={sessionRotationNotice}
             canManageApiKeys={canManageApiKeys}
             canConfigureSettings={canConfigureSettings}
             manageKeysPermissionTitle={manageKeysPermissionTitle}
@@ -5552,6 +5582,10 @@ function SecuritySettings({
   onRegenerateKeys,
   onIssueAdminApiKey,
   onRevokeAdminApiKey,
+  currentSession,
+  onRotateCurrentSession,
+  isRotatingSession,
+  sessionRotationNotice,
   canManageApiKeys,
   canConfigureSettings,
   manageKeysPermissionTitle,
@@ -5570,6 +5604,10 @@ function SecuritySettings({
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
   onIssueAdminApiKey: (label: string) => Promise<IssuedAdminApiKey | null>;
   onRevokeAdminApiKey: (keyId: string) => Promise<void> | void;
+  currentSession: AdminSession | null;
+  onRotateCurrentSession: () => Promise<void> | void;
+  isRotatingSession: boolean;
+  sessionRotationNotice: string | null;
   canManageApiKeys: boolean;
   canConfigureSettings: boolean;
   manageKeysPermissionTitle?: string;
@@ -5646,6 +5684,7 @@ function SecuritySettings({
   const revocationHistory = authSettings?.apiKeyRevocationHistory || [];
   const serviceKeys = authSettings?.apiKeyServiceKeys || [];
   const activeServiceKeys = serviceKeys.filter((entry) => !entry.revokedAt && entry.status !== 'revoked');
+  const currentSessionId = currentSession?.token ? currentSession.token.slice(-12) : null;
 
   const issueServiceKey = async () => {
     const label = serviceKeyLabel.trim();
@@ -5773,6 +5812,51 @@ function SecuritySettings({
                 Leave blank to allow any invited email domain.
               </span>
             </label>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-muted/35 p-4" data-testid="settings-session-rotation">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Current admin session</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Rotate the active browser token after sensitive work. Backy revokes the previous token and records the rotation in the auth audit trail.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void onRotateCurrentSession()}
+                disabled={!currentSession?.token || isRotatingSession}
+                iconStart={<RefreshCw className={cn('size-3.5', isRotatingSession && 'animate-spin')} />}
+                data-testid="settings-session-rotate"
+              >
+                {isRotatingSession ? 'Rotating...' : 'Rotate session'}
+              </Button>
+            </div>
+            <dl className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-4">
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Auth mode</dt>
+                <dd className="mt-1 font-medium text-foreground">{currentSession?.authMode || 'No session'}</dd>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Session id</dt>
+                <dd className="mt-1 font-mono text-foreground">{currentSessionId ? `...${currentSessionId}` : 'Not signed in'}</dd>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Issued</dt>
+                <dd className="mt-1 text-foreground">{currentSession?.issuedAt ? formatAuditTime(currentSession.issuedAt) : 'n/a'}</dd>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <dt>Expires</dt>
+                <dd className="mt-1 text-foreground">{currentSession?.expiresAt ? formatAuditTime(currentSession.expiresAt) : 'n/a'}</dd>
+              </div>
+            </dl>
+            {sessionRotationNotice ? (
+              <p className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                {sessionRotationNotice}
+              </p>
+            ) : null}
           </div>
         </PanelContent>
       </Panel>
@@ -6210,6 +6294,9 @@ function auditTitle(log: AdminAuditLog): string {
   if (log.action === 'auth.logout') {
     return 'Admin logged out';
   }
+  if (log.action === 'auth.session.rotate') {
+    return 'Admin session rotated';
+  }
   if (log.action === 'auth.session.revoke') {
     return 'Admin session revoked';
   }
@@ -6234,6 +6321,8 @@ function auditDescription(log: AdminAuditLog): string {
   const targetEmail = typeof metadata?.targetEmail === 'string' ? metadata.targetEmail : null;
   const authMode = typeof metadata?.authMode === 'string' ? metadata.authMode : null;
   const targetAuthMode = typeof metadata?.targetAuthMode === 'string' ? metadata.targetAuthMode : null;
+  const previousSessionId = typeof metadata?.previousSessionId === 'string' ? metadata.previousSessionId : null;
+  const newSessionId = typeof metadata?.newSessionId === 'string' ? metadata.newSessionId : null;
 
   if (beforeMode && afterMode && beforeMode !== afterMode) {
     return `Delivery mode changed from ${beforeMode} to ${afterMode}.`;
@@ -6257,6 +6346,10 @@ function auditDescription(log: AdminAuditLog): string {
 
   if (log.action === 'auth.logout') {
     return `${email || 'Admin'} logged out${authMode ? ` from ${authMode}` : ''}.`;
+  }
+
+  if (log.action === 'auth.session.rotate') {
+    return `${email || 'Admin'} rotated ${authMode || 'admin'} session${previousSessionId && newSessionId ? ` from ...${previousSessionId} to ...${newSessionId}` : ''}.`;
   }
 
   if (log.action === 'auth.session.revoke') {

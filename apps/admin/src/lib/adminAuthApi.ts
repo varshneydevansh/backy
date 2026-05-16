@@ -240,6 +240,22 @@ export async function fetchAdminSession(token: string) {
   return payload.data;
 }
 
+export async function rotateAdminSession(token: string) {
+  const response = await fetch(`${getAdminApiBase()}/auth/session`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const payload = await readJson<AdminAuthResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to rotate admin session');
+  }
+
+  return payload.data;
+}
+
 export async function logoutAdmin(token?: string | null) {
   await fetch(`${getAdminApiBase()}/auth/logout`, {
     method: 'POST',

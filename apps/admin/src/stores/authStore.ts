@@ -13,7 +13,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { acceptAdminInvite, fetchAdminSession, loginAdmin, logoutAdmin, resetAdminPassword, type AdminSession } from '@/lib/adminAuthApi';
+import { acceptAdminInvite, fetchAdminSession, loginAdmin, logoutAdmin, resetAdminPassword, rotateAdminSession, type AdminSession } from '@/lib/adminAuthApi';
 
 // ============================================
 // TYPES
@@ -40,6 +40,7 @@ interface AuthActions {
   resetPassword: (token: string, password: string) => Promise<void>;
   signOut: () => void;
   refreshSession: () => Promise<void>;
+  rotateSession: () => Promise<AdminSession>;
   clearError: () => void;
 }
 
@@ -166,6 +167,32 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false,
             error: message,
           });
+        }
+      },
+
+      rotateSession: async () => {
+        const token = useAuthStore.getState().session?.token;
+        if (!token) {
+          throw new Error('Sign in with a valid admin session before rotating it.');
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+          const data = await rotateAdminSession(token);
+          set({
+            user: data.user,
+            session: data.session,
+            isLoading: false,
+            error: null,
+          });
+          return data.session;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to rotate admin session';
+          set({
+            isLoading: false,
+            error: message,
+          });
+          throw error;
         }
       },
 
