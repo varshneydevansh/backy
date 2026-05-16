@@ -28,7 +28,7 @@ interface SourceRecord {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
-type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -176,6 +176,8 @@ const stripeSecretConfigured = () => Boolean(envValue(['BACKY_STRIPE_SECRET_KEY'
 
 const paypalAccessTokenConfigured = () => Boolean(envValue(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']));
 
+const paddleApiKeyConfigured = () => Boolean(envValue(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']));
+
 const subscriptionActionProviderUrl = (): string => {
   const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
   const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
@@ -205,6 +207,9 @@ const subscriptionActionExecutionMode = (provider: string, subscriptionReference
   }
   if (normalizedProvider === 'paypal' && paypalAccessTokenConfigured() && subscriptionReference) {
     return 'paypal-api';
+  }
+  if (normalizedProvider === 'paddle' && paddleApiKeyConfigured() && subscriptionReference) {
+    return 'paddle-api';
   }
   if (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) && subscriptionActionProviderUrl()) {
     return 'http-api';
@@ -319,6 +324,14 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         referencePattern: 'I-*',
         executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paypal-api').length,
         blocker: paypalAccessTokenConfigured() ? '' : 'Configure BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN for direct PayPal subscription actions.',
+      },
+      {
+        provider: 'paddle',
+        executionMode: 'paddle-api',
+        configured: paddleApiKeyConfigured(),
+        referencePattern: 'sub_*',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paddle-api').length,
+        blocker: paddleApiKeyConfigured() ? '' : 'Configure BACKY_PADDLE_API_KEY or PADDLE_API_KEY for direct Paddle subscription actions.',
       },
       {
         provider: 'http',

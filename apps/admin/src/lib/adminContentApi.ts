@@ -1505,7 +1505,7 @@ export interface ProductSubscriptionLifecycle {
     fulfillmentStatus: string;
     lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
     subscriptionReference: string;
-    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
     actionHistory: Array<{
       id: string;
       schemaVersion: string;
@@ -1551,7 +1551,7 @@ export interface ProductSubscriptionLifecycle {
     supportedActions: Array<'pause' | 'resume' | 'cancel'>;
     providers: Array<{
       provider: 'stripe' | 'paypal' | 'http' | 'manual' | string;
-      executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+      executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
       configured: boolean;
       referencePattern: string;
       executableSubscriptions: number;
@@ -1576,7 +1576,7 @@ export interface ProductSubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;

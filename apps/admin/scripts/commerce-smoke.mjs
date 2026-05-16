@@ -250,6 +250,12 @@ const paypalSubscriptionExecutionEnabled = () => {
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const paddleSubscriptionExecutionEnabled = () => {
+  const token = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const httpSubscriptionExecutionEnabled = () => {
   const url = process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL || process.env.COMMERCE_SUBSCRIPTION_ACTION_URL || '';
   return url === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/subscription/action`;
@@ -335,6 +341,31 @@ const startStripeCheckoutMock = async () => {
     if (paypalSubscriptionMatch && request.method === 'POST') {
       response.writeHead(204, { 'content-type': 'application/json' });
       response.end();
+      return;
+    }
+
+    const paddleSubscriptionMatch = request.url.match(/^\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/);
+    if (paddleSubscriptionMatch && request.method === 'POST') {
+      const subscriptionId = decodeURIComponent(paddleSubscriptionMatch[1]);
+      const action = paddleSubscriptionMatch[2];
+      const payload = JSON.parse(body || '{}');
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        data: {
+          id: subscriptionId,
+          status: action === 'pause' ? 'paused' : action === 'resume' ? 'active' : 'canceled',
+          currency_code: 'USD',
+          next_billed_at: action === 'cancel' ? null : new Date(Date.now() + 86400000).toISOString(),
+          paused_at: action === 'pause' ? new Date().toISOString() : null,
+          canceled_at: action === 'cancel' ? new Date().toISOString() : null,
+          scheduled_change: {
+            action,
+            effective_at: payload.effective_from === 'next_billing_period'
+              ? new Date(Date.now() + 86400000).toISOString()
+              : new Date().toISOString(),
+          },
+        },
+      }));
       return;
     }
 
@@ -2222,6 +2253,9 @@ const assertStripeCheckoutExecution = async ({
     if (paypalSubscriptionExecutionEnabled()) {
       assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paypal' && provider.configured === true && provider.executionMode === 'paypal-api'), `Product subscription execution readiness omitted PayPal provider state: ${JSON.stringify(lifecycle?.execution)}`);
     }
+    if (paddleSubscriptionExecutionEnabled()) {
+      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paddle' && provider.configured === true && provider.executionMode === 'paddle-api'), `Product subscription execution readiness omitted Paddle provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    }
     if (httpSubscriptionExecutionEnabled()) {
       assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'http' && provider.configured === true && provider.executionMode === 'http-api'), `Product subscription execution readiness omitted HTTP provider state: ${JSON.stringify(lifecycle?.execution)}`);
     }
@@ -2275,6 +2309,28 @@ const assertStripeCheckoutExecution = async ({
       assert(paypalActionRequest, `PayPal mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePayPalActionRequests))}`);
       assert(paypalActionRequest.headers.authorization === 'Bearer paypal_smoke_access_token', `PayPal subscription action did not send bearer auth: ${JSON.stringify(paypalActionRequest.headers)}`);
       assert(paypalActionRequest.headers['paypal-request-id'], `PayPal subscription action did not send idempotency header: ${JSON.stringify(paypalActionRequest.headers)}`);
+    }
+
+    if (paddleSubscriptionExecutionEnabled()) {
+      const beforePaddleActionRequests = stripeCheckoutMock.requests.length;
+      const paddleActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'pause',
+          provider: 'paddle',
+          subscriptionReference: `sub_paddle_${slug}`,
+          reason: 'Smoke Paddle subscription pause action.',
+        }),
+      });
+      const paddleSubscriptionAction = paddleActionPayload.data?.action || paddleActionPayload.action;
+      assert(paddleSubscriptionAction?.status === 'succeeded', `Paddle subscription action did not execute against mock: ${JSON.stringify(paddleActionPayload).slice(0, 500)}`);
+      assert(paddleSubscriptionAction.executionMode === 'paddle-api', `Paddle subscription action did not use Paddle execution: ${JSON.stringify(paddleSubscriptionAction)}`);
+      assert(paddleSubscriptionAction.subscriptionReference === `sub_paddle_${slug}`, `Paddle subscription action used the wrong subscription reference: ${JSON.stringify(paddleSubscriptionAction)}`);
+      const paddleActionRequest = stripeCheckoutMock.requests.slice(beforePaddleActionRequests).find((request) => request.method === 'POST' && request.url === `/subscriptions/sub_paddle_${slug}/pause`);
+      assert(paddleActionRequest, `Paddle mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePaddleActionRequests))}`);
+      assert(paddleActionRequest.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle subscription action did not send bearer auth: ${JSON.stringify(paddleActionRequest.headers)}`);
+      const paddleActionBody = JSON.parse(paddleActionRequest.body || '{}');
+      assert(paddleActionBody.effective_from === 'next_billing_period', `Paddle subscription pause body was unexpected: ${JSON.stringify(paddleActionBody)}`);
     }
 
     if (httpSubscriptionExecutionEnabled()) {

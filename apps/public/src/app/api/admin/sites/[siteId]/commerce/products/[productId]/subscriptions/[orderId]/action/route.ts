@@ -56,7 +56,7 @@ interface SubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;
@@ -207,6 +207,28 @@ const canExecutePayPalSubscriptionAction = (provider: string, subscriptionRefere
   Boolean(subscriptionReference)
 );
 
+const paddleApiKey = () => (
+  process.env.BACKY_PADDLE_API_KEY?.trim()
+  || process.env.PADDLE_API_KEY?.trim()
+  || ''
+);
+
+const paddleApiBaseUrl = () => (
+  process.env.BACKY_PADDLE_API_BASE_URL?.trim()
+  || process.env.PADDLE_API_BASE_URL?.trim()
+  || 'https://api.paddle.com'
+).replace(/\/$/, '');
+
+const paddleSubscriptionEndpoint = (subscriptionReference: string, action: SubscriptionLifecycleAction['action']) => (
+  `${paddleApiBaseUrl()}/subscriptions/${encodeURIComponent(subscriptionReference)}/${action}`
+);
+
+const canExecutePaddleSubscriptionAction = (provider: string, subscriptionReference: string) => (
+  provider.toLowerCase() === 'paddle' &&
+  Boolean(paddleApiKey()) &&
+  Boolean(subscriptionReference)
+);
+
 const envValue = (keys: string[]): string => (
   keys.map((key) => process.env[key]?.trim() || '').find(Boolean) || ''
 );
@@ -258,6 +280,34 @@ const safePayPalErrorPayload = (value: Record<string, unknown>) => ({
   issue: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).issue),
   description: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).description),
 });
+
+const safePaddleSubscriptionPayload = (value: Record<string, unknown>) => {
+  const data = toRecord(value.data || value);
+  const scheduledChange = toRecord(data.scheduled_change || data.scheduledChange);
+  return {
+    id: textValue(data.id),
+    status: textValue(data.status),
+    currencyCode: textValue(data.currency_code || data.currencyCode),
+    nextBilledAt: textValue(data.next_billed_at || data.nextBilledAt),
+    pausedAt: textValue(data.paused_at || data.pausedAt),
+    canceledAt: textValue(data.canceled_at || data.canceledAt),
+    scheduledChange: {
+      action: textValue(scheduledChange.action),
+      effectiveAt: textValue(scheduledChange.effective_at || scheduledChange.effectiveAt),
+      resumeAt: textValue(scheduledChange.resume_at || scheduledChange.resumeAt),
+    },
+  };
+};
+
+const safePaddleErrorPayload = (value: Record<string, unknown>) => {
+  const error = toRecord(value.error);
+  return {
+    type: textValue(error.type || value.type),
+    code: textValue(error.code || value.code),
+    detail: textValue(error.detail || value.detail) || 'Paddle subscription action failed.',
+    documentationUrl: textValue(error.documentation_url || error.documentationUrl || value.documentation_url || value.documentationUrl),
+  };
+};
 
 const safeHttpProviderPayload = (value: Record<string, unknown>) => ({
   id: textValue(value.id || value.actionId || value.subscriptionActionId),
@@ -352,6 +402,47 @@ const executePayPalSubscriptionAction = async (input: {
       status: input.action === 'pause' ? 'SUSPENDED' : input.action === 'resume' ? 'ACTIVE' : 'CANCELLED',
       httpStatus: response.status,
     },
+  };
+};
+
+const executePaddleSubscriptionAction = async (input: {
+  action: SubscriptionLifecycleAction['action'];
+  actionId: string;
+  subscriptionReference: string;
+  reason: string;
+}) => {
+  const requestBody: Record<string, unknown> = {};
+  if (input.action === 'pause') {
+    requestBody.effective_from = 'next_billing_period';
+  } else if (input.action === 'resume') {
+    requestBody.effective_from = 'immediately';
+  } else {
+    requestBody.effective_from = 'immediately';
+  }
+
+  const response = await fetch(paddleSubscriptionEndpoint(input.subscriptionReference, input.action), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${paddleApiKey()}`,
+      'content-type': 'application/json',
+      'x-backy-idempotency-key': input.actionId,
+    },
+    body: JSON.stringify(requestBody),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safePaddleErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safePaddleSubscriptionPayload(payloadRecord),
   };
 };
 
@@ -539,8 +630,9 @@ const buildSubscriptionActionUpdate = async (
   const actionId = `subact_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const shouldExecuteStripe = canExecuteStripeSubscriptionAction(provider, subscriptionReference);
   const shouldExecutePayPal = canExecutePayPalSubscriptionAction(provider, subscriptionReference);
+  const shouldExecutePaddle = canExecutePaddleSubscriptionAction(provider, subscriptionReference);
   const shouldExecuteHttp = canExecuteHttpSubscriptionAction(provider);
-  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : shouldExecuteHttp ? 'http-api' : 'handoff';
+  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : shouldExecutePaddle ? 'paddle-api' : shouldExecuteHttp ? 'http-api' : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.product-subscription-action.v1',
     action: `subscription.${actionName}`,
@@ -554,9 +646,9 @@ const buildSubscriptionActionUpdate = async (
     reason,
     idempotencyKey: actionId,
   };
-  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal || shouldExecuteHttp ? 'requested' : 'requires_action';
+  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteHttp ? 'requested' : 'requires_action';
   let completedAt: string | null = null;
-  let statusNote = shouldExecuteStripe || shouldExecutePayPal || shouldExecuteHttp ? 'requested' : 'handoff';
+  let statusNote = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteHttp ? 'requested' : 'handoff';
 
   if (shouldExecuteStripe) {
     const result = await executeStripeSubscriptionAction({
@@ -577,6 +669,23 @@ const buildSubscriptionActionUpdate = async (
     }
   } else if (shouldExecutePayPal) {
     const result = await executePayPalSubscriptionAction({
+      action: actionName,
+      actionId,
+      subscriptionReference,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      status = 'succeeded';
+      completedAt = new Date().toISOString();
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      completedAt = new Date().toISOString();
+      statusNote = 'failed';
+    }
+  } else if (shouldExecutePaddle) {
+    const result = await executePaddleSubscriptionAction({
       action: actionName,
       actionId,
       subscriptionReference,
