@@ -27,6 +27,8 @@ const PAYPAL_REFUND_MOCK_PORT = Number(process.env.BACKY_PAYPAL_REFUND_MOCK_PORT
 const PAYPAL_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${PAYPAL_REFUND_MOCK_PORT}`;
 const SQUARE_REFUND_MOCK_PORT = Number(process.env.BACKY_SQUARE_REFUND_MOCK_PORT || 45686);
 const SQUARE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${SQUARE_REFUND_MOCK_PORT}`;
+const ADYEN_REFUND_MOCK_PORT = Number(process.env.BACKY_ADYEN_REFUND_MOCK_PORT || 45687);
+const ADYEN_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${ADYEN_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
@@ -375,6 +377,44 @@ const createSquareRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(SQUARE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const adyenRefundExecutionEnabled = () => {
+  const key = process.env.BACKY_ADYEN_API_KEY || process.env.ADYEN_API_KEY || '';
+  const merchantAccount = process.env.BACKY_ADYEN_MERCHANT_ACCOUNT || process.env.ADYEN_MERCHANT_ACCOUNT || '';
+  const apiBaseUrl = process.env.BACKY_ADYEN_API_BASE_URL || process.env.ADYEN_API_BASE_URL || '';
+  return Boolean(key && merchantAccount && apiBaseUrl === ADYEN_REFUND_MOCK_BASE_URL);
+};
+
+const createAdyenRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        merchantAccount: body.merchantAccount || '',
+        paymentPspReference: String(request.url || '').split('/')[2] || '',
+        pspReference: `adyen_refund_smoke_${requests.length}`,
+        reference: body.reference || '',
+        status: 'received',
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(ADYEN_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1849,6 +1889,30 @@ const prepareSquareProviderRefundThroughUi = async (client, orderNumber, suffix)
   return null;
 };
 
+const prepareAdyenProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'adyen', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `adyen_payment_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('adyen') && document.body?.innerText?.includes(${JSON.stringify(`adyen_payment_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Adyen provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyPostMockServer) => {
   const expectedSecret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY;
   const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
@@ -2204,6 +2268,7 @@ const main = async () => {
   let stripeRefundMockServer;
   let paypalRefundMockServer;
   let squareRefundMockServer;
+  let adyenRefundMockServer;
   let easyPostMockServer;
   let shippoMockServer;
   let fulfillmentProviderServer;
@@ -2542,9 +2607,11 @@ const main = async () => {
       ? 'paypal'
       : squareRefundExecutionEnabled()
         ? 'square'
-        : stripeRefundExecutionEnabled()
-          ? 'stripe'
-          : 'manual';
+        : adyenRefundExecutionEnabled()
+          ? 'adyen'
+          : stripeRefundExecutionEnabled()
+            ? 'stripe'
+            : 'manual';
 
     if (providerRefundExecutionProvider === 'paypal') {
       paypalRefundMockServer = await createPayPalRefundMockServer();
@@ -2552,6 +2619,9 @@ const main = async () => {
     } else if (providerRefundExecutionProvider === 'square') {
       squareRefundMockServer = await createSquareRefundMockServer();
       await prepareSquareProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'adyen') {
+      adyenRefundMockServer = await createAdyenRefundMockServer();
+      await prepareAdyenProviderRefundThroughUi(client, orderNumber, suffix);
     } else if (providerRefundExecutionProvider === 'stripe') {
       stripeRefundMockServer = await createStripeRefundMockServer();
       await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
@@ -2616,6 +2686,23 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Square execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Square refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'square-api', `Provider refund payload did not persist Square execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'adyen') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(adyenRefundMockServer.requests.length >= 1, `Adyen refund mock did not receive a refund request: ${adyenRefundMockServer.requests.length}`);
+      const adyenRefundRequest = adyenRefundMockServer.requests[0];
+      const expectedKey = process.env.BACKY_ADYEN_API_KEY || process.env.ADYEN_API_KEY;
+      const expectedMerchantAccount = process.env.BACKY_ADYEN_MERCHANT_ACCOUNT || process.env.ADYEN_MERCHANT_ACCOUNT;
+      assert(adyenRefundRequest.url === `/payments/adyen_payment_${suffix}/refunds`, `Adyen refund mock received unexpected URL: ${JSON.stringify(adyenRefundMockServer.requests)}`);
+      assert(adyenRefundRequest.headers['x-api-key'] === expectedKey, `Adyen refund mock did not receive API key auth: ${JSON.stringify(adyenRefundRequest.headers)}`);
+      assert(adyenRefundRequest.body.merchantAccount === expectedMerchantAccount, `Adyen refund body did not include merchant account: ${JSON.stringify(adyenRefundRequest.body)}`);
+      assert(/^rf_/.test(String(adyenRefundRequest.body.reference || '')), `Adyen refund body did not include internal reference: ${JSON.stringify(adyenRefundRequest.body)}`);
+      assert(Number(adyenRefundRequest.body.amount?.value) === Math.round(expectedProviderTotal * 100), `Adyen refund body amount did not match order total: ${JSON.stringify(adyenRefundRequest.body)}`);
+      assert(adyenRefundRequest.body.amount?.currency === 'USD', `Adyen refund body currency did not match order currency: ${JSON.stringify(adyenRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('adyen_refund_smoke_'), `Provider refund did not persist the Adyen refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'payments.refunds.create', `Provider refund payload did not persist the Adyen refund action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Adyen execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.pspReference === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Adyen refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'adyen-api', `Provider refund payload did not persist Adyen execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'stripe') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
@@ -2837,6 +2924,9 @@ const main = async () => {
     }
     if (squareRefundMockServer) {
       await squareRefundMockServer.close().catch(() => {});
+    }
+    if (adyenRefundMockServer) {
+      await adyenRefundMockServer.close().catch(() => {});
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});

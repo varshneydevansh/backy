@@ -188,6 +188,34 @@ const canExecuteSquareRefund = (provider: string, paymentReference: string) => (
   Boolean(paymentReference)
 );
 
+const adyenApiKey = () => (
+  process.env.BACKY_ADYEN_API_KEY?.trim()
+  || process.env.ADYEN_API_KEY?.trim()
+  || ''
+);
+
+const adyenMerchantAccount = () => (
+  process.env.BACKY_ADYEN_MERCHANT_ACCOUNT?.trim()
+  || process.env.ADYEN_MERCHANT_ACCOUNT?.trim()
+  || ''
+);
+
+const adyenRefundEndpoint = (paymentPspReference: string) => {
+  const baseUrl = (
+    process.env.BACKY_ADYEN_API_BASE_URL?.trim()
+    || process.env.ADYEN_API_BASE_URL?.trim()
+    || 'https://checkout-test.adyen.com/v71'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/payments/${encodeURIComponent(paymentPspReference)}/refunds`;
+};
+
+const canExecuteAdyenRefund = (provider: string, paymentReference: string) => (
+  provider.toLowerCase() === 'adyen' &&
+  Boolean(adyenApiKey()) &&
+  Boolean(adyenMerchantAccount()) &&
+  Boolean(paymentReference)
+);
+
 const toStripeAmount = (amount: number, currency: string): number => {
   const normalizedCurrency = currency.toUpperCase();
   return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
@@ -386,6 +414,22 @@ const safeSquareErrorPayload = (value: Record<string, unknown>) => {
   };
 };
 
+const safeAdyenRefundPayload = (value: Record<string, unknown>) => ({
+  pspReference: textValue(value.pspReference),
+  paymentPspReference: textValue(value.paymentPspReference),
+  merchantAccount: textValue(value.merchantAccount),
+  reference: textValue(value.reference),
+  status: textValue(value.status),
+});
+
+const safeAdyenErrorPayload = (value: Record<string, unknown>) => ({
+  status: Number(value.status || 0),
+  errorCode: textValue(value.errorCode),
+  message: textValue(value.message) || 'Adyen refund request failed.',
+  errorType: textValue(value.errorType),
+  pspReference: textValue(value.pspReference),
+});
+
 const executeStripeRefund = async (input: {
   refundId: string;
   orderId: string;
@@ -518,6 +562,49 @@ const executeSquareRefund = async (input: {
   };
 };
 
+const executeAdyenRefund = async (input: {
+  refundId: string;
+  paymentReference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+}) => {
+  const response = await fetch(adyenRefundEndpoint(input.paymentReference), {
+    method: 'POST',
+    headers: {
+      'x-api-key': adyenApiKey(),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      merchantAccount: adyenMerchantAccount(),
+      amount: {
+        value: toMinorAmount(input.amount, input.currency),
+        currency: input.currency.toUpperCase(),
+      },
+      reference: input.refundId,
+      metadata: {
+        backyRefundId: input.refundId,
+        backyRefundReason: input.reason.slice(0, 500),
+      },
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeAdyenErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeAdyenRefundPayload(payloadRecord),
+  };
+};
+
 const buildProviderRefundUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
@@ -534,6 +621,7 @@ const buildProviderRefundUpdate = async (
   const shouldExecuteStripeRefund = canExecuteStripeRefund(provider, paymentReference);
   const shouldExecutePayPalRefund = canExecutePayPalRefund(provider, paymentReference);
   const shouldExecuteSquareRefund = canExecuteSquareRefund(provider, paymentReference);
+  const shouldExecuteAdyenRefund = canExecuteAdyenRefund(provider, paymentReference);
   const orderNumber = textValue(values.ordernumber);
   const executionMode = shouldExecuteStripeRefund
     ? 'stripe-api'
@@ -541,7 +629,9 @@ const buildProviderRefundUpdate = async (
       ? 'paypal-api'
       : shouldExecuteSquareRefund
         ? 'square-api'
-        : 'handoff';
+        : shouldExecuteAdyenRefund
+          ? 'adyen-api'
+          : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.provider-refund.v1',
     action: provider === 'stripe'
@@ -550,7 +640,9 @@ const buildProviderRefundUpdate = async (
         ? 'payments.captures.refund'
         : provider === 'square'
           ? 'refunds.create'
-          : 'provider.refund.create',
+          : provider === 'adyen'
+            ? 'payments.refunds.create'
+            : 'provider.refund.create',
     provider,
     executionMode,
     orderId: record.id,
@@ -648,6 +740,32 @@ const buildProviderRefundUpdate = async (
       status = 'failed';
       statusNote = 'failed';
     }
+  } else if (shouldExecuteAdyenRefund) {
+    const result = await executeAdyenRefund({
+      refundId,
+      paymentReference,
+      amount,
+      currency,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const adyenStatus = result.payload.status.toLowerCase();
+      if (adyenStatus === 'received' || adyenStatus === 'completed' || adyenStatus === 'succeeded') {
+        status = 'succeeded';
+        completedAt = new Date().toISOString();
+      } else if (adyenStatus === 'failed' || adyenStatus === 'error' || adyenStatus === 'refused') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerRefundId = result.payload.pspReference || refundId;
+      providerReference = `${provider}:${result.payload.pspReference || refundId}`;
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      statusNote = 'failed';
+    }
   }
 
   const refund: ProviderRefundPayload = {
@@ -662,7 +780,7 @@ const buildProviderRefundUpdate = async (
     completedAt,
     providerPayload,
   };
-  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund || shouldExecuteSquareRefund) || status === 'succeeded';
+  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund || shouldExecuteSquareRefund || shouldExecuteAdyenRefund) || status === 'succeeded';
 
   return {
     refund,
