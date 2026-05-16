@@ -13,6 +13,8 @@ import {
   FileText,
   Image as ImageIcon,
   Package,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -29,6 +31,7 @@ import {
   getOrderAnalytics,
   getProductSubscriptionLifecycle,
   getUserPermissions,
+  runProductSubscriptionLifecycleAction,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
   listProductNotificationEvents,
@@ -46,6 +49,7 @@ import {
   type CommerceReconciliationResult,
   type CommerceProductProviderSyncResult,
   type ProductSubscriptionLifecycle,
+  type ProductSubscriptionLifecycleAction,
   type AdminUserPermissionMatrix,
   type OrderAnalytics,
   type OrderDeliveryEvent,
@@ -655,6 +659,8 @@ function ProductsRoute() {
   const [selectedProductLifecycle, setSelectedProductLifecycle] = useState<ProductSubscriptionLifecycle | null>(null);
   const [isProductLifecycleLoading, setIsProductLifecycleLoading] = useState(false);
   const [productLifecycleError, setProductLifecycleError] = useState<string | null>(null);
+  const [productLifecycleActionBusy, setProductLifecycleActionBusy] = useState<string | null>(null);
+  const [productLifecycleActionMessage, setProductLifecycleActionMessage] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
   const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
@@ -1623,6 +1629,36 @@ function ProductsRoute() {
     }
   };
 
+  const runSelectedProductSubscriptionAction = async (
+    orderId: string,
+    action: ProductSubscriptionLifecycleAction['action'],
+    subscriptionReference: string,
+  ) => {
+    if (!selectedProduct?.id || !canEditProducts) {
+      setProductLifecycleError(!canEditProducts ? (editPermissionTitle || 'Your account cannot edit products.') : 'Save the product before running subscription actions.');
+      return;
+    }
+
+    const busyKey = `${orderId}:${action}`;
+    setProductLifecycleActionBusy(busyKey);
+    setProductLifecycleActionMessage(null);
+    try {
+      const result = await runProductSubscriptionLifecycleAction(activeSiteId, selectedProduct.id, orderId, {
+        action,
+        subscriptionReference,
+        reason: `Backy operator requested subscription ${action} from the Products lifecycle panel.`,
+      });
+      setProductLifecycleActionMessage(`${result.action} ${result.status} via ${result.executionMode}`);
+      setProductLifecycleError(null);
+      await loadSelectedProductLifecycle(selectedProduct.id);
+      await loadCommerceOrderAnalytics();
+    } catch (actionError) {
+      setProductLifecycleError(actionError instanceof Error ? actionError.message : 'Unable to run subscription lifecycle action');
+    } finally {
+      setProductLifecycleActionBusy(null);
+    }
+  };
+
   const loadCommerceReconciliationReadiness = async () => {
     if (!canConfigureCommerce) {
       setReconciliationReadiness(null);
@@ -1686,6 +1722,8 @@ function ProductsRoute() {
       setProductNotificationError(null);
       setSelectedProductLifecycle(null);
       setProductLifecycleError(null);
+      setProductLifecycleActionBusy(null);
+      setProductLifecycleActionMessage(null);
       setSelectedCustomerProfileId(null);
       setCustomerProfileDraft(customerProfileToDraft(null));
       setProductPagination(null);
@@ -1719,6 +1757,8 @@ function ProductsRoute() {
         setProductNotificationError(null);
         setSelectedProductLifecycle(null);
         setProductLifecycleError(null);
+        setProductLifecycleActionBusy(null);
+        setProductLifecycleActionMessage(null);
         setSelectedCustomerProfileId(null);
         setCustomerProfileDraft(customerProfileToDraft(null));
         setProductPagination(null);
@@ -1932,6 +1972,8 @@ function ProductsRoute() {
     if (!selectedProduct?.id || !canViewCommerce) {
       setSelectedProductLifecycle(null);
       setProductLifecycleError(null);
+      setProductLifecycleActionBusy(null);
+      setProductLifecycleActionMessage(null);
       return;
     }
 
@@ -1963,6 +2005,8 @@ function ProductsRoute() {
     });
     setSelectedProductLifecycle(null);
     setProductLifecycleError(null);
+    setProductLifecycleActionBusy(null);
+    setProductLifecycleActionMessage(null);
   };
 
   const resetForm = () => {
@@ -4282,6 +4326,11 @@ function ProductsRoute() {
                       {productLifecycleError}
                     </div>
                   ) : null}
+                  {productLifecycleActionMessage ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                      Subscription action {productLifecycleActionMessage}.
+                    </div>
+                  ) : null}
                   <div className="grid gap-3 md:grid-cols-4">
                     <div>
                       <div className="text-[11px] uppercase text-muted-foreground">Subscriptions</div>
@@ -4337,6 +4386,38 @@ function ProductsRoute() {
                           <div className="text-right">
                             <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
                             <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
+                            <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'pause', subscription.subscriptionReference)}
+                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'paused' || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
+                                title={!canEditProducts ? editPermissionTitle : undefined}
+                                iconStart={<Pause className="size-3.5" />}
+                              >
+                                Pause
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'resume', subscription.subscriptionReference)}
+                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'active' || subscription.lifecycleStatus === 'renewal' || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
+                                title={!canEditProducts ? editPermissionTitle : undefined}
+                                iconStart={<Play className="size-3.5" />}
+                              >
+                                Resume
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void runSelectedProductSubscriptionAction(subscription.id, 'cancel', subscription.subscriptionReference)}
+                                disabled={!subscription.subscriptionReference || subscription.lifecycleStatus === 'cancelled' || productLifecycleActionBusy !== null || !canEditProducts}
+                                title={!canEditProducts ? editPermissionTitle : undefined}
+                                iconStart={<Archive className="size-3.5" />}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       )) : (
@@ -4347,7 +4428,7 @@ function ProductsRoute() {
                     </div>
                   </div>
                   <div className="mt-3 text-xs text-muted-foreground">
-                    Webhooks update lifecycle state through {selectedProductLifecycle?.contract.webhookApi || '/api/sites/:siteId/commerce/webhook'}; reconciliation repairs stale private orders through {selectedProductLifecycle?.contract.reconciliationApi || '/api/admin/sites/:siteId/commerce/reconcile'}.
+                    Actions call /api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action; webhooks update lifecycle state through {selectedProductLifecycle?.contract.webhookApi || '/api/sites/:siteId/commerce/webhook'}; reconciliation repairs stale private orders through {selectedProductLifecycle?.contract.reconciliationApi || '/api/admin/sites/:siteId/commerce/reconcile'}.
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-provider-sync">

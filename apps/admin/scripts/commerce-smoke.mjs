@@ -295,6 +295,31 @@ const startStripeCheckoutMock = async () => {
       return;
     }
 
+    const subscriptionMatch = request.url.match(/^\/v1\/subscriptions\/([^/]+)(?:\/resume)?$/);
+    if (subscriptionMatch && (request.method === 'POST' || request.method === 'DELETE')) {
+      const subscriptionId = decodeURIComponent(subscriptionMatch[1]);
+      const isResume = request.url.endsWith('/resume');
+      const form = new URLSearchParams(body);
+      const status = request.method === 'DELETE'
+        ? 'canceled'
+        : isResume
+          ? 'active'
+          : form.has('pause_collection[behavior]')
+            ? 'paused'
+            : 'active';
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: subscriptionId,
+        object: 'subscription',
+        status,
+        cancel_at_period_end: false,
+        canceled_at: request.method === 'DELETE' ? Math.floor(Date.now() / 1000) : null,
+        current_period_end: Math.floor(Date.now() / 1000) + 86400,
+        pause_collection: status === 'paused' ? { behavior: form.get('pause_collection[behavior]') || 'void' } : null,
+      }));
+      return;
+    }
+
     if (request.method !== 'POST' || request.url !== '/v1/checkout/sessions') {
       response.writeHead(404, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'Not found' } }));
@@ -2157,6 +2182,26 @@ const assertStripeCheckoutExecution = async ({
     assert(lifecycle.subscriptions?.some((entry) => entry.subscriptionReference === `sub_${slug}`), `Product subscription lifecycle did not expose the subscription reference: ${JSON.stringify(lifecycle?.subscriptions)}`);
     assert(lifecycle.contract?.webhookApi?.includes('/commerce/webhook'), `Product subscription lifecycle contract omitted webhook API: ${JSON.stringify(lifecycle?.contract)}`);
 
+    const beforeActionRequests = stripeCheckoutMock.requests.length;
+    const actionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'cancel',
+        reason: 'Smoke provider subscription cancellation action.',
+      }),
+    });
+    const subscriptionAction = actionPayload.data?.action || actionPayload.action;
+    assert(subscriptionAction?.schemaVersion === 'backy.product-subscription-action.v1', `Subscription action schema was unexpected: ${JSON.stringify(actionPayload).slice(0, 500)}`);
+    assert(subscriptionAction.status === 'succeeded', `Subscription action did not execute against Stripe mock: ${JSON.stringify(subscriptionAction)}`);
+    assert(subscriptionAction.executionMode === 'stripe-api', `Subscription action did not use Stripe execution: ${JSON.stringify(subscriptionAction)}`);
+    assert(subscriptionAction.subscriptionReference === `sub_${slug}`, `Subscription action used the wrong subscription reference: ${JSON.stringify(subscriptionAction)}`);
+    const actionRequest = stripeCheckoutMock.requests.slice(beforeActionRequests).find((request) => request.method === 'DELETE' && request.url === `/v1/subscriptions/sub_${slug}`);
+    assert(actionRequest, `Stripe mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeActionRequests))}`);
+    assert(actionRequest.headers.authorization === `Bearer ${expectedSecret}`, `Stripe subscription action did not send bearer auth: ${JSON.stringify(actionRequest.headers)}`);
+    assert(actionRequest.form['metadata[backy_subscription_action]'] === 'cancel', `Stripe subscription action omitted action metadata: ${JSON.stringify(actionRequest.form)}`);
+    orderRecord = await getCollectionRecordBySlug(ordersCollection.id, order.slug);
+    assert(String(orderRecord.values?.notes || '').includes('Subscription action executed succeeded'), `Subscription action note was not persisted: ${JSON.stringify(orderRecord.values)}`);
+
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
       : null;
@@ -2360,6 +2405,7 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Subscription lifecycle') &&
           document.body?.innerText?.includes('Recent subscription orders') &&
           document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
+          document.body?.innerText?.includes('/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action') &&
           document.body?.innerText?.includes('/api/sites/:siteId/commerce/webhook'),
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&

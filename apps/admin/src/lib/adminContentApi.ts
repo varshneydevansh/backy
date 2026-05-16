@@ -1527,12 +1527,45 @@ export interface ProductSubscriptionLifecycle {
   };
 }
 
+export interface ProductSubscriptionLifecycleAction {
+  id: string;
+  schemaVersion: 'backy.product-subscription-action.v1';
+  action: 'pause' | 'resume' | 'cancel';
+  status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
+  provider: string;
+  executionMode: 'stripe-api' | 'handoff';
+  productId: string;
+  productSlug: string;
+  orderId: string;
+  orderSlug: string;
+  subscriptionReference: string;
+  reason: string;
+  requestedAt: string;
+  completedAt: string | null;
+  providerPayload: Record<string, unknown>;
+}
+
 interface ApiProductSubscriptionLifecycleResponse {
   success: boolean;
   data?: {
     lifecycle: ProductSubscriptionLifecycle;
   };
   lifecycle?: ProductSubscriptionLifecycle;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiProductSubscriptionActionResponse {
+  success: boolean;
+  data?: {
+    action: ProductSubscriptionLifecycleAction;
+    record?: ApiCollectionRecord;
+    order?: ApiCollectionRecord;
+  };
+  action?: ProductSubscriptionLifecycleAction;
   error?: {
     code?: string;
     message?: string;
@@ -6670,6 +6703,31 @@ export async function getProductSubscriptionLifecycle(
   }
 
   return lifecycle;
+}
+
+export async function runProductSubscriptionLifecycleAction(
+  siteId: string,
+  productId: string,
+  orderId: string,
+  body: {
+    action: ProductSubscriptionLifecycleAction['action'];
+    reason?: string;
+    provider?: string;
+    subscriptionReference?: string;
+  },
+): Promise<ProductSubscriptionLifecycleAction> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/products/${productId}/subscriptions/${orderId}/action`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const payload = await readJson<ApiProductSubscriptionActionResponse>(response);
+  const action = payload.data?.action || payload.action;
+
+  if (!response.ok || !payload.success || !action) {
+    throw adminContentApiError(payload, 'Unable to run subscription lifecycle action');
+  }
+
+  return action;
 }
 
 export async function createOrderShippingLabel(
