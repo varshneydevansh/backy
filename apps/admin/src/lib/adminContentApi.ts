@@ -2131,6 +2131,16 @@ export interface SiteSettingsInput {
     stripeApiBaseUrl?: string;
     stripeTaxApiBaseUrl?: string;
     stripeRefundApiBaseUrl?: string;
+    paypalAccessTokenConfigured?: boolean;
+    paypalApiBaseUrl?: string;
+    squareAccessTokenConfigured?: boolean;
+    squareApiBaseUrl?: string;
+    squareVersion?: string;
+    adyenApiKeyConfigured?: boolean;
+    adyenMerchantAccountConfigured?: boolean;
+    adyenApiBaseUrl?: string;
+    mollieApiKeyConfigured?: boolean;
+    mollieApiBaseUrl?: string;
     paymentProvider?: 'none' | 'stripe' | 'manual';
     taxProvider?: 'manual' | 'http' | 'stripe';
     easyPostApiKeyConfigured?: boolean;

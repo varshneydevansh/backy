@@ -915,6 +915,13 @@ function OrdersRoute() {
     const fulfillmentProvider = commerce?.fulfillmentProvider || 'manual';
     const reconciliationMode = commerce?.reconciliationMode || 'manual';
     const webhookRequired = Boolean(commerce?.webhookEventsEnabled && paymentProvider !== 'none');
+    const refundProviderModes = [
+      runtime?.stripeSecretConfigured ? 'stripe' : '',
+      runtime?.paypalAccessTokenConfigured ? 'paypal' : '',
+      runtime?.squareAccessTokenConfigured ? 'square' : '',
+      runtime?.adyenApiKeyConfigured && runtime?.adyenMerchantAccountConfigured ? 'adyen' : '',
+      runtime?.mollieApiKeyConfigured ? 'mollie' : '',
+    ].filter(Boolean);
 
     return [
       {
@@ -927,6 +934,15 @@ function OrdersRoute() {
             ? `Stripe secret is configured; API base ${runtime.stripeApiBaseUrl || 'https://api.stripe.com'}.`
             : 'Stripe is selected but BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY is missing.'
           : 'Manual or disabled payment provider; provider refund actions keep a handoff payload.',
+      },
+      {
+        key: 'payment-refund-providers',
+        title: 'Payment refund providers',
+        mode: refundProviderModes.length ? refundProviderModes.join(', ') : 'handoff',
+        ready: refundProviderModes.length > 0,
+        detail: refundProviderModes.length
+          ? `Provider Refund can execute through ${refundProviderModes.join(', ')} when the order payment provider/reference matches.`
+          : 'No payment refund provider env is configured; Provider Refund will persist a manual handoff payload.',
       },
       {
         key: 'tax-quote',

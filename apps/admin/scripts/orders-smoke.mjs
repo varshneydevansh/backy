@@ -1414,6 +1414,7 @@ const assertOrdersLayout = async (client) => {
       providerReadiness: Boolean(document.querySelector('[data-testid="orders-provider-readiness"]')) &&
         document.body?.innerText?.includes('Provider execution readiness') &&
         document.body?.innerText?.includes('Stripe checkout/refund') &&
+        document.body?.innerText?.includes('Payment refund providers') &&
         document.body?.innerText?.includes('Tax quote') &&
         document.body?.innerText?.includes('Carrier labels/tracking') &&
         document.body?.innerText?.includes('Fulfillment dispatch') &&

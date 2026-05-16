@@ -312,6 +312,16 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
   const stripeApiBaseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']);
   const stripeTaxApiBaseUrl = envValue(['BACKY_STRIPE_TAX_API_BASE_URL']);
   const stripeRefundApiBaseUrl = envValue(['BACKY_STRIPE_REFUND_API_BASE_URL']);
+  const paypalAccessToken = envValue(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']);
+  const paypalApiBaseUrl = envValue(['BACKY_PAYPAL_API_BASE_URL', 'PAYPAL_API_BASE_URL']);
+  const squareAccessToken = envValue(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']);
+  const squareApiBaseUrl = envValue(['BACKY_SQUARE_API_BASE_URL', 'SQUARE_API_BASE_URL']);
+  const squareVersion = envValue(['BACKY_SQUARE_VERSION', 'SQUARE_VERSION']);
+  const adyenApiKey = envValue(['BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY']);
+  const adyenMerchantAccount = envValue(['BACKY_ADYEN_MERCHANT_ACCOUNT', 'ADYEN_MERCHANT_ACCOUNT']);
+  const adyenApiBaseUrl = envValue(['BACKY_ADYEN_API_BASE_URL', 'ADYEN_API_BASE_URL']);
+  const mollieApiKey = envValue(['BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY']);
+  const mollieApiBaseUrl = envValue(['BACKY_MOLLIE_API_BASE_URL', 'MOLLIE_API_BASE_URL']);
   const easyPostApiKey = envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY']);
   const easyPostApiBaseUrl = envValue(['BACKY_EASYPOST_API_BASE_URL', 'EASYPOST_API_BASE_URL']);
   const shippoApiKey = envValue(['BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY']);
@@ -341,6 +351,16 @@ const getCommerceRuntimeSummary = (settings: unknown) => {
     stripeApiBaseUrl: stripeApiBaseUrl || 'https://api.stripe.com',
     stripeTaxApiBaseUrl: stripeTaxApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
     stripeRefundApiBaseUrl: stripeRefundApiBaseUrl || stripeApiBaseUrl || 'https://api.stripe.com',
+    paypalAccessTokenConfigured: Boolean(paypalAccessToken),
+    paypalApiBaseUrl: paypalApiBaseUrl || 'https://api-m.paypal.com',
+    squareAccessTokenConfigured: Boolean(squareAccessToken),
+    squareApiBaseUrl: squareApiBaseUrl || 'https://connect.squareup.com',
+    squareVersion: squareVersion || '2026-01-22',
+    adyenApiKeyConfigured: Boolean(adyenApiKey),
+    adyenMerchantAccountConfigured: Boolean(adyenMerchantAccount),
+    adyenApiBaseUrl: adyenApiBaseUrl || 'https://checkout-test.adyen.com/v71',
+    mollieApiKeyConfigured: Boolean(mollieApiKey),
+    mollieApiBaseUrl: mollieApiBaseUrl || 'https://api.mollie.com/v2',
     paymentProvider,
     taxProvider,
     easyPostApiKeyConfigured: Boolean(easyPostApiKey),
