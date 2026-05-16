@@ -1,4 +1,5 @@
 import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import type { BackyJsonObject } from '@backy-cms/core';
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { listAuthSettingsPermissionOverrides, type AdminUserPermissionOverride } from '@/lib/adminPermissionOverrides';
@@ -184,7 +185,12 @@ const readPositiveInteger = (value: string | undefined, fallback: number, min: n
   return Math.min(Math.max(Math.floor(parsed), min), max);
 };
 
-type AdminAuthRateLimitScope = 'login' | 'password-recovery' | 'password-reset';
+export type AdminAuthRateLimitScope = 'login' | 'password-recovery' | 'password-reset';
+type AdminAuthRateLimitBucket = 'principal' | 'client';
+type AdminAuthRateLimitState = { count: number; resetAt: number };
+type AdminAuthRateLimitResult =
+  | { allowed: true; remaining: number; resetAt: string | null }
+  | { allowed: false; retryAfterSeconds: number; resetAt: string };
 
 const authRateLimitConfig = (scope: AdminAuthRateLimitScope) => {
   if (scope === 'login') {
@@ -330,10 +336,89 @@ const pruneExpiredSessions = () => {
 const adminAuthRateLimitKey = (input: {
   scope: AdminAuthRateLimitScope;
   identifier: string;
-  bucket?: 'principal' | 'client';
+  bucket?: AdminAuthRateLimitBucket;
 }) => {
   const normalizedIdentifier = input.identifier.trim().toLowerCase() || 'anonymous';
   return `${input.scope}:${hashRateLimitKey(normalizedIdentifier)}`;
+};
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const toJsonObject = (value: unknown): BackyJsonObject => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as BackyJsonObject
+    : {}
+);
+
+const readPersistedAuthRateLimits = (
+  auth: unknown,
+  now = Date.now(),
+): Record<string, AdminAuthRateLimitState> => {
+  const raw = toRecord(toRecord(auth).authRateLimits);
+  const next: Record<string, AdminAuthRateLimitState> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const entry = toRecord(value);
+    const count = Number(entry.count);
+    const resetAt = Number(entry.resetAt);
+    if (!key || !Number.isFinite(count) || !Number.isFinite(resetAt) || resetAt <= now || count <= 0) {
+      continue;
+    }
+    next[key] = {
+      count: Math.floor(count),
+      resetAt: Math.floor(resetAt),
+    };
+  }
+  return next;
+};
+
+const writePersistedAuthRateLimits = (
+  auth: unknown,
+  entries: Record<string, AdminAuthRateLimitState>,
+): BackyJsonObject => {
+  const authRateLimits: BackyJsonObject = {};
+  for (const [key, state] of Object.entries(entries)) {
+    authRateLimits[key] = {
+      count: state.count,
+      resetAt: state.resetAt,
+    };
+  }
+
+  return {
+    ...toJsonObject(auth),
+    authRateLimits,
+  };
+};
+
+const evaluateAuthRateLimit = (
+  state: AdminAuthRateLimitState | undefined,
+  effectiveMax: number,
+  now = Date.now(),
+): AdminAuthRateLimitResult => {
+  if (!state || state.resetAt <= now) {
+    return {
+      allowed: true,
+      remaining: effectiveMax,
+      resetAt: null,
+    };
+  }
+
+  if (state.count >= effectiveMax) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((state.resetAt - now) / 1000)),
+      resetAt: new Date(state.resetAt).toISOString(),
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, effectiveMax - state.count),
+    resetAt: new Date(state.resetAt).toISOString(),
+  };
 };
 
 const pruneExpiredAuthRateLimits = (now = Date.now()) => {
@@ -347,42 +432,22 @@ const pruneExpiredAuthRateLimits = (now = Date.now()) => {
 export function peekAdminAuthRateLimit(input: {
   scope: AdminAuthRateLimitScope;
   identifier: string;
-  bucket?: 'principal' | 'client';
-}): { allowed: true; remaining: number; resetAt: string | null } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
+  bucket?: AdminAuthRateLimitBucket;
+}): AdminAuthRateLimitResult {
   const { max, clientMax } = authRateLimitConfig(input.scope);
   const effectiveMax = input.bucket === 'client' ? clientMax : max;
   const now = Date.now();
   pruneExpiredAuthRateLimits(now);
 
   const current = AUTH_RATE_LIMITS.get(adminAuthRateLimitKey(input));
-  if (!current || current.resetAt <= now) {
-    return {
-      allowed: true,
-      remaining: effectiveMax,
-      resetAt: null,
-    };
-  }
-
-  if (current.count >= effectiveMax) {
-    return {
-      allowed: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
-      resetAt: new Date(current.resetAt).toISOString(),
-    };
-  }
-
-  return {
-    allowed: true,
-    remaining: Math.max(0, effectiveMax - current.count),
-    resetAt: new Date(current.resetAt).toISOString(),
-  };
+  return evaluateAuthRateLimit(current, effectiveMax, now);
 }
 
 export function checkAdminAuthRateLimit(input: {
   scope: AdminAuthRateLimitScope;
   identifier: string;
-  bucket?: 'principal' | 'client';
-}): { allowed: true; remaining: number; resetAt: string } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
+  bucket?: AdminAuthRateLimitBucket;
+}): Exclude<AdminAuthRateLimitResult, { resetAt: null }> {
   const { max, clientMax, windowMs } = authRateLimitConfig(input.scope);
   const effectiveMax = input.bucket === 'client' ? clientMax : max;
   const now = Date.now();
@@ -417,6 +482,53 @@ export function clearAdminAuthRateLimit(input: {
   identifier: string;
 }): void {
   AUTH_RATE_LIMITS.delete(adminAuthRateLimitKey(input));
+}
+
+export function peekPersistedAdminAuthRateLimit(input: {
+  auth?: unknown;
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+  bucket?: AdminAuthRateLimitBucket;
+}): AdminAuthRateLimitResult {
+  const { max, clientMax } = authRateLimitConfig(input.scope);
+  const effectiveMax = input.bucket === 'client' ? clientMax : max;
+  const now = Date.now();
+  const entries = readPersistedAuthRateLimits(input.auth, now);
+  return evaluateAuthRateLimit(entries[adminAuthRateLimitKey(input)], effectiveMax, now);
+}
+
+export function checkPersistedAdminAuthRateLimit(input: {
+  auth?: unknown;
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+  bucket?: AdminAuthRateLimitBucket;
+}): { limit: Exclude<AdminAuthRateLimitResult, { resetAt: null }>; auth: BackyJsonObject } {
+  const { max, clientMax, windowMs } = authRateLimitConfig(input.scope);
+  const effectiveMax = input.bucket === 'client' ? clientMax : max;
+  const now = Date.now();
+  const key = adminAuthRateLimitKey(input);
+  const entries = readPersistedAuthRateLimits(input.auth, now);
+  const current = entries[key];
+  const state = current && current.resetAt > now
+    ? current
+    : { count: 0, resetAt: now + windowMs };
+
+  state.count += 1;
+  entries[key] = state;
+  return {
+    limit: evaluateAuthRateLimit(state, effectiveMax, now) as Exclude<AdminAuthRateLimitResult, { resetAt: null }>,
+    auth: writePersistedAuthRateLimits(input.auth, entries),
+  };
+}
+
+export function clearPersistedAdminAuthRateLimit(input: {
+  auth?: unknown;
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+}): BackyJsonObject {
+  const entries = readPersistedAuthRateLimits(input.auth);
+  delete entries[adminAuthRateLimitKey(input)];
+  return writePersistedAuthRateLimits(input.auth, entries);
 }
 
 export function authenticateAdminCredentials(

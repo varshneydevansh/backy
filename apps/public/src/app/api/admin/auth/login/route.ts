@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyJsonObject } from '@backy-cms/core';
 import {
   authenticateAdminCredentials,
   authenticateAdminCredentialsWithPersistence,
-  checkAdminAuthRateLimit,
-  clearAdminAuthRateLimit,
+  checkPersistedAdminAuthRateLimit,
+  clearPersistedAdminAuthRateLimit,
   createAdminSessionForExternalUser,
-  peekAdminAuthRateLimit,
+  peekPersistedAdminAuthRateLimit,
   revokeAdminSession,
   type AdminSession,
 } from '@/lib/admin-auth/sessionStore';
@@ -59,9 +60,9 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
-const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => (
+const asAuthSettings = (value: unknown): BackyJsonObject | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? value as BackyJsonObject
     : undefined
 );
 
@@ -227,45 +228,62 @@ const completeLoginResponse = async (
 
 const rateLimitIdentifier = (kind: 'client' | 'email', value: string) => `${kind}:${value}`;
 
-const getLoginRateLimit = (clientAddress: string, email: string) => {
-  const clientLimit = peekAdminAuthRateLimit({
+const getLoginRateLimit = (auth: BackyJsonObject | undefined, clientAddress: string, email: string) => {
+  const clientLimit = peekPersistedAdminAuthRateLimit({
+    auth,
     scope: 'login',
     identifier: rateLimitIdentifier('client', clientAddress),
     bucket: 'client',
   });
   if (!clientLimit.allowed) return clientLimit;
 
-  return peekAdminAuthRateLimit({
+  return peekPersistedAdminAuthRateLimit({
+    auth,
     scope: 'login',
     identifier: rateLimitIdentifier('email', email),
     bucket: 'principal',
   });
 };
 
-const recordFailedLoginAttempt = (clientAddress: string, email: string) => {
-  const clientLimit = checkAdminAuthRateLimit({
+const recordFailedLoginAttempt = (auth: BackyJsonObject | undefined, clientAddress: string, email: string) => {
+  const clientLimit = checkPersistedAdminAuthRateLimit({
+    auth,
     scope: 'login',
     identifier: rateLimitIdentifier('client', clientAddress),
     bucket: 'client',
   });
-  if (!clientLimit.allowed) return clientLimit;
+  if (!clientLimit.limit.allowed) return clientLimit;
 
-  return checkAdminAuthRateLimit({
+  return checkPersistedAdminAuthRateLimit({
+    auth: clientLimit.auth,
     scope: 'login',
     identifier: rateLimitIdentifier('email', email),
     bucket: 'principal',
   });
 };
 
-const clearFailedLoginAttempts = (clientAddress: string, email: string) => {
-  clearAdminAuthRateLimit({
+const clearFailedLoginAttempts = (auth: BackyJsonObject | undefined, clientAddress: string, email: string) => {
+  const withoutClient = clearPersistedAdminAuthRateLimit({
+    auth,
     scope: 'login',
     identifier: rateLimitIdentifier('client', clientAddress),
   });
-  clearAdminAuthRateLimit({
+  return clearPersistedAdminAuthRateLimit({
+    auth: withoutClient,
     scope: 'login',
     identifier: rateLimitIdentifier('email', email),
   });
+};
+
+const persistAuthSettings = async (
+  repositories: LoginAuditRepositories,
+  auth: BackyJsonObject,
+) => {
+  if (repositories) {
+    await repositories.settings.update({ auth });
+  } else {
+    updateAdminSettings({ auth });
+  }
 };
 
 export async function POST(request: NextRequest) {
@@ -280,17 +298,31 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
   }
 
-  const loginLimit = getLoginRateLimit(clientAddress, email);
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  let authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : asAuthSettings(getAdminSettings().auth);
+
+  const loginLimit = getLoginRateLimit(authSettings, clientAddress, email);
   if (!loginLimit.allowed) {
     return rateLimitResponse(requestId, loginLimit.retryAfterSeconds);
   }
 
-  const repositories = !shouldUseDemoStoreFallback()
-    ? await getRequiredDatabaseRepositories()
-    : null;
-  const authSettings = repositories
-    ? asAuthSettings((await repositories.settings.get()).auth)
-    : asAuthSettings(getAdminSettings().auth);
+  const recordFailure = async () => {
+    const failedAttempt = recordFailedLoginAttempt(authSettings, clientAddress, email);
+    await persistAuthSettings(repositories, failedAttempt.auth);
+    authSettings = failedAttempt.auth;
+    return failedAttempt.limit;
+  };
+
+  const clearFailures = async () => {
+    const clearedAuth = clearFailedLoginAttempts(authSettings, clientAddress, email);
+    await persistAuthSettings(repositories, clearedAuth);
+    authSettings = clearedAuth;
+  };
+
   const supabaseAuthConfigured = isSupabaseAdminAuthConfigured();
   let supabaseAuthUnavailable = false;
   if (supabaseAuthConfigured) {
@@ -301,7 +333,7 @@ export async function POST(request: NextRequest) {
           ? await repositories.users.getByEmail(supabaseIdentity.email)
           : getAdminUserByEmail(supabaseIdentity.email);
         if (user?.status === 'active') {
-          clearFailedLoginAttempts(clientAddress, email);
+          await clearFailures();
           return completeLoginResponse(requestId, createAdminSessionForExternalUser({
             id: user.id,
             email: user.email,
@@ -330,7 +362,7 @@ export async function POST(request: NextRequest) {
       );
     }
     if (supabaseAuthConfigured) {
-      const failedAttempt = recordFailedLoginAttempt(clientAddress, email);
+      const failedAttempt = await recordFailure();
       if (!failedAttempt.allowed) {
         return rateLimitResponse(requestId, failedAttempt.retryAfterSeconds);
       }
@@ -352,13 +384,13 @@ export async function POST(request: NextRequest) {
     }, authSettings)
     : authenticateAdminCredentials(email, password, authSettings);
   if (!session) {
-    const failedAttempt = recordFailedLoginAttempt(clientAddress, email);
+    const failedAttempt = await recordFailure();
     if (!failedAttempt.allowed) {
       return rateLimitResponse(requestId, failedAttempt.retryAfterSeconds);
     }
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
-  clearFailedLoginAttempts(clientAddress, email);
+  await clearFailures();
   return completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode);
 }

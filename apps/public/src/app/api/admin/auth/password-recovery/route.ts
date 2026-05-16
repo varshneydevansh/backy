@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyJsonObject } from '@backy-cms/core';
 import {
-  checkAdminAuthRateLimit,
+  checkPersistedAdminAuthRateLimit,
   createAdminPasswordResetToken,
 } from '@/lib/admin-auth/sessionStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
-import { getAdminUserByEmail } from '@/lib/backyStore';
+import { getAdminSettings, getAdminUserByEmail, updateAdminSettings } from '@/lib/backyStore';
 import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence';
 import { deliverAdminPasswordResetEmail, type AdminUserDeliveryResult } from '@/lib/adminUserEmailDelivery';
 import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
@@ -33,6 +34,12 @@ const getClientAddress = (request: NextRequest) => (
 
 const exposeLocalRecoveryToken = () => (
   process.env.BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN?.trim().toLowerCase() === 'true'
+);
+
+const asAuthSettings = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as BackyJsonObject
+    : undefined
 );
 
 const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
@@ -70,32 +77,48 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  let authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : asAuthSettings(getAdminSettings().auth);
+  const persistAuthSettings = async (auth: BackyJsonObject) => {
+    if (repositories) {
+      await repositories.settings.update({ auth });
+    } else {
+      updateAdminSettings({ auth });
+    }
+    authSettings = auth;
+  };
+
   const clientAddress = getClientAddress(request);
-  const clientLimit = checkAdminAuthRateLimit({
+  const clientLimit = checkPersistedAdminAuthRateLimit({
+    auth: authSettings,
     scope: 'password-recovery',
     identifier: `client:${clientAddress}`,
     bucket: 'client',
   });
-  if (!clientLimit.allowed) {
-    return rateLimitResponse(requestId, clientLimit.retryAfterSeconds);
+  await persistAuthSettings(clientLimit.auth);
+  if (!clientLimit.limit.allowed) {
+    return rateLimitResponse(requestId, clientLimit.limit.retryAfterSeconds);
   }
 
-  const principalLimit = checkAdminAuthRateLimit({
+  const principalLimit = checkPersistedAdminAuthRateLimit({
+    auth: authSettings,
     scope: 'password-recovery',
     identifier: `email:${email}`,
     bucket: 'principal',
   });
-  if (!principalLimit.allowed) {
-    return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
+  await persistAuthSettings(principalLimit.auth);
+  if (!principalLimit.limit.allowed) {
+    return rateLimitResponse(requestId, principalLimit.limit.retryAfterSeconds);
   }
 
   let resetDelivery: AdminUserDeliveryResult | null = null;
   let localRecovery: { resetUrl: string; expiresAt: string } | undefined;
 
   try {
-    const repositories = !shouldUseDemoStoreFallback()
-      ? await getRequiredDatabaseRepositories()
-      : null;
     const user = repositories
       ? await repositories.users.getByEmail(email)
       : getAdminUserByEmail(email);

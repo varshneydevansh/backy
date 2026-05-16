@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
+import type { BackyJsonObject } from '@backy-cms/core';
+import { checkPersistedAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
 import {
   isProductionAdminLocalAuthAllowed,
@@ -12,6 +13,7 @@ import {
   removePersistedPasswordResetToken,
 } from '@/lib/adminAuthTokenPersistence';
 import { recordAdminAudit } from '@/lib/adminAudit';
+import { getAdminSettings, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -49,9 +51,9 @@ const getClientAddress = (request: NextRequest) => (
   || 'unknown'
 );
 
-const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => (
+const asAuthSettings = (value: unknown): BackyJsonObject | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? value as BackyJsonObject
     : undefined
 );
 
@@ -93,7 +95,17 @@ export async function POST(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
-  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
+  let authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : asAuthSettings(getAdminSettings().auth);
+  const persistAuthSettings = async (auth: BackyJsonObject) => {
+    if (repositories) {
+      await repositories.settings.update({ auth });
+    } else {
+      updateAdminSettings({ auth });
+    }
+    authSettings = auth;
+  };
 
   const passwordPolicy = await validateAdminPasswordPolicy(password, authSettings);
   if (!passwordPolicy.ok) {
@@ -101,22 +113,26 @@ export async function POST(request: NextRequest) {
   }
 
   const clientAddress = getClientAddress(request);
-  const clientLimit = checkAdminAuthRateLimit({
+  const clientLimit = checkPersistedAdminAuthRateLimit({
+    auth: authSettings,
     scope: 'password-reset',
     identifier: `client:${clientAddress}`,
     bucket: 'client',
   });
-  if (!clientLimit.allowed) {
-    return rateLimitResponse(requestId, clientLimit.retryAfterSeconds);
+  await persistAuthSettings(clientLimit.auth);
+  if (!clientLimit.limit.allowed) {
+    return rateLimitResponse(requestId, clientLimit.limit.retryAfterSeconds);
   }
 
-  const principalLimit = checkAdminAuthRateLimit({
+  const principalLimit = checkPersistedAdminAuthRateLimit({
+    auth: authSettings,
     scope: 'password-reset',
     identifier: `token:${token}`,
     bucket: 'principal',
   });
-  if (!principalLimit.allowed) {
-    return rateLimitResponse(requestId, principalLimit.retryAfterSeconds);
+  await persistAuthSettings(principalLimit.auth);
+  if (!principalLimit.limit.allowed) {
+    return rateLimitResponse(requestId, principalLimit.limit.retryAfterSeconds);
   }
 
   const result = await resetAdminPasswordToken(token, password, repositories
