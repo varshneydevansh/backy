@@ -17,6 +17,39 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 
 const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
 
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 100;
+
+const parsePositiveInt = (value: string | null, fallback: number): number => {
+    if (!value) {
+        return fallback;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseOffset = (value: string | null): number => {
+    const parsed = value ? Number.parseInt(value, 10) : 0;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const parsePagination = (searchParams: URLSearchParams) => {
+    const limit = Math.min(MAX_LIMIT, parsePositiveInt(searchParams.get('limit'), DEFAULT_LIMIT));
+    const offset = parseOffset(searchParams.get('offset'));
+
+    return { limit, offset };
+};
+
+const paginateSites = <TSite>(sites: TSite[], limit: number, offset: number) => ({
+    items: sites.slice(offset, offset + limit),
+    pagination: {
+        total: sites.length,
+        limit,
+        offset,
+        hasMore: offset + limit < sites.length,
+    },
+});
+
 const findPublicSite = (sites: StoreSite[], identifier: string): StoreSite | undefined => {
     const normalized = normalizeIdentifier(identifier);
     return sites.find(
@@ -95,6 +128,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const identifier = searchParams.get('slug') || searchParams.get('identifier');
+        const { limit, offset } = parsePagination(searchParams);
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
@@ -121,8 +155,8 @@ export async function GET(request: NextRequest) {
 
             const result = await repositories.sites.list({
                 status: 'published',
-                limit: 100,
-                offset: 0,
+                limit,
+                offset,
             });
             const sites = result.items.filter((site) => site.isPublished).map(publicSiteFromRepositorySite);
 
@@ -133,7 +167,7 @@ export async function GET(request: NextRequest) {
                     sites,
                     pagination: {
                         ...result.pagination,
-                        total: sites.length,
+                        total: result.pagination.total,
                     },
                 },
                 sites,
@@ -165,19 +199,16 @@ export async function GET(request: NextRequest) {
             });
         }
 
+        const page = paginateSites(sites, limit, offset);
+
         return publicContractJson({
             success: true,
             requestId,
             data: {
-                sites,
-                pagination: {
-                    total: sites.length,
-                    limit: sites.length,
-                    offset: 0,
-                    hasMore: false,
-                },
+                sites: page.items,
+                pagination: page.pagination,
             },
-            sites,
+            sites: page.items,
         }, {
             requestId,
             request,

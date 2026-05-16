@@ -538,6 +538,19 @@ try {
     assertBackyContract(publicSiteList, 'discovery');
     assert(publicSiteList.json?.success === true, `${publicSiteList.url} expected success envelope`);
     assert(publicSiteList.json?.data?.sites?.some((site) => site.id === createdSiteId), `${publicSiteList.url} missing published temporary site`);
+
+    const pagedPublicSiteList = await request('/api/sites?limit=1&offset=0');
+    assert(pagedPublicSiteList.response.status === 200, `${pagedPublicSiteList.url} expected 200, got ${pagedPublicSiteList.response.status}`);
+    assertBackyContract(pagedPublicSiteList, 'discovery');
+    assert(pagedPublicSiteList.json?.success === true, `${pagedPublicSiteList.url} expected success envelope`);
+    assert(Array.isArray(pagedPublicSiteList.json?.data?.sites), `${pagedPublicSiteList.url} expected paged sites array`);
+    assert(pagedPublicSiteList.json.data.sites.length <= 1, `${pagedPublicSiteList.url} returned more sites than requested`);
+    assert(pagedPublicSiteList.json?.data?.pagination?.limit === 1, `${pagedPublicSiteList.url} expected pagination limit=1`);
+    assert(pagedPublicSiteList.json?.data?.pagination?.offset === 0, `${pagedPublicSiteList.url} expected pagination offset=0`);
+    assert(
+      pagedPublicSiteList.json?.data?.pagination?.total >= pagedPublicSiteList.json.data.sites.length,
+      `${pagedPublicSiteList.url} expected pagination total to cover returned sites`,
+    );
   });
 
   await record('admin frontend design import connects external template', async () => {

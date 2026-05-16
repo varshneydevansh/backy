@@ -6769,6 +6769,7 @@ export function listBlogAuthors(siteId: string): StoreBlogAuthor[] {
   const userAuthors = USER_LIST
     .filter(
       (user) =>
+        user.role === 'owner' ||
         user.role === 'admin' ||
         user.role === 'editor' ||
         assignedAuthorIds.has(user.id),
