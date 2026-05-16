@@ -2995,6 +2995,8 @@ const main = async () => {
         values.providerrefundid === refundFailureSeed.values.providerrefundid &&
         values.providerrefundreason === 'Provider refund failed in smoke.' &&
         values.paymentstatus === 'paid' &&
+        String(values.providerrefundpayload || '').includes('"webhook"') &&
+        String(values.providerrefundpayload || '').includes('"type": "refund.failed"') &&
         /Commerce webhook refund.failed/.test(String(values.notes || ''))
       ),
       'Provider refund failure webhook did not persist failed refund status',
@@ -3047,6 +3049,9 @@ const main = async () => {
         values.providerrefundprovider === 'adyen' &&
         values.providerrefundid === `adyen_refund_reversed_${suffix}` &&
         values.providerrefundreason === 'Adyen refund reversed in smoke.' &&
+        String(values.providerrefundpayload || '').includes('"webhook"') &&
+        String(values.providerrefundpayload || '').includes('"type": "REFUNDED_REVERSED"') &&
+        String(values.providerrefundpayload || '').includes('"pspReference": "adyen_refund_reversed_') &&
         /Commerce webhook REFUNDED_REVERSED/.test(String(values.notes || ''))
       ),
       'Adyen refund reversed webhook did not persist requires-action refund status',
