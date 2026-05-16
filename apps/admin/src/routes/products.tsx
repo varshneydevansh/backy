@@ -4368,6 +4368,42 @@ function ProductsRoute() {
                       </div>
                     ))}
                   </div>
+                  <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="products-subscription-execution-readiness">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">Action execution readiness</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {selectedProductLifecycle?.execution
+                            ? `${selectedProductLifecycle.execution.summary.executableSubscriptions} direct · ${selectedProductLifecycle.execution.summary.handoffSubscriptions} handoff`
+                            : 'Select or save a product, then refresh lifecycle to inspect provider execution.'}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {selectedProductLifecycle?.execution?.schemaVersion || 'backy.product-subscription-execution-readiness.v1'}
+                      </div>
+                    </div>
+                    {selectedProductLifecycle?.execution ? (
+                      <div className="mt-3 grid gap-2 md:grid-cols-4">
+                        {selectedProductLifecycle.execution.providers.map((provider) => (
+                          <div key={`${provider.provider}-${provider.executionMode}`} className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium capitalize text-foreground">{provider.provider}</span>
+                              {provider.configured ? (
+                                <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
+                              ) : (
+                                <AlertTriangle className="size-3.5 text-amber-600" aria-hidden="true" />
+                              )}
+                            </div>
+                            <div className="mt-1 text-muted-foreground">{provider.executionMode}</div>
+                            <div className="mt-1 text-muted-foreground">{provider.executableSubscriptions} matching subscription{provider.executableSubscriptions === 1 ? '' : 's'}</div>
+                            {provider.blocker ? (
+                              <div className="mt-1 text-[11px] text-amber-700">{provider.blocker}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="mt-3 rounded-md border border-border bg-background p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-xs font-semibold text-foreground">Recent subscription orders</div>
@@ -4386,6 +4422,7 @@ function ProductsRoute() {
                           <div className="text-right">
                             <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
                             <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
+                            <div className="mt-0.5 text-muted-foreground">{subscription.paymentProvider || 'manual'} · {subscription.actionExecutionMode}</div>
                             <div className="mt-2 flex flex-wrap justify-end gap-1.5">
                               <Button
                                 size="sm"

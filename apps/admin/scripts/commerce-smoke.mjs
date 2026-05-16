@@ -2213,6 +2213,18 @@ const assertStripeCheckoutExecution = async ({
     assert(lifecycle.summary?.total >= 1, `Product subscription lifecycle did not count subscription orders: ${JSON.stringify(lifecycle?.summary)}`);
     assert(lifecycle.summary?.cancelled >= 1, `Product subscription lifecycle did not count cancellation settlement: ${JSON.stringify(lifecycle?.summary)}`);
     assert(lifecycle.subscriptions?.some((entry) => entry.subscriptionReference === `sub_${slug}`), `Product subscription lifecycle did not expose the subscription reference: ${JSON.stringify(lifecycle?.subscriptions)}`);
+    const stripeLifecycleEntry = lifecycle.subscriptions?.find((entry) => entry.subscriptionReference === `sub_${slug}`);
+    assert(stripeLifecycleEntry?.paymentProvider === 'stripe', `Product subscription lifecycle did not expose payment provider readiness: ${JSON.stringify(stripeLifecycleEntry)}`);
+    assert(stripeLifecycleEntry?.actionExecutionMode === 'stripe-api', `Product subscription lifecycle did not expose Stripe execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`);
+    assert(lifecycle.execution?.schemaVersion === 'backy.product-subscription-execution-readiness.v1', `Product subscription execution readiness schema was unexpected: ${JSON.stringify(lifecycle?.execution)}`);
+    assert(lifecycle.execution?.summary?.executableSubscriptions >= 1, `Product subscription execution readiness did not count executable subscriptions: ${JSON.stringify(lifecycle?.execution)}`);
+    assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'stripe' && provider.configured === true && provider.executionMode === 'stripe-api'), `Product subscription execution readiness omitted Stripe provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    if (paypalSubscriptionExecutionEnabled()) {
+      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paypal' && provider.configured === true && provider.executionMode === 'paypal-api'), `Product subscription execution readiness omitted PayPal provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    }
+    if (httpSubscriptionExecutionEnabled()) {
+      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'http' && provider.configured === true && provider.executionMode === 'http-api'), `Product subscription execution readiness omitted HTTP provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    }
     assert(lifecycle.contract?.webhookApi?.includes('/commerce/webhook'), `Product subscription lifecycle contract omitted webhook API: ${JSON.stringify(lifecycle?.contract)}`);
 
     const beforeActionRequests = stripeCheckoutMock.requests.length;
@@ -2480,6 +2492,8 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Trial days'),
         hasSubscriptionLifecycle: Boolean(document.querySelector('[data-testid="products-subscription-lifecycle"]')) &&
           document.body?.innerText?.includes('Subscription lifecycle') &&
+          document.body?.innerText?.includes('Action execution readiness') &&
+          document.body?.innerText?.includes('backy.product-subscription-execution-readiness.v1') &&
           document.body?.innerText?.includes('Recent subscription orders') &&
           document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
           document.body?.innerText?.includes('/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action') &&

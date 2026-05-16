@@ -1500,10 +1500,12 @@ export interface ProductSubscriptionLifecycle {
     orderNumber: string;
     customerName: string;
     customerEmail: string;
+    paymentProvider: string;
     paymentStatus: string;
     fulfillmentStatus: string;
     lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
     subscriptionReference: string;
+    actionExecutionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
     checkoutSessionId: string;
     total: number;
     currency: string;
@@ -1519,6 +1521,23 @@ export interface ProductSubscriptionLifecycle {
       lineTotal: number;
     }>;
   }>;
+  execution?: {
+    schemaVersion: 'backy.product-subscription-execution-readiness.v1';
+    actionEndpoint: string;
+    supportedActions: Array<'pause' | 'resume' | 'cancel'>;
+    providers: Array<{
+      provider: 'stripe' | 'paypal' | 'http' | 'manual' | string;
+      executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
+      configured: boolean;
+      referencePattern: string;
+      executableSubscriptions: number;
+      blocker: string;
+    }>;
+    summary: {
+      executableSubscriptions: number;
+      handoffSubscriptions: number;
+    };
+  };
   contract: {
     ordersApi: string;
     webhookApi: string;

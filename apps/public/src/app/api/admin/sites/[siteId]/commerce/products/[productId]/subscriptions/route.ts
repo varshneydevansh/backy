@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { PRODUCT_COLLECTION_SLUG, productRecordToCommerceProduct, type CommerceSourceRecord } from '@/lib/commerceCatalog';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
-import { getCollectionByIdOrSlug, getCollectionRecordByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { getAdminSettings, getCollectionByIdOrSlug, getCollectionRecordByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -28,6 +28,7 @@ interface SourceRecord {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
+type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -37,6 +38,12 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 const textValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
+);
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
 );
 
 const numberValue = (value: unknown): number => {
@@ -127,6 +134,50 @@ const lifecycleStatus = (values: Record<string, unknown>): 'active' | 'renewal' 
   return 'pending';
 };
 
+const envValue = (keys: string[]): string => (
+  keys.map((key) => process.env[key]?.trim() || '').find(Boolean) || ''
+);
+
+const stripeSecretConfigured = () => Boolean(envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']));
+
+const paypalAccessTokenConfigured = () => Boolean(envValue(['BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN']));
+
+const subscriptionActionProviderUrl = (): string => {
+  const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
+  const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
+    || textValue(commerce.subscriptionActionProviderUrl)
+    || textValue(commerce.subscriptionLifecycleProviderUrl);
+  if (!configuredUrl) return '';
+  try {
+    const url = new URL(configuredUrl);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const inferSubscriptionProvider = (values: Record<string, unknown>, subscriptionReference: string): string => {
+  const configuredProvider = textValue(values.paymentprovider).toLowerCase();
+  if (configuredProvider) return configuredProvider;
+  if (subscriptionReference.startsWith('sub_')) return 'stripe';
+  if (subscriptionReference.startsWith('I-')) return 'paypal';
+  return 'manual';
+};
+
+const subscriptionActionExecutionMode = (provider: string, subscriptionReference: string): SubscriptionActionExecutionMode => {
+  const normalizedProvider = provider.toLowerCase();
+  if (normalizedProvider === 'stripe' && stripeSecretConfigured() && subscriptionReference.startsWith('sub_')) {
+    return 'stripe-api';
+  }
+  if (normalizedProvider === 'paypal' && paypalAccessTokenConfigured() && subscriptionReference) {
+    return 'paypal-api';
+  }
+  if (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) && subscriptionActionProviderUrl()) {
+    return 'http-api';
+  }
+  return 'handoff';
+};
+
 const timestampValue = (record: SourceRecord): number => {
   const timestamp = Date.parse(record.updatedAt || record.createdAt || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -178,16 +229,22 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       summary.units += units;
       summary.revenue = Math.round((summary.revenue + revenue) * 100) / 100;
 
+      const subscriptionReference = textValue(values.paymentreference);
+      const paymentProvider = inferSubscriptionProvider(values, subscriptionReference);
+      const actionExecutionMode = subscriptionActionExecutionMode(paymentProvider, subscriptionReference);
+
       return {
         id: order.id,
         slug: order.slug,
         orderNumber: textValue(values.ordernumber) || order.slug,
         customerName: textValue(values.customername),
         customerEmail: textValue(values.email),
+        paymentProvider,
         paymentStatus: textValue(values.paymentstatus).toLowerCase() || 'pending',
         fulfillmentStatus: textValue(values.fulfillmentstatus).toLowerCase() || 'unfulfilled',
         lifecycleStatus: status,
-        subscriptionReference: textValue(values.paymentreference),
+        subscriptionReference,
+        actionExecutionMode,
         checkoutSessionId: textValue(values.checkoutsessionid),
         total: numberValue(values.total),
         currency: normalizeCurrency(values.currency),
@@ -205,6 +262,50 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
       };
     });
 
+  const execution = {
+    schemaVersion: 'backy.product-subscription-execution-readiness.v1',
+    actionEndpoint: '/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action',
+    supportedActions: ['pause', 'resume', 'cancel'],
+    providers: [
+      {
+        provider: 'stripe',
+        executionMode: 'stripe-api',
+        configured: stripeSecretConfigured(),
+        referencePattern: 'sub_*',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'stripe-api').length,
+        blocker: stripeSecretConfigured() ? '' : 'Configure BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY for direct Stripe subscription actions.',
+      },
+      {
+        provider: 'paypal',
+        executionMode: 'paypal-api',
+        configured: paypalAccessTokenConfigured(),
+        referencePattern: 'I-*',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paypal-api').length,
+        blocker: paypalAccessTokenConfigured() ? '' : 'Configure BACKY_PAYPAL_ACCESS_TOKEN or PAYPAL_ACCESS_TOKEN for direct PayPal subscription actions.',
+      },
+      {
+        provider: 'http',
+        executionMode: 'http-api',
+        configured: Boolean(subscriptionActionProviderUrl()),
+        referencePattern: 'provider supplied',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'http-api').length,
+        blocker: subscriptionActionProviderUrl() ? '' : 'Configure BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL, COMMERCE_SUBSCRIPTION_ACTION_URL, or Settings commerce subscriptionActionProviderUrl.',
+      },
+      {
+        provider: 'manual',
+        executionMode: 'handoff',
+        configured: true,
+        referencePattern: 'any',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'handoff').length,
+        blocker: '',
+      },
+    ],
+    summary: {
+      executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode !== 'handoff').length,
+      handoffSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'handoff').length,
+    },
+  };
+
   return {
     schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
@@ -217,6 +318,7 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
     },
     summary,
     subscriptions: subscriptions.slice(0, 25),
+    execution,
     contract: {
       ordersApi: `/api/admin/sites/:siteId/commerce/orders`,
       webhookApi: `/api/sites/:siteId/commerce/webhook`,
