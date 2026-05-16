@@ -2508,16 +2508,18 @@ const runMediaStorageCredentialRotationProbe = async (
 
 const vercelSecretManagerConfig = () => {
   const runtime = getVercelRuntimeSummary();
+  const apiBaseUrl = envValue(['BACKY_VERCEL_API_BASE_URL', 'VERCEL_API_BASE_URL']) || 'https://api.vercel.com';
   return {
     token: envValue(['VERCEL_TOKEN', 'BACKY_VERCEL_TOKEN']),
     projectId: runtime.projectId || envValue(['VERCEL_PROJECT_ID', 'BACKY_VERCEL_PROJECT_ID']),
     teamId: runtime.teamId || envValue(['VERCEL_TEAM_ID', 'BACKY_VERCEL_TEAM_ID']),
+    apiBaseUrl,
   };
 };
 
-const vercelProjectEnvUrl = (projectId: string, path = '') => {
-  const url = new URL(`https://api.vercel.com/v9/projects/${encodeURIComponent(projectId)}/env${path}`);
-  const teamId = vercelSecretManagerConfig().teamId;
+const vercelProjectEnvUrl = (projectId: string, path = '', version: 'v9' | 'v10' = 'v9') => {
+  const { apiBaseUrl, teamId } = vercelSecretManagerConfig();
+  const url = new URL(`/${version}/projects/${encodeURIComponent(projectId)}/env${path}`, apiBaseUrl);
   if (teamId) {
     url.searchParams.set('teamId', teamId);
   }
@@ -2548,7 +2550,7 @@ const vercelEnvRequest = async (
 };
 
 const listVercelEnvVariables = async (projectId: string): Promise<Array<{ id: string; key: string }>> => {
-  const payload = parseJsonObject(await vercelEnvRequest(vercelProjectEnvUrl(projectId), { method: 'GET' })) || {};
+  const payload = parseJsonObject(await vercelEnvRequest(vercelProjectEnvUrl(projectId, '', 'v10'), { method: 'GET' })) || {};
   const envs = Array.isArray(payload.envs) ? payload.envs : [];
   return envs
     .map((item) => parseJsonObject(item))
@@ -2578,20 +2580,26 @@ const createVercelEnvKey = async (
     targetEnvironments: string[];
   },
 ) => {
-  const url = new URL(`https://api.vercel.com/v10/projects/${encodeURIComponent(projectId)}/env`);
-  const { teamId } = vercelSecretManagerConfig();
+  const { apiBaseUrl, teamId } = vercelSecretManagerConfig();
+  const url = new URL(`/v10/projects/${encodeURIComponent(projectId)}/env`, apiBaseUrl);
+  url.searchParams.set('upsert', 'true');
   if (teamId) {
     url.searchParams.set('teamId', teamId);
   }
-  await vercelEnvRequest(url, {
+  const payload = await vercelEnvRequest(url, {
     method: 'POST',
     body: JSON.stringify({
       key: input.key,
       value: input.value,
-      type: input.secret ? 'encrypted' : 'plain',
+      type: input.secret ? 'sensitive' : 'plain',
       target: input.targetEnvironments,
     }),
   });
+  const failed = parseJsonObject(payload)?.failed;
+  if (Array.isArray(failed) && failed.length > 0) {
+    const firstFailure = parseJsonObject(failed[0]) || {};
+    throw new Error(stringValue(firstFailure.error) || stringValue(firstFailure.reason) || `Vercel could not upsert ${input.key}.`);
+  }
 };
 
 const runMediaStorageSecretManager = async (input: {
@@ -2640,7 +2648,10 @@ const runMediaStorageSecretManager = async (input: {
     };
   });
   const missingRequired = operations.some((operation) => operation.required && !operation.ready);
-  const canExecute = Boolean(projectId && token && !missingRequired && targetEnvironments.length > 0);
+  const secretDevelopmentTarget = targetEnvironments.includes('development') && operations.some((operation) => (
+    operation.secret && operation.ready
+  ));
+  const canExecute = Boolean(projectId && token && !missingRequired && !secretDevelopmentTarget && targetEnvironments.length > 0);
   const nextSteps = [
     'Run the credential rotation probe and confirm the replacement credential reaches ready.',
     'Use this Vercel env manager in dry-run mode to review the create/update/delete operations.',
@@ -2651,13 +2662,11 @@ const runMediaStorageSecretManager = async (input: {
 
   if (!input.dryRun && canExecute && projectId) {
     if (input.mode === 'promote') {
-      const existing = await listVercelEnvVariables(projectId);
       for (const operation of operations.filter((operation) => operation.ready)) {
         const mapping = mappings.find((item) => item.targetName === operation.name);
         const sourceName = mapping?.sourceNames.find((name) => Boolean(process.env[name]));
         const sourceValue = sourceName ? process.env[sourceName] : undefined;
         if (!sourceValue || !mapping) continue;
-        await deleteVercelEnvKey(projectId, operation.name, existing);
         await createVercelEnvKey(projectId, {
           key: operation.name,
           value: sourceValue,
@@ -2709,9 +2718,11 @@ const runMediaStorageSecretManager = async (input: {
       },
       {
         label: 'Target environments',
-        ready: targetEnvironments.length > 0,
-        detail: targetEnvironments.length > 0
-          ? `Targeting ${targetEnvironments.join(', ')}.`
+        ready: targetEnvironments.length > 0 && !secretDevelopmentTarget,
+        detail: secretDevelopmentTarget
+          ? 'Storage secrets are promoted as Vercel sensitive environment variables, which must target production and/or preview only.'
+          : targetEnvironments.length > 0
+            ? `Targeting ${targetEnvironments.join(', ')}.`
           : 'Select at least one Vercel environment target.',
       },
     ],
