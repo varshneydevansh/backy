@@ -184,11 +184,23 @@ const readPositiveInteger = (value: string | undefined, fallback: number, min: n
   return Math.min(Math.max(Math.floor(parsed), min), max);
 };
 
-const authRateLimitConfig = () => ({
-  max: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_MAX, 5, 1, 100),
-  clientMax: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_CLIENT_RATE_LIMIT_MAX, 25, 1, 500),
-  windowMs: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1_000, 24 * 60 * 60 * 1000),
-});
+type AdminAuthRateLimitScope = 'login' | 'password-recovery' | 'password-reset';
+
+const authRateLimitConfig = (scope: AdminAuthRateLimitScope) => {
+  if (scope === 'login') {
+    return {
+      max: readPositiveInteger(process.env.BACKY_AUTH_LOGIN_RATE_LIMIT_MAX, 5, 1, 100),
+      clientMax: readPositiveInteger(process.env.BACKY_AUTH_LOGIN_CLIENT_RATE_LIMIT_MAX, 25, 1, 500),
+      windowMs: readPositiveInteger(process.env.BACKY_AUTH_LOGIN_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1_000, 24 * 60 * 60 * 1000),
+    };
+  }
+
+  return {
+    max: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_MAX, 5, 1, 100),
+    clientMax: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_CLIENT_RATE_LIMIT_MAX, 25, 1, 500),
+    windowMs: readPositiveInteger(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 1_000, 24 * 60 * 60 * 1000),
+  };
+};
 
 const hashRateLimitKey = (value: string) => (
   createHash('sha256').update(value).digest('hex').slice(0, 32)
@@ -315,22 +327,67 @@ const pruneExpiredSessions = () => {
   }
 };
 
-export function checkAdminAuthRateLimit(input: {
-  scope: 'password-recovery' | 'password-reset';
+const adminAuthRateLimitKey = (input: {
+  scope: AdminAuthRateLimitScope;
   identifier: string;
   bucket?: 'principal' | 'client';
-}): { allowed: true; remaining: number; resetAt: string } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
-  const { max, clientMax, windowMs } = authRateLimitConfig();
-  const effectiveMax = input.bucket === 'client' ? clientMax : max;
-  const now = Date.now();
+}) => {
   const normalizedIdentifier = input.identifier.trim().toLowerCase() || 'anonymous';
-  const key = `${input.scope}:${hashRateLimitKey(normalizedIdentifier)}`;
+  return `${input.scope}:${hashRateLimitKey(normalizedIdentifier)}`;
+};
 
+const pruneExpiredAuthRateLimits = (now = Date.now()) => {
   for (const [storedKey, state] of AUTH_RATE_LIMITS.entries()) {
     if (state.resetAt <= now) {
       AUTH_RATE_LIMITS.delete(storedKey);
     }
   }
+};
+
+export function peekAdminAuthRateLimit(input: {
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+  bucket?: 'principal' | 'client';
+}): { allowed: true; remaining: number; resetAt: string | null } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
+  const { max, clientMax } = authRateLimitConfig(input.scope);
+  const effectiveMax = input.bucket === 'client' ? clientMax : max;
+  const now = Date.now();
+  pruneExpiredAuthRateLimits(now);
+
+  const current = AUTH_RATE_LIMITS.get(adminAuthRateLimitKey(input));
+  if (!current || current.resetAt <= now) {
+    return {
+      allowed: true,
+      remaining: effectiveMax,
+      resetAt: null,
+    };
+  }
+
+  if (current.count >= effectiveMax) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+      resetAt: new Date(current.resetAt).toISOString(),
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, effectiveMax - current.count),
+    resetAt: new Date(current.resetAt).toISOString(),
+  };
+}
+
+export function checkAdminAuthRateLimit(input: {
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+  bucket?: 'principal' | 'client';
+}): { allowed: true; remaining: number; resetAt: string } | { allowed: false; retryAfterSeconds: number; resetAt: string } {
+  const { max, clientMax, windowMs } = authRateLimitConfig(input.scope);
+  const effectiveMax = input.bucket === 'client' ? clientMax : max;
+  const now = Date.now();
+  const key = adminAuthRateLimitKey(input);
+  pruneExpiredAuthRateLimits(now);
 
   const current = AUTH_RATE_LIMITS.get(key);
   const state = current && current.resetAt > now
@@ -353,6 +410,13 @@ export function checkAdminAuthRateLimit(input: {
     remaining: Math.max(0, effectiveMax - state.count),
     resetAt: new Date(state.resetAt).toISOString(),
   };
+}
+
+export function clearAdminAuthRateLimit(input: {
+  scope: AdminAuthRateLimitScope;
+  identifier: string;
+}): void {
+  AUTH_RATE_LIMITS.delete(adminAuthRateLimitKey(input));
 }
 
 export function authenticateAdminCredentials(

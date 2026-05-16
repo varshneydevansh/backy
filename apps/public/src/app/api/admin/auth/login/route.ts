@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   authenticateAdminCredentials,
   authenticateAdminCredentialsWithPersistence,
+  checkAdminAuthRateLimit,
+  clearAdminAuthRateLimit,
   createAdminSessionForExternalUser,
+  peekAdminAuthRateLimit,
   revokeAdminSession,
   type AdminSession,
 } from '@/lib/admin-auth/sessionStore';
@@ -61,6 +64,23 @@ const asAuthSettings = (value: unknown): Record<string, unknown> | undefined => 
     ? value as Record<string, unknown>
     : undefined
 );
+
+const getClientAddress = (request: NextRequest) => (
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  || request.headers.get('x-real-ip')?.trim()
+  || 'unknown'
+);
+
+const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
+  const response = errorResponse(
+    429,
+    'RATE_LIMITED',
+    'Too many login attempts. Please wait before trying again.',
+    requestId,
+  );
+  response.headers.set('Retry-After', String(retryAfterSeconds));
+  return response;
+};
 
 const successResponse = (requestId: string, session: AdminSession) => attachAdminSessionCookie(NextResponse.json({
   success: true,
@@ -205,15 +225,64 @@ const completeLoginResponse = async (
   return successResponse(requestId, session);
 };
 
+const rateLimitIdentifier = (kind: 'client' | 'email', value: string) => `${kind}:${value}`;
+
+const getLoginRateLimit = (clientAddress: string, email: string) => {
+  const clientLimit = peekAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('client', clientAddress),
+    bucket: 'client',
+  });
+  if (!clientLimit.allowed) return clientLimit;
+
+  return peekAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('email', email),
+    bucket: 'principal',
+  });
+};
+
+const recordFailedLoginAttempt = (clientAddress: string, email: string) => {
+  const clientLimit = checkAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('client', clientAddress),
+    bucket: 'client',
+  });
+  if (!clientLimit.allowed) return clientLimit;
+
+  return checkAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('email', email),
+    bucket: 'principal',
+  });
+};
+
+const clearFailedLoginAttempts = (clientAddress: string, email: string) => {
+  clearAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('client', clientAddress),
+  });
+  clearAdminAuthRateLimit({
+    scope: 'login',
+    identifier: rateLimitIdentifier('email', email),
+  });
+};
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   const twoFactorCode = body.twoFactorCode;
+  const clientAddress = getClientAddress(request);
 
   if (!email || !email.includes('@') || !password) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
+  }
+
+  const loginLimit = getLoginRateLimit(clientAddress, email);
+  if (!loginLimit.allowed) {
+    return rateLimitResponse(requestId, loginLimit.retryAfterSeconds);
   }
 
   const repositories = !shouldUseDemoStoreFallback()
@@ -232,6 +301,7 @@ export async function POST(request: NextRequest) {
           ? await repositories.users.getByEmail(supabaseIdentity.email)
           : getAdminUserByEmail(supabaseIdentity.email);
         if (user?.status === 'active') {
+          clearFailedLoginAttempts(clientAddress, email);
           return completeLoginResponse(requestId, createAdminSessionForExternalUser({
             id: user.id,
             email: user.email,
@@ -260,6 +330,10 @@ export async function POST(request: NextRequest) {
       );
     }
     if (supabaseAuthConfigured) {
+      const failedAttempt = recordFailedLoginAttempt(clientAddress, email);
+      if (!failedAttempt.allowed) {
+        return rateLimitResponse(requestId, failedAttempt.retryAfterSeconds);
+      }
       return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
     }
 
@@ -278,8 +352,13 @@ export async function POST(request: NextRequest) {
     }, authSettings)
     : authenticateAdminCredentials(email, password, authSettings);
   if (!session) {
+    const failedAttempt = recordFailedLoginAttempt(clientAddress, email);
+    if (!failedAttempt.allowed) {
+      return rateLimitResponse(requestId, failedAttempt.retryAfterSeconds);
+    }
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
+  clearFailedLoginAttempts(clientAddress, email);
   return completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode);
 }

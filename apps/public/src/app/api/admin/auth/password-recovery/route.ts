@@ -137,11 +137,9 @@ export async function POST(request: NextRequest) {
   const deliveryConfig = getEmailDeliveryConfig();
   const publicResetDelivery: AdminUserDeliveryResult = {
     attempted: true,
-    provider: resetDelivery?.provider || deliveryConfig.provider,
+    provider: deliveryConfig.provider,
     status: 'queued',
     deliveryConfigured: true,
-    statusCode: resetDelivery?.statusCode,
-    metadata: resetDelivery?.metadata,
   };
   const message = localRecovery
     ? 'Local recovery link generated. Open it to reset the password in this development environment.'

@@ -4,6 +4,7 @@ const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost
 const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 const adminDevOrigin = 'http://localhost:5173';
 const recoveryRateLimitMax = Math.min(Math.max(Number.parseInt(process.env.BACKY_AUTH_RECOVERY_RATE_LIMIT_MAX || '5', 10) || 5, 1), 100);
+const loginRateLimitMax = Math.min(Math.max(Number.parseInt(process.env.BACKY_AUTH_LOGIN_RATE_LIMIT_MAX || '5', 10) || 5, 1), 100);
 
 function assert(condition, message) {
   if (!condition) {
@@ -125,6 +126,35 @@ await record('admin api key cannot use owner-only permissions', async () => {
   assert(result.json?.success === false, `${result.url} expected error envelope`);
   assert(result.json?.error?.code === 'FORBIDDEN_PERMISSION', `${result.url} expected FORBIDDEN_PERMISSION error code`);
   assertCorsAndRequestId(result);
+});
+
+await record('login rate limits repeated invalid credentials', async () => {
+  const email = `login-rate-limit-${Date.now()}@example.invalid`;
+  const headers = {
+    origin: adminDevOrigin,
+    'content-type': 'application/json',
+    'x-forwarded-for': '203.0.113.13',
+  };
+  let limited = null;
+
+  for (let attempt = 0; attempt < loginRateLimitMax + 1; attempt += 1) {
+    const result = await request('/api/admin/auth/login', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email, password: 'not-the-password' }),
+    });
+    if (result.response.status === 429) {
+      limited = result;
+      break;
+    }
+  }
+
+  assert(limited, 'expected repeated invalid login attempts to be rate limited');
+  assert(limited.response.status === 429, `${limited.url} expected 429, got ${limited.response.status}`);
+  assert(limited.json?.success === false, `${limited.url} expected error envelope`);
+  assert(limited.json?.error?.code === 'RATE_LIMITED', `${limited.url} expected RATE_LIMITED error code`);
+  assert(Number(limited.response.headers.get('retry-after')) > 0, `${limited.url} expected retry-after header`);
+  assertCorsAndRequestId(limited);
 });
 
 await record('password recovery does not enumerate local accounts', async () => {
