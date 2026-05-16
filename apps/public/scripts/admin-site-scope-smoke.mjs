@@ -164,6 +164,97 @@ try {
     }),
   });
 
+  const representativeNestedRequests = [
+    {
+      label: 'non-member admin nested media list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/media`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested media create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/media`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ filename: `denied-media-${suffix}.png` }),
+      },
+    },
+    {
+      label: 'non-member admin nested collections list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/collections`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested collection create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/collections`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: `Denied Collection ${suffix}`, slug: `denied-collection-${suffix}` }),
+      },
+    },
+    {
+      label: 'non-member admin nested forms list denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/forms`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested form create denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/forms`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: `Denied Form ${suffix}`, slug: `denied-form-${suffix}` }),
+      },
+    },
+    {
+      label: 'non-member admin nested navigation read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/navigation`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested navigation update denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/navigation`,
+      init: {
+        method: 'PATCH',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ primary: [], footer: [] }),
+      },
+    },
+    {
+      label: 'non-member admin nested frontend-design read denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/frontend-design`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested frontend-design update denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/frontend-design`,
+      init: {
+        method: 'PATCH',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ source: 'site-scope-smoke', contract: {} }),
+      },
+    },
+    {
+      label: 'non-member admin nested commerce analytics denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/commerce/orders/analytics`,
+      init: { headers: scopedHeaders },
+    },
+    {
+      label: 'non-member admin nested commerce reconcile denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/commerce/reconcile`,
+      init: {
+        method: 'POST',
+        headers: { ...scopedHeaders, 'content-type': 'application/json' },
+        body: JSON.stringify({ dryRun: true }),
+      },
+    },
+  ];
+
+  for (const check of representativeNestedRequests) {
+    await expectForbiddenSiteScope(check.path, check.init);
+  }
+
   const ownerDetail = await requireOk(`/api/admin/sites/${encodeURIComponent(site.id)}`);
   assert(ownerDetail.data?.site?.id === site.id, 'Admin key should still read the team-owned site for cleanup verification');
 
@@ -176,6 +267,7 @@ try {
       'non-member admin update denied',
       'non-member admin nested pages list denied',
       'non-member admin nested page create denied',
+      ...representativeNestedRequests.map((check) => check.label),
       'admin key still bypasses team scope for service cleanup',
     ],
     siteId: site.id,
