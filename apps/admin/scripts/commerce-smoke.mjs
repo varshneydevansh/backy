@@ -2649,7 +2649,8 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('/api/sites/:siteId/commerce/webhook'),
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
-          document.body?.innerText?.includes('Sync provider catalog') &&
+          document.body?.innerText?.includes('Paddle') &&
+          document.body?.innerText?.includes('HTTP') &&
           document.body?.innerText?.includes('configured HTTP product and price metadata'),
         hasProviderReconciliation: Boolean(providerReconciliation) &&
           providerReconciliationText.includes('Provider execution and reconciliation') &&
