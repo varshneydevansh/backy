@@ -25,6 +25,7 @@ import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  getCommerceReconciliationReadiness,
   getOrderAnalytics,
   getUserPermissions,
   getSiteFrontendDesign,
@@ -32,6 +33,7 @@ import {
   listProductNotificationEvents,
   listCollectionRecords,
   listCollections,
+  reconcileCommerceOrders,
   syncCommerceProductProvider,
   updateCollection,
   updateCollectionRecord,
@@ -39,6 +41,8 @@ import {
   type CollectionField,
   type CollectionRecord,
   type CollectionRecordPagination,
+  type CommerceCronReadiness,
+  type CommerceReconciliationResult,
   type CommerceProductProviderSyncResult,
   type AdminUserPermissionMatrix,
   type OrderAnalytics,
@@ -640,6 +644,10 @@ function ProductsRoute() {
   const [orderAnalytics, setOrderAnalytics] = useState<OrderAnalytics | null>(null);
   const [isOrderAnalyticsLoading, setIsOrderAnalyticsLoading] = useState(false);
   const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
+  const [reconciliationReadiness, setReconciliationReadiness] = useState<CommerceCronReadiness | null>(null);
+  const [reconciliationResult, setReconciliationResult] = useState<CommerceReconciliationResult | null>(null);
+  const [isReconciliationLoading, setIsReconciliationLoading] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
   const [productNotificationEvents, setProductNotificationEvents] = useState<OrderDeliveryEvent[]>([]);
   const [productNotificationError, setProductNotificationError] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
@@ -1293,6 +1301,25 @@ function ProductsRoute() {
         : null,
       requirement: 'The products collection must be public, while the orders collection must stay published and private.',
     },
+    providerExecution: {
+      quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
+      catalogSync: 'Product records can be synchronized to configured commerce providers from the Products workspace.',
+      reconciliation: {
+        readiness: reconciliationReadiness,
+        lastPreview: reconciliationResult
+          ? {
+              schemaVersion: reconciliationResult.schemaVersion,
+              runMode: reconciliationResult.runMode,
+              dryRun: reconciliationResult.dryRun,
+              eventCount: reconciliationResult.eventCount,
+              eligibleUpdateCount: reconciliationResult.eligibleUpdateCount ?? 0,
+              updatedCount: reconciliationResult.updatedCount,
+              unmatchedCount: reconciliationResult.unmatchedCount,
+              processedAt: reconciliationResult.processedAt,
+            }
+          : null,
+      },
+    },
     storefrontContract: {
       collectionSlug: PRODUCT_COLLECTION_SLUG,
       routePatterns: {
@@ -1492,6 +1519,8 @@ function ProductsRoute() {
     productNotificationEvents,
     products,
     publicBaseUrl,
+    reconciliationReadiness,
+    reconciliationResult,
     searchQuery,
     storefrontApiUrl,
     storefrontProductDetailUrl,
@@ -1567,6 +1596,50 @@ function ProductsRoute() {
     }
   };
 
+  const loadCommerceReconciliationReadiness = async () => {
+    if (!canConfigureCommerce) {
+      setReconciliationReadiness(null);
+      setReconciliationResult(null);
+      setReconciliationError(null);
+      return null;
+    }
+
+    setIsReconciliationLoading(true);
+    try {
+      const readiness = await getCommerceReconciliationReadiness();
+      setReconciliationReadiness(readiness);
+      setReconciliationError(null);
+      return readiness;
+    } catch (loadError) {
+      setReconciliationReadiness(null);
+      setReconciliationError(loadError instanceof Error ? loadError.message : 'Unable to load provider reconciliation readiness');
+      return null;
+    } finally {
+      setIsReconciliationLoading(false);
+    }
+  };
+
+  const previewCommerceReconciliation = async () => {
+    if (!canConfigureCommerce) {
+      setReconciliationError(configurePermissionTitle || 'Your account cannot preview provider reconciliation.');
+      return null;
+    }
+
+    setIsReconciliationLoading(true);
+    try {
+      const result = await reconcileCommerceOrders(activeSiteId, 100, { dryRun: true });
+      setReconciliationResult(result);
+      setReconciliationError(null);
+      return result;
+    } catch (previewError) {
+      setReconciliationResult(null);
+      setReconciliationError(previewError instanceof Error ? previewError.message : 'Unable to preview provider reconciliation');
+      return null;
+    } finally {
+      setIsReconciliationLoading(false);
+    }
+  };
+
   const loadProducts = async () => {
     if (isProductsBusy) return;
     if (isPermissionMatrixPending) return;
@@ -1579,6 +1652,9 @@ function ProductsRoute() {
       setCustomerProfiles([]);
       setOrderAnalytics(null);
       setOrderAnalyticsError(null);
+      setReconciliationReadiness(null);
+      setReconciliationResult(null);
+      setReconciliationError(null);
       setProductNotificationEvents([]);
       setProductNotificationError(null);
       setSelectedCustomerProfileId(null);
@@ -1607,6 +1683,9 @@ function ProductsRoute() {
         setCustomerProfiles([]);
         setOrderAnalytics(null);
         setOrderAnalyticsError(null);
+        setReconciliationReadiness(null);
+        setReconciliationResult(null);
+        setReconciliationError(null);
         setProductNotificationEvents([]);
         setProductNotificationError(null);
         setSelectedCustomerProfileId(null);
@@ -1649,9 +1728,13 @@ function ProductsRoute() {
       void loadProductNotificationEvents();
       if (orderCollection) {
         void loadCommerceOrderAnalytics();
+        void loadCommerceReconciliationReadiness();
       } else {
         setOrderAnalytics(null);
         setOrderAnalyticsError(null);
+        setReconciliationReadiness(null);
+        setReconciliationResult(null);
+        setReconciliationError(null);
       }
       setSelectedCustomerProfileId((current) => (
         current && customerRecords.some((customer) => customer.id === current)
@@ -2912,11 +2995,68 @@ function ProductsRoute() {
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-border bg-card p-3">
-                    <div className="text-xs font-semibold text-foreground">Next commerce milestone</div>
+                  <div data-testid="products-provider-reconciliation" className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-xs font-semibold text-foreground">Provider execution and reconciliation</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture private orders, calculate quote totals, create checkout-session handoffs, link customers, settle provider webhook events, and run platform scheduled reconciliation. Provider API execution, automated refunds, and external cron deployment remain deeper commerce backend work.
+                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe catalog metadata, settle provider webhooks, and preview scheduled reconciliation. External cron deployment and deeper provider automation remain backend rollout work.
                     </p>
+                    <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Scheduled worker</span>
+                        <span className={cn(
+                          'rounded-md px-2 py-1 font-medium',
+                          reconciliationReadiness?.ready ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                        )}
+                        >
+                          {reconciliationReadiness?.ready ? 'Ready' : 'Needs setup'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Cron route</span>
+                        <span className="max-w-[190px] truncate font-mono text-[11px] text-foreground">
+                          {reconciliationReadiness?.entrypoint || '/api/admin/commerce/reconcile?limit=100'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Last preview</span>
+                        <span className="font-mono text-[11px] text-foreground">
+                          {reconciliationResult
+                            ? `${reconciliationResult.eventCount} events / ${reconciliationResult.eligibleUpdateCount ?? 0} eligible`
+                            : 'Not run'}
+                        </span>
+                      </div>
+                      {reconciliationReadiness?.missing?.length ? (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+                          Missing: {reconciliationReadiness.missing.slice(0, 3).join(', ')}
+                        </div>
+                      ) : null}
+                      {reconciliationError ? (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+                          {reconciliationError}
+                        </div>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void loadCommerceReconciliationReadiness()}
+                          disabled={isProductsAccessBusy || isReconciliationLoading || !canConfigureCommerce}
+                          title={!canConfigureCommerce ? configurePermissionTitle : undefined}
+                          iconStart={<RefreshCw className={cn('size-3.5', isReconciliationLoading && 'animate-spin')} />}
+                        >
+                          Refresh readiness
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void previewCommerceReconciliation()}
+                          disabled={isProductsAccessBusy || isReconciliationLoading || !ordersCollection || !canConfigureCommerce}
+                          title={!canConfigureCommerce ? configurePermissionTitle : !ordersCollection ? 'Create the private orders queue first.' : undefined}
+                        >
+                          Preview reconciliation
+                        </Button>
+                      </div>
+                    </div>
                     <Link
                       to="/orders"
                       search={activeSiteSearch}

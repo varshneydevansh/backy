@@ -2229,6 +2229,22 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
 const assertProductsLayout = async (client) => {
   await clickByText(client, 'Refresh', { exact: true }).catch(() => null);
   await waitUntilIdle(client, '/products refresh before layout assertion');
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const previewState = await evaluate(client, `(() => {
+      const candidates = Array.from(document.querySelectorAll('button'));
+      const button = candidates.find((candidate) => (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Preview reconciliation');
+      return {
+        present: Boolean(button),
+        disabled: Boolean(button?.disabled || button?.getAttribute('aria-disabled') === 'true'),
+      };
+    })()`);
+    if (previewState.present && !previewState.disabled) {
+      await clickByText(client, 'Preview reconciliation', { exact: true });
+      break;
+    }
+    await sleep(250);
+  }
+  await waitUntilIdle(client, '/products reconciliation preview before layout assertion');
 
   let layout = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -2239,6 +2255,8 @@ const assertProductsLayout = async (client) => {
       const backendCommerceAnalyticsText = backendCommerceAnalytics?.textContent || '';
       const productAutomation = document.querySelector('[data-testid="products-notification-automation"]');
       const productAutomationText = productAutomation?.textContent || '';
+      const providerReconciliation = document.querySelector('[data-testid="products-provider-reconciliation"]');
+      const providerReconciliationText = providerReconciliation?.textContent || '';
       return {
         width: window.innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
@@ -2277,6 +2295,13 @@ const assertProductsLayout = async (client) => {
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
           document.body?.innerText?.includes('Sync Stripe catalog'),
+        hasProviderReconciliation: Boolean(providerReconciliation) &&
+          providerReconciliationText.includes('Provider execution and reconciliation') &&
+          providerReconciliationText.includes('Scheduled worker') &&
+          providerReconciliationText.includes('/api/admin/commerce/reconcile?limit=100') &&
+          providerReconciliationText.includes('Preview reconciliation') &&
+          /\\d+ events \\/ \\d+ eligible/.test(providerReconciliationText),
+        providerReconciliationText,
         hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
           document.body?.innerText?.includes('Page and editor binding contract') &&
           document.body?.innerText?.includes('Product card blocks') &&
@@ -2294,14 +2319,14 @@ const assertProductsLayout = async (client) => {
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
     })()`);
-    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics) {
+    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics && layout.hasProviderReconciliation) {
       break;
     }
     await sleep(250);
   }
 
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasProviderSync && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasProviderSync && layout.hasProviderReconciliation && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

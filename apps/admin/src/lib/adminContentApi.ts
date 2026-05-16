@@ -6778,11 +6778,22 @@ export async function getOrderAnalytics(siteId: string): Promise<OrderAnalytics>
   return analytics;
 }
 
-export async function reconcileCommerceOrders(siteId: string, limit = 100): Promise<CommerceReconciliationResult> {
+export async function reconcileCommerceOrders(
+  siteId: string,
+  limit = 100,
+  options: { dryRun?: boolean; runMode?: 'manual' | 'scheduled' } = {},
+): Promise<CommerceReconciliationResult> {
   const query = new URLSearchParams();
   query.set('limit', String(limit));
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/reconcile?${query.toString()}`, {
     method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...(options.dryRun !== undefined ? { dryRun: options.dryRun } : {}),
+      ...(options.runMode ? { runMode: options.runMode } : {}),
+    }),
   });
   const payload = await response.json();
   if (!response.ok || payload.success === false) {
