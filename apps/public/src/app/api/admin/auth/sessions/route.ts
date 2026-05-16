@@ -5,6 +5,8 @@ import {
   listAdminSessions,
   revokeAdminSessionById,
 } from '@/lib/admin-auth/sessionStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -84,9 +86,31 @@ export async function DELETE(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A session id is required.', requestId);
   }
 
+  const targetSession = listAdminSessions({}).find((session) => session.id === sessionId) || null;
   const result = revokeAdminSessionById(sessionId, currentToken);
   if (result.current) {
     return errorResponse(409, 'CURRENT_SESSION_LOCKED', 'Use Log out to revoke your current session.', requestId);
+  }
+  if (result.revoked && targetSession) {
+    const repositories = !shouldUseDemoStoreFallback()
+      ? await getRequiredDatabaseRepositories()
+      : null;
+    await recordAdminAudit({
+      repositories,
+      actorId: access.session.user.id,
+      entity: 'settings',
+      entityId: 'platform',
+      action: 'auth.session.revoke',
+      metadata: {
+        revokedSessionId: targetSession.id,
+        targetUserId: targetSession.user.id,
+        targetEmail: targetSession.user.email,
+        targetRole: targetSession.user.role,
+        targetAuthMode: targetSession.authMode,
+        revokedByUserId: access.session.user.id,
+      },
+      requestId,
+    });
   }
 
   return NextResponse.json({

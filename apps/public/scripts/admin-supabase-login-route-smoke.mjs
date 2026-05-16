@@ -197,6 +197,18 @@ const patchAuthSettings = async (baseUrl, token, auth) => {
   return payload.data?.settings;
 };
 
+const listAdminSessions = async (baseUrl, token, email) => {
+  const params = new URLSearchParams({ email });
+  const response = await fetch(`${baseUrl}/api/admin/auth/sessions?${params.toString()}`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(response.ok && Array.isArray(payload.data?.sessions), `Unable to list admin sessions: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data.sessions;
+};
+
 const postLogin = async (baseUrl, body) => {
   const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
     method: 'POST',
@@ -227,6 +239,7 @@ const main = async () => {
       ...originalAuth,
       requireTwoFactor: true,
     });
+    const sessionsBeforeMfa = await listAdminSessions(publicServer.baseUrl, adminToken, SUPABASE_EMAIL);
 
     const missingMfa = await postLogin(publicServer.baseUrl, {
       email: SUPABASE_EMAIL,
@@ -242,6 +255,11 @@ const main = async () => {
     });
     assert(invalidMfa.response.status === 401, `Invalid MFA code should return 401, got ${invalidMfa.response.status}: ${JSON.stringify(invalidMfa.payload).slice(0, 500)}`);
     assert(invalidMfa.payload.error?.code === 'INVALID_MFA_CODE', `Invalid MFA code returned wrong error: ${JSON.stringify(invalidMfa.payload).slice(0, 500)}`);
+    const sessionsAfterFailedMfa = await listAdminSessions(publicServer.baseUrl, adminToken, SUPABASE_EMAIL);
+    assert(
+      sessionsAfterFailedMfa.length === sessionsBeforeMfa.length,
+      `Failed MFA attempts should not leave active sessions: ${JSON.stringify({ before: sessionsBeforeMfa, after: sessionsAfterFailedMfa }).slice(0, 1000)}`,
+    );
 
     const { response, payload, setCookie } = await postLogin(publicServer.baseUrl, {
       email: SUPABASE_EMAIL,
@@ -254,6 +272,11 @@ const main = async () => {
     assert(payload.data?.user?.email === SUPABASE_EMAIL, `Supabase-backed login mapped the wrong user: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload.data?.session?.authMode === 'supabase', `Supabase-backed login did not issue authMode=supabase: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(setCookie.includes('backy_admin_session=') && /HttpOnly/i.test(setCookie), `Supabase-backed login did not set an httpOnly session cookie: ${setCookie}`);
+    const sessionsAfterSuccessfulMfa = await listAdminSessions(publicServer.baseUrl, adminToken, SUPABASE_EMAIL);
+    assert(
+      sessionsAfterSuccessfulMfa.length === sessionsBeforeMfa.length + 1,
+      `Successful MFA login should create exactly one active session: ${JSON.stringify({ before: sessionsBeforeMfa, after: sessionsAfterSuccessfulMfa }).slice(0, 1000)}`,
+    );
     assert(supabaseMock.requests.length === 4, `Supabase Auth mock expected four requests, got ${supabaseMock.requests.length}`);
 
     console.log(JSON.stringify({
@@ -263,6 +286,7 @@ const main = async () => {
       mfa: {
         missingCode: missingMfa.payload.error?.code,
         invalidCode: invalidMfa.payload.error?.code,
+        failedAttemptsDidNotCreateSessions: true,
       },
       supabaseRequests: supabaseMock.requests.length,
       publicPort,

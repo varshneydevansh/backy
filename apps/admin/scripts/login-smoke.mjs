@@ -139,6 +139,44 @@ const assertHttpOnlySessionCookieFlow = async () => {
   );
 };
 
+const assertAuthAuditEvents = async () => {
+  const loginResponse = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const loginPayload = await loginResponse.json().catch(() => ({}));
+  assert(
+    loginResponse.ok && loginPayload.data?.session?.token,
+    `Admin login for auth audit readback failed: ${JSON.stringify(loginPayload).slice(0, 500)}`,
+  );
+
+  const auditResponse = await fetch(`${API_BASE_URL}/api/admin/audit-logs?entity=settings&entityId=platform&limit=50`, {
+    headers: { authorization: `Bearer ${loginPayload.data.session.token}` },
+  });
+  const auditPayload = await auditResponse.json().catch(() => ({}));
+  const logs = auditPayload.data?.logs || [];
+  assert(
+    auditResponse.ok && logs.some((log) => (
+      log.action === 'auth.login.success' &&
+      log.metadata?.email === 'admin@backy.io' &&
+      log.metadata?.authMode === 'local-demo'
+    )),
+    `Auth login success audit event was not recorded: ${JSON.stringify(auditPayload).slice(0, 1000)}`,
+  );
+  assert(
+    logs.some((log) => (
+      log.action === 'auth.logout' &&
+      log.metadata?.email === 'admin@backy.io' &&
+      log.metadata?.revoked === true
+    )),
+    `Auth logout audit event was not recorded: ${JSON.stringify(auditPayload).slice(0, 1000)}`,
+  );
+};
+
 const waitForCdp = async () => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
@@ -351,6 +389,7 @@ const main = async () => {
   try {
     await assertEditorCanReadOwnPermissionMatrix();
     await assertHttpOnlySessionCookieFlow();
+    await assertAuthAuditEvents();
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();

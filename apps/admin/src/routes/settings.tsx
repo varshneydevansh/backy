@@ -6167,6 +6167,24 @@ function formatAuditTime(value: string): string {
 }
 
 function auditTitle(log: AdminAuditLog): string {
+  if (log.action === 'auth.login.success') {
+    return 'Admin login accepted';
+  }
+  if (log.action === 'auth.login.mfa_required') {
+    return 'Admin login paused for MFA';
+  }
+  if (log.action === 'auth.login.mfa_invalid') {
+    return 'Admin MFA rejected';
+  }
+  if (log.action === 'auth.login.mfa_provider_missing') {
+    return 'Admin MFA provider missing';
+  }
+  if (log.action === 'auth.logout') {
+    return 'Admin logged out';
+  }
+  if (log.action === 'auth.session.revoke') {
+    return 'Admin session revoked';
+  }
   if (log.action === 'settings.update') {
     return 'Settings updated';
   }
@@ -6184,9 +6202,37 @@ function auditDescription(log: AdminAuditLog): string {
     ? metadata.changedKeys.filter((key): key is string => typeof key === 'string')
     : [];
   const scope = typeof metadata?.scope === 'string' ? metadata.scope : null;
+  const email = typeof metadata?.email === 'string' ? metadata.email : null;
+  const targetEmail = typeof metadata?.targetEmail === 'string' ? metadata.targetEmail : null;
+  const authMode = typeof metadata?.authMode === 'string' ? metadata.authMode : null;
+  const targetAuthMode = typeof metadata?.targetAuthMode === 'string' ? metadata.targetAuthMode : null;
 
   if (beforeMode && afterMode && beforeMode !== afterMode) {
     return `Delivery mode changed from ${beforeMode} to ${afterMode}.`;
+  }
+
+  if (log.action === 'auth.login.success') {
+    return `${email || 'Admin'} signed in${authMode ? ` with ${authMode}` : ''}.`;
+  }
+
+  if (log.action === 'auth.login.mfa_required') {
+    return `${email || 'Admin'} passed primary auth and must enter a two-factor code.`;
+  }
+
+  if (log.action === 'auth.login.mfa_invalid') {
+    return `${email || 'Admin'} entered an invalid two-factor code.`;
+  }
+
+  if (log.action === 'auth.login.mfa_provider_missing') {
+    return 'Two-factor auth is required but no MFA verifier is configured.';
+  }
+
+  if (log.action === 'auth.logout') {
+    return `${email || 'Admin'} logged out${authMode ? ` from ${authMode}` : ''}.`;
+  }
+
+  if (log.action === 'auth.session.revoke') {
+    return `Revoked ${targetEmail || 'admin'} session${targetAuthMode ? ` (${targetAuthMode})` : ''}.`;
   }
 
   if (scope) {

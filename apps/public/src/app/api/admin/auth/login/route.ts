@@ -3,6 +3,7 @@ import {
   authenticateAdminCredentials,
   authenticateAdminCredentialsWithPersistence,
   createAdminSessionForExternalUser,
+  revokeAdminSession,
   type AdminSession,
 } from '@/lib/admin-auth/sessionStore';
 import {
@@ -11,6 +12,7 @@ import {
   PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
 } from '@/lib/admin-auth/productionPolicy';
 import { attachAdminSessionCookie } from '@/lib/admin-auth/sessionCookie';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   authenticateSupabaseAdminCredentials,
   isSupabaseAdminAuthConfigured,
@@ -73,17 +75,64 @@ const requiresMfa = (authSettings: Record<string, unknown> | undefined): boolean
   authSettings?.requireTwoFactor === true
 );
 
-const completeLoginResponse = (
+type LoginAuditRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>> | null;
+
+const sessionAuditMetadata = (
+  session: AdminSession,
+  extra: Record<string, unknown> = {},
+) => ({
+  userId: session.user.id,
+  email: session.user.email,
+  role: session.user.role,
+  authMode: session.authMode,
+  ...extra,
+});
+
+const recordAuthAudit = async (input: {
+  repositories: LoginAuditRepositories;
+  requestId: string;
+  action: string;
+  session: AdminSession;
+  metadata?: Record<string, unknown>;
+}) => {
+  await recordAdminAudit({
+    repositories: input.repositories,
+    actorId: input.session.user.id,
+    entity: 'settings',
+    entityId: 'platform',
+    action: input.action,
+    metadata: sessionAuditMetadata(input.session, input.metadata),
+    requestId: input.requestId,
+  });
+};
+
+const completeLoginResponse = async (
   requestId: string,
   session: AdminSession,
+  repositories: LoginAuditRepositories,
   authSettings: Record<string, unknown> | undefined,
   twoFactorCode: unknown,
 ) => {
   if (!requiresMfa(authSettings)) {
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.success',
+      session,
+      metadata: { mfaRequired: false },
+    });
     return successResponse(requestId, session);
   }
 
   if (!isAdminMfaConfigured()) {
+    revokeAdminSession(session.token);
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.mfa_provider_missing',
+      session,
+      metadata: { mfaRequired: true },
+    });
     return errorResponse(
       503,
       'MFA_PROVIDER_NOT_CONFIGURED',
@@ -93,13 +142,36 @@ const completeLoginResponse = (
   }
 
   if (typeof twoFactorCode !== 'string' || !twoFactorCode.trim()) {
+    revokeAdminSession(session.token);
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.mfa_required',
+      session,
+      metadata: { mfaRequired: true },
+    });
     return errorResponse(401, 'MFA_REQUIRED', 'Enter your two-factor authentication code.', requestId);
   }
 
   if (!verifyAdminMfaCode(twoFactorCode)) {
+    revokeAdminSession(session.token);
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.mfa_invalid',
+      session,
+      metadata: { mfaRequired: true },
+    });
     return errorResponse(401, 'INVALID_MFA_CODE', 'Invalid two-factor authentication code.', requestId);
   }
 
+  await recordAuthAudit({
+    repositories,
+    requestId,
+    action: 'auth.login.success',
+    session,
+    metadata: { mfaRequired: true },
+  });
   return successResponse(requestId, session);
 };
 
@@ -136,7 +208,7 @@ export async function POST(request: NextRequest) {
             fullName: user.fullName,
             role: user.role,
             status: user.status,
-          }, 'supabase', authSettings), authSettings, twoFactorCode);
+          }, 'supabase', authSettings), repositories, authSettings, twoFactorCode);
         }
       }
     } catch (error) {
@@ -179,5 +251,5 @@ export async function POST(request: NextRequest) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
-  return completeLoginResponse(requestId, session, authSettings, twoFactorCode);
+  return completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode);
 }
