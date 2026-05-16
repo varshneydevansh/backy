@@ -25,6 +25,8 @@ const STRIPE_REFUND_MOCK_PORT = Number(process.env.BACKY_STRIPE_REFUND_MOCK_PORT
 const STRIPE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${STRIPE_REFUND_MOCK_PORT}`;
 const PAYPAL_REFUND_MOCK_PORT = Number(process.env.BACKY_PAYPAL_REFUND_MOCK_PORT || 45685);
 const PAYPAL_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${PAYPAL_REFUND_MOCK_PORT}`;
+const SQUARE_REFUND_MOCK_PORT = Number(process.env.BACKY_SQUARE_REFUND_MOCK_PORT || 45686);
+const SQUARE_REFUND_MOCK_BASE_URL = `http://127.0.0.1:${SQUARE_REFUND_MOCK_PORT}`;
 const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681);
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
@@ -331,6 +333,48 @@ const createPayPalRefundMockServer = async () => {
     });
   });
   await new Promise((resolve) => server.listen(PAYPAL_REFUND_MOCK_PORT, '127.0.0.1', resolve));
+  return {
+    requests,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+};
+
+const squareRefundExecutionEnabled = () => {
+  const token = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN || '';
+  const apiBaseUrl = process.env.BACKY_SQUARE_API_BASE_URL || process.env.SQUARE_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === SQUARE_REFUND_MOCK_BASE_URL);
+};
+
+const createSquareRefundMockServer = async () => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const body = bodyText ? JSON.parse(bodyText) : {};
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body,
+      });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        refund: {
+          id: `sq_refund_smoke_${requests.length}`,
+          status: 'COMPLETED',
+          amount_money: body.amount_money || {},
+          payment_id: body.payment_id || '',
+          order_id: `sq_order_smoke_${requests.length}`,
+          reason: body.reason || '',
+          created_at: '2026-05-16T00:00:00Z',
+          updated_at: '2026-05-16T00:00:01Z',
+        },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(SQUARE_REFUND_MOCK_PORT, '127.0.0.1', resolve));
   return {
     requests,
     close: () => new Promise((resolve) => server.close(resolve)),
@@ -1781,6 +1825,30 @@ const preparePayPalProviderRefundThroughUi = async (client, orderNumber, suffix)
   return null;
 };
 
+const prepareSquareProviderRefundThroughUi = async (client, orderNumber, suffix) => {
+  await clickOrderCardButton(client, orderNumber, 'Edit');
+  await setLabeledControl(client, 'Provider', 'square', { exact: true });
+  await setLabeledControl(client, 'Payment ref', `sq_payment_${suffix}`, { exact: true });
+  await clickByText(client, 'Save Order', { exact: true });
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      updated: document.body?.innerText?.includes('Order updated.') || false,
+      providerVisible: document.body?.innerText?.includes('square') && document.body?.innerText?.includes(${JSON.stringify(`sq_payment_${suffix}`)}),
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    }))()`);
+    if (state.updated || state.providerVisible) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Square provider refund preparation did not save: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const verifyEasyPostProviderExecution = async (collectionId, slug, suffix, easyPostMockServer) => {
   const expectedSecret = process.env.BACKY_EASYPOST_API_KEY || process.env.EASYPOST_API_KEY;
   const beforeLabelRecord = await getCollectionRecordBySlug(collectionId, slug);
@@ -2135,6 +2203,7 @@ const main = async () => {
   let stripeTaxMockServer;
   let stripeRefundMockServer;
   let paypalRefundMockServer;
+  let squareRefundMockServer;
   let easyPostMockServer;
   let shippoMockServer;
   let fulfillmentProviderServer;
@@ -2471,13 +2540,18 @@ const main = async () => {
 
     const providerRefundExecutionProvider = paypalRefundExecutionEnabled()
       ? 'paypal'
-      : stripeRefundExecutionEnabled()
-        ? 'stripe'
-        : 'manual';
+      : squareRefundExecutionEnabled()
+        ? 'square'
+        : stripeRefundExecutionEnabled()
+          ? 'stripe'
+          : 'manual';
 
     if (providerRefundExecutionProvider === 'paypal') {
       paypalRefundMockServer = await createPayPalRefundMockServer();
       await preparePayPalProviderRefundThroughUi(client, orderNumber, suffix);
+    } else if (providerRefundExecutionProvider === 'square') {
+      squareRefundMockServer = await createSquareRefundMockServer();
+      await prepareSquareProviderRefundThroughUi(client, orderNumber, suffix);
     } else if (providerRefundExecutionProvider === 'stripe') {
       stripeRefundMockServer = await createStripeRefundMockServer();
       await prepareStripeProviderRefundThroughUi(client, orderNumber, suffix);
@@ -2524,6 +2598,24 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful PayPal execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned PayPal refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'paypal-api', `Provider refund payload did not persist PayPal execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    } else if (providerRefundExecutionProvider === 'square') {
+      const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
+      assert(squareRefundMockServer.requests.length >= 1, `Square refund mock did not receive a refund request: ${squareRefundMockServer.requests.length}`);
+      const squareRefundRequest = squareRefundMockServer.requests[0];
+      const expectedToken = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN;
+      const expectedVersion = process.env.BACKY_SQUARE_VERSION || process.env.SQUARE_VERSION || '2026-01-22';
+      assert(squareRefundRequest.url === '/v2/refunds', `Square refund mock received unexpected URL: ${JSON.stringify(squareRefundMockServer.requests)}`);
+      assert(squareRefundRequest.headers.authorization === `Bearer ${expectedToken}`, `Square refund mock did not receive bearer auth: ${JSON.stringify(squareRefundRequest.headers)}`);
+      assert(squareRefundRequest.headers['square-version'] === expectedVersion, `Square refund mock did not receive the expected version header: ${JSON.stringify(squareRefundRequest.headers)}`);
+      assert(/^rf_/.test(String(squareRefundRequest.body.idempotency_key || '')), `Square refund body did not include idempotency key: ${JSON.stringify(squareRefundRequest.body)}`);
+      assert(squareRefundRequest.body.payment_id === `sq_payment_${suffix}`, `Square refund body did not include payment id: ${JSON.stringify(squareRefundRequest.body)}`);
+      assert(Number(squareRefundRequest.body.amount_money?.amount) === Math.round(expectedProviderTotal * 100), `Square refund body amount did not match order total: ${JSON.stringify(squareRefundRequest.body)}`);
+      assert(squareRefundRequest.body.amount_money?.currency === 'USD', `Square refund body currency did not match order currency: ${JSON.stringify(squareRefundRequest.body)}`);
+      assert(String(providerRefundRecord.values.providerrefundid || '').startsWith('sq_refund_smoke_'), `Provider refund did not persist the Square refund id: ${JSON.stringify(providerRefundRecord.values)}`);
+      assert(persistedProviderPayload.action === 'refunds.create', `Provider refund payload did not persist the Square refund action: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Square execution: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Square refund id: ${JSON.stringify(persistedProviderPayload)}`);
+      assert(persistedProviderPayload.executionMode === 'square-api', `Provider refund payload did not persist Square execution mode: ${JSON.stringify(persistedProviderPayload)}`);
     } else if (providerRefundExecutionProvider === 'stripe') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(stripeRefundMockServer.requests.length >= 1, `Stripe refund mock did not receive a refund request: ${stripeRefundMockServer.requests.length}`);
@@ -2742,6 +2834,9 @@ const main = async () => {
     }
     if (paypalRefundMockServer) {
       await paypalRefundMockServer.close().catch(() => {});
+    }
+    if (squareRefundMockServer) {
+      await squareRefundMockServer.close().catch(() => {});
     }
     if (easyPostMockServer) {
       await easyPostMockServer.close().catch(() => {});

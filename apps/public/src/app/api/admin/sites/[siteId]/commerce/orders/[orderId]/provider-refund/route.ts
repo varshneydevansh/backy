@@ -161,7 +161,41 @@ const canExecutePayPalRefund = (provider: string, paymentReference: string) => (
   Boolean(paymentReference)
 );
 
+const squareAccessToken = () => (
+  process.env.BACKY_SQUARE_ACCESS_TOKEN?.trim()
+  || process.env.SQUARE_ACCESS_TOKEN?.trim()
+  || ''
+);
+
+const squareVersion = () => (
+  process.env.BACKY_SQUARE_VERSION?.trim()
+  || process.env.SQUARE_VERSION?.trim()
+  || '2026-01-22'
+);
+
+const squareRefundEndpoint = () => {
+  const baseUrl = (
+    process.env.BACKY_SQUARE_API_BASE_URL?.trim()
+    || process.env.SQUARE_API_BASE_URL?.trim()
+    || 'https://connect.squareup.com'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/v2/refunds`;
+};
+
+const canExecuteSquareRefund = (provider: string, paymentReference: string) => (
+  provider.toLowerCase() === 'square' &&
+  Boolean(squareAccessToken()) &&
+  Boolean(paymentReference)
+);
+
 const toStripeAmount = (amount: number, currency: string): number => {
+  const normalizedCurrency = currency.toUpperCase();
+  return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
+    ? Math.max(0, Math.round(amount))
+    : Math.max(0, Math.round(amount * 100));
+};
+
+const toMinorAmount = (amount: number, currency: string): number => {
   const normalizedCurrency = currency.toUpperCase();
   return ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)
     ? Math.max(0, Math.round(amount))
@@ -311,6 +345,47 @@ const safePayPalErrorPayload = (value: Record<string, unknown>) => {
   };
 };
 
+const safeSquareMoneyPayload = (value: unknown) => {
+  const money = toRecord(value);
+  return {
+    amount: Number(money.amount || 0),
+    currency: textValue(money.currency),
+  };
+};
+
+const safeSquareRefundPayload = (value: Record<string, unknown>) => {
+  const refund = toRecord(value.refund);
+  return {
+    id: textValue(refund.id),
+    status: textValue(refund.status),
+    amount_money: safeSquareMoneyPayload(refund.amount_money),
+    payment_id: textValue(refund.payment_id),
+    order_id: textValue(refund.order_id),
+    reason: textValue(refund.reason),
+    created_at: textValue(refund.created_at),
+    updated_at: textValue(refund.updated_at),
+  };
+};
+
+const safeSquareErrorPayload = (value: Record<string, unknown>) => {
+  const errors = Array.isArray(value.errors)
+    ? value.errors.map((error) => {
+      const errorRecord = toRecord(error);
+      return {
+        category: textValue(errorRecord.category),
+        code: textValue(errorRecord.code),
+        detail: textValue(errorRecord.detail),
+        field: textValue(errorRecord.field),
+      };
+    })
+    : [];
+
+  return {
+    errors,
+    message: errors[0]?.detail || 'Square refund request failed.',
+  };
+};
+
 const executeStripeRefund = async (input: {
   refundId: string;
   orderId: string;
@@ -402,6 +477,47 @@ const executePayPalRefund = async (input: {
   };
 };
 
+const executeSquareRefund = async (input: {
+  refundId: string;
+  paymentReference: string;
+  amount: number;
+  currency: string;
+  reason: string;
+}) => {
+  const response = await fetch(squareRefundEndpoint(), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${squareAccessToken()}`,
+      'content-type': 'application/json',
+      'square-version': squareVersion(),
+    },
+    body: JSON.stringify({
+      idempotency_key: input.refundId,
+      amount_money: {
+        amount: toMinorAmount(input.amount, input.currency),
+        currency: input.currency.toUpperCase(),
+      },
+      payment_id: input.paymentReference,
+      reason: input.reason.slice(0, 192),
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeSquareErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeSquareRefundPayload(payloadRecord),
+  };
+};
+
 const buildProviderRefundUpdate = async (
   record: CollectionRecordAuditSource,
   body: Record<string, unknown>,
@@ -417,19 +533,24 @@ const buildProviderRefundUpdate = async (
   const paymentReference = textValue(values.paymentreference);
   const shouldExecuteStripeRefund = canExecuteStripeRefund(provider, paymentReference);
   const shouldExecutePayPalRefund = canExecutePayPalRefund(provider, paymentReference);
+  const shouldExecuteSquareRefund = canExecuteSquareRefund(provider, paymentReference);
   const orderNumber = textValue(values.ordernumber);
   const executionMode = shouldExecuteStripeRefund
     ? 'stripe-api'
     : shouldExecutePayPalRefund
       ? 'paypal-api'
-      : 'handoff';
+      : shouldExecuteSquareRefund
+        ? 'square-api'
+        : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.provider-refund.v1',
     action: provider === 'stripe'
       ? 'refunds.create'
       : provider === 'paypal'
         ? 'payments.captures.refund'
-        : 'provider.refund.create',
+        : provider === 'square'
+          ? 'refunds.create'
+          : 'provider.refund.create',
     provider,
     executionMode,
     orderId: record.id,
@@ -501,6 +622,32 @@ const buildProviderRefundUpdate = async (
       status = 'failed';
       statusNote = 'failed';
     }
+  } else if (shouldExecuteSquareRefund) {
+    const result = await executeSquareRefund({
+      refundId,
+      paymentReference,
+      amount,
+      currency,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const squareStatus = result.payload.status.toUpperCase();
+      if (squareStatus === 'COMPLETED') {
+        status = 'succeeded';
+        completedAt = new Date().toISOString();
+      } else if (squareStatus === 'FAILED' || squareStatus === 'REJECTED') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerRefundId = result.payload.id || refundId;
+      providerReference = `${provider}:${result.payload.id || refundId}`;
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      statusNote = 'failed';
+    }
   }
 
   const refund: ProviderRefundPayload = {
@@ -515,7 +662,7 @@ const buildProviderRefundUpdate = async (
     completedAt,
     providerPayload,
   };
-  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund) || status === 'succeeded';
+  const shouldMarkRefunded = !(shouldExecuteStripeRefund || shouldExecutePayPalRefund || shouldExecuteSquareRefund) || status === 'succeeded';
 
   return {
     refund,
