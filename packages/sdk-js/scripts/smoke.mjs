@@ -565,6 +565,10 @@ assert(revalidatedSeo.notModified === true, 'seoCached() did not return notModif
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');
+if (media.data.media?.length > 0) {
+  assert(media.data.media[0].references?.schemaVersion === 'backy.media.references.v1', 'media() missing normalized reference metadata');
+  assert(media.data.media[0].editableMetadata?.schemaVersion === 'backy.media.editable-metadata.v1', 'media() missing editable metadata contract');
+}
 const cachedMedia = await client.mediaCached({ limit: 5 });
 assert(cachedMedia.notModified === false, 'mediaCached() first request should return a body');
 assert(cachedMedia.meta.etag, 'mediaCached() missing response ETag');
@@ -574,6 +578,8 @@ assert(revalidatedMedia.notModified === true, 'mediaCached() did not return notM
 if (media.data.media?.length > 0) {
   const mediaDetail = await client.mediaAsset(media.data.media[0].id);
   assert(mediaDetail.data.media?.id === media.data.media[0].id, 'mediaAsset() returned wrong media asset');
+  assert(mediaDetail.data.media?.references?.schemaVersion === 'backy.media.references.v1', 'mediaAsset() missing normalized reference metadata');
+  assert(mediaDetail.data.media?.editableMetadata?.metadata, 'mediaAsset() missing editable metadata values');
   const cachedMediaDetail = await client.mediaAssetCached(media.data.media[0].id);
   assert(cachedMediaDetail.notModified === false, 'mediaAssetCached() first request should return a body');
   assert(cachedMediaDetail.body.data.media?.id === media.data.media[0].id, 'mediaAssetCached() returned wrong media asset');

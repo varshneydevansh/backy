@@ -7,8 +7,8 @@
 import { NextRequest } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
-import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { toPublicMediaAsset } from '@/lib/publicMediaResource';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         scope: 'media',
       }) || undefined;
 
-      const mediaWithVariants = withResponsiveMediaManifest(site.id, media);
+      const mediaWithVariants = toPublicMediaAsset(site.id, media);
 
       return publicContractJson({
         success: true,
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 
-    const mediaWithVariants = withResponsiveMediaManifest(site.id, media);
+    const mediaWithVariants = toPublicMediaAsset(site.id, media);
 
     return publicContractJson({
       success: true,

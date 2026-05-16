@@ -132,6 +132,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
   - Supports `type`, `scope`, `pageId`, `postId`, `blogId` (alias for `postId`), `global=true`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
   - `pageId`/`postId`/`blogId` media filters return globally reusable assets plus assets explicitly scoped or bound to the requested content item. Use `global=true` to return only site-global assets, or combine `scope=page|post` with the content id for only content-scoped assets.
+  - Each public asset includes `references: { schemaVersion: "backy.media.references.v1", pageIds, postIds, pages, posts, usageTypes, totalBindings }`, `referenceSummary`, and `editableMetadata: { schemaVersion: "backy.media.editable-metadata.v1", title, altText, caption, tags, folderId, scope, scopeTargetId, visibility, metadata }` so custom frontends can browse asset usage and editable metadata without depending on admin-only internals.
   - Public image media includes `responsive: { src, srcSet, sizes, variants, preparedAt?, preparedBy? }` with transform URLs for generated/custom frontend responsive image rendering.
   - The detail route returns one public asset in `{ success, requestId, data: { media } }`, preserves legacy top-level `media`, and returns `404` for missing or private media.
 - `GET /api/sites/:siteId/media/:mediaId/file`

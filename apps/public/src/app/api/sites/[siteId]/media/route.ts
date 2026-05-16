@@ -10,9 +10,9 @@ import { NextRequest } from 'next/server';
 import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
-import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { toPublicMediaAsset } from '@/lib/publicMediaResource';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -67,7 +67,7 @@ const mediaTagMatches = (tags: string[], tag: string | null) => {
 };
 
 const paginateMedia = (siteId: string, items: MediaItem[], limit: number, offset: number) => ({
-    media: items.slice(offset, offset + limit).map((item) => withResponsiveMediaManifest(siteId, item)),
+    media: items.slice(offset, offset + limit).map((item) => toPublicMediaAsset(siteId, item)),
     pagination: {
         total: items.length,
         limit,
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             ...mediaPayload,
             media: mediaPayload.media
                 .filter((item) => !isMediaQuarantined(item))
-                .map((item) => withResponsiveMediaManifest(site.id, item)),
+                .map((item) => toPublicMediaAsset(site.id, item)),
         };
 
         return publicContractJson({

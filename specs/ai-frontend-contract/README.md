@@ -131,6 +131,8 @@ Admin media detail can replace the stored file for an existing media item with `
 
 Public image media can also be routed through `GET /api/sites/:siteId/media/:mediaId/transform?width=:width&quality=:quality`. Backy validates site ownership, public visibility, image type, and bounded width/quality parameters, then redirects to the Next image optimizer. Public media list/detail responses include a `responsive` manifest for public image assets with `src`, `srcSet`, `sizes`, and transform `variants`, so generated/custom frontends can render responsive images without hardcoding Backy width presets. Admin clients can persist prepared variant manifests with `POST /api/admin/sites/:siteId/media/:mediaId/transforms`; public media responses prefer those prepared widths/quality/sizes and include preparation metadata. Manifest/OpenAPI advertise the route, and the SDK exposes `mediaTransformUrl(...)` plus `BackyMediaAsset.responsive` typing.
 
+Public media list/detail responses also normalize usage metadata for custom frontend workflows. Each asset now includes `references` with `backy.media.references.v1` page/post target lists, binding usage types, and binding records derived from admin media binding metadata, plus `referenceSummary` for quick counts. `editableMetadata` exposes the asset title/alt/caption/tags/folder/scope/visibility and original metadata under `backy.media.editable-metadata.v1`, so frontend builders can inspect the same fields they would present for editing while preserving the legacy top-level media fields.
+
 ## Current collection endpoints
 
 Backy now exposes the first implementation-backed CMS collection surface:

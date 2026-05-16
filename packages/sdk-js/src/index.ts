@@ -274,6 +274,45 @@ export interface BackyMediaAsset {
     generatedBytes?: number;
     storageProvider?: string;
   };
+  references?: {
+    schemaVersion: 'backy.media.references.v1' | string;
+    global: boolean;
+    scoped: boolean;
+    scopes: string[];
+    pageIds: string[];
+    postIds: string[];
+    pages: Array<{
+      id: string;
+      usageTypes: string[];
+      bindings: Array<Record<string, unknown>>;
+    }>;
+    posts: Array<{
+      id: string;
+      usageTypes: string[];
+      bindings: Array<Record<string, unknown>>;
+    }>;
+    usageTypes: string[];
+    totalBindings: number;
+  };
+  referenceSummary?: {
+    pageCount: number;
+    postCount: number;
+    usageTypes: string[];
+    global: boolean;
+    scoped: boolean;
+  };
+  editableMetadata?: {
+    schemaVersion: 'backy.media.editable-metadata.v1' | string;
+    title: string | null;
+    altText: string | null;
+    caption: string | null;
+    tags: string[];
+    folderId: string | null;
+    scope: string;
+    scopeTargetId: string | null;
+    visibility: string;
+    metadata: Record<string, unknown>;
+  };
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }

@@ -909,6 +909,11 @@ try {
     assert(publicFontDetail.json?.success === true, `${publicFontDetail.url} expected success envelope`);
     assert(publicFontDetail.json?.data?.media?.id === createdMediaId, `${publicFontDetail.url} missing media detail in data envelope`);
     assert(publicFontDetail.json?.media?.metadata?.fontFamily === 'Contract Sans Display', `${publicFontDetail.url} missing legacy media detail`);
+    assert(publicFontDetail.json?.data?.media?.editableMetadata?.schemaVersion === 'backy.media.editable-metadata.v1', `${publicFontDetail.url} missing editable metadata contract`);
+    assert(publicFontDetail.json?.data?.media?.editableMetadata?.metadata?.fontFamily === 'Contract Sans Display', `${publicFontDetail.url} missing editable metadata values`);
+    assert(publicFontDetail.json?.data?.media?.references?.schemaVersion === 'backy.media.references.v1', `${publicFontDetail.url} missing media references contract`);
+    assert(publicFontDetail.json?.data?.media?.references?.global === true, `${publicFontDetail.url} expected initial public font to be global`);
+    assert(publicFontDetail.json?.data?.media?.references?.totalBindings === 0, `${publicFontDetail.url} expected no initial media bindings`);
 
     const adminMediaList = await request(`/api/admin/sites/${createdSiteId}/media?type=font&tag=font`);
     assert(adminMediaList.response.status === 200, `${adminMediaList.url} expected 200, got ${adminMediaList.response.status}`);
@@ -1561,6 +1566,18 @@ try {
     const pageMediaList = await request(`/api/admin/sites/${createdSiteId}/media?pageId=${createdPageId}&type=font`);
     assert(pageMediaList.response.status === 200, `${pageMediaList.url} expected 200, got ${pageMediaList.response.status}`);
     assert(pageMediaList.json?.data?.media?.some((item) => item.id === createdMediaId && item.pageIds?.includes(createdPageId)), `${pageMediaList.url} missing page-bound media`);
+
+    const publicPageMediaList = await request(`/api/sites/${createdSiteId}/media?pageId=${createdPageId}&type=font`);
+    assert(publicPageMediaList.response.status === 200, `${publicPageMediaList.url} expected 200, got ${publicPageMediaList.response.status}`);
+    const publicPageMedia = publicPageMediaList.json?.data?.media?.find((item) => item.id === createdMediaId);
+    assert(publicPageMedia?.references?.pageIds?.includes(createdPageId), `${publicPageMediaList.url} missing page reference ids`);
+    assert(publicPageMedia?.references?.pages?.some((page) => (
+      page.id === createdPageId &&
+      page.usageTypes?.includes('content') &&
+      page.bindings?.some((binding) => binding.targetId === createdPageId && binding.usageType === 'content')
+    )), `${publicPageMediaList.url} missing normalized page binding reference`);
+    assert(publicPageMedia?.referenceSummary?.pageCount >= 1, `${publicPageMediaList.url} missing page reference summary`);
+    assert(publicPageMedia?.editableMetadata?.tags?.includes('font'), `${publicPageMediaList.url} missing editable media tag metadata`);
 
     const futurePageSchedule = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const futureScheduledPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
@@ -3082,6 +3099,14 @@ try {
     const publicBlogMediaAliasList = await request(`/api/sites/${createdSiteId}/media?blogId=${createdPostId}&type=font`);
     assert(publicBlogMediaAliasList.response.status === 200, `${publicBlogMediaAliasList.url} expected 200, got ${publicBlogMediaAliasList.response.status}`);
     assert(publicBlogMediaAliasList.json?.data?.media?.some((item) => item.id === createdMediaId && item.postIds?.includes(createdPostId)), `${publicBlogMediaAliasList.url} missing public blogId media alias item`);
+    const publicBlogMedia = publicBlogMediaAliasList.json?.data?.media?.find((item) => item.id === createdMediaId);
+    assert(publicBlogMedia?.references?.postIds?.includes(createdPostId), `${publicBlogMediaAliasList.url} missing post reference ids`);
+    assert(publicBlogMedia?.references?.posts?.some((post) => (
+      post.id === createdPostId &&
+      post.usageTypes?.includes('featured') &&
+      post.bindings?.some((binding) => binding.targetId === createdPostId && binding.usageType === 'featured')
+    )), `${publicBlogMediaAliasList.url} missing normalized post binding reference`);
+    assert(publicBlogMedia?.referenceSummary?.postCount >= 1, `${publicBlogMediaAliasList.url} missing post reference summary`);
 
     const readiness = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}/readiness`);
     assert(readiness.response.status === 200, `${readiness.url} expected 200, got ${readiness.response.status}`);
