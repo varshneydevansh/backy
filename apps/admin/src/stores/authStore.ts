@@ -148,7 +148,6 @@ export const useAuthStore = create<AuthStore>()(
 
       refreshSession: async () => {
         const token = useAuthStore.getState().session?.token;
-        if (!token) return;
 
         set({ isLoading: true, error: null });
         try {
@@ -172,9 +171,6 @@ export const useAuthStore = create<AuthStore>()(
 
       rotateSession: async () => {
         const token = useAuthStore.getState().session?.token;
-        if (!token) {
-          throw new Error('Sign in with a valid admin session before rotating it.');
-        }
 
         set({ isLoading: true, error: null });
         try {
@@ -202,9 +198,30 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'backy-auth-storage',
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AuthStore>;
+        const persistedSession = persisted.session && persisted.session.issuedAt && persisted.session.expiresAt && persisted.session.authMode
+          ? {
+              issuedAt: persisted.session.issuedAt,
+              expiresAt: persisted.session.expiresAt,
+              authMode: persisted.session.authMode,
+            }
+          : null;
+        return {
+          ...currentState,
+          ...persisted,
+          session: persistedSession,
+        };
+      },
       partialize: (state) => ({
         user: state.user,
-        session: state.session,
+        session: state.session
+          ? {
+              issuedAt: state.session.issuedAt,
+              expiresAt: state.session.expiresAt,
+              authMode: state.session.authMode,
+            }
+          : null,
       }),
     }
   )
@@ -215,7 +232,7 @@ export const useAuthStore = create<AuthStore>()(
 // ============================================
 
 export const selectIsAuthenticated = (state: AuthStore): boolean =>
-  Boolean(state.user && state.session?.token);
+  Boolean(state.user && state.session);
 
 export const selectIsAdmin = (state: AuthStore): boolean =>
   state.user?.role === 'owner' || state.user?.role === 'admin';

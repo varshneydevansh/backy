@@ -600,6 +600,7 @@ const signInAdmin = async (client) => {
   const loginResult = await evaluate(client, `(async () => {
     const response = await fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/login`)}, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'admin@backy.io',
@@ -620,7 +621,7 @@ const signInAdmin = async (client) => {
     return {
       ok: true,
       userEmail: payload.data.user.email,
-      hasToken: Boolean(payload.data.session.token),
+      hasSession: Boolean(payload.data.session.expiresAt),
     };
   })()`);
   assert(loginResult.ok, `Unable to create browser admin session: ${JSON.stringify(loginResult).slice(0, 1000)}`);
@@ -636,9 +637,9 @@ const signInAdmin = async (client) => {
           Boolean(document.querySelector('[data-testid="dashboard-command-center"]'))
         ) &&
           stored?.state?.user?.email === 'admin@backy.io' &&
-          Boolean(stored?.state?.session?.token),
+          Boolean(stored?.state?.session?.expiresAt),
         path: window.location.pathname,
-        hasToken: Boolean(stored?.state?.session?.token),
+        hasSession: Boolean(stored?.state?.session?.expiresAt),
         userEmail: stored?.state?.user?.email || '',
         body: document.body?.innerText?.slice(0, 900) || '',
       };

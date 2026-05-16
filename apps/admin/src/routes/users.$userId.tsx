@@ -505,12 +505,6 @@ function EditUserPage() {
       return;
     }
 
-    if (!currentSessionToken) {
-      setUserSessions([]);
-      setSessionNotice('Sign in with a valid admin session to review active sessions.');
-      return;
-    }
-
     if (!canManageUsers) {
       setUserSessions([]);
       setSessionNotice(managePermissionTitle || 'Your account cannot review user sessions.');
@@ -539,12 +533,6 @@ function EditUserPage() {
     if (isCurrentAdminPermissionMatrixPending) return;
     if (!user) {
       setUserMfa(null);
-      return;
-    }
-
-    if (!currentSessionToken) {
-      setUserMfa(null);
-      setMfaNotice('Sign in with a valid admin session to review MFA controls.');
       return;
     }
 
@@ -602,7 +590,6 @@ function EditUserPage() {
     formData.status !== user.status
   ));
   const canCreateResetToken = Boolean(
-    currentSessionToken &&
     canManageUsers &&
     !isUserDetailBusy &&
     !isCreatingResetToken &&
@@ -610,14 +597,12 @@ function EditUserPage() {
     formData.status !== 'suspended',
   );
   const canCreateInviteToken = Boolean(
-    currentSessionToken &&
     canManageUsers &&
     !isUserDetailBusy &&
     !isCreatingInviteToken &&
     formData.status === 'invited',
   );
   const canManageUserMfa = Boolean(
-    currentSessionToken &&
     canManageUsers &&
     !isUserDetailBusy &&
     !isLoadingUserMfa &&
@@ -1054,7 +1039,7 @@ function EditUserPage() {
   };
 
   const revokeSession = async (session: AdminSessionSummary) => {
-    if (!currentSessionToken || session.current || revokingSessionId) return;
+    if (session.current || revokingSessionId) return;
     if (!canManageUsers) {
       setSessionNotice(managePermissionTitle || 'Your account cannot revoke user sessions.');
       return;
@@ -1080,8 +1065,7 @@ function EditUserPage() {
       return;
     }
 
-    if (!currentSessionToken || isCreatingInviteToken) {
-      setInviteTokenNotice('Sign in with a valid admin session to generate invite links.');
+    if (isCreatingInviteToken) {
       return;
     }
 
@@ -1111,8 +1095,7 @@ function EditUserPage() {
       return;
     }
 
-    if (!currentSessionToken || isCreatingResetToken) {
-      setResetTokenNotice('Sign in with a valid admin session to generate reset tokens.');
+    if (isCreatingResetToken) {
       return;
     }
 
@@ -1142,8 +1125,7 @@ function EditUserPage() {
       return;
     }
 
-    if (!currentSessionToken || isSavingUserMfa) {
-      setMfaNotice('Sign in with a valid admin session to update MFA settings.');
+    if (isSavingUserMfa) {
       return;
     }
 

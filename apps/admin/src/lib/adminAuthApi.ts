@@ -2,7 +2,7 @@ import { getAdminApiBase } from '@/lib/adminContentApi';
 import type { User } from '@/stores/authStore';
 
 export interface AdminSession {
-  token: string;
+  token?: string;
   issuedAt: string;
   expiresAt: string;
   authMode: 'local-demo' | 'supabase';
@@ -213,8 +213,18 @@ const readJson = async <T>(response: Response): Promise<T> => {
   return payload as T;
 };
 
+const sessionHeaders = (token?: string | null, extra?: HeadersInit): Headers => {
+  const headers = new Headers(extra);
+  if (token && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${token}`);
+  }
+  return headers;
+};
+
 export async function fetchAdminPasswordPolicy() {
-  const response = await fetch(`${getAdminApiBase()}/auth/password-policy`);
+  const response = await fetch(`${getAdminApiBase()}/auth/password-policy`, {
+    credentials: 'include',
+  });
   const payload = await readJson<AdminPasswordPolicyResponse>(response);
 
   if (!response.ok || !payload?.success || !payload.data) {
@@ -227,6 +237,7 @@ export async function fetchAdminPasswordPolicy() {
 export async function loginAdmin(email: string, password: string, twoFactorCode?: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/login`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
     },
@@ -248,11 +259,10 @@ export async function loginAdmin(email: string, password: string, twoFactorCode?
   return payload.data;
 }
 
-export async function fetchAdminSession(token: string) {
+export async function fetchAdminSession(token?: string | null) {
   const response = await fetch(`${getAdminApiBase()}/auth/session`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
+    credentials: 'include',
+    headers: sessionHeaders(token),
   });
   const payload = await readJson<AdminAuthResponse>(response);
 
@@ -263,12 +273,11 @@ export async function fetchAdminSession(token: string) {
   return payload.data;
 }
 
-export async function rotateAdminSession(token: string) {
+export async function rotateAdminSession(token?: string | null) {
   const response = await fetch(`${getAdminApiBase()}/auth/session`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
+    credentials: 'include',
+    headers: sessionHeaders(token),
   });
   const payload = await readJson<AdminAuthResponse>(response);
 
@@ -282,23 +291,19 @@ export async function rotateAdminSession(token: string) {
 export async function logoutAdmin(token?: string | null) {
   await fetch(`${getAdminApiBase()}/auth/logout`, {
     method: 'POST',
-    headers: token
-      ? {
-          authorization: `Bearer ${token}`,
-        }
-      : undefined,
+    credentials: 'include',
+    headers: sessionHeaders(token),
   }).catch(() => undefined);
 }
 
-export async function listAdminAuthSessions(token: string, filters: { userId?: string; email?: string } = {}) {
+export async function listAdminAuthSessions(token?: string | null, filters: { userId?: string; email?: string } = {}) {
   const params = new URLSearchParams();
   if (filters.userId) params.set('userId', filters.userId);
   if (filters.email) params.set('email', filters.email);
   const query = params.toString();
   const response = await fetch(`${getAdminApiBase()}/auth/sessions${query ? `?${query}` : ''}`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
+    credentials: 'include',
+    headers: sessionHeaders(token),
   });
   const payload = await readJson<AdminSessionListResponse>(response);
 
@@ -309,13 +314,13 @@ export async function listAdminAuthSessions(token: string, filters: { userId?: s
   return payload.data.sessions;
 }
 
-export async function revokeAdminAuthSession(token: string, sessionId: string) {
+export async function revokeAdminAuthSession(token: string | null | undefined, sessionId: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/sessions`, {
     method: 'DELETE',
-    headers: {
-      authorization: `Bearer ${token}`,
+    credentials: 'include',
+    headers: sessionHeaders(token, {
       'content-type': 'application/json',
-    },
+    }),
     body: JSON.stringify({ sessionId }),
   });
   const payload = await readJson<AdminSessionRevokeResponse>(response);
@@ -328,16 +333,16 @@ export async function revokeAdminAuthSession(token: string, sessionId: string) {
 }
 
 export async function createAdminPasswordResetToken(
-  token: string,
+  token: string | null | undefined,
   userId: string,
   options: { expiresInMinutes?: number } = {},
 ) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/password-reset`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
+    credentials: 'include',
+    headers: sessionHeaders(token, {
       'content-type': 'application/json',
-    },
+    }),
     body: JSON.stringify(options),
   });
   const payload = await readJson<AdminPasswordResetTokenResponse>(response);
@@ -350,16 +355,16 @@ export async function createAdminPasswordResetToken(
 }
 
 export async function createAdminInviteToken(
-  token: string,
+  token: string | null | undefined,
   userId: string,
   options: { expiresInMinutes?: number } = {},
 ) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/invite-link`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
+    credentials: 'include',
+    headers: sessionHeaders(token, {
       'content-type': 'application/json',
-    },
+    }),
     body: JSON.stringify(options),
   });
   const payload = await readJson<AdminInviteTokenResponse>(response);
@@ -371,11 +376,10 @@ export async function createAdminInviteToken(
   return payload.data.invite;
 }
 
-export async function getAdminUserMfa(token: string, userId: string) {
+export async function getAdminUserMfa(token: string | null | undefined, userId: string) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/mfa`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
+    credentials: 'include',
+    headers: sessionHeaders(token),
   });
   const payload = await readJson<AdminUserMfaResponse>(response);
 
@@ -387,16 +391,16 @@ export async function getAdminUserMfa(token: string, userId: string) {
 }
 
 export async function updateAdminUserMfa(
-  token: string,
+  token: string | null | undefined,
   userId: string,
   input: { enabled?: boolean; generateRecoveryCodes?: boolean },
 ) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/mfa`, {
     method: 'PATCH',
-    headers: {
-      authorization: `Bearer ${token}`,
+    credentials: 'include',
+    headers: sessionHeaders(token, {
       'content-type': 'application/json',
-    },
+    }),
     body: JSON.stringify(input),
   });
   const payload = await readJson<AdminUserMfaResponse>(response);
@@ -414,6 +418,7 @@ export async function updateAdminUserMfa(
 export async function acceptAdminInvite(token: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/accept-invite`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
     },
@@ -431,6 +436,7 @@ export async function acceptAdminInvite(token: string) {
 export async function resetAdminPassword(token: string, password: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/reset-password`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
     },
@@ -448,6 +454,7 @@ export async function resetAdminPassword(token: string, password: string) {
 export async function requestAdminPasswordRecovery(email: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/password-recovery`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
     },

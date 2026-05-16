@@ -95,6 +95,7 @@ const applyCorsHeaders = (headers: Headers, origin: string | null) => {
   headers.set('Access-Control-Allow-Origin', origin as string);
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Backy-Admin-Key, X-API-Key, X-Backy-Admin-Session');
+  headers.set('Access-Control-Allow-Credentials', 'true');
   headers.set('Access-Control-Max-Age', '86400');
   headers.append('Vary', 'Origin');
 };

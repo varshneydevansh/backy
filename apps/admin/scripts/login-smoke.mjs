@@ -314,11 +314,11 @@ const waitForDashboard = async (client) => {
         ready: window.location.pathname === '/' && Boolean(document.querySelector('[data-testid="dashboard-command-center"]')),
         path: window.location.pathname,
         userEmail: stored?.state?.user?.email || '',
-        hasToken: Boolean(stored?.state?.session?.token),
+        hasSession: Boolean(stored?.state?.session?.expiresAt),
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
-    if (state.ready && state.userEmail === 'admin@backy.io' && state.hasToken) return state;
+    if (state.ready && state.userEmail === 'admin@backy.io' && state.hasSession) return state;
     await sleep(250);
   }
 

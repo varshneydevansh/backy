@@ -435,26 +435,9 @@ const getAdminApiKey = (): string => {
   );
 };
 
-const getAdminSessionToken = (): string => {
-  if (typeof window === 'undefined') return '';
-
-  try {
-    const raw = window.localStorage.getItem('backy-auth-storage');
-    const parsed = raw ? JSON.parse(raw) as { state?: { session?: { token?: unknown } } } : null;
-    return typeof parsed?.state?.session?.token === 'string' ? parsed.state.session.token : '';
-  } catch {
-    return '';
-  }
-};
-
 const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
   const apiKey = getAdminApiKey();
-  const sessionToken = getAdminSessionToken();
   const headers = new Headers(init.headers);
-
-  if (sessionToken && !headers.has('authorization')) {
-    headers.set('authorization', `Bearer ${sessionToken}`);
-  }
 
   if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
     headers.set('x-backy-admin-key', apiKey);
@@ -462,6 +445,7 @@ const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
 
   return globalThis.fetch(input, {
     ...init,
+    credentials: init.credentials || 'include',
     headers,
   });
 };

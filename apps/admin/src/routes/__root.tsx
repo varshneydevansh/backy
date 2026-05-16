@@ -39,8 +39,7 @@ function RootComponent() {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
-  const isAuthenticated = useAuthStore((state) => Boolean(state.user && state.session?.token));
-  const sessionToken = useAuthStore((state) => state.session?.token || '');
+  const isAuthenticated = useAuthStore((state) => Boolean(state.user && state.session));
   const refreshSession = useAuthStore((state) => state.refreshSession);
   const validatedSessionRef = useRef(false);
 
@@ -55,13 +54,13 @@ function RootComponent() {
   }, [isAuthenticated, isPublicRoute, navigate]);
 
   useEffect(() => {
-    if (isPublicRoute || !isAuthenticated || !sessionToken || validatedSessionRef.current) {
+    if (isPublicRoute || !isAuthenticated || validatedSessionRef.current) {
       return;
     }
 
     validatedSessionRef.current = true;
     void refreshSession();
-  }, [isAuthenticated, isPublicRoute, refreshSession, sessionToken]);
+  }, [isAuthenticated, isPublicRoute, refreshSession]);
 
   // Public routes render without layout
   if (isPublicRoute) {

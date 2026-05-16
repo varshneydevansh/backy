@@ -71,10 +71,10 @@ function LoginPage() {
   const { signIn, isLoading, error, clearError, user, session } = useAuthStore();
 
   useEffect(() => {
-    if (user && session?.token) {
+    if (user && session) {
       navigate({ to: '/' });
     }
-  }, [session?.token, user, navigate]);
+  }, [session, user, navigate]);
 
   // Form state
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
