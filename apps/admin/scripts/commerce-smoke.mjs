@@ -256,6 +256,12 @@ const paddleSubscriptionExecutionEnabled = () => {
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const paddleCatalogSyncEnabled = () => {
+  const token = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
+  const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const httpSubscriptionExecutionEnabled = () => {
   const url = process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL || process.env.COMMERCE_SUBSCRIPTION_ACTION_URL || '';
   return url === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/subscription/action`;
@@ -308,6 +314,45 @@ const startStripeCheckoutMock = async () => {
         unit_amount: Number(form.get('unit_amount') || 0),
         product: form.get('product'),
         livemode: false,
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/products') {
+      const payload = JSON.parse(body || '{}');
+      const id = `pro_mock_${requests.length}`;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        data: {
+          id,
+          type: 'product',
+          status: 'active',
+          name: payload.name,
+          description: payload.description,
+          tax_category: payload.tax_category,
+          image_url: payload.image_url,
+          custom_data: payload.custom_data,
+        },
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/prices') {
+      const payload = JSON.parse(body || '{}');
+      const id = `pri_mock_${requests.length}`;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        data: {
+          id,
+          type: 'price',
+          status: 'active',
+          product_id: payload.product_id,
+          description: payload.description,
+          unit_price: payload.unit_price,
+          billing_cycle: payload.billing_cycle,
+          trial_period: payload.trial_period,
+          custom_data: payload.custom_data,
+        },
       }));
       return;
     }
@@ -1980,6 +2025,45 @@ const assertProductProviderSync = async ({ productCollection, productRecord }) =
     assert(sync.status === 'handoff', `Product provider sync should fall back to handoff without Stripe mock env: ${JSON.stringify(sync)}`);
     assert(sync.executionMode === 'handoff', `Product provider sync handoff mode was unexpected: ${JSON.stringify(sync)}`);
     assert(String(sync.reason || '').includes('STRIPE_SECRET_KEY'), `Product provider sync did not explain missing Stripe credentials: ${JSON.stringify(sync)}`);
+  }
+
+  if (paddleCatalogSyncEnabled()) {
+    const beforePaddleRequests = stripeCheckoutMock?.requests.length || 0;
+    const paddlePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
+      method: 'POST',
+      body: JSON.stringify({ provider: 'paddle' }),
+    });
+    const paddleSync = paddlePayload.data?.sync || paddlePayload.sync;
+    const paddleUpdated = paddlePayload.data?.product || paddlePayload.product;
+    assert(paddleSync?.provider === 'paddle', `Paddle product provider sync did not return Paddle metadata: ${JSON.stringify(paddlePayload).slice(0, 500)}`);
+    assert(paddleSync.status === 'synced', `Paddle product provider sync did not execute against the mock provider: ${JSON.stringify(paddleSync)}`);
+    assert(paddleSync.executionMode === 'paddle-api', `Paddle product sync execution mode was unexpected: ${JSON.stringify(paddleSync)}`);
+    assert(/^pro_mock_/.test(paddleSync.product?.id || ''), `Paddle product id was not returned: ${JSON.stringify(paddleSync)}`);
+    assert(/^pri_mock_/.test(paddleSync.price?.id || ''), `Paddle price id was not returned: ${JSON.stringify(paddleSync)}`);
+    assert(paddleSync.price?.unitAmount === 4900, `Paddle price amount was unexpected: ${JSON.stringify(paddleSync.price)}`);
+    assert(paddleUpdated?.id === productRecord.id, `Paddle product provider sync did not return the updated product: ${JSON.stringify(paddleUpdated)}`);
+
+    const paddleRequests = stripeCheckoutMock.requests.slice(beforePaddleRequests);
+    const paddleProductRequest = paddleRequests.find((request) => request.method === 'POST' && request.url === '/products');
+    const paddlePriceRequest = paddleRequests.find((request) => request.method === 'POST' && request.url === '/prices');
+    assert(paddleProductRequest?.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle product sync did not send bearer auth: ${JSON.stringify(paddleProductRequest?.headers)}`);
+    assert(paddlePriceRequest?.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle price sync did not send bearer auth: ${JSON.stringify(paddlePriceRequest?.headers)}`);
+    const paddleProductBody = JSON.parse(paddleProductRequest.body || '{}');
+    const paddlePriceBody = JSON.parse(paddlePriceRequest.body || '{}');
+    assert(paddleProductBody.name === readProductValue(productRecord.values, 'title'), `Paddle product body did not include product name: ${JSON.stringify(paddleProductBody)}`);
+    assert(paddleProductBody.tax_category === 'standard', `Paddle product body did not include the default tax category: ${JSON.stringify(paddleProductBody)}`);
+    assert(paddleProductBody.custom_data?.backyProductId === productRecord.id, `Paddle product body did not include Backy product metadata: ${JSON.stringify(paddleProductBody)}`);
+    assert(paddleProductBody.custom_data?.backySku === readProductValue(productRecord.values, 'sku'), `Paddle product body did not include Backy SKU metadata: ${JSON.stringify(paddleProductBody)}`);
+    assert(paddlePriceBody.product_id === paddleSync.product.id, `Paddle price body did not target the created product: ${JSON.stringify(paddlePriceBody)}`);
+    assert(paddlePriceBody.unit_price?.amount === '4900', `Paddle price amount was unexpected: ${JSON.stringify(paddlePriceBody)}`);
+    assert(paddlePriceBody.unit_price?.currency_code === String(readProductValue(productRecord.values, 'currency')).toUpperCase(), `Paddle price currency was unexpected: ${JSON.stringify(paddlePriceBody)}`);
+    assert(paddlePriceBody.billing_cycle?.interval === 'month' && paddlePriceBody.billing_cycle?.frequency === 1, `Paddle price body did not include monthly subscription recurrence: ${JSON.stringify(paddlePriceBody)}`);
+    assert(paddlePriceBody.trial_period?.interval === 'day' && paddlePriceBody.trial_period?.frequency === 14, `Paddle price body did not include trial period: ${JSON.stringify(paddlePriceBody)}`);
+
+    const paddleRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
+    const paddlePersisted = readProductValue(paddleRefreshed.values, 'providerSync');
+    assert(paddlePersisted?.requestId === paddleSync.requestId, `Paddle product provider sync was not persisted: ${JSON.stringify(paddleRefreshed.values)}`);
+    assert(paddlePersisted.executionMode === 'paddle-api', `Persisted Paddle provider sync mode differed: ${JSON.stringify(paddlePersisted)}`);
   }
 
   const beforeHttpRequests = commerceProviderMock?.requests.length || 0;

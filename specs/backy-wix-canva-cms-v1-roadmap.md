@@ -137,7 +137,7 @@ It explicitly excludes:
 5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, navigation/redirect/SEO editors, form/comment operations, frontend handoff, and site-level comment policy controls; remaining work is theme-token editing, domain/deploy execution, ownership scope, and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness + template starter + validation
-8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring; future platform work is a safe code component registry/sandboxed iframe runtime for fully custom animations and simulations
+8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring; future platform work is the `interactiveFigure`/`codeComponent` block family with a safe component registry, sandboxed iframe runtime, CSP/permission controls, allowed data bindings, publish readiness, and static fallbacks for fully custom animations and simulations
 9. `/blog`: status controls, tag/category UI and list filters
 10. `/blog.new`: post metadata + publish path
 11. `/blog.$postId`: revisioning and publication state
@@ -166,7 +166,16 @@ It explicitly excludes:
 10. `/api/sites/[siteId]/commerce/catalog`: public product catalog and product detail contract for custom storefronts
 11. `/api/sites/[siteId]/commerce/orders`: public checkout-intake contract that writes private Backy orders and reserves inventory
 
-## 7) Forms + Contact Share + Comments next-pass contract
+## 7) Interactive animation/code component platform checklist
+
+- [ ] Define `interactiveFigure` and `codeComponent` element schemas for pages and blog posts, including `componentKey`, `version`, props, controls, data bindings, dimensions, fallback content, and render capability metadata.
+- [ ] Add Backy-owned component registry APIs for trusted built-ins and custom component bundles, with signed versions, ownership, review/publish status, rollback, allowed data scopes, dependency metadata, and audit logs.
+- [ ] Add sandboxed iframe execution for custom code components with strict CSP, sandbox flags, permission allowlists, postMessage data/resize/error protocol, blocked-script fallback rendering, and no access to parent DOM/cookies/secrets.
+- [ ] Add editor controls for selecting components, binding collections/media/forms/commerce data, editing props and fallbacks, previewing animation states, and blocking publish when registry/security requirements are not met.
+- [ ] Extend public render payloads, frontend manifest, OpenAPI, and SDK types so external frontends can render registered interactive blocks without reading admin/editor internals.
+- [ ] Add smoke and security tests for rendering, data binding, fallback content, version rollback, blocked permissions, blocked network targets, and sandbox escape attempts.
+
+## 8) Forms + Contact Share + Comments next-pass contract
 
 ### 7.1 Form submissions
 
@@ -220,7 +229,7 @@ It explicitly excludes:
    4. notification/webhook execution
    5. comment moderation queue analytics
 
-## 8) Architecture and code consolidation
+## 9) Architecture and code consolidation
 
 ### 8.1 Shared contracts
 
@@ -245,7 +254,7 @@ It explicitly excludes:
    1. Supabase Storage or S3-compatible object store
    2. optional image transforms
 
-## 9) Implementation phases (chronological, non-repeating)
+## 10) Implementation phases (chronological, non-repeating)
 
 ### Phase A: Stabilize truth + persistence (2 weeks)
 
@@ -284,7 +293,7 @@ It explicitly excludes:
 3. consistency pass for theme and token application
 4. final manual functional matrix review against this spec
 
-## 10) Complexity / effort guardrails
+## 11) Complexity / effort guardrails
 
 1. Priority is now-feature-complete before advanced extras.
 2. Avoid duplicated features; every new feature should map to one package service.
@@ -294,7 +303,7 @@ It explicitly excludes:
    2. Empty but actionable
    3. Error with recoverable action
 
-## 11) Done criteria before release candidate
+## 12) Done criteria before release candidate
 
 1. 90%+ core editor actions produce persisted server-side state.
 2. All page routes show connected action labels and real responses.
@@ -303,7 +312,7 @@ It explicitly excludes:
 5. API and admin contract coverage are validated via contract tests or explicit payload fixtures.
 6. one-click deployment pattern is documented and reproducible for two Vercel apps plus one DB.
 
-## 12) Open risk register
+## 13) Open risk register
 
 1. icon-only buttons reducing usability if labels are not enforced in product spec
 2. duplicated schema causing silent drift between editor and renderer

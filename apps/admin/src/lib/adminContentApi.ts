@@ -1414,7 +1414,7 @@ interface ApiCollectionRecordResponse {
 export interface CommerceProductProviderSyncResult {
   provider: string;
   status: 'handoff' | 'synced' | 'failed';
-  executionMode: 'handoff' | 'stripe-api' | 'http-api';
+  executionMode: 'handoff' | 'stripe-api' | 'paddle-api' | 'http-api';
   syncedAt: string;
   requestId: string;
   reason?: string;

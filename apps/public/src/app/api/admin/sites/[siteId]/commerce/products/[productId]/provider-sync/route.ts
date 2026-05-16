@@ -17,7 +17,7 @@ interface RouteParams {
 }
 
 type ProviderSyncStatus = 'handoff' | 'synced' | 'failed';
-type ProductSyncProvider = 'stripe' | 'http';
+type ProductSyncProvider = 'stripe' | 'http' | 'paddle';
 
 const PROVIDER_SYNC_FIELD = 'providersync';
 
@@ -57,6 +57,8 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 
 const stripeSecretKey = () => envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
 
+const paddleApiKey = () => envValue(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']);
+
 const productSyncToken = () => envValue(['BACKY_COMMERCE_PRODUCT_SYNC_TOKEN', 'COMMERCE_PRODUCT_SYNC_TOKEN']);
 
 const jsonRecord = (value: unknown): Record<string, unknown> => (
@@ -89,6 +91,7 @@ const configuredProductSyncProvider = (settings: unknown): ProductSyncProvider |
   ).toLowerCase();
 
   if (configured === 'stripe') return 'stripe';
+  if (configured === 'paddle') return 'paddle';
   if (['http', 'generic-http', 'custom-http'].includes(configured)) return 'http';
   if (configuredHttpCatalogSyncUrl(settings)) return 'http';
   return null;
@@ -99,6 +102,7 @@ const resolveProductSyncProvider = (provider: string, settings: unknown): Produc
     return configuredProductSyncProvider(settings) || 'stripe';
   }
   if (provider === 'stripe') return 'stripe';
+  if (provider === 'paddle') return 'paddle';
   if (['http', 'generic-http', 'custom-http'].includes(provider)) return 'http';
   return null;
 };
@@ -116,6 +120,17 @@ const stripeHeaders = (accountId?: string | null) => ({
   ...(envValue(['BACKY_STRIPE_API_VERSION', 'STRIPE_API_VERSION'])
     ? { 'stripe-version': envValue(['BACKY_STRIPE_API_VERSION', 'STRIPE_API_VERSION']) }
     : {}),
+});
+
+const paddleApiUrl = (path: string) => {
+  const baseUrl = envValue(['BACKY_PADDLE_API_BASE_URL', 'PADDLE_API_BASE_URL']) || 'https://api.paddle.com';
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return new URL(path.replace(/^\/+/, ''), normalizedBase).toString();
+};
+
+const paddleHeaders = () => ({
+  authorization: `Bearer ${paddleApiKey()}`,
+  'content-type': 'application/json',
 });
 
 const centsValue = (value: number) => (
@@ -485,6 +500,168 @@ const executeStripeProductSync = async ({
   };
 };
 
+const safePaddleData = (payload: Record<string, unknown>) => {
+  const data = jsonRecord(payload.data);
+  return Object.keys(data).length ? data : payload;
+};
+
+const safePaddleProductPayload = (payload: Record<string, unknown>) => {
+  const value = safePaddleData(payload);
+  return {
+    id: textValue(value.id),
+    object: textValue(value.object) || textValue(value.type) || 'product',
+    active: textValue(value.status) ? textValue(value.status) !== 'archived' : null,
+    status: textValue(value.status),
+    name: textValue(value.name),
+    url: textValue(value.url),
+  };
+};
+
+const safePaddlePricePayload = (payload: Record<string, unknown>, product: CommerceProduct) => {
+  const value = safePaddleData(payload);
+  const unitPrice = jsonRecord(value.unit_price);
+  const billingCycle = jsonRecord(value.billing_cycle);
+  const trialPeriod = jsonRecord(value.trial_period);
+  return {
+    id: textValue(value.id),
+    object: textValue(value.object) || textValue(value.type) || 'price',
+    active: textValue(value.status) ? textValue(value.status) !== 'archived' : null,
+    status: textValue(value.status),
+    currency: textValue(unitPrice.currency_code).toLowerCase() || product.currency.toLowerCase(),
+    unitAmount: Number(textValue(unitPrice.amount) || centsValue(product.price)),
+    recurring: Object.keys(billingCycle).length || product.subscription.enabled
+      ? {
+        interval: textValue(billingCycle.interval) || product.subscription.interval,
+        trialDays: Number(textValue(trialPeriod.frequency) || product.subscription.trialDays || 0),
+      }
+      : null,
+  };
+};
+
+const safePaddleErrorPayload = (value: Record<string, unknown>) => {
+  const error = jsonRecord(value.error);
+  const source = Object.keys(error).length ? error : value;
+  return {
+    type: textValue(source.type) || 'paddle-api',
+    code: textValue(source.code) || textValue(source.status),
+    message: textValue(source.detail) || textValue(source.message) || textValue(source.error) || 'Paddle product sync failed.',
+  };
+};
+
+const paddleTaxCategory = (settings: unknown): string => {
+  const commerce = settingsCommerce(settings);
+  return textValue(commerce.paddleTaxCategory)
+    || textValue(commerce.productPaddleTaxCategory)
+    || textValue(commerce.catalogSyncPaddleTaxCategory)
+    || 'standard';
+};
+
+const paddleBillingCycleForInterval = (interval: CommerceProduct['subscription']['interval']) => {
+  if (interval === 'weekly') return { interval: 'week', frequency: 1 };
+  if (interval === 'quarterly') return { interval: 'month', frequency: 3 };
+  if (interval === 'yearly') return { interval: 'year', frequency: 1 };
+  return { interval: 'month', frequency: 1 };
+};
+
+const buildPaddleProductPayload = (product: CommerceProduct, requestId: string, settings: unknown) => ({
+  name: product.title,
+  description: product.description ? product.description.slice(0, 1000) : undefined,
+  tax_category: paddleTaxCategory(settings),
+  image_url: product.imageUrl || undefined,
+  custom_data: {
+    backyProductId: product.id,
+    backyProductSlug: product.slug,
+    backySku: product.sku,
+    requestId,
+  },
+});
+
+const buildPaddlePricePayload = (product: CommerceProduct, paddleProductId: string, requestId: string) => ({
+  product_id: paddleProductId,
+  description: product.title,
+  unit_price: {
+    amount: String(centsValue(product.price)),
+    currency_code: product.currency.toUpperCase(),
+  },
+  ...(product.subscription.enabled
+    ? {
+      billing_cycle: paddleBillingCycleForInterval(product.subscription.interval),
+      ...(product.subscription.trialDays > 0
+        ? { trial_period: { interval: 'day', frequency: product.subscription.trialDays } }
+        : {}),
+    }
+    : {}),
+  custom_data: {
+    backyProductId: product.id,
+    backyProductSlug: product.slug,
+    backySku: product.sku,
+    requestId,
+  },
+});
+
+const callPaddle = async (path: string, body: Record<string, unknown>) => {
+  const response = await fetch(paddleApiUrl(path), {
+    method: 'POST',
+    headers: paddleHeaders(),
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  return { response, payload };
+};
+
+const executePaddleProductSync = async ({
+  product,
+  requestId,
+  settings,
+}: {
+  product: CommerceProduct;
+  requestId: string;
+  settings: unknown;
+}) => {
+  if (!paddleApiKey()) {
+    return buildHandoffSync({
+      product,
+      requestId,
+      provider: 'paddle',
+      reason: 'BACKY_PADDLE_API_KEY or PADDLE_API_KEY is not configured.',
+    });
+  }
+
+  const createdProduct = await callPaddle('products', buildPaddleProductPayload(product, requestId, settings));
+  if (!createdProduct.response.ok) {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'paddle', reason: 'Paddle product creation failed.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'paddle-api',
+      error: safePaddleErrorPayload(createdProduct.payload),
+    };
+  }
+
+  const productId = textValue(safePaddleData(createdProduct.payload).id);
+  const createdPrice = productId
+    ? await callPaddle('prices', buildPaddlePricePayload(product, productId, requestId))
+    : null;
+  if (!createdPrice || !createdPrice.response.ok) {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'paddle', reason: 'Paddle price creation failed.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'paddle-api',
+      product: safePaddleProductPayload(createdProduct.payload),
+      error: safePaddleErrorPayload(createdPrice?.payload || { message: 'Paddle product id was missing.' }),
+    };
+  }
+
+  return {
+    provider: 'paddle',
+    status: 'synced' as ProviderSyncStatus,
+    executionMode: 'paddle-api',
+    syncedAt: new Date().toISOString(),
+    requestId,
+    product: safePaddleProductPayload(createdProduct.payload),
+    price: safePaddlePricePayload(createdPrice.payload, product),
+  };
+};
+
 const executeProductProviderSync = async ({
   siteId,
   product,
@@ -500,6 +677,9 @@ const executeProductProviderSync = async ({
 }) => {
   if (provider === 'http') {
     return executeHttpProductSync({ siteId, product, requestId, settings });
+  }
+  if (provider === 'paddle') {
+    return executePaddleProductSync({ product, requestId, settings });
   }
   return executeStripeProductSync({
     product,
@@ -559,7 +739,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const settings = await repositories.settings.get();
       const provider = resolveProductSyncProvider(requestedProvider, settings);
       if (!provider) {
-        return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+        return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
       }
       const product = productRecordToCommerceProduct(sourceRecordFromRecord(record));
       const sync = await executeProductProviderSync({
@@ -631,7 +811,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const settings = getAdminSettings();
     const provider = resolveProductSyncProvider(requestedProvider, settings);
     if (!provider) {
-      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
     }
     const sync = await executeProductProviderSync({
       siteId: site.id,
