@@ -256,6 +256,12 @@ const paddleSubscriptionExecutionEnabled = () => {
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const squareSubscriptionExecutionEnabled = () => {
+  const token = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN || '';
+  const apiBaseUrl = process.env.BACKY_SQUARE_API_BASE_URL || process.env.SQUARE_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const paddleCatalogSyncEnabled = () => {
   const token = process.env.BACKY_PADDLE_API_KEY || process.env.PADDLE_API_KEY || '';
   const apiBaseUrl = process.env.BACKY_PADDLE_API_BASE_URL || process.env.PADDLE_API_BASE_URL || '';
@@ -455,6 +461,32 @@ const startStripeCheckoutMock = async () => {
               : new Date().toISOString(),
           },
         },
+      }));
+      return;
+    }
+
+    const squareSubscriptionMatch = request.url.match(/^\/v2\/subscriptions\/([^/]+)\/(pause|resume|cancel)$/);
+    if (squareSubscriptionMatch && request.method === 'POST') {
+      const subscriptionId = decodeURIComponent(squareSubscriptionMatch[1]);
+      const action = squareSubscriptionMatch[2];
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        subscription: {
+          id: subscriptionId,
+          status: action === 'pause' ? 'PAUSED' : action === 'resume' ? 'ACTIVE' : 'CANCELED',
+          version: 3,
+          start_date: '2026-05-16',
+          canceled_date: action === 'cancel' ? '2026-05-16' : null,
+          paid_until_date: '2026-06-16',
+          timezone: 'UTC',
+        },
+        actions: [
+          {
+            id: `sq_subscription_action_${requests.length}`,
+            type: action.toUpperCase(),
+            effective_date: '2026-05-16',
+          },
+        ],
       }));
       return;
     }
@@ -2424,6 +2456,9 @@ const assertStripeCheckoutExecution = async ({
     if (paddleSubscriptionExecutionEnabled()) {
       assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'paddle' && provider.configured === true && provider.executionMode === 'paddle-api'), `Product subscription execution readiness omitted Paddle provider state: ${JSON.stringify(lifecycle?.execution)}`);
     }
+    if (squareSubscriptionExecutionEnabled()) {
+      assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'square' && provider.configured === true && provider.executionMode === 'square-api'), `Product subscription execution readiness omitted Square provider state: ${JSON.stringify(lifecycle?.execution)}`);
+    }
     if (httpSubscriptionExecutionEnabled()) {
       assert(lifecycle.execution?.providers?.some((provider) => provider.provider === 'http' && provider.configured === true && provider.executionMode === 'http-api'), `Product subscription execution readiness omitted HTTP provider state: ${JSON.stringify(lifecycle?.execution)}`);
     }
@@ -2499,6 +2534,29 @@ const assertStripeCheckoutExecution = async ({
       assert(paddleActionRequest.headers.authorization === 'Bearer paddle_smoke_api_key', `Paddle subscription action did not send bearer auth: ${JSON.stringify(paddleActionRequest.headers)}`);
       const paddleActionBody = JSON.parse(paddleActionRequest.body || '{}');
       assert(paddleActionBody.effective_from === 'next_billing_period', `Paddle subscription pause body was unexpected: ${JSON.stringify(paddleActionBody)}`);
+    }
+
+    if (squareSubscriptionExecutionEnabled()) {
+      const beforeSquareActionRequests = stripeCheckoutMock.requests.length;
+      const squareActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'pause',
+          provider: 'square',
+          subscriptionReference: `sq_sub_${slug}`,
+          reason: 'Smoke Square subscription pause action.',
+        }),
+      });
+      const squareSubscriptionAction = squareActionPayload.data?.action || squareActionPayload.action;
+      assert(squareSubscriptionAction?.status === 'succeeded', `Square subscription action did not execute against mock: ${JSON.stringify(squareActionPayload).slice(0, 500)}`);
+      assert(squareSubscriptionAction.executionMode === 'square-api', `Square subscription action did not use Square execution: ${JSON.stringify(squareSubscriptionAction)}`);
+      assert(squareSubscriptionAction.subscriptionReference === `sq_sub_${slug}`, `Square subscription action used the wrong subscription reference: ${JSON.stringify(squareSubscriptionAction)}`);
+      const squareActionRequest = stripeCheckoutMock.requests.slice(beforeSquareActionRequests).find((request) => request.method === 'POST' && request.url === `/v2/subscriptions/sq_sub_${slug}/pause`);
+      assert(squareActionRequest, `Square mock did not receive subscription pause action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforeSquareActionRequests))}`);
+      assert(squareActionRequest.headers.authorization === 'Bearer square_smoke_access_token', `Square subscription action did not send bearer auth: ${JSON.stringify(squareActionRequest.headers)}`);
+      assert(squareActionRequest.headers['square-version'] === (process.env.BACKY_SQUARE_VERSION || process.env.SQUARE_VERSION || '2026-01-22'), `Square subscription action did not send Square-Version: ${JSON.stringify(squareActionRequest.headers)}`);
+      const squareActionBody = JSON.parse(squareActionRequest.body || '{}');
+      assert(squareActionBody.pause_reason === 'Smoke Square subscription pause action.', `Square subscription pause body was unexpected: ${JSON.stringify(squareActionBody)}`);
     }
 
     if (httpSubscriptionExecutionEnabled()) {

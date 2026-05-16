@@ -56,7 +56,7 @@ interface SubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;
@@ -229,6 +229,34 @@ const canExecutePaddleSubscriptionAction = (provider: string, subscriptionRefere
   Boolean(subscriptionReference)
 );
 
+const squareAccessToken = () => (
+  process.env.BACKY_SQUARE_ACCESS_TOKEN?.trim()
+  || process.env.SQUARE_ACCESS_TOKEN?.trim()
+  || ''
+);
+
+const squareApiBaseUrl = () => (
+  process.env.BACKY_SQUARE_API_BASE_URL?.trim()
+  || process.env.SQUARE_API_BASE_URL?.trim()
+  || 'https://connect.squareup.com'
+).replace(/\/$/, '');
+
+const squareVersion = () => (
+  process.env.BACKY_SQUARE_VERSION?.trim()
+  || process.env.SQUARE_VERSION?.trim()
+  || '2026-01-22'
+);
+
+const squareSubscriptionEndpoint = (subscriptionReference: string, action: SubscriptionLifecycleAction['action']) => (
+  `${squareApiBaseUrl()}/v2/subscriptions/${encodeURIComponent(subscriptionReference)}/${action}`
+);
+
+const canExecuteSquareSubscriptionAction = (provider: string, subscriptionReference: string) => (
+  provider.toLowerCase() === 'square' &&
+  Boolean(squareAccessToken()) &&
+  Boolean(subscriptionReference)
+);
+
 const envValue = (keys: string[]): string => (
   keys.map((key) => process.env[key]?.trim() || '').find(Boolean) || ''
 );
@@ -306,6 +334,40 @@ const safePaddleErrorPayload = (value: Record<string, unknown>) => {
     code: textValue(error.code || value.code),
     detail: textValue(error.detail || value.detail) || 'Paddle subscription action failed.',
     documentationUrl: textValue(error.documentation_url || error.documentationUrl || value.documentation_url || value.documentationUrl),
+  };
+};
+
+const safeSquareSubscriptionPayload = (value: Record<string, unknown>) => {
+  const subscription = toRecord(value.subscription || value);
+  const actions = Array.isArray(value.actions)
+    ? value.actions.map((action) => {
+      const entry = toRecord(action);
+      return {
+        id: textValue(entry.id),
+        type: textValue(entry.type),
+        effectiveDate: textValue(entry.effective_date || entry.effectiveDate),
+      };
+    }).filter((action) => action.id || action.type)
+    : [];
+  return {
+    id: textValue(subscription.id),
+    status: textValue(subscription.status),
+    startDate: textValue(subscription.start_date || subscription.startDate),
+    canceledDate: textValue(subscription.canceled_date || subscription.canceledDate),
+    paidUntilDate: textValue(subscription.paid_until_date || subscription.paidUntilDate),
+    timezone: textValue(subscription.timezone),
+    version: subscription.version ?? null,
+    actions,
+  };
+};
+
+const safeSquareErrorPayload = (value: Record<string, unknown>) => {
+  const errors = Array.isArray(value.errors) ? value.errors.map(toRecord) : [];
+  const firstError = errors[0] || toRecord(value.error) || value;
+  return {
+    category: textValue(firstError.category),
+    code: textValue(firstError.code),
+    detail: textValue(firstError.detail || firstError.message) || 'Square subscription action failed.',
   };
 };
 
@@ -443,6 +505,42 @@ const executePaddleSubscriptionAction = async (input: {
   return {
     ok: true as const,
     payload: safePaddleSubscriptionPayload(payloadRecord),
+  };
+};
+
+const executeSquareSubscriptionAction = async (input: {
+  action: SubscriptionLifecycleAction['action'];
+  actionId: string;
+  subscriptionReference: string;
+  reason: string;
+}) => {
+  const requestBody = input.action === 'pause'
+    ? { pause_reason: input.reason.slice(0, 255) }
+    : {};
+  const response = await fetch(squareSubscriptionEndpoint(input.subscriptionReference, input.action), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${squareAccessToken()}`,
+      'content-type': 'application/json',
+      'square-version': squareVersion(),
+      'x-backy-idempotency-key': input.actionId,
+    },
+    body: JSON.stringify(requestBody),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeSquareErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeSquareSubscriptionPayload(payloadRecord),
   };
 };
 
@@ -631,8 +729,19 @@ const buildSubscriptionActionUpdate = async (
   const shouldExecuteStripe = canExecuteStripeSubscriptionAction(provider, subscriptionReference);
   const shouldExecutePayPal = canExecutePayPalSubscriptionAction(provider, subscriptionReference);
   const shouldExecutePaddle = canExecutePaddleSubscriptionAction(provider, subscriptionReference);
+  const shouldExecuteSquare = canExecuteSquareSubscriptionAction(provider, subscriptionReference);
   const shouldExecuteHttp = canExecuteHttpSubscriptionAction(provider);
-  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : shouldExecutePaddle ? 'paddle-api' : shouldExecuteHttp ? 'http-api' : 'handoff';
+  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe
+    ? 'stripe-api'
+    : shouldExecutePayPal
+      ? 'paypal-api'
+      : shouldExecutePaddle
+        ? 'paddle-api'
+        : shouldExecuteSquare
+          ? 'square-api'
+          : shouldExecuteHttp
+            ? 'http-api'
+            : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.product-subscription-action.v1',
     action: `subscription.${actionName}`,
@@ -646,9 +755,9 @@ const buildSubscriptionActionUpdate = async (
     reason,
     idempotencyKey: actionId,
   };
-  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteHttp ? 'requested' : 'requires_action';
+  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteSquare || shouldExecuteHttp ? 'requested' : 'requires_action';
   let completedAt: string | null = null;
-  let statusNote = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteHttp ? 'requested' : 'handoff';
+  let statusNote = shouldExecuteStripe || shouldExecutePayPal || shouldExecutePaddle || shouldExecuteSquare || shouldExecuteHttp ? 'requested' : 'handoff';
 
   if (shouldExecuteStripe) {
     const result = await executeStripeSubscriptionAction({
@@ -686,6 +795,23 @@ const buildSubscriptionActionUpdate = async (
     }
   } else if (shouldExecutePaddle) {
     const result = await executePaddleSubscriptionAction({
+      action: actionName,
+      actionId,
+      subscriptionReference,
+      reason,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      status = 'succeeded';
+      completedAt = new Date().toISOString();
+      statusNote = 'executed';
+    } else {
+      status = 'failed';
+      completedAt = new Date().toISOString();
+      statusNote = 'failed';
+    }
+  } else if (shouldExecuteSquare) {
+    const result = await executeSquareSubscriptionAction({
       action: actionName,
       actionId,
       subscriptionReference,

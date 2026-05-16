@@ -28,7 +28,7 @@ interface SourceRecord {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
 const ORDER_LIMIT = 1000;
-type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'http-api' | 'handoff';
+type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'http-api' | 'handoff';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -178,6 +178,8 @@ const paypalAccessTokenConfigured = () => Boolean(envValue(['BACKY_PAYPAL_ACCESS
 
 const paddleApiKeyConfigured = () => Boolean(envValue(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']));
 
+const squareAccessTokenConfigured = () => Boolean(envValue(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']));
+
 const subscriptionActionProviderUrl = (): string => {
   const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
   const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
@@ -210,6 +212,9 @@ const subscriptionActionExecutionMode = (provider: string, subscriptionReference
   }
   if (normalizedProvider === 'paddle' && paddleApiKeyConfigured() && subscriptionReference) {
     return 'paddle-api';
+  }
+  if (normalizedProvider === 'square' && squareAccessTokenConfigured() && subscriptionReference) {
+    return 'square-api';
   }
   if (['http', 'generic-http', 'custom-http'].includes(normalizedProvider) && subscriptionActionProviderUrl()) {
     return 'http-api';
@@ -332,6 +337,14 @@ const buildLifecycle = (productRecord: SourceRecord, orders: SourceRecord[]) => 
         referencePattern: 'sub_*',
         executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'paddle-api').length,
         blocker: paddleApiKeyConfigured() ? '' : 'Configure BACKY_PADDLE_API_KEY or PADDLE_API_KEY for direct Paddle subscription actions.',
+      },
+      {
+        provider: 'square',
+        executionMode: 'square-api',
+        configured: squareAccessTokenConfigured(),
+        referencePattern: 'Square subscription id',
+        executableSubscriptions: subscriptions.filter((subscription) => subscription.actionExecutionMode === 'square-api').length,
+        blocker: squareAccessTokenConfigured() ? '' : 'Configure BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN for direct Square subscription actions.',
       },
       {
         provider: 'http',
