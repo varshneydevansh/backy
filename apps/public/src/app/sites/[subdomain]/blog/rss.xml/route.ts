@@ -7,7 +7,7 @@ import {
   listBlogTags,
 } from '@/lib/backyStore';
 import { buildBlogRssXml } from '@/lib/blogRss';
-import { createPublicCacheRevision, withPublicContractHeaders } from '@/lib/publicContractResponse';
+import { createPublicCacheRevision, publicContractResponse } from '@/lib/publicContractResponse';
 
 interface RouteParams {
   params: Promise<{
@@ -48,16 +48,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   });
   const cacheRevision = createPublicCacheRevision({ site, posts, categories, tags, authors });
 
-  return withPublicContractHeaders(new NextResponse(xml, {
-    headers: {
-      'content-type': 'application/rss+xml; charset=utf-8',
-    },
-  }), {
+  return publicContractResponse(xml, {
     request,
     requestId,
     cache: 'discovery',
     schemaVersion: 'rss.2.0',
     siteId: site.id,
     cacheRevision,
+    etagSeed: {
+      format: 'rss.2.0',
+      site,
+      posts,
+      categories,
+      tags,
+      authors,
+      revision: cacheRevision,
+    },
+  }, {
+    headers: {
+      'content-type': 'application/rss+xml; charset=utf-8',
+    },
   });
 }

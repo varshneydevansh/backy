@@ -80,6 +80,31 @@ export const publicContractJson = <TBody>(
   });
 };
 
+export const publicContractResponse = (
+  body: BodyInit | null,
+  options: PublicContractResponseOptions,
+  init: ResponseInit = {},
+) => {
+  const status = options.status || 200;
+  const shouldAttachCacheMetadata = shouldAttachEtag(status, options.cache);
+  const etagSeed = options.etagSeed ?? body ?? '';
+  const etag = shouldAttachCacheMetadata
+    ? createEtag(etagSeed)
+    : null;
+  const response = etag && requestHasMatchingEtag(options.request, etag)
+    ? new NextResponse(null, { ...init, status: 304 })
+    : new NextResponse(body, { ...init, status });
+
+  if (etag) {
+    response.headers.set('etag', etag);
+  }
+
+  return withPublicContractHeaders(response, {
+    ...options,
+    cacheRevision: options.cacheRevision || (shouldAttachCacheMetadata ? createPublicCacheRevision(etagSeed) : undefined),
+  });
+};
+
 const shouldAttachEtag = (status: number, cache: PublicContractCacheScope) => (
   status >= 200 && status < 300 && (cache === 'discovery' || cache === 'render')
 );

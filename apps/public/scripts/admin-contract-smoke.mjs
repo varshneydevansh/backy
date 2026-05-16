@@ -3237,7 +3237,15 @@ try {
     assert(visibleBlogRss.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleBlogRss.url} missing public contract version`);
     assert(visibleBlogRss.response.headers.get('x-backy-schema-version') === 'rss.2.0', `${visibleBlogRss.url} missing RSS schema version`);
     assert(visibleBlogRss.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleBlogRss.url} missing RSS site id header`);
-    assert(visibleBlogRss.response.headers.get('x-backy-cache-revision'), `${visibleBlogRss.url} missing RSS cache revision`);
+    const blogRssCacheRevision = visibleBlogRss.response.headers.get('x-backy-cache-revision');
+    assert(blogRssCacheRevision, `${visibleBlogRss.url} missing RSS cache revision`);
+    const blogRssEtag = visibleBlogRss.response.headers.get('etag');
+    assert(blogRssEtag?.startsWith('"backy-'), `${visibleBlogRss.url} missing RSS etag`);
+    const revalidatedBlogRss = await request(`/api/sites/${createdSiteId}/blog/rss?limit=10`, {
+      headers: { 'if-none-match': blogRssEtag },
+    });
+    assert(revalidatedBlogRss.response.status === 304, `${revalidatedBlogRss.url} expected RSS 304, got ${revalidatedBlogRss.response.status}`);
+    assert(revalidatedBlogRss.response.headers.get('x-backy-cache-revision') === blogRssCacheRevision, `${revalidatedBlogRss.url} expected matching RSS cache revision`);
     assert(visibleBlogRss.text.includes('<rss version="2.0"'), `${visibleBlogRss.url} missing RSS root`);
     assert(visibleBlogRss.text.includes(`<title>Admin Contract Post</title>`), `${visibleBlogRss.url} missing post title item`);
     assert(visibleBlogRss.text.includes(`/blog/${postSlug}`), `${visibleBlogRss.url} missing post canonical link`);
@@ -3249,7 +3257,15 @@ try {
     assert(hostedBlogRss.response.headers.get('content-type')?.includes('application/rss+xml'), `${hostedBlogRss.url} expected hosted RSS content type`);
     assert(hostedBlogRss.response.headers.get('x-backy-schema-version') === 'rss.2.0', `${hostedBlogRss.url} missing hosted RSS schema version`);
     assert(hostedBlogRss.response.headers.get('x-backy-site-id') === createdSiteId, `${hostedBlogRss.url} missing hosted RSS site id header`);
-    assert(hostedBlogRss.response.headers.get('x-backy-cache-revision'), `${hostedBlogRss.url} missing hosted RSS cache revision`);
+    const hostedBlogRssCacheRevision = hostedBlogRss.response.headers.get('x-backy-cache-revision');
+    assert(hostedBlogRssCacheRevision, `${hostedBlogRss.url} missing hosted RSS cache revision`);
+    const hostedBlogRssEtag = hostedBlogRss.response.headers.get('etag');
+    assert(hostedBlogRssEtag?.startsWith('"backy-'), `${hostedBlogRss.url} missing hosted RSS etag`);
+    const revalidatedHostedBlogRss = await request(`/sites/${siteSlug}/blog/rss.xml`, {
+      headers: { 'if-none-match': hostedBlogRssEtag },
+    });
+    assert(revalidatedHostedBlogRss.response.status === 304, `${revalidatedHostedBlogRss.url} expected hosted RSS 304, got ${revalidatedHostedBlogRss.response.status}`);
+    assert(revalidatedHostedBlogRss.response.headers.get('x-backy-cache-revision') === hostedBlogRssCacheRevision, `${revalidatedHostedBlogRss.url} expected matching hosted RSS cache revision`);
     assert(hostedBlogRss.text.includes(`/blog/${postSlug}`), `${hostedBlogRss.url} missing hosted RSS post link`);
 
     const capturedBlogTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
@@ -4727,23 +4743,55 @@ try {
       assert(seoSitemap.response.status === 200, `${seoSitemap.url} expected 200, got ${seoSitemap.response.status}`);
       assert(seoSitemap.response.headers.get('content-type')?.includes('application/xml'), `${seoSitemap.url} expected XML sitemap content type`);
       assert(seoSitemap.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${seoSitemap.url} missing matching SEO cache revision`);
+      const seoSitemapEtag = seoSitemap.response.headers.get('etag');
+      assert(seoSitemapEtag?.startsWith('"backy-'), `${seoSitemap.url} missing SEO sitemap etag`);
+      const revalidatedSeoSitemap = await request(`/api/sites/${createdSiteId}/seo?format=sitemap`, {
+        headers: { 'if-none-match': seoSitemapEtag },
+      });
+      assert(revalidatedSeoSitemap.response.status === 304, `${revalidatedSeoSitemap.url} expected SEO sitemap 304, got ${revalidatedSeoSitemap.response.status}`);
+      assert(revalidatedSeoSitemap.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${revalidatedSeoSitemap.url} expected matching SEO sitemap cache revision`);
       assert(seoSitemap.text.includes(`https://${customDomain}/${pageSlug}-form-write`), `${seoSitemap.url} missing custom-domain temporary page in sitemap`);
 
       const seoRobots = await request(`/api/sites/${createdSiteId}/seo?format=robots`);
       assert(seoRobots.response.status === 200, `${seoRobots.url} expected 200, got ${seoRobots.response.status}`);
       assert(seoRobots.response.headers.get('content-type')?.includes('text/plain'), `${seoRobots.url} expected robots text content type`);
       assert(seoRobots.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${seoRobots.url} missing matching SEO cache revision`);
+      const seoRobotsEtag = seoRobots.response.headers.get('etag');
+      assert(seoRobotsEtag?.startsWith('"backy-'), `${seoRobots.url} missing SEO robots etag`);
+      const revalidatedSeoRobots = await request(`/api/sites/${createdSiteId}/seo?format=robots`, {
+        headers: { 'if-none-match': seoRobotsEtag },
+      });
+      assert(revalidatedSeoRobots.response.status === 304, `${revalidatedSeoRobots.url} expected SEO robots 304, got ${revalidatedSeoRobots.response.status}`);
+      assert(revalidatedSeoRobots.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${revalidatedSeoRobots.url} expected matching SEO robots cache revision`);
       assert(seoRobots.text.includes(`Sitemap: https://${customDomain}/sitemap.xml`), `${seoRobots.url} missing custom-domain sitemap pointer`);
       assert(seoRobots.text.includes('Disallow: /contract-private'), `${seoRobots.url} missing custom robots rule`);
 
       const hostedSitemap = await request(`/sites/${siteSlug}/sitemap.xml`);
       assert(hostedSitemap.response.status === 200, `${hostedSitemap.url} expected 200, got ${hostedSitemap.response.status}`);
       assert(hostedSitemap.response.headers.get('content-type')?.includes('application/xml'), `${hostedSitemap.url} expected XML sitemap content type`);
+      const hostedSitemapCacheRevision = hostedSitemap.response.headers.get('x-backy-cache-revision');
+      assert(hostedSitemapCacheRevision, `${hostedSitemap.url} missing hosted sitemap cache revision`);
+      const hostedSitemapEtag = hostedSitemap.response.headers.get('etag');
+      assert(hostedSitemapEtag?.startsWith('"backy-'), `${hostedSitemap.url} missing hosted sitemap etag`);
+      const revalidatedHostedSitemap = await request(`/sites/${siteSlug}/sitemap.xml`, {
+        headers: { 'if-none-match': hostedSitemapEtag },
+      });
+      assert(revalidatedHostedSitemap.response.status === 304, `${revalidatedHostedSitemap.url} expected hosted sitemap 304, got ${revalidatedHostedSitemap.response.status}`);
+      assert(revalidatedHostedSitemap.response.headers.get('x-backy-cache-revision') === hostedSitemapCacheRevision, `${revalidatedHostedSitemap.url} expected matching hosted sitemap cache revision`);
       assert(hostedSitemap.text.includes(`https://${customDomain}/${pageSlug}-form-write`), `${hostedSitemap.url} missing custom-domain hosted temporary page URL`);
 
       const hostedRobots = await request(`/sites/${siteSlug}/robots.txt`);
       assert(hostedRobots.response.status === 200, `${hostedRobots.url} expected 200, got ${hostedRobots.response.status}`);
       assert(hostedRobots.response.headers.get('content-type')?.includes('text/plain'), `${hostedRobots.url} expected robots text content type`);
+      const hostedRobotsCacheRevision = hostedRobots.response.headers.get('x-backy-cache-revision');
+      assert(hostedRobotsCacheRevision, `${hostedRobots.url} missing hosted robots cache revision`);
+      const hostedRobotsEtag = hostedRobots.response.headers.get('etag');
+      assert(hostedRobotsEtag?.startsWith('"backy-'), `${hostedRobots.url} missing hosted robots etag`);
+      const revalidatedHostedRobots = await request(`/sites/${siteSlug}/robots.txt`, {
+        headers: { 'if-none-match': hostedRobotsEtag },
+      });
+      assert(revalidatedHostedRobots.response.status === 304, `${revalidatedHostedRobots.url} expected hosted robots 304, got ${revalidatedHostedRobots.response.status}`);
+      assert(revalidatedHostedRobots.response.headers.get('x-backy-cache-revision') === hostedRobotsCacheRevision, `${revalidatedHostedRobots.url} expected matching hosted robots cache revision`);
       assert(hostedRobots.text.includes(`Sitemap: https://${customDomain}/sitemap.xml`), `${hostedRobots.url} missing custom-domain hosted sitemap pointer`);
 
       const frontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);

@@ -14,7 +14,7 @@ import {
   listBlogTags,
 } from '@/lib/backyStore';
 import { buildBlogRssXml, normalizeRepositoryPostForRss } from '@/lib/blogRss';
-import { createPublicCacheRevision, withPublicContractHeaders } from '@/lib/publicContractResponse';
+import { createPublicCacheRevision, publicContractResponse, withPublicContractHeaders } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -103,17 +103,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const xml = buildBlogRssXml({ site, posts, categories, tags, authors, origin, feedPath: '/blog/rss.xml' });
       const revision = cacheRevision || createPublicCacheRevision({ site, posts, categories, tags, authors });
 
-      return withPublicContractHeaders(new NextResponse(xml, {
-        headers: {
-          'content-type': 'application/rss+xml; charset=utf-8',
-        },
-      }), {
+      return publicContractResponse(xml, {
         requestId,
         request,
         cache: 'discovery',
         schemaVersion: 'rss.2.0',
         siteId: site.id,
         cacheRevision: revision,
+        etagSeed: {
+          format: 'rss.2.0',
+          site,
+          posts,
+          categories,
+          tags,
+          authors,
+          revision,
+        },
+      }, {
+        headers: {
+          'content-type': 'application/rss+xml; charset=utf-8',
+        },
       });
     }
 
@@ -128,17 +137,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const authors = listBlogAuthors(site.id);
     const xml = buildBlogRssXml({ site, posts, categories, tags, authors, origin, feedPath: '/blog/rss.xml' });
 
-    return withPublicContractHeaders(new NextResponse(xml, {
-      headers: {
-        'content-type': 'application/rss+xml; charset=utf-8',
-      },
-    }), {
+    const cacheRevision = createPublicCacheRevision({ site, posts, categories, tags, authors });
+    return publicContractResponse(xml, {
       requestId,
       request,
       cache: 'discovery',
       schemaVersion: 'rss.2.0',
       siteId: site.id,
-      cacheRevision: createPublicCacheRevision({ site, posts, categories, tags, authors }),
+      cacheRevision,
+      etagSeed: {
+        format: 'rss.2.0',
+        site,
+        posts,
+        categories,
+        tags,
+        authors,
+        revision: cacheRevision,
+      },
+    }, {
+      headers: {
+        'content-type': 'application/rss+xml; charset=utf-8',
+      },
     });
   } catch (error) {
     console.error('Blog RSS API error:', error);

@@ -6,7 +6,7 @@
  * GET /api/sites/[siteId]/seo?format=robots
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import {
@@ -28,8 +28,8 @@ import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collecti
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import {
   createPublicCacheRevision,
+  publicContractResponse,
   publicContractJson,
-  withPublicContractHeaders,
 } from '@/lib/publicContractResponse';
 
 interface RouteParams {
@@ -429,33 +429,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const format = getRequestedFormat(request);
 
       if (format === 'sitemap') {
-        return withPublicContractHeaders(
-          new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
-            headers: {
-              'content-type': 'application/xml; charset=utf-8',
-            },
-          }),
+        const xml = buildSitemapXml(sitemapRoutes(discovery));
+        return publicContractResponse(
+          xml,
           {
             requestId,
+            request,
             cache: 'discovery',
             siteId: site.id,
             cacheRevision,
+            etagSeed: {
+              format: 'sitemap',
+              discovery,
+              cacheRevision,
+            },
+          },
+          {
+            headers: {
+              'content-type': 'application/xml; charset=utf-8',
+            },
           },
         );
       }
 
       if (format === 'robots') {
-        return withPublicContractHeaders(
-          new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
-            headers: {
-              'content-type': 'text/plain; charset=utf-8',
-            },
-          }),
+        const text = buildRobotsTxtFromDiscovery(discovery);
+        return publicContractResponse(
+          text,
           {
             requestId,
+            request,
             cache: 'discovery',
             siteId: site.id,
             cacheRevision,
+            etagSeed: {
+              format: 'robots',
+              discovery,
+              cacheRevision,
+            },
+          },
+          {
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+            },
           },
         );
       }
@@ -489,33 +505,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const format = getRequestedFormat(request);
 
     if (format === 'sitemap') {
-      return withPublicContractHeaders(
-        new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
-          headers: {
-            'content-type': 'application/xml; charset=utf-8',
-          },
-        }),
+      const xml = buildSitemapXml(sitemapRoutes(discovery));
+      return publicContractResponse(
+        xml,
         {
           requestId,
+          request,
           cache: 'discovery',
           siteId: site.id,
           cacheRevision,
+          etagSeed: {
+            format: 'sitemap',
+            discovery,
+            cacheRevision,
+          },
+        },
+        {
+          headers: {
+            'content-type': 'application/xml; charset=utf-8',
+          },
         },
       );
     }
 
     if (format === 'robots') {
-      return withPublicContractHeaders(
-        new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
-          headers: {
-            'content-type': 'text/plain; charset=utf-8',
-          },
-        }),
+      const text = buildRobotsTxtFromDiscovery(discovery);
+      return publicContractResponse(
+        text,
         {
           requestId,
+          request,
           cache: 'discovery',
           siteId: site.id,
           cacheRevision,
+          etagSeed: {
+            format: 'robots',
+            discovery,
+            cacheRevision,
+          },
+        },
+        {
+          headers: {
+            'content-type': 'text/plain; charset=utf-8',
+          },
         },
       );
     }
