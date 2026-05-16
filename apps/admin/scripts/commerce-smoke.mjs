@@ -1849,6 +1849,7 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug,
     productCollection,
     ordersCollection,
     customersCollection,
+    productRecord,
     slug,
   });
 
@@ -1924,6 +1925,7 @@ const assertStripeCheckoutExecution = async ({
   productCollection,
   ordersCollection,
   customersCollection,
+  productRecord,
   slug,
 }) => {
   if (!stripeCheckoutExecutionEnabled()) {
@@ -2146,6 +2148,15 @@ const assertStripeCheckoutExecution = async ({
     assert(subscriptionAnalytics.operations.subscriptionTrialEndingCount >= 1, `Order analytics did not count subscription trial-ending notices: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
     assert(subscriptionAnalytics.operations.subscriptionCancelledCount >= 1, `Order analytics did not count subscription cancellations: ${JSON.stringify(subscriptionAnalyticsPayload).slice(0, 500)}`);
 
+    const lifecyclePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions`);
+    const lifecycle = lifecyclePayload.data?.lifecycle || lifecyclePayload.lifecycle;
+    assert(lifecycle?.schemaVersion === 'backy.product-subscription-lifecycle.v1', `Product subscription lifecycle schema was unexpected: ${JSON.stringify(lifecyclePayload).slice(0, 500)}`);
+    assert(lifecycle.product?.id === productRecord.id, `Product subscription lifecycle targeted the wrong product: ${JSON.stringify(lifecycle?.product)}`);
+    assert(lifecycle.summary?.total >= 1, `Product subscription lifecycle did not count subscription orders: ${JSON.stringify(lifecycle?.summary)}`);
+    assert(lifecycle.summary?.cancelled >= 1, `Product subscription lifecycle did not count cancellation settlement: ${JSON.stringify(lifecycle?.summary)}`);
+    assert(lifecycle.subscriptions?.some((entry) => entry.subscriptionReference === `sub_${slug}`), `Product subscription lifecycle did not expose the subscription reference: ${JSON.stringify(lifecycle?.subscriptions)}`);
+    assert(lifecycle.contract?.webhookApi?.includes('/commerce/webhook'), `Product subscription lifecycle contract omitted webhook API: ${JSON.stringify(lifecycle?.contract)}`);
+
     const stripeCustomerRecord = customersCollection?.id
       ? await getCollectionRecordBySlug(customersCollection.id, 'commerce-stripe-smoke-at-example-com')
       : null;
@@ -2345,6 +2356,11 @@ const assertProductsLayout = async (client) => {
         hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
           document.body?.innerText?.includes('Subscription metadata') &&
           document.body?.innerText?.includes('Trial days'),
+        hasSubscriptionLifecycle: Boolean(document.querySelector('[data-testid="products-subscription-lifecycle"]')) &&
+          document.body?.innerText?.includes('Subscription lifecycle') &&
+          document.body?.innerText?.includes('Recent subscription orders') &&
+          document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
+          document.body?.innerText?.includes('/api/sites/:siteId/commerce/webhook'),
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
           document.body?.innerText?.includes('Sync provider catalog') &&
@@ -2373,14 +2389,14 @@ const assertProductsLayout = async (client) => {
         hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
       };
     })()`);
-    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics && layout.hasProviderReconciliation) {
+    if (layout.hasProductPerformance && layout.hasProductAutomation && layout.hasBackendCommerceAnalytics && layout.hasSubscriptionLifecycle && layout.hasProviderReconciliation) {
       break;
     }
     await sleep(250);
   }
 
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasProviderSync && layout.hasProviderReconciliation && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasCommerceAnalytics && layout.hasBackendCommerceAnalytics && layout.hasProductPerformance && layout.hasProductAutomation && layout.hasCustomerProfileManager && layout.hasSubscriptionMetadata && layout.hasSubscriptionLifecycle && layout.hasProviderSync && layout.hasProviderReconciliation && layout.hasPageBindingContract && layout.hasProductPageTemplates && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

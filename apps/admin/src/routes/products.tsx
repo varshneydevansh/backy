@@ -27,6 +27,7 @@ import {
   deleteCollectionRecord,
   getCommerceReconciliationReadiness,
   getOrderAnalytics,
+  getProductSubscriptionLifecycle,
   getUserPermissions,
   getSiteFrontendDesign,
   importCollectionRecordsCsv,
@@ -44,6 +45,7 @@ import {
   type CommerceCronReadiness,
   type CommerceReconciliationResult,
   type CommerceProductProviderSyncResult,
+  type ProductSubscriptionLifecycle,
   type AdminUserPermissionMatrix,
   type OrderAnalytics,
   type OrderDeliveryEvent,
@@ -650,6 +652,9 @@ function ProductsRoute() {
   const [reconciliationError, setReconciliationError] = useState<string | null>(null);
   const [productNotificationEvents, setProductNotificationEvents] = useState<OrderDeliveryEvent[]>([]);
   const [productNotificationError, setProductNotificationError] = useState<string | null>(null);
+  const [selectedProductLifecycle, setSelectedProductLifecycle] = useState<ProductSubscriptionLifecycle | null>(null);
+  const [isProductLifecycleLoading, setIsProductLifecycleLoading] = useState(false);
+  const [productLifecycleError, setProductLifecycleError] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
   const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
@@ -1596,6 +1601,28 @@ function ProductsRoute() {
     }
   };
 
+  const loadSelectedProductLifecycle = async (productId: string | null = selectedProductId) => {
+    if (!productId || !canViewCommerce) {
+      setSelectedProductLifecycle(null);
+      setProductLifecycleError(null);
+      return null;
+    }
+
+    setIsProductLifecycleLoading(true);
+    try {
+      const lifecycle = await getProductSubscriptionLifecycle(activeSiteId, productId);
+      setSelectedProductLifecycle(lifecycle);
+      setProductLifecycleError(null);
+      return lifecycle;
+    } catch (loadError) {
+      setSelectedProductLifecycle(null);
+      setProductLifecycleError(loadError instanceof Error ? loadError.message : 'Unable to load product subscription lifecycle');
+      return null;
+    } finally {
+      setIsProductLifecycleLoading(false);
+    }
+  };
+
   const loadCommerceReconciliationReadiness = async () => {
     if (!canConfigureCommerce) {
       setReconciliationReadiness(null);
@@ -1657,6 +1684,8 @@ function ProductsRoute() {
       setReconciliationError(null);
       setProductNotificationEvents([]);
       setProductNotificationError(null);
+      setSelectedProductLifecycle(null);
+      setProductLifecycleError(null);
       setSelectedCustomerProfileId(null);
       setCustomerProfileDraft(customerProfileToDraft(null));
       setProductPagination(null);
@@ -1688,6 +1717,8 @@ function ProductsRoute() {
         setReconciliationError(null);
         setProductNotificationEvents([]);
         setProductNotificationError(null);
+        setSelectedProductLifecycle(null);
+        setProductLifecycleError(null);
         setSelectedCustomerProfileId(null);
         setCustomerProfileDraft(customerProfileToDraft(null));
         setProductPagination(null);
@@ -1898,6 +1929,17 @@ function ProductsRoute() {
   }, [selectedProduct]);
 
   useEffect(() => {
+    if (!selectedProduct?.id || !canViewCommerce) {
+      setSelectedProductLifecycle(null);
+      setProductLifecycleError(null);
+      return;
+    }
+
+    void loadSelectedProductLifecycle(selectedProduct.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId, canViewCommerce, selectedProduct?.id]);
+
+  useEffect(() => {
     setCustomerProfileDraft(customerProfileToDraft(selectedCustomerProfile));
   }, [selectedCustomerProfile]);
 
@@ -1919,6 +1961,8 @@ function ProductsRoute() {
       inventory: '',
       replaceExisting: false,
     });
+    setSelectedProductLifecycle(null);
+    setProductLifecycleError(null);
   };
 
   const resetForm = () => {
@@ -4205,6 +4249,105 @@ function ProductsRoute() {
                         placeholder="0"
                       />
                     </Field>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-subscription-lifecycle">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Subscription lifecycle</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Product-scoped subscription orders, provider webhook states, and operator handoff routes.</div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void loadSelectedProductLifecycle()}
+                        disabled={!selectedProduct || isProductLifecycleLoading || !canViewCommerce}
+                        title={!selectedProduct ? 'Save the product before loading subscription lifecycle.' : (!canViewCommerce ? viewPermissionTitle : undefined)}
+                        iconStart={<RefreshCw className={cn('size-4', isProductLifecycleLoading && 'animate-spin')} />}
+                      >
+                        Refresh lifecycle
+                      </Button>
+                      <Link
+                        to="/orders"
+                        search={{ siteId: activeSiteId }}
+                        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
+                      >
+                        Open orders
+                      </Link>
+                    </div>
+                  </div>
+                  {productLifecycleError ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {productLifecycleError}
+                    </div>
+                  ) : null}
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Subscriptions</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">{selectedProductLifecycle?.summary.total ?? 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Active / renewal</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">
+                        {(selectedProductLifecycle?.summary.active ?? 0) + (selectedProductLifecycle?.summary.renewals ?? 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Needs attention</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">
+                        {(selectedProductLifecycle?.summary.dunning ?? 0) + (selectedProductLifecycle?.summary.paused ?? 0) + (selectedProductLifecycle?.summary.trialEnding ?? 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase text-muted-foreground">Product revenue</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">
+                        {formatMoney(selectedProductLifecycle?.summary.revenue ?? 0, selectedProductLifecycle?.subscriptions[0]?.currency || formState.currency || 'USD')}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-4">
+                    {[
+                      ['Dunning', selectedProductLifecycle?.summary.dunning ?? 0],
+                      ['Paused', selectedProductLifecycle?.summary.paused ?? 0],
+                      ['Trial ending', selectedProductLifecycle?.summary.trialEnding ?? 0],
+                      ['Cancelled', selectedProductLifecycle?.summary.cancelled ?? 0],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-md border border-border bg-background px-3 py-2 text-xs">
+                        <div className="text-muted-foreground">{label}</div>
+                        <div className="mt-1 font-semibold text-foreground">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-foreground">Recent subscription orders</div>
+                      <div className="text-[11px] text-muted-foreground">{selectedProductLifecycle?.schemaVersion || 'backy.product-subscription-lifecycle.v1'}</div>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {selectedProductLifecycle?.subscriptions.length ? selectedProductLifecycle.subscriptions.slice(0, 3).map((subscription) => (
+                        <div key={subscription.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
+                          <div>
+                            <div className="font-medium text-foreground">{subscription.orderNumber}</div>
+                            <div className="mt-0.5 text-muted-foreground">
+                              {subscription.customerEmail || subscription.customerName || 'Unknown customer'}
+                              {subscription.subscriptionReference ? ` · ${subscription.subscriptionReference}` : ''}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-medium text-foreground">{subscription.lifecycleStatus.replace(/_/g, ' ')}</div>
+                            <div className="mt-0.5 text-muted-foreground">{formatMoney(subscription.productRevenue, subscription.currency)} · {subscription.productUnits} unit{subscription.productUnits === 1 ? '' : 's'}</div>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                          No subscription orders are attached to this product yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    Webhooks update lifecycle state through {selectedProductLifecycle?.contract.webhookApi || '/api/sites/:siteId/commerce/webhook'}; reconciliation repairs stale private orders through {selectedProductLifecycle?.contract.reconciliationApi || '/api/admin/sites/:siteId/commerce/reconcile'}.
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-provider-sync">

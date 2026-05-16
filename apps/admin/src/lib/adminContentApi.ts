@@ -1468,6 +1468,78 @@ interface ApiCommerceProductProviderSyncResponse {
   };
 }
 
+export interface ProductSubscriptionLifecycle {
+  schemaVersion: 'backy.product-subscription-lifecycle.v1';
+  generatedAt: string;
+  product: {
+    id: string;
+    slug: string;
+    title: string;
+    sku: string;
+    subscription: {
+      enabled: boolean;
+      interval: string;
+      trialDays: number;
+    };
+  };
+  summary: {
+    total: number;
+    active: number;
+    renewals: number;
+    dunning: number;
+    paused: number;
+    trialEnding: number;
+    cancelled: number;
+    pending: number;
+    revenue: number;
+    units: number;
+  };
+  subscriptions: Array<{
+    id: string;
+    slug: string;
+    orderNumber: string;
+    customerName: string;
+    customerEmail: string;
+    paymentStatus: string;
+    fulfillmentStatus: string;
+    lifecycleStatus: 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
+    subscriptionReference: string;
+    checkoutSessionId: string;
+    total: number;
+    currency: string;
+    productUnits: number;
+    productRevenue: number;
+    updatedAt: string | null;
+    matchedItems: Array<{
+      productId: string;
+      slug: string;
+      title: string;
+      sku: string;
+      quantity: number;
+      lineTotal: number;
+    }>;
+  }>;
+  contract: {
+    ordersApi: string;
+    webhookApi: string;
+    reconciliationApi: string;
+    supportedLifecycleEvents: string[];
+  };
+}
+
+interface ApiProductSubscriptionLifecycleResponse {
+  success: boolean;
+  data?: {
+    lifecycle: ProductSubscriptionLifecycle;
+  };
+  lifecycle?: ProductSubscriptionLifecycle;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface AdminOrderShippingLabel {
   id: string;
   status: 'draft' | 'purchased' | 'voided';
@@ -6583,6 +6655,21 @@ export async function syncCommerceProductProvider(
     sync,
     product: toCollectionRecord(product),
   };
+}
+
+export async function getProductSubscriptionLifecycle(
+  siteId: string,
+  productId: string,
+): Promise<ProductSubscriptionLifecycle> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/products/${productId}/subscriptions`);
+  const payload = await readJson<ApiProductSubscriptionLifecycleResponse>(response);
+  const lifecycle = payload.data?.lifecycle || payload.lifecycle;
+
+  if (!response.ok || !payload.success || !lifecycle) {
+    throw adminContentApiError(payload, 'Unable to load product subscription lifecycle');
+  }
+
+  return lifecycle;
 }
 
 export async function createOrderShippingLabel(
