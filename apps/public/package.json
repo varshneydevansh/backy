@@ -24,6 +24,7 @@
         "test:media-safety": "tsx scripts/media-safety-provider-smoke.ts",
         "test:media-scope": "tsx scripts/media-scope-smoke.ts",
         "test:media-secret-manager": "node scripts/media-secret-manager-smoke.mjs",
+        "test:site-discovery-rate-limit": "node scripts/site-discovery-rate-limit-smoke.mjs",
         "test:commerce-webhook": "tsx scripts/commerce-webhook-idempotency-smoke.ts",
         "test:commerce-webhook-secret": "tsx scripts/commerce-webhook-secret-smoke.ts",
         "test:repository-runtime": "tsx scripts/repository-runtime-smoke.ts",

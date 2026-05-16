@@ -15,7 +15,10 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
+const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const DISCOVERY_RATE_LIMIT_WINDOW_MS = 60_000;
+const DISCOVERY_RATE_LIMIT_MAX = 600;
+const RATE_LIMIT_STATE = new Map<string, { count: number; resetAt: number }>();
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 100;
@@ -50,13 +53,97 @@ const paginateSites = <TSite>(sites: TSite[], limit: number, offset: number) => 
     },
 });
 
+const stripTrailingDot = (value: string) => value.endsWith('.') ? value.slice(0, -1) : value;
+
+const normalizeIdentifier = (value: string) => stripTrailingDot(value.trim().toLowerCase());
+
+const normalizeDomain = (value: string | null | undefined): string | null => {
+    const raw = (value || '').trim();
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(raw.includes('://') ? raw : `https://${raw}`);
+        return stripTrailingDot(parsed.hostname.toLowerCase().replace(/^www\./, ''));
+    } catch {
+        const host = raw
+            .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+            .split(/[/?#]/)[0]
+            .split('@')
+            .pop()
+            ?.split(':')[0]
+            .toLowerCase()
+            .replace(/^www\./, '');
+        return host ? stripTrailingDot(host) : null;
+    }
+};
+
+const domainsMatch = (left: string | null | undefined, right: string | null | undefined): boolean => {
+    const normalizedLeft = normalizeDomain(left);
+    const normalizedRight = normalizeDomain(right);
+
+    return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+};
+
+const envNumber = (key: string, fallback: number): number => {
+    const parsed = Number.parseInt(process.env[key] || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const clientAddress = (request: NextRequest): string => (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown'
+);
+
+const rateLimitKey = (request: NextRequest): string => {
+    const address = clientAddress(request);
+    const origin = request.headers.get('origin') || request.headers.get('referer') || 'anonymous';
+
+    return `${address}:${origin}`;
+};
+
+const isRateLimitDisabled = () => TRUE_VALUES.has((process.env.BACKY_PUBLIC_DISCOVERY_RATE_LIMIT_DISABLED || '').toLowerCase());
+
+const checkDiscoveryRateLimit = (request: NextRequest) => {
+    const limit = envNumber('BACKY_PUBLIC_DISCOVERY_RATE_LIMIT_MAX', DISCOVERY_RATE_LIMIT_MAX);
+    const windowMs = envNumber('BACKY_PUBLIC_DISCOVERY_RATE_LIMIT_WINDOW_MS', DISCOVERY_RATE_LIMIT_WINDOW_MS);
+    const now = Date.now();
+    const key = rateLimitKey(request);
+    const current = RATE_LIMIT_STATE.get(key);
+    const state = current && current.resetAt > now
+        ? current
+        : { count: 0, resetAt: now + windowMs };
+
+    state.count += 1;
+    RATE_LIMIT_STATE.set(key, state);
+
+    for (const [candidateKey, candidate] of RATE_LIMIT_STATE.entries()) {
+        if (candidate.resetAt <= now) {
+            RATE_LIMIT_STATE.delete(candidateKey);
+        }
+    }
+
+    const remaining = Math.max(0, limit - state.count);
+    const retryAfterSeconds = Math.max(1, Math.ceil((state.resetAt - now) / 1000));
+
+    return {
+        limited: state.count > limit,
+        limit,
+        remaining,
+        resetAt: state.resetAt,
+        retryAfterSeconds,
+    };
+};
+
 const findPublicSite = (sites: StoreSite[], identifier: string): StoreSite | undefined => {
     const normalized = normalizeIdentifier(identifier);
     return sites.find(
         (site) =>
             normalizeIdentifier(site.id) === normalized ||
             normalizeIdentifier(site.slug) === normalized ||
-            (site.customDomain ? normalizeIdentifier(site.customDomain) === normalized : false),
+            domainsMatch(site.customDomain, identifier),
     );
 };
 
@@ -94,7 +181,7 @@ const findPublicRepositorySite = async (
         return siteBySlug;
     }
 
-    const normalized = normalizeIdentifier(identifier);
+    const normalizedDomain = normalizeDomain(identifier);
     const result = await repositories.sites.list({
         status: 'published',
         limit: 100,
@@ -104,11 +191,11 @@ const findPublicRepositorySite = async (
     return result.items.find((site) => (
         site.isPublished &&
         site.customDomain &&
-        normalizeIdentifier(site.customDomain) === normalized
+        normalizeDomain(site.customDomain) === normalizedDomain
     )) || null;
 };
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const errorResponse = (status: number, code: string, message: string, requestId: string, headers?: HeadersInit) => (
     publicContractJson(
         {
             success: false,
@@ -118,17 +205,30 @@ const errorResponse = (status: number, code: string, message: string, requestId:
                 message,
             },
         },
-        { status, requestId, cache: 'error' },
+        { status, requestId, cache: 'error', headers },
     )
 );
+
+const rateLimitHeaders = (limit: ReturnType<typeof checkDiscoveryRateLimit>) => ({
+    'x-ratelimit-limit': String(limit.limit),
+    'x-ratelimit-remaining': String(limit.remaining),
+    'x-ratelimit-reset': String(Math.ceil(limit.resetAt / 1000)),
+    ...(limit.limited ? { 'retry-after': String(limit.retryAfterSeconds) } : {}),
+});
 
 export async function GET(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || makeRequestId();
 
     try {
+        const rateLimit = isRateLimitDisabled() ? null : checkDiscoveryRateLimit(request);
+        if (rateLimit?.limited) {
+            return errorResponse(429, 'RATE_LIMITED', 'Too many site discovery requests.', requestId, rateLimitHeaders(rateLimit));
+        }
+
         const { searchParams } = new URL(request.url);
         const identifier = searchParams.get('slug') || searchParams.get('identifier');
         const { limit, offset } = parsePagination(searchParams);
+        const headers = rateLimit ? rateLimitHeaders(rateLimit) : undefined;
 
         if (!shouldUseDemoStoreFallback()) {
             const repositories = await getRequiredDatabaseRepositories();
@@ -150,6 +250,7 @@ export async function GET(request: NextRequest) {
                     request,
                     cache: 'discovery',
                     siteId: publicSite.id,
+                    headers,
                 });
             }
 
@@ -175,6 +276,7 @@ export async function GET(request: NextRequest) {
                 requestId,
                 request,
                 cache: 'discovery',
+                headers,
             });
         }
 
@@ -196,6 +298,7 @@ export async function GET(request: NextRequest) {
                 request,
                 cache: 'discovery',
                 siteId: site.id,
+                headers,
             });
         }
 
@@ -213,6 +316,7 @@ export async function GET(request: NextRequest) {
             requestId,
             request,
             cache: 'discovery',
+            headers,
         });
     } catch (error) {
         console.error('API Error:', error);

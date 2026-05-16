@@ -532,6 +532,12 @@ try {
     assert(publicSiteByDomain.response.status === 200, `${publicSiteByDomain.url} expected 200, got ${publicSiteByDomain.response.status}`);
     assertBackyContract(publicSiteByDomain, 'discovery');
     assert(publicSiteByDomain.json?.data?.site?.id === createdSiteId, `${publicSiteByDomain.url} did not resolve custom domain`);
+    assert(publicSiteByDomain.response.headers.get('x-ratelimit-limit'), `${publicSiteByDomain.url} missing discovery rate-limit header`);
+
+    const publicSiteByCanonicalDomainUrl = await request(`/api/sites?identifier=${encodeURIComponent(`https://www.${customDomain}/products?ref=contract`)}`);
+    assert(publicSiteByCanonicalDomainUrl.response.status === 200, `${publicSiteByCanonicalDomainUrl.url} expected 200, got ${publicSiteByCanonicalDomainUrl.response.status}`);
+    assertBackyContract(publicSiteByCanonicalDomainUrl, 'discovery');
+    assert(publicSiteByCanonicalDomainUrl.json?.data?.site?.id === createdSiteId, `${publicSiteByCanonicalDomainUrl.url} did not resolve canonicalized custom domain URL`);
 
     const publicSiteList = await request('/api/sites');
     assert(publicSiteList.response.status === 200, `${publicSiteList.url} expected 200, got ${publicSiteList.response.status}`);

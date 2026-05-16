@@ -22,6 +22,7 @@ export interface PublicContractResponseOptions {
   schemaVersion?: string;
   siteId?: string;
   cacheRevision?: string;
+  headers?: HeadersInit;
 }
 
 export const withPublicContractHeaders = (
@@ -44,6 +45,12 @@ export const withPublicContractHeaders = (
 
   if (options.cacheRevision) {
     response.headers.set('x-backy-cache-revision', options.cacheRevision);
+  }
+
+  if (options.headers) {
+    for (const [key, value] of new Headers(options.headers).entries()) {
+      response.headers.set(key, value);
+    }
   }
 
   return response;
