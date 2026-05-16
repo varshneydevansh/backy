@@ -147,6 +147,23 @@ try {
     body: JSON.stringify({ description: `This should not persist ${suffix}` }),
   });
 
+  await expectForbiddenSiteScope(`/api/admin/sites/${encodeURIComponent(site.id)}/pages?includeUnpublished=true`, {
+    headers: scopedHeaders,
+  });
+
+  await expectForbiddenSiteScope(`/api/admin/sites/${encodeURIComponent(site.id)}/pages`, {
+    method: 'POST',
+    headers: {
+      ...scopedHeaders,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: `Denied Nested Page ${suffix}`,
+      slug: `denied-nested-page-${suffix}`,
+      status: 'draft',
+    }),
+  });
+
   const ownerDetail = await requireOk(`/api/admin/sites/${encodeURIComponent(site.id)}`);
   assert(ownerDetail.data?.site?.id === site.id, 'Admin key should still read the team-owned site for cleanup verification');
 
@@ -157,6 +174,8 @@ try {
       'non-member admin list filtered',
       'non-member admin detail denied',
       'non-member admin update denied',
+      'non-member admin nested pages list denied',
+      'non-member admin nested page create denied',
       'admin key still bypasses team scope for service cleanup',
     ],
     siteId: site.id,

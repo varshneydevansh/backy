@@ -3,11 +3,12 @@ import { createHash } from 'node:crypto';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
-import { getAdminSettings, listAdminTeamMembers, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
+import { getAdminSettings, getSiteByIdOrSlug, listAdminTeamMembers, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 type AdminRole = AdminSession['user']['role'];
-type AdminTeamScopeAction = 'view' | 'manage';
+type AdminTeamScopeAction = 'view' | 'content' | 'manage';
+type DatabaseRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
 
 export type AdminAccessContext = {
   type: 'session' | 'api-key';
@@ -20,6 +21,7 @@ export type AdminTeamScopedResource = {
 
 const scopedTeamRoles: Record<AdminTeamScopeAction, AdminRole[]> = {
   view: ['owner', 'admin', 'editor', 'viewer'],
+  content: ['owner', 'admin', 'editor'],
   manage: ['owner', 'admin'],
 };
 
@@ -160,6 +162,72 @@ const hasRequiredRole = (role: AdminRole, allowedRoles: AdminRole[]) => allowedR
 const normalizeTeamId = (teamId: string | null | undefined) => (
   typeof teamId === 'string' ? teamId.trim() : ''
 );
+
+const nestedAdminSiteIdentifierFromRequest = (request: NextRequest) => {
+  let pathname = '';
+  try {
+    pathname = new URL(request.url).pathname;
+  } catch {
+    return null;
+  }
+
+  const segments = pathname.split('/').filter(Boolean);
+  const apiIndex = segments.indexOf('api');
+  if (
+    apiIndex < 0 ||
+    segments[apiIndex + 1] !== 'admin' ||
+    segments[apiIndex + 2] !== 'sites'
+  ) {
+    return null;
+  }
+
+  const siteIdentifier = segments[apiIndex + 3];
+  if (!siteIdentifier) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(siteIdentifier).trim() || null;
+  } catch {
+    return siteIdentifier.trim() || null;
+  }
+};
+
+const teamScopeActionForPermission = (permission?: string): AdminTeamScopeAction => {
+  if (!permission) {
+    return 'manage';
+  }
+
+  const [group, action] = permission.split('.');
+  if (action === 'view' || action === 'export') {
+    return 'view';
+  }
+
+  if (group === 'sites' || group === 'settings' || group === 'users') {
+    return 'manage';
+  }
+
+  if (action === 'configure') {
+    return group === 'commerce' ? 'manage' : 'content';
+  }
+
+  if (action === 'manage' || action === 'create' || action === 'edit' || action === 'publish' || action === 'delete') {
+    return 'content';
+  }
+
+  return 'manage';
+};
+
+const resolveAdminSiteScopeResource = async (
+  siteIdentifier: string,
+  repositories: DatabaseRepositories | null,
+): Promise<AdminTeamScopedResource | null> => {
+  if (repositories) {
+    return await repositories.sites.getById(siteIdentifier) || await repositories.sites.getBySlug(siteIdentifier);
+  }
+
+  return getSiteByIdOrSlug(siteIdentifier) || null;
+};
 
 export const adminAccessError = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
@@ -338,6 +406,24 @@ export async function requireAdminAccess(
       return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'This admin account does not have the required permission.', requestId);
     }
 
+    const siteIdentifier = nestedAdminSiteIdentifierFromRequest(request);
+    if (siteIdentifier) {
+      const site = await resolveAdminSiteScopeResource(siteIdentifier, repositories);
+      if (!site) {
+        return adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const scopedAccess = await requireAdminTeamScopeAccess(
+        { type: 'session', session },
+        requestId,
+        site,
+        { action: teamScopeActionForPermission(options.permission) },
+      );
+      if (scopedAccess) {
+        return scopedAccess;
+      }
+    }
+
     return {
       type: 'session',
       session,
@@ -346,6 +432,24 @@ export async function requireAdminAccess(
 
   if (!hasRequiredRole(session.user.role, allowedRoles)) {
     return adminAccessError(403, 'FORBIDDEN', 'This admin account cannot manage users.', requestId);
+  }
+
+  const siteIdentifier = nestedAdminSiteIdentifierFromRequest(request);
+  if (siteIdentifier) {
+    const site = await resolveAdminSiteScopeResource(siteIdentifier, repositories);
+    if (!site) {
+      return adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const scopedAccess = await requireAdminTeamScopeAccess(
+      { type: 'session', session },
+      requestId,
+      site,
+      { action: teamScopeActionForPermission(options.permission) },
+    );
+    if (scopedAccess) {
+      return scopedAccess;
+    }
   }
 
   return {
