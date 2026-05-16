@@ -6733,6 +6733,25 @@ export async function createOrderProviderRefund(
   };
 }
 
+export async function refreshOrderProviderRefund(
+  siteId: string,
+  orderId: string,
+): Promise<{ record: CollectionRecord; refund: AdminOrderProviderRefund }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/provider-refund`, {
+    method: 'PATCH',
+  });
+  const payload = await readJson<ApiOrderProviderRefundResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to refresh provider refund');
+  }
+
+  return {
+    record: toCollectionRecord(payload.data.record || payload.data.order),
+    refund: payload.data.refund,
+  };
+}
+
 export interface CommerceReconciliationResult {
   schemaVersion: 'backy.commerce-reconciliation.v1';
   runMode?: 'manual' | 'scheduled';

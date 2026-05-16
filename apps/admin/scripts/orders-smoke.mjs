@@ -280,6 +280,20 @@ const createStripeRefundMockServer = async () => {
         form,
       });
       response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        response.end(JSON.stringify({
+          id: String(request.url || '').split('/').pop() || `re_smoke_${requests.length}`,
+          object: 'refund',
+          status: 'succeeded',
+          amount: 1234,
+          currency: 'usd',
+          payment_intent: `pi_refund_refresh_${Date.now()}`,
+          charge: '',
+          reason: 'requested_by_customer',
+          created: 1710000000 + requests.length,
+        }));
+        return;
+      }
       response.end(JSON.stringify({
         id: `re_smoke_${requests.length}`,
         object: 'refund',
@@ -321,6 +335,23 @@ const createPayPalRefundMockServer = async () => {
         body,
       });
       response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        const refundId = String(request.url || '').split('/').pop() || `paypal_refund_smoke_${requests.length}`;
+        response.end(JSON.stringify({
+          id: refundId,
+          status: 'COMPLETED',
+          amount: { value: '12.34', currency_code: 'USD' },
+          invoice_id: '',
+          custom_id: '',
+          update_time: '2026-05-16T00:00:05Z',
+          links: [{
+            href: `https://api.paypal.test/v2/payments/refunds/${refundId}`,
+            rel: 'self',
+            method: 'GET',
+          }],
+        }));
+        return;
+      }
       response.end(JSON.stringify({
         id: `paypal_refund_smoke_${requests.length}`,
         status: 'COMPLETED',
@@ -364,6 +395,22 @@ const createSquareRefundMockServer = async () => {
         body,
       });
       response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        const refundId = String(request.url || '').split('/').pop() || `sq_refund_smoke_${requests.length}`;
+        response.end(JSON.stringify({
+          refund: {
+            id: refundId,
+            status: 'COMPLETED',
+            amount_money: { amount: 1234, currency: 'USD' },
+            payment_id: `sq_payment_refresh_${Date.now()}`,
+            order_id: `sq_order_smoke_${requests.length}`,
+            reason: 'refresh',
+            created_at: '2026-05-16T00:00:00Z',
+            updated_at: '2026-05-16T00:00:05Z',
+          },
+        }));
+        return;
+      }
       response.end(JSON.stringify({
         refund: {
           id: `sq_refund_smoke_${requests.length}`,
@@ -443,7 +490,18 @@ const createMollieRefundMockServer = async () => {
         headers: request.headers,
         body,
       });
-      response.writeHead(201, { 'content-type': 'application/json' });
+      response.writeHead(request.method === 'GET' ? 200 : 201, { 'content-type': 'application/json' });
+      if (request.method === 'GET') {
+        response.end(JSON.stringify({
+          id: String(request.url || '').split('/').pop() || `re_mollie_smoke_${requests.length}`,
+          status: 'refunded',
+          amount: { value: '12.34', currency: 'USD' },
+          paymentId: String(request.url || '').split('/')[3] || '',
+          description: 'refresh',
+          createdAt: '2026-05-16T00:00:05+00:00',
+        }));
+        return;
+      }
       response.end(JSON.stringify({
         id: `re_mollie_smoke_${requests.length}`,
         status: 'refunded',
@@ -1817,23 +1875,28 @@ const clickOrderCardButton = async (client, orderNumber, buttonText) => {
 };
 
 const assertOrderCardButtonEnabled = async (client, orderNumber, buttonText) => {
-  const result = await evaluate(client, `(() => {
-    const orderNumber = ${JSON.stringify(orderNumber)};
-    const buttonText = ${JSON.stringify(buttonText)};
-    const cards = Array.from(document.querySelectorAll('article'));
-    const card = cards.find((candidate) => (candidate.textContent || '').includes(orderNumber));
-    const button = Array.from((card || document).querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
-    ));
-    return {
-      hasCard: Boolean(card),
-      hasButton: button instanceof HTMLButtonElement,
-      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
-      cardText: (card?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 900),
-    };
-  })()`);
+  let result = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const orderNumber = ${JSON.stringify(orderNumber)};
+      const buttonText = ${JSON.stringify(buttonText)};
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((candidate) => (candidate.textContent || '').includes(orderNumber));
+      const button = Array.from((card || document).querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
+      ));
+      return {
+        hasCard: Boolean(card),
+        hasButton: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        cardText: (card?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 900),
+      };
+    })()`);
+    if (result.hasCard && result.hasButton && result.disabled === false) return result;
+    await sleep(250);
+  }
   assert(
-    result.hasCard && result.hasButton && result.disabled === false,
+    result?.hasCard && result?.hasButton && result.disabled === false,
     `${buttonText} was not enabled for ${orderNumber}: ${JSON.stringify(result)}`,
   );
   return result;
@@ -2829,6 +2892,79 @@ const main = async () => {
       assert(persistedProviderPayload.execution?.ok === true, `Provider refund payload did not persist a successful Stripe execution: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.execution?.payload?.id === providerRefundRecord.values.providerrefundid, `Provider refund payload did not persist the returned Stripe refund id: ${JSON.stringify(persistedProviderPayload)}`);
       assert(persistedProviderPayload.executionMode === 'stripe-api', `Provider refund payload did not persist Stripe execution mode: ${JSON.stringify(persistedProviderPayload)}`);
+    }
+
+    if (['paypal', 'square', 'mollie', 'stripe'].includes(providerRefundExecutionProvider)) {
+      const pendingRefundId = `${providerRefundExecutionProvider}_refresh_${suffix}`;
+      const latestOrder = await getCollectionRecordBySlug(collectionId, slug);
+      await updateCollectionRecord(collectionId, latestOrder.id, {
+        status: 'published',
+        values: {
+          ...latestOrder.values,
+          providerrefundstatus: 'requested',
+          providerrefundprovider: providerRefundExecutionProvider,
+          providerrefundid: pendingRefundId,
+          providerrefundreference: `${providerRefundExecutionProvider}:${pendingRefundId}`,
+          providerrefundcompletedat: '',
+          providerrefundpayload: JSON.stringify({
+            schemaVersion: 'backy.provider-refund.v1',
+            action: 'provider.refund.refresh.smoke',
+            provider: providerRefundExecutionProvider,
+            executionMode: `${providerRefundExecutionProvider}-api`,
+            idempotencyKey: pendingRefundId,
+          }),
+          notes: 'Order smoke reset to pending provider refund before refresh.',
+        },
+      });
+      await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => values.providerrefundstatus === 'requested' && values.providerrefundid === pendingRefundId,
+        'Provider refund pending refresh setup did not persist',
+      );
+      await navigateToOrders(client);
+      await waitUntilIdle(client, '/orders provider refund refresh setup');
+      await assertOrderCardButtonEnabled(client, orderNumber, 'Refresh Provider Refund');
+      await clickOrderCardButton(client, orderNumber, 'Refresh Provider Refund');
+      const refreshedProviderRefundRecord = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.providerrefundstatus === 'succeeded' &&
+          values.providerrefundid === pendingRefundId &&
+          Boolean(values.providerrefundcompletedat) &&
+          String(values.providerrefundpayload || '').includes('"refresh"') &&
+          /Provider refund refresh reconciled succeeded/.test(String(values.notes || ''))
+        ),
+        'Provider Refund refresh did not reconcile the pending provider refund',
+      );
+      const refreshedProviderPayload = JSON.parse(String(refreshedProviderRefundRecord.values.providerrefundpayload || '{}'));
+      assert(refreshedProviderPayload.refresh?.ok === true, `Provider refund refresh payload did not persist a successful refresh: ${JSON.stringify(refreshedProviderPayload)}`);
+      assert(refreshedProviderPayload.refresh?.executionMode === `${providerRefundExecutionProvider}-api`, `Provider refund refresh payload did not persist the execution mode: ${JSON.stringify(refreshedProviderPayload)}`);
+      const providerRefundMockServer = providerRefundExecutionProvider === 'paypal'
+        ? paypalRefundMockServer
+        : providerRefundExecutionProvider === 'square'
+          ? squareRefundMockServer
+          : providerRefundExecutionProvider === 'mollie'
+            ? mollieRefundMockServer
+            : stripeRefundMockServer;
+      const refreshRequest = providerRefundMockServer.requests.find((request) => request.method === 'GET' && String(request.url || '').includes(pendingRefundId));
+      assert(refreshRequest, `Provider refund refresh did not query the ${providerRefundExecutionProvider} mock: ${JSON.stringify(providerRefundMockServer.requests)}`);
+    } else if (providerRefundExecutionProvider === 'manual') {
+      await clickOrderCardButton(client, orderNumber, 'Refresh Provider Refund');
+      const refreshedManualProviderRefundRecord = await waitForOrderValue(
+        collectionId,
+        slug,
+        (values) => (
+          values.providerrefundstatus === 'requires_action' &&
+          String(values.providerrefundpayload || '').includes('"refresh"') &&
+          String(values.providerrefundpayload || '').includes('"executionMode": "handoff"') &&
+          /Provider refund refresh handoff requires_action/.test(String(values.notes || ''))
+        ),
+        'Manual provider refund refresh did not persist a handoff refresh payload',
+      );
+      const refreshedManualProviderPayload = JSON.parse(String(refreshedManualProviderRefundRecord.values.providerrefundpayload || '{}'));
+      assert(refreshedManualProviderPayload.refresh?.ok === false, `Manual provider refund refresh should persist a handoff result: ${JSON.stringify(refreshedManualProviderPayload)}`);
     }
 
     await editOrderAfterWorkflow(client, orderNumber);

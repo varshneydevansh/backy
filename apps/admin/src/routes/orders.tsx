@@ -43,6 +43,7 @@ import {
   listCollectionRecords,
   listCollections,
   refreshOrderQuote,
+  refreshOrderProviderRefund,
   refreshOrderTracking,
   reconcileCommerceOrders,
   updateCollection,
@@ -2054,6 +2055,32 @@ function OrdersRoute() {
     }
   };
 
+  const refreshOrderProviderRefundAction = async (order: CollectionRecord) => {
+    if (isOrdersBusy) return;
+    if (!canEditOrders) {
+      setError(editPermissionTitle || 'Your account cannot refresh provider refunds.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { record: updated, refund } = await refreshOrderProviderRefund(activeSiteId, order.id);
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedOrderId === updated.id) {
+        setFormState(orderToForm(updated));
+      }
+      void loadOrderAnalytics();
+      setNotice(`Provider refund refresh ${refund.status} for ${formatMoney(refund.amount, refund.currency)}.`);
+    } catch (refundError) {
+      setError(refundError instanceof Error ? refundError.message : 'Unable to refresh provider refund');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const selectCustomerProfile = (customer: CollectionRecord) => {
     if (isOrdersBusy) return;
     if (!canViewOrders) {
@@ -3399,6 +3426,7 @@ function OrdersRoute() {
                       onFulfilled={() => void updateOrderWorkflow(order, buildFulfilledWorkflowUpdates(order))}
                       onRefunded={() => void updateOrderWorkflow(order, buildRefundWorkflowUpdates(order))}
                       onProviderRefund={() => void requestOrderProviderRefund(order)}
+                      onRefreshProviderRefund={() => void refreshOrderProviderRefundAction(order)}
                       onCancelled={() => void updateOrderWorkflow(order, buildCancelWorkflowUpdates(order))}
                       onDelete={() => {
                         if (isOrdersBusy) return;
@@ -4400,6 +4428,7 @@ function OrderCard({
   onFulfilled,
   onRefunded,
   onProviderRefund,
+  onRefreshProviderRefund,
   onCancelled,
   onDelete,
   canDelete,
@@ -4422,6 +4451,7 @@ function OrderCard({
   onFulfilled: () => void;
   onRefunded: () => void;
   onProviderRefund: () => void;
+  onRefreshProviderRefund: () => void;
   onCancelled: () => void;
   onDelete: () => void;
 }) {
@@ -4459,6 +4489,7 @@ function OrderCard({
   const providerRefundAmount = toNumber(readOrderValue(values, 'providerrefundamount', 0));
   const providerRefundRequestedAt = String(readOrderValue(values, 'providerrefundrequestedat', ''));
   const providerRefundRetryable = providerRefundStatus === 'failed' || providerRefundStatus === 'requires_action';
+  const providerRefundRefreshable = Boolean(providerRefundId) && providerRefundStatus !== 'succeeded';
   const riskScore = toNumber(readOrderValue(values, 'riskscore', 0));
   const riskLevel = String(readOrderValue(values, 'risklevel', riskScore >= 60 ? 'high' : riskScore >= 25 ? 'medium' : 'low'));
   const riskReviewStatus = String(readOrderValue(values, 'riskreviewstatus', riskLevel === 'low' ? 'cleared' : 'pending_review'));
@@ -4660,6 +4691,9 @@ function OrderCard({
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
         <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabled || (Boolean(providerRefundId) && !providerRefundRetryable) || paymentStatus === 'pending' || paymentStatus === 'failed'} iconStart={<CreditCard className="size-4" />}>{providerRefundRetryable ? 'Retry Provider Refund' : 'Provider Refund'}</Button>
+        {providerRefundRefreshable ? (
+          <Button size="sm" variant="outline" onClick={onRefreshProviderRefund} disabled={disabled} iconStart={<RefreshCw className="size-4" />}>Refresh Provider Refund</Button>
+        ) : null}
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>

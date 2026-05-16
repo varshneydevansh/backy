@@ -3,6 +3,7 @@
  *
  * GET  /api/admin/sites/[siteId]/commerce/orders/[orderId]/provider-refund
  * POST /api/admin/sites/[siteId]/commerce/orders/[orderId]/provider-refund
+ * PATCH /api/admin/sites/[siteId]/commerce/orders/[orderId]/provider-refund
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -155,6 +156,15 @@ const paypalRefundEndpoint = (captureId: string) => {
   return `${baseUrl}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`;
 };
 
+const paypalRefundStatusEndpoint = (refundId: string) => {
+  const baseUrl = (
+    process.env.BACKY_PAYPAL_API_BASE_URL?.trim()
+    || process.env.PAYPAL_API_BASE_URL?.trim()
+    || 'https://api-m.paypal.com'
+  ).replace(/\/$/, '');
+  return `${baseUrl}/v2/payments/refunds/${encodeURIComponent(refundId)}`;
+};
+
 const canExecutePayPalRefund = (provider: string, paymentReference: string) => (
   provider.toLowerCase() === 'paypal' &&
   Boolean(paypalAccessToken()) &&
@@ -181,6 +191,8 @@ const squareRefundEndpoint = () => {
   ).replace(/\/$/, '');
   return `${baseUrl}/v2/refunds`;
 };
+
+const squareRefundStatusEndpoint = (refundId: string) => `${squareRefundEndpoint()}/${encodeURIComponent(refundId)}`;
 
 const canExecuteSquareRefund = (provider: string, paymentReference: string) => (
   provider.toLowerCase() === 'square' &&
@@ -230,6 +242,8 @@ const mollieRefundEndpoint = (paymentId: string) => {
   ).replace(/\/$/, '');
   return `${baseUrl}/payments/${encodeURIComponent(paymentId)}/refunds`;
 };
+
+const mollieRefundStatusEndpoint = (paymentId: string, refundId: string) => `${mollieRefundEndpoint(paymentId)}/${encodeURIComponent(refundId)}`;
 
 const canExecuteMollieRefund = (provider: string, paymentReference: string) => (
   provider.toLowerCase() === 'mollie' &&
@@ -516,6 +530,30 @@ const executeStripeRefund = async (input: {
   };
 };
 
+const refreshStripeRefund = async (refundId: string) => {
+  const response = await fetch(`${stripeRefundEndpoint()}/${encodeURIComponent(refundId)}`, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${stripeSecretKey()}`,
+    },
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeStripeErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeStripeRefundPayload(payloadRecord),
+  };
+};
+
 const executePayPalRefund = async (input: {
   refundId: string;
   orderId: string;
@@ -559,6 +597,30 @@ const executePayPalRefund = async (input: {
   };
 };
 
+const refreshPayPalRefund = async (refundId: string) => {
+  const response = await fetch(paypalRefundStatusEndpoint(refundId), {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${paypalAccessToken()}`,
+    },
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safePayPalErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safePayPalRefundPayload(payloadRecord),
+  };
+};
+
 const executeSquareRefund = async (input: {
   refundId: string;
   paymentReference: string;
@@ -582,6 +644,31 @@ const executeSquareRefund = async (input: {
       payment_id: input.paymentReference,
       reason: input.reason.slice(0, 192),
     }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeSquareErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeSquareRefundPayload(payloadRecord),
+  };
+};
+
+const refreshSquareRefund = async (refundId: string) => {
+  const response = await fetch(squareRefundStatusEndpoint(refundId), {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${squareAccessToken()}`,
+      'square-version': squareVersion(),
+    },
     cache: 'no-store',
   });
   const payload = await response.json().catch(() => ({}));
@@ -667,6 +754,30 @@ const executeMollieRefund = async (input: {
         backyRefundReason: input.reason.slice(0, 500),
       },
     }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeMollieErrorPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeMollieRefundPayload(payloadRecord),
+  };
+};
+
+const refreshMollieRefund = async (paymentReference: string, refundId: string) => {
+  const response = await fetch(mollieRefundStatusEndpoint(paymentReference, refundId), {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${mollieApiKey()}`,
+    },
     cache: 'no-store',
   });
   const payload = await response.json().catch(() => ({}));
@@ -918,6 +1029,171 @@ const buildProviderRefundUpdate = async (
   };
 };
 
+const buildProviderRefundRefreshUpdate = async (
+  record: CollectionRecordAuditSource,
+  existing: ProviderRefundPayload,
+) => {
+  const now = new Date().toISOString();
+  const values = toRecord(record.values);
+  const provider = existing.provider.toLowerCase() || 'manual';
+  const paymentReference = textValue(values.paymentreference);
+  const providerPayload: Record<string, unknown> = {
+    ...existing.providerPayload,
+    schemaVersion: 'backy.provider-refund.v1',
+    action: provider === 'stripe'
+      ? 'refunds.retrieve'
+      : provider === 'paypal'
+        ? 'payments.refunds.get'
+        : provider === 'square'
+          ? 'refunds.get'
+          : provider === 'mollie'
+            ? 'payments.refunds.get'
+            : 'provider.refund.refresh',
+    provider,
+    orderId: record.id,
+    orderNumber: textValue(values.ordernumber),
+    paymentReference,
+    amount: existing.amount,
+    currency: existing.currency,
+    reason: existing.reason,
+    idempotencyKey: existing.id,
+  };
+  let status = existing.status;
+  let completedAt = existing.completedAt;
+  let providerReference = existing.reference || (paymentReference ? `${provider}:${paymentReference}:${existing.id}` : `${provider}:${existing.id}`);
+  let statusNote = 'handoff';
+
+  if (provider === 'stripe' && stripeSecretKey() && existing.id) {
+    const result = await refreshStripeRefund(existing.id);
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: 'stripe-api',
+      ...result,
+    };
+    if (result.ok) {
+      if (result.payload.status === 'succeeded') {
+        status = 'succeeded';
+        completedAt = completedAt || now;
+      } else if (result.payload.status === 'failed' || result.payload.status === 'canceled') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerReference = `${provider}:${result.payload.id || existing.id}`;
+      statusNote = 'reconciled';
+    } else {
+      statusNote = 'refresh_failed';
+    }
+  } else if (provider === 'paypal' && paypalAccessToken() && existing.id) {
+    const result = await refreshPayPalRefund(existing.id);
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: 'paypal-api',
+      ...result,
+    };
+    if (result.ok) {
+      const paypalStatus = result.payload.status.toUpperCase();
+      if (paypalStatus === 'COMPLETED') {
+        status = 'succeeded';
+        completedAt = completedAt || now;
+      } else if (paypalStatus === 'FAILED' || paypalStatus === 'CANCELLED' || paypalStatus === 'DENIED') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerReference = `${provider}:${result.payload.id || existing.id}`;
+      statusNote = 'reconciled';
+    } else {
+      statusNote = 'refresh_failed';
+    }
+  } else if (provider === 'square' && squareAccessToken() && existing.id) {
+    const result = await refreshSquareRefund(existing.id);
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: 'square-api',
+      ...result,
+    };
+    if (result.ok) {
+      const squareStatus = result.payload.status.toUpperCase();
+      if (squareStatus === 'COMPLETED') {
+        status = 'succeeded';
+        completedAt = completedAt || now;
+      } else if (squareStatus === 'FAILED' || squareStatus === 'REJECTED') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerReference = `${provider}:${result.payload.id || existing.id}`;
+      statusNote = 'reconciled';
+    } else {
+      statusNote = 'refresh_failed';
+    }
+  } else if (provider === 'mollie' && mollieApiKey() && paymentReference && existing.id) {
+    const result = await refreshMollieRefund(paymentReference, existing.id);
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: 'mollie-api',
+      ...result,
+    };
+    if (result.ok) {
+      const mollieStatus = result.payload.status.toLowerCase();
+      if (mollieStatus === 'refunded') {
+        status = 'succeeded';
+        completedAt = completedAt || now;
+      } else if (mollieStatus === 'failed' || mollieStatus === 'canceled') {
+        status = 'failed';
+      } else {
+        status = 'requested';
+      }
+      providerReference = `${provider}:${result.payload.id || existing.id}`;
+      statusNote = 'reconciled';
+    } else {
+      statusNote = 'refresh_failed';
+    }
+  } else {
+    providerPayload.refresh = {
+      requestedAt: now,
+      executionMode: 'handoff',
+      ok: false,
+      payload: {
+        message: 'Provider refund refresh is not configured for this provider or refund.',
+      },
+    };
+  }
+
+  const refund: ProviderRefundPayload = {
+    ...existing,
+    status,
+    reference: providerReference,
+    completedAt,
+    providerPayload,
+  };
+
+  return {
+    refund,
+    values: {
+      ...values,
+      ...(status === 'succeeded' ? {
+        orderstatus: 'refunded',
+        paymentstatus: 'refunded',
+        fulfillmentstatus: 'cancelled',
+      } : {}),
+      refundamount: refund.amount,
+      refundreason: refund.reason,
+      providerrefundstatus: refund.status,
+      providerrefundprovider: refund.provider,
+      providerrefundid: refund.id,
+      providerrefundreference: refund.reference,
+      providerrefundamount: refund.amount,
+      providerrefundreason: refund.reason,
+      providerrefundrequestedat: refund.requestedAt,
+      providerrefundcompletedat: refund.completedAt,
+      providerrefundpayload: JSON.stringify(refund.providerPayload, null, 2),
+      notes: appendNote(values.notes, `Provider refund refresh ${statusNote} ${refund.status} ${now} via ${provider}.`),
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'commerce.view' });
@@ -1062,6 +1338,117 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, refund } });
   } catch (error) {
     console.error('Admin order provider refund create API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, { permission: 'commerce.edit' });
+  if (access instanceof NextResponse) return access;
+
+  try {
+    const { siteId, orderId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+
+      const collection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
+      if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+      const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+      if (commerceAccess) return commerceAccess;
+
+      const record = await repositories.collections.getRecordById(site.id, collection.id, orderId)
+        || await repositories.collections.getRecordBySlug(site.id, collection.id, orderId);
+      if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+
+      const existing = existingRefundPayload(record);
+      if (!existing) return errorResponse(400, 'PROVIDER_REFUND_NOT_FOUND', 'This order does not have a provider refund to refresh', requestId);
+
+      const { refund, values: rawValues } = await buildProviderRefundRefreshUpdate(record, existing);
+      const values = normalizeCollectionRecordMediaValues(collection, rawValues);
+      const validationErrors = await validateRepositoryCollectionRecordValues({
+        repository: repositories.collections,
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collection,
+        values,
+        existingValues: record.values,
+        excludeRecordId: record.id,
+      });
+      if (validationErrors.length > 0) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Provider refund values are invalid', requestId, validationErrors);
+      }
+
+      const updated = (await repositories.collections.updateRecord(site.id, collection.id, record.id, {
+        values: toJsonRecord(values),
+      })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'collectionRecord',
+        entityId: updated.id,
+        reason: 'order-provider-refund-refreshed',
+        requestId,
+      });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'collectionRecord',
+        entityId: updated.id,
+        action: 'update',
+        before: collectionRecordAuditMetadata(collection, record),
+        after: collectionRecordAuditMetadata(collection, updated),
+        metadata: providerRefundAuditMetadata(collection, updated, refund),
+        requestId,
+      });
+
+      return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, refund, cacheInvalidation } });
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+
+    const collection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
+    if (!collection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+    const commerceAccess = await requireCommerceCollectionAccess(request, requestId, collection.slug, 'edit');
+    if (commerceAccess) return commerceAccess;
+
+    const record = getCollectionRecordByIdOrSlug(site.id, collection.id, orderId, { includeUnpublished: true });
+    if (!record) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+
+    const existing = existingRefundPayload(record);
+    if (!existing) return errorResponse(400, 'PROVIDER_REFUND_NOT_FOUND', 'This order does not have a provider refund to refresh', requestId);
+
+    const { refund, values: rawValues } = await buildProviderRefundRefreshUpdate(record, existing);
+    const values = normalizeCollectionRecordMediaValues(collection as unknown as BackyCollection, rawValues);
+    const validationErrors = validateCollectionRecordValues(collection, values, {
+      existingValues: record.values,
+      excludeRecordId: record.id,
+    });
+    if (validationErrors.length > 0) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Provider refund values are invalid', requestId, validationErrors);
+    }
+
+    const updated = updateAdminCollectionRecord(site.id, collection.id, record.id, { values });
+    if (!updated) return errorResponse(404, 'ORDER_NOT_FOUND', 'Order not found', requestId);
+
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'collectionRecord',
+      entityId: updated.id,
+      action: 'update',
+      before: collectionRecordAuditMetadata(collection, record),
+      after: collectionRecordAuditMetadata(collection, updated),
+      metadata: providerRefundAuditMetadata(collection, updated, refund),
+      requestId,
+    });
+
+    return NextResponse.json({ success: true, requestId, data: { record: updated, order: updated, refund } });
+  } catch (error) {
+    console.error('Admin order provider refund refresh API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
