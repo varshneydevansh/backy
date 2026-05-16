@@ -1816,6 +1816,29 @@ const clickOrderCardButton = async (client, orderNumber, buttonText) => {
   return result;
 };
 
+const assertOrderCardButtonEnabled = async (client, orderNumber, buttonText) => {
+  const result = await evaluate(client, `(() => {
+    const orderNumber = ${JSON.stringify(orderNumber)};
+    const buttonText = ${JSON.stringify(buttonText)};
+    const cards = Array.from(document.querySelectorAll('article'));
+    const card = cards.find((candidate) => (candidate.textContent || '').includes(orderNumber));
+    const button = Array.from((card || document).querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === buttonText
+    ));
+    return {
+      hasCard: Boolean(card),
+      hasButton: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      cardText: (card?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 900),
+    };
+  })()`);
+  assert(
+    result.hasCard && result.hasButton && result.disabled === false,
+    `${buttonText} was not enabled for ${orderNumber}: ${JSON.stringify(result)}`,
+  );
+  return result;
+};
+
 const selectOrderForBulk = async (client, orderNumber) => {
   const result = await evaluate(client, `(() => {
     const checkbox = document.querySelector('[aria-label="' + CSS.escape(${JSON.stringify(`Select order ${orderNumber}`)}) + '"]');
@@ -2723,6 +2746,9 @@ const main = async () => {
 
     const providerRefundPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/${providerRefundRecord.id}/provider-refund`);
     assert(providerRefundPayload.data?.refund?.id === providerRefundRecord.values.providerrefundid, `Provider refund endpoint did not return the prepared refund: ${JSON.stringify(providerRefundPayload)}`);
+    if (providerRefundExecutionProvider === 'manual') {
+      await assertOrderCardButtonEnabled(client, orderNumber, 'Retry Provider Refund');
+    }
     if (providerRefundExecutionProvider === 'paypal') {
       const persistedProviderPayload = JSON.parse(String(providerRefundRecord.values.providerrefundpayload || '{}'));
       assert(paypalRefundMockServer.requests.length >= 1, `PayPal refund mock did not receive a refund request: ${paypalRefundMockServer.requests.length}`);

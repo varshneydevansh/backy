@@ -4458,6 +4458,7 @@ function OrderCard({
   const providerRefundId = String(readOrderValue(values, 'providerrefundid', ''));
   const providerRefundAmount = toNumber(readOrderValue(values, 'providerrefundamount', 0));
   const providerRefundRequestedAt = String(readOrderValue(values, 'providerrefundrequestedat', ''));
+  const providerRefundRetryable = providerRefundStatus === 'failed' || providerRefundStatus === 'requires_action';
   const riskScore = toNumber(readOrderValue(values, 'riskscore', 0));
   const riskLevel = String(readOrderValue(values, 'risklevel', riskScore >= 60 ? 'high' : riskScore >= 25 ? 'medium' : 'low'));
   const riskReviewStatus = String(readOrderValue(values, 'riskreviewstatus', riskLevel === 'low' ? 'cleared' : 'pending_review'));
@@ -4658,7 +4659,7 @@ function OrderCard({
         <Button size="sm" variant="outline" onClick={onDispatchFulfillment} disabled={disabled || Boolean(fulfillmentId) || paymentStatus !== 'paid' || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled'} iconStart={<PackageCheck className="size-4" />}>Dispatch Fulfillment</Button>
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
-        <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabled || Boolean(providerRefundId) || paymentStatus === 'pending' || paymentStatus === 'failed'} iconStart={<CreditCard className="size-4" />}>Provider Refund</Button>
+        <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabled || (Boolean(providerRefundId) && !providerRefundRetryable) || paymentStatus === 'pending' || paymentStatus === 'failed'} iconStart={<CreditCard className="size-4" />}>{providerRefundRetryable ? 'Retry Provider Refund' : 'Provider Refund'}</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
       </div>
