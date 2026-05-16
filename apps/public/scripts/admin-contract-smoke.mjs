@@ -1636,10 +1636,39 @@ try {
     assert(Array.isArray(visibleScheduledPage.json?.data?.page?.frontendDesign?.bindingHints) && visibleScheduledPage.json.data.page.frontendDesign.bindingHints.length === 2, `${visibleScheduledPage.url} missing normalized page binding hints`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
 
+    const publicPageByPath = await request(`/api/sites/${createdSiteId}/pages?path=/${pageSlug}`);
+    assert(publicPageByPath.response.status === 200, `${publicPageByPath.url} expected path lookup 200, got ${publicPageByPath.response.status}`);
+    assertBackyContract(publicPageByPath, 'discovery');
+    assert(publicPageByPath.json?.success === true, `${publicPageByPath.url} expected success envelope`);
+    assert(publicPageByPath.json?.data?.page?.id === createdPageId, `${publicPageByPath.url} returned wrong page for path lookup`);
+    assert(publicPageByPath.json?.page?.id === createdPageId, `${publicPageByPath.url} missing legacy page parity for path lookup`);
+
     const publicPageList = await request(`/api/sites/${createdSiteId}/pages?limit=100`);
     const publicPageListEntry = publicPageList.json?.data?.pages?.find((page) => page.id === createdPageId);
     assert(publicPageList.response.status === 200, `${publicPageList.url} expected public page list`);
+    assertBackyContract(publicPageList, 'discovery');
+    assert(publicPageList.json?.success === true, `${publicPageList.url} expected success envelope`);
+    assert(Array.isArray(publicPageList.json?.data?.pages), `${publicPageList.url} missing data page list`);
+    assert(Array.isArray(publicPageList.json?.pages), `${publicPageList.url} missing legacy page list`);
+    assert(publicPageList.json.pages.some((page) => page.id === createdPageId), `${publicPageList.url} missing created page in legacy list`);
+    assert(publicPageList.json?.data?.pagination?.limit === 100, `${publicPageList.url} expected data pagination limit`);
+    assert(publicPageList.json?.data?.pagination?.offset === 0, `${publicPageList.url} expected data pagination offset`);
+    assert(publicPageList.json?.pagination?.total === publicPageList.json?.data?.pagination?.total, `${publicPageList.url} expected legacy pagination total parity`);
+    assert(publicPageList.json?.pagination?.hasMore === publicPageList.json?.data?.pagination?.hasMore, `${publicPageList.url} expected legacy pagination hasMore parity`);
     assert(publicPageListEntry?.seo?.canonical === `/${pageSlug}`, `${publicPageList.url} missing normalized SEO on page list entries`);
+
+    const pagedPublicPageList = await request(`/api/sites/${createdSiteId}/pages?limit=1&offset=0`);
+    assert(pagedPublicPageList.response.status === 200, `${pagedPublicPageList.url} expected paged public page list`);
+    assertBackyContract(pagedPublicPageList, 'discovery');
+    assert(pagedPublicPageList.json?.success === true, `${pagedPublicPageList.url} expected success envelope`);
+    assert(Array.isArray(pagedPublicPageList.json?.data?.pages), `${pagedPublicPageList.url} missing paged data page list`);
+    assert(pagedPublicPageList.json.data.pages.length <= 1, `${pagedPublicPageList.url} returned more than requested limit`);
+    assert(pagedPublicPageList.json?.data?.pagination?.limit === 1, `${pagedPublicPageList.url} expected paged data limit`);
+    assert(pagedPublicPageList.json?.data?.pagination?.offset === 0, `${pagedPublicPageList.url} expected paged data offset`);
+    assert(typeof pagedPublicPageList.json?.data?.pagination?.total === 'number', `${pagedPublicPageList.url} missing paged data total`);
+    assert(typeof pagedPublicPageList.json?.data?.pagination?.hasMore === 'boolean', `${pagedPublicPageList.url} missing paged data hasMore`);
+    assert(pagedPublicPageList.json?.pagination?.limit === pagedPublicPageList.json?.data?.pagination?.limit, `${pagedPublicPageList.url} expected legacy paged limit parity`);
+    assert(pagedPublicPageList.json?.pagination?.offset === pagedPublicPageList.json?.data?.pagination?.offset, `${pagedPublicPageList.url} expected legacy paged offset parity`);
 
     const capturedPageTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
       method: 'POST',
