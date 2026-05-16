@@ -13,7 +13,7 @@ import {
   generateImageTransformManifest,
   MediaTransformGenerationError,
 } from '@/lib/mediaTransformGeneration';
-import { mediaQuotaPayload, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
+import { mediaQuotaPayload, readMediaBillingLimit, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -171,6 +171,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const nextUsageBytes = currentUsageBytes
       - generatedTransformBytes(beforeMedia.metadata)
       + generatedTransformBytes({ generatedTransforms });
+    const billingLimit = readMediaBillingLimit(site.settings, settings, nextUsageBytes);
+
+    if (billingLimit.blocked) {
+      await deleteGeneratedTransformFiles({ generatedTransforms });
+      return errorResponse(
+        402,
+        'BILLING_MEDIA_LIMIT',
+        `The ${billingLimit.policy.billingPlan} site plan allows ${billingLimit.policy.mediaLimitGb} GB of media storage. Update the site billing quota before preparing responsive variants.`,
+        requestId,
+        mediaQuotaPayload(billingLimit.limitBytes, currentUsageBytes),
+      );
+    }
 
     if (nextUsageBytes > siteMediaQuotaBytes) {
       await deleteGeneratedTransformFiles({ generatedTransforms });

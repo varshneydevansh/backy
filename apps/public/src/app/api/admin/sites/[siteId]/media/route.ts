@@ -23,9 +23,14 @@ import {
 } from '@/lib/mediaScope';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
 import { generatedTransformBytes } from '@/lib/mediaTransformGeneration';
-import { isUploadAllowedByFileType, mediaQuotaPayload, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
+import {
+  isUploadAllowedByFileType,
+  mediaQuotaPayload,
+  readMediaBillingLimit,
+  resolveMediaUploadPolicy,
+} from '@/lib/mediaUploadPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { DEFAULT_SITE_SETTINGS, type MediaItem } from '@backy-cms/core';
+import type { MediaItem } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -197,32 +202,6 @@ const mediaUsageBytes = (items: MediaItem[]) => (
   ), 0)
 );
 
-const toRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as TRecord
-    : undefined
-);
-
-const readMediaBillingPolicy = (siteSettings: unknown, workspaceSettings: unknown) => {
-  const siteRoot = toRecord<Record<string, unknown>>(siteSettings) || {};
-  const workspaceRoot = toRecord<Record<string, unknown>>(workspaceSettings) || {};
-  const integrations = toRecord<Record<string, unknown>>(workspaceRoot.integrations) || {};
-  const commerce = toRecord<Record<string, unknown>>(integrations.commerce) || {};
-  const billingQuota = toRecord<Record<string, unknown>>(siteRoot.billingQuota) || {};
-  const limits = toRecord<Record<string, unknown>>(billingQuota.limits) || {};
-  const mediaGb = Number(limits.mediaGb);
-
-  return {
-    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
-    mediaLimitGb: Number.isFinite(mediaGb) && mediaGb >= 0
-      ? mediaGb
-      : DEFAULT_SITE_SETTINGS.billingQuota.limits.mediaGb,
-    billingPlan: typeof billingQuota.plan === 'string'
-      ? billingQuota.plan
-      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
-  };
-};
-
 const enforceMediaBillingLimit = (
   siteSettings: unknown,
   workspaceSettings: unknown,
@@ -230,9 +209,8 @@ const enforceMediaBillingLimit = (
   currentUsageBytes: number,
   requestId: string,
 ) => {
-  const policy = readMediaBillingPolicy(siteSettings, workspaceSettings);
-  const limitBytes = Math.floor(policy.mediaLimitGb * 1024 * 1024 * 1024);
-  if (policy.overageMode === 'block' && nextUsageBytes > limitBytes) {
+  const { blocked, limitBytes, policy } = readMediaBillingLimit(siteSettings, workspaceSettings, nextUsageBytes);
+  if (blocked) {
     return errorResponse(
       402,
       'BILLING_MEDIA_LIMIT',

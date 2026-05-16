@@ -24,7 +24,12 @@ import {
   generatedTransformBytes,
   generatedTransformStoragePaths,
 } from '@/lib/mediaTransformGeneration';
-import { isUploadAllowedByFileType, mediaQuotaPayload, resolveMediaUploadPolicy } from '@/lib/mediaUploadPolicy';
+import {
+  isUploadAllowedByFileType,
+  mediaQuotaPayload,
+  readMediaBillingLimit,
+  resolveMediaUploadPolicy,
+} from '@/lib/mediaUploadPolicy';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
 
@@ -579,6 +584,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }).media;
     const currentUsageBytes = mediaUsageBytes(currentMedia);
     const nextUsageBytes = currentUsageBytes + file.size;
+    const billingLimit = readMediaBillingLimit(site.settings, settings, nextUsageBytes);
+
+    if (billingLimit.blocked) {
+      return errorResponse(
+        402,
+        'BILLING_MEDIA_LIMIT',
+        `The ${billingLimit.policy.billingPlan} site plan allows ${billingLimit.policy.mediaLimitGb} GB of media storage. Update the site billing quota before replacing this asset.`,
+        requestId,
+        mediaQuotaPayload(billingLimit.limitBytes, currentUsageBytes),
+      );
+    }
 
     if (nextUsageBytes > siteMediaQuotaBytes) {
       return errorResponse(

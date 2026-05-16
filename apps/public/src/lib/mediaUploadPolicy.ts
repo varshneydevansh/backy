@@ -1,4 +1,5 @@
 import { extname } from 'node:path';
+import { DEFAULT_SITE_SETTINGS } from '@backy-cms/core';
 
 const DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const DEFAULT_SITE_MEDIA_QUOTA_BYTES = 500 * 1024 * 1024;
@@ -19,6 +20,12 @@ export type MediaUploadPolicy = {
   quotaBytes: number;
   warningThresholdPercent: number;
   allowedFileTypes: string[];
+};
+
+export type MediaBillingPolicy = {
+  overageMode: string;
+  mediaLimitGb: number;
+  billingPlan: string;
 };
 
 const finitePositiveNumber = (value: unknown): number | null => {
@@ -71,6 +78,54 @@ export const mediaQuotaPayload = (limitBytes: number, usedBytes: number, policy?
       }
     : {}),
 });
+
+const toRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as TRecord
+    : undefined
+);
+
+export const readMediaBillingPolicy = (
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+): MediaBillingPolicy => {
+  const siteRoot = toRecord<Record<string, unknown>>(siteSettings) || {};
+  const workspaceRoot = toRecord<Record<string, unknown>>(workspaceSettings) || {};
+  const integrations = toRecord<Record<string, unknown>>(workspaceRoot.integrations) || {};
+  const commerce = toRecord<Record<string, unknown>>(integrations.commerce) || {};
+  const billingQuota = toRecord<Record<string, unknown>>(siteRoot.billingQuota) || {};
+  const limits = toRecord<Record<string, unknown>>(billingQuota.limits) || {};
+  const mediaGb = Number(limits.mediaGb);
+
+  return {
+    overageMode: typeof commerce.overageMode === 'string' ? commerce.overageMode : 'warn',
+    mediaLimitGb: Number.isFinite(mediaGb) && mediaGb >= 0
+      ? mediaGb
+      : DEFAULT_SITE_SETTINGS.billingQuota.limits.mediaGb,
+    billingPlan: typeof billingQuota.plan === 'string'
+      ? billingQuota.plan
+      : DEFAULT_SITE_SETTINGS.billingQuota.plan,
+  };
+};
+
+export const mediaBillingLimitBytes = (policy: MediaBillingPolicy): number => (
+  Math.floor(policy.mediaLimitGb * 1024 * 1024 * 1024)
+);
+
+export const readMediaBillingLimit = (
+  siteSettings: unknown,
+  workspaceSettings: unknown,
+  nextUsageBytes: number,
+) => {
+  const policy = readMediaBillingPolicy(siteSettings, workspaceSettings);
+  const limitBytes = mediaBillingLimitBytes(policy);
+
+  return {
+    policy,
+    limitBytes,
+    blocked: policy.overageMode === 'block' && nextUsageBytes > limitBytes,
+  };
+};
 
 export const isUploadAllowedByFileType = (
   policy: MediaUploadPolicy,

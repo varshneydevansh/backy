@@ -476,6 +476,93 @@ const assertMediaBillingLimitEnforced = async (suffix) => {
   }
 };
 
+const assertMediaMutationBillingLimitEnforced = async (suffix, mediaId, originalName) => {
+  const site = await getSite();
+  const settings = await readSettings();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const blockedReplacementName = `blocked-media-replacement-limit-${suffix}.png`;
+  const replacementFormData = new FormData();
+  replacementFormData.append('file', new Blob([ONE_PIXEL_PNG], { type: 'image/png' }), blockedReplacementName);
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: 'block',
+      },
+    },
+  });
+  await updateSite(SITE_ID, {
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          mediaGb: 0,
+        },
+      },
+    },
+  });
+
+  try {
+    const replacement = await requestApiRaw(`/api/admin/sites/${SITE_ID}/media/${mediaId}`, {
+      method: 'POST',
+      body: replacementFormData,
+    });
+    assert(
+      replacement.response.status === 402,
+      `Billing media limit should reject replacement, got ${replacement.response.status}: ${JSON.stringify(replacement.payload).slice(0, 500)}`,
+    );
+    assert(
+      replacement.payload?.error?.code === 'BILLING_MEDIA_LIMIT',
+      `Billing media replacement limit should return BILLING_MEDIA_LIMIT: ${JSON.stringify(replacement.payload).slice(0, 500)}`,
+    );
+
+    const transforms = await requestApiRaw(`/api/admin/sites/${SITE_ID}/media/${mediaId}/transforms`, {
+      method: 'POST',
+      body: JSON.stringify({
+        widths: [64],
+        quality: 80,
+        preparedBy: 'media-smoke-billing-limit',
+      }),
+    });
+    assert(
+      transforms.response.status === 402,
+      `Billing media limit should reject transforms, got ${transforms.response.status}: ${JSON.stringify(transforms.payload).slice(0, 500)}`,
+    );
+    assert(
+      transforms.payload?.error?.code === 'BILLING_MEDIA_LIMIT',
+      `Billing media transform limit should return BILLING_MEDIA_LIMIT: ${JSON.stringify(transforms.payload).slice(0, 500)}`,
+    );
+
+    const media = await waitForMedia(originalName, (item) => item.id === mediaId);
+    assert(media.originalName === originalName, `Billing-limited replacement changed original media name: ${JSON.stringify(media).slice(0, 500)}`);
+    assert(
+      !Array.isArray(media.metadata?.replacementVersions) || media.metadata.replacementVersions.length === 0,
+      `Billing-limited replacement unexpectedly retained a version: ${JSON.stringify(media.metadata?.replacementVersions ?? null).slice(0, 500)}`,
+    );
+    assert(
+      !Array.isArray(media.metadata?.generatedTransforms?.variants),
+      `Billing-limited transforms unexpectedly persisted variants: ${JSON.stringify(media.metadata?.generatedTransforms ?? null).slice(0, 500)}`,
+    );
+
+    const blockedReplacementMatches = await listMedia(blockedReplacementName);
+    assert(
+      blockedReplacementMatches.length === 0,
+      `Billing-limited replacement unexpectedly persisted media: ${JSON.stringify(blockedReplacementMatches).slice(0, 500)}`,
+    );
+  } finally {
+    await updateSite(SITE_ID, { settings: originalSiteSettings });
+    await updateSettings({ integrations: originalIntegrations });
+  }
+};
+
 const expectApiError = async (endpoint, options, expectedStatus, expectedCode) => {
   try {
     await requestApi(endpoint, options);
@@ -2561,6 +2648,7 @@ const main = async () => {
       caption: 'Temporary image for media admin smoke.',
     });
     mediaIds.push(publicImage.id);
+    await assertMediaMutationBillingLimitEnforced(suffix, publicImage.id, imageName);
     const privateFile = await uploadMedia({
       filename: privateName,
       mimeType: 'text/plain',
