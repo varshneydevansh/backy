@@ -611,6 +611,11 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   8. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`
      - `POST /api/sites/:siteId/pages/:pageId/comments`
+  9. Render advanced interactive blocks from a safe registry contract, not arbitrary inline scripts:
+     - trusted blocks use `type: "interactiveFigure"` or `type: "codeComponent"` with `componentKey`, `version`, `props`, `controls`, `dataBindings`, and `fallback` metadata.
+     - custom user code runs only through a signed/versioned component bundle or sandboxed iframe URL selected from Backy's component registry.
+     - public payloads expose CSP requirements, sandbox flags, allowed permissions, allowed data-binding scopes, integrity/version metadata, and static fallback content for crawlers, unsupported clients, or blocked scripts.
+     - registry/sandbox execution is frontend-side; Backy owns authoring, validation, version history, publishing, audit logs, data access, and API compatibility.
 - `packages/sdk-js` wraps this public flow for JavaScript/TypeScript frontends. It intentionally calls the same public endpoints documented above, so consumers can use the SDK or raw HTTP interchangeably without depending on admin/editor internals.
 - CORS policy for custom frontends:
   - allow exact frontend origin(s),

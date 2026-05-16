@@ -137,7 +137,7 @@ It explicitly excludes:
 5. `/sites/$siteId`: backend-backed site workspace with details, publish/readiness controls, navigation/redirect/SEO editors, form/comment operations, frontend handoff, and site-level comment policy controls; remaining work is theme-token editing, domain/deploy execution, ownership scope, and deeper workflow polish
 6. `/pages`: persisted filtering, paging, search, status chips
 7. `/pages.new`: slug uniqueness + template starter + validation
-8. `/pages.$pageId.edit`: connected save/publish/power controls + responsive editing
+8. `/pages.$pageId.edit`: connected save/publish/power controls, responsive editing, and interactive block authoring; future platform work is a safe code component registry/sandboxed iframe runtime for fully custom animations and simulations
 9. `/blog`: status controls, tag/category UI and list filters
 10. `/blog.new`: post metadata + publish path
 11. `/blog.$postId`: revisioning and publication state
@@ -162,7 +162,7 @@ It explicitly excludes:
 6. `/api/sites/[siteId]/blog`: public feed with pagination cursor
 7. `/api/sites/[siteId]/forms/...`: public definition and submit endpoints with validation/moderation/contact-share coverage plus admin create/update/delete/contact lifecycle coverage; remaining work is delivery execution, consent export, analytics, DB persistence, and broader canvas-bound form-builder coverage
 8. `/api/sites/[siteId]/comments`: moderation-aware public read/create/update, site-wide queue listing, site policy enforcement, admin UI moderation coverage, and cleanup behavior; remaining work is report triage, author blocklists, notifications, analytics, and DB persistence
-9. `PageRenderer.tsx`: single shared rendering contract with editor schema
+9. `PageRenderer.tsx`: single shared rendering contract with editor schema, trusted interactive figures, sandboxed custom code components, CSP/permission metadata, allowed data bindings, and static fallback states
 10. `/api/sites/[siteId]/commerce/catalog`: public product catalog and product detail contract for custom storefronts
 11. `/api/sites/[siteId]/commerce/orders`: public checkout-intake contract that writes private Backy orders and reserves inventory
 
