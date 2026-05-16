@@ -2655,6 +2655,8 @@ const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
   shippingProviderUrl: '',
   discountProvider: 'manual',
   discountProviderUrl: '',
+  catalogSyncProvider: 'manual',
+  catalogSyncProviderUrl: '',
   shippingLabelProvider: 'manual',
   shippingOriginAddress: '',
   shippingDefaultParcel: '',
@@ -3110,6 +3112,12 @@ function validateSettingsDraft({
       url: commerce.discountProviderUrl,
       label: 'Discount provider endpoint URL',
       detail: 'Use an http or https discount calculator endpoint, or switch the discount provider back to built-in rules.',
+    },
+    {
+      provider: commerce.catalogSyncProvider,
+      url: commerce.catalogSyncProviderUrl,
+      label: 'Product catalog sync endpoint URL',
+      detail: 'Use an http or https catalog-sync endpoint, or switch product provider sync back to manual/Stripe handoff.',
     },
     {
       provider: commerce.fulfillmentProvider,

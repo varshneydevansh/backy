@@ -17,6 +17,7 @@ interface RouteParams {
 }
 
 type ProviderSyncStatus = 'handoff' | 'synced' | 'failed';
+type ProductSyncProvider = 'stripe' | 'http';
 
 const PROVIDER_SYNC_FIELD = 'providersync';
 
@@ -56,6 +57,52 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 
 const stripeSecretKey = () => envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY']);
 
+const productSyncToken = () => envValue(['BACKY_COMMERCE_PRODUCT_SYNC_TOKEN', 'COMMERCE_PRODUCT_SYNC_TOKEN']);
+
+const jsonRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+);
+
+const settingsCommerce = (settings: unknown): Record<string, unknown> => {
+  const root = jsonRecord(settings);
+  const integrations = jsonRecord(root.integrations);
+  return jsonRecord(integrations.commerce);
+};
+
+const configuredHttpCatalogSyncUrl = (settings: unknown): string => {
+  const commerce = settingsCommerce(settings);
+  return envValue(['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL'])
+    || textValue(commerce.catalogSyncProviderUrl)
+    || textValue(commerce.productSyncProviderUrl)
+    || textValue(commerce.providerCatalogSyncUrl);
+};
+
+const configuredProductSyncProvider = (settings: unknown): ProductSyncProvider | null => {
+  const commerce = settingsCommerce(settings);
+  const configured = (
+    envValue(['BACKY_COMMERCE_PRODUCT_SYNC_PROVIDER', 'COMMERCE_PRODUCT_SYNC_PROVIDER'])
+    || textValue(commerce.catalogSyncProvider)
+    || textValue(commerce.productSyncProvider)
+    || textValue(commerce.providerCatalogSyncProvider)
+  ).toLowerCase();
+
+  if (configured === 'stripe') return 'stripe';
+  if (['http', 'generic-http', 'custom-http'].includes(configured)) return 'http';
+  if (configuredHttpCatalogSyncUrl(settings)) return 'http';
+  return null;
+};
+
+const resolveProductSyncProvider = (provider: string, settings: unknown): ProductSyncProvider | null => {
+  if (!provider || provider === 'auto') {
+    return configuredProductSyncProvider(settings) || 'stripe';
+  }
+  if (provider === 'stripe') return 'stripe';
+  if (['http', 'generic-http', 'custom-http'].includes(provider)) return 'http';
+  return null;
+};
+
 const stripeApiUrl = (path: string) => {
   const baseUrl = envValue(['BACKY_STRIPE_API_BASE_URL', 'STRIPE_API_BASE_URL']) || 'https://api.stripe.com';
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -92,12 +139,14 @@ const buildHandoffSync = ({
   product,
   requestId,
   reason,
+  provider = 'stripe',
 }: {
   product: CommerceProduct;
   requestId: string;
   reason: string;
+  provider?: ProductSyncProvider;
 }) => ({
-  provider: 'stripe',
+  provider,
   status: 'handoff' as ProviderSyncStatus,
   executionMode: 'handoff',
   syncedAt: new Date().toISOString(),
@@ -120,6 +169,190 @@ const buildHandoffSync = ({
       : null,
   },
 });
+
+const safeHttpPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id) || textValue(value.productId) || textValue(value.externalId) || textValue(value.reference),
+  object: textValue(value.object) || textValue(value.type),
+  active: typeof value.active === 'boolean' ? value.active : null,
+  url: textValue(value.url) || textValue(value.productUrl),
+});
+
+const safeHttpErrorPayload = (value: Record<string, unknown>) => {
+  const error = jsonRecord(value.error);
+  const source = Object.keys(error).length ? error : value;
+  return {
+    type: textValue(source.type) || 'http-provider',
+    code: textValue(source.code) || textValue(source.status),
+    message: textValue(source.message) || textValue(source.error) || 'HTTP product catalog sync failed.',
+  };
+};
+
+const safeHttpProviderResponse = (value: Record<string, unknown>) => ({
+  id: textValue(value.id) || textValue(value.productId) || textValue(value.externalId) || textValue(value.reference),
+  reference: textValue(value.reference),
+  status: textValue(value.status),
+  url: textValue(value.url) || textValue(value.productUrl),
+  requestId: textValue(value.requestId),
+});
+
+const buildHttpCatalogPayload = ({
+  siteId,
+  product,
+  requestId,
+}: {
+  siteId: string;
+  product: CommerceProduct;
+  requestId: string;
+}) => ({
+  schemaVersion: 'backy.commerce-product-sync.v1',
+  requestId,
+  siteId,
+  product: {
+    id: product.id,
+    slug: product.slug,
+    status: product.status,
+    title: product.title,
+    sku: product.sku,
+    description: product.description,
+    price: product.price,
+    compareAtPrice: product.compareAtPrice,
+    currency: product.currency,
+    imageUrl: product.imageUrl,
+    galleryImages: product.galleryImages,
+    variants: product.variants,
+    category: product.category,
+    tags: product.tags,
+    vendor: product.vendor,
+    featured: product.featured,
+    productType: product.productType,
+    inventory: product.inventory,
+    delivery: product.delivery,
+    checkout: product.checkout,
+    subscription: product.subscription,
+    links: product.links,
+    updatedAt: product.updatedAt,
+    publishedAt: product.publishedAt,
+  },
+});
+
+const executeHttpProductSync = async ({
+  siteId,
+  product,
+  requestId,
+  settings,
+}: {
+  siteId: string;
+  product: CommerceProduct;
+  requestId: string;
+  settings: unknown;
+}) => {
+  const endpointUrl = configuredHttpCatalogSyncUrl(settings);
+  if (!endpointUrl) {
+    return buildHandoffSync({
+      product,
+      requestId,
+      provider: 'http',
+      reason: 'BACKY_COMMERCE_PRODUCT_SYNC_URL or Settings commerce catalog sync provider URL is not configured.',
+    });
+  }
+
+  let url: URL;
+  try {
+    url = new URL(endpointUrl);
+  } catch {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'http', reason: 'Configured HTTP product sync URL is invalid.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'http-api',
+      error: {
+        type: 'configuration',
+        code: 'INVALID_URL',
+        message: 'Configured HTTP product sync URL is invalid.',
+      },
+    };
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'http', reason: 'Configured HTTP product sync URL must use http or https.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'http-api',
+      error: {
+        type: 'configuration',
+        code: 'UNSUPPORTED_PROTOCOL',
+        message: 'Configured HTTP product sync URL must use http or https.',
+      },
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-backy-request-id': requestId,
+        'x-backy-provider-kind': 'product-catalog',
+        ...(productSyncToken() ? { authorization: `Bearer ${productSyncToken()}` } : {}),
+      },
+      body: JSON.stringify(buildHttpCatalogPayload({ siteId, product, requestId })),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) {
+      return {
+        ...buildHandoffSync({ product, requestId, provider: 'http', reason: 'HTTP product catalog sync failed.' }),
+        status: 'failed' as ProviderSyncStatus,
+        executionMode: 'http-api',
+        error: safeHttpErrorPayload(payload),
+      };
+    }
+
+    const productPayload = jsonRecord(payload.product);
+    const pricePayload = jsonRecord(payload.price);
+    const providerProduct = Object.keys(productPayload).length ? productPayload : payload;
+    return {
+      provider: 'http',
+      status: 'synced' as ProviderSyncStatus,
+      executionMode: 'http-api',
+      syncedAt: new Date().toISOString(),
+      requestId,
+      product: {
+        ...safeHttpPayload(providerProduct),
+        name: textValue(providerProduct.name) || product.title,
+      },
+      price: {
+        ...safeHttpPayload(pricePayload),
+        id: textValue(pricePayload.id) || textValue(payload.priceId),
+        currency: textValue(pricePayload.currency) || product.currency.toLowerCase(),
+        unitAmount: typeof pricePayload.unitAmount === 'number'
+          ? pricePayload.unitAmount
+          : centsValue(product.price),
+        recurring: product.subscription.enabled
+          ? {
+            interval: product.subscription.interval,
+            trialDays: product.subscription.trialDays,
+          }
+          : null,
+      },
+      providerResponse: safeHttpProviderResponse(payload),
+    };
+  } catch (error) {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'http', reason: 'HTTP product catalog sync request failed.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'http-api',
+      error: {
+        type: error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network',
+        code: error instanceof Error && error.name === 'AbortError' ? 'TIMEOUT' : 'REQUEST_FAILED',
+        message: error instanceof Error ? error.message : 'HTTP product catalog sync request failed.',
+      },
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const safeStripePayload = (value: Record<string, unknown>) => ({
   id: textValue(value.id),
@@ -252,6 +485,29 @@ const executeStripeProductSync = async ({
   };
 };
 
+const executeProductProviderSync = async ({
+  siteId,
+  product,
+  requestId,
+  settings,
+  provider,
+}: {
+  siteId: string;
+  product: CommerceProduct;
+  requestId: string;
+  settings: unknown;
+  provider: ProductSyncProvider;
+}) => {
+  if (provider === 'http') {
+    return executeHttpProductSync({ siteId, product, requestId, settings });
+  }
+  return executeStripeProductSync({
+    product,
+    requestId,
+    accountId: providerAccountId(settings),
+  });
+};
+
 const sourceRecordFromRecord = (record: {
   id: string;
   slug: string;
@@ -280,10 +536,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, productId } = await params;
     const body = await parseJsonBody(request);
-    const requestedProvider = textValue(body.provider).toLowerCase() || 'stripe';
-    if (requestedProvider !== 'stripe') {
-      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Only Stripe product sync is supported right now.', requestId, { provider: requestedProvider });
-    }
+    const requestedProvider = textValue(body.provider).toLowerCase() || 'auto';
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -304,11 +557,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const settings = await repositories.settings.get();
+      const provider = resolveProductSyncProvider(requestedProvider, settings);
+      if (!provider) {
+        return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+      }
       const product = productRecordToCommerceProduct(sourceRecordFromRecord(record));
-      const sync = await executeStripeProductSync({
+      const sync = await executeProductProviderSync({
+        siteId: site.id,
         product,
         requestId,
-        accountId: providerAccountId(settings),
+        settings,
+        provider,
       });
       const updated = (await repositories.collections.updateRecord(site.id, collection.id, record.id, {
         values: toJsonRecord({
@@ -369,10 +628,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const product = productRecordToCommerceProduct(sourceRecordFromRecord(record));
-    const sync = await executeStripeProductSync({
+    const settings = getAdminSettings();
+    const provider = resolveProductSyncProvider(requestedProvider, settings);
+    if (!provider) {
+      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+    }
+    const sync = await executeProductProviderSync({
+      siteId: site.id,
       product,
       requestId,
-      accountId: providerAccountId(getAdminSettings()),
+      settings,
+      provider,
     });
     const updated = updateAdminCollectionRecord(site.id, collection.id, record.id, {
       values: {

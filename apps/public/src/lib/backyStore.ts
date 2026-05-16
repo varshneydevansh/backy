@@ -811,6 +811,8 @@ let SETTINGS: StoreSettings = {
       shippingProviderUrl: '',
       discountProvider: 'manual',
       discountProviderUrl: '',
+      catalogSyncProvider: 'manual',
+      catalogSyncProviderUrl: '',
       fulfillmentProvider: 'manual',
       fulfillmentProviderUrl: '',
       inventoryReservations: true,

@@ -729,6 +729,11 @@ const validateCommerceProviderEndpoints = (integrations: unknown): string | null
       label: 'Discount provider endpoint URL',
     },
     {
+      provider: stringValue(commerce.catalogSyncProvider || commerce.productSyncProvider || commerce.providerCatalogSyncProvider),
+      url: stringValue(commerce.catalogSyncProviderUrl || commerce.productSyncProviderUrl || commerce.providerCatalogSyncUrl),
+      label: 'Product catalog sync endpoint URL',
+    },
+    {
       provider: stringValue(commerce.fulfillmentProvider),
       url: stringValue(commerce.fulfillmentProviderUrl),
       label: 'Fulfillment endpoint URL',
@@ -1168,6 +1173,10 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       shippingProviderUrl: stringValue(commerce.shippingProviderUrl),
       discountProvider: stringValue(commerce.discountProvider) === 'http' ? 'http' : 'manual',
       discountProviderUrl: stringValue(commerce.discountProviderUrl),
+      catalogSyncProvider: ['http', 'generic-http', 'custom-http'].includes(stringValue(commerce.catalogSyncProvider))
+        ? stringValue(commerce.catalogSyncProvider)
+        : 'manual',
+      catalogSyncProviderUrl: stringValue(commerce.catalogSyncProviderUrl),
       shippingLabelProvider: ['easypost', 'shippo'].includes(stringValue(commerce.shippingLabelProvider))
         ? stringValue(commerce.shippingLabelProvider)
         : 'manual',

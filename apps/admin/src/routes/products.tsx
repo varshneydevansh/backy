@@ -1303,7 +1303,7 @@ function ProductsRoute() {
     },
     providerExecution: {
       quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
-      catalogSync: 'Product records can be synchronized to configured commerce providers from the Products workspace.',
+      catalogSync: 'Product records can be synchronized to Stripe or a configured HTTP catalog-sync provider from the Products workspace.',
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -2277,15 +2277,15 @@ function ProductsRoute() {
     setNotice(null);
 
     try {
-      const result = await syncCommerceProductProvider(activeSiteId, selectedProduct.id, { provider: 'stripe' });
+      const result = await syncCommerceProductProvider(activeSiteId, selectedProduct.id, { provider: 'auto' });
       const saved = normalizeProductRecord(result.product);
       setProducts((current) => current.map((product) => (product.id === saved.id ? saved : product)));
       setFormState(productToForm(saved));
       setNotice(result.sync.status === 'synced'
-        ? 'Stripe catalog product and price synced.'
+        ? `${result.sync.provider === 'http' ? 'HTTP provider' : 'Stripe'} catalog product and price synced.`
         : result.sync.status === 'failed'
-          ? 'Stripe sync failed; provider handoff metadata was saved.'
-          : 'Stripe handoff metadata saved. Add a Stripe secret key to execute the provider sync.');
+          ? 'Provider sync failed; provider handoff metadata was saved.'
+          : 'Provider handoff metadata saved. Configure a catalog-sync endpoint or provider secret to execute the sync.');
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : 'Unable to sync product provider catalog');
     } finally {
@@ -2998,7 +2998,7 @@ function ProductsRoute() {
                   <div data-testid="products-provider-reconciliation" className="rounded-lg border border-border bg-card p-3">
                     <div className="text-xs font-semibold text-foreground">Provider execution and reconciliation</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe catalog metadata, settle provider webhooks, and preview scheduled reconciliation. External cron deployment and deeper provider automation remain backend rollout work.
+                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe or configured HTTP catalog metadata, settle provider webhooks, and preview scheduled reconciliation through the scheduled worker. Deeper marketplace-specific provider automation remains backend rollout work.
                     </p>
                     <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3 text-xs">
                       <div className="flex items-center justify-between gap-3">
@@ -4211,7 +4211,7 @@ function ProductsRoute() {
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-foreground">Provider catalog sync</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Stripe product and price metadata for provider checkout catalogs.</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Stripe or configured HTTP product and price metadata for provider checkout catalogs.</div>
                     </div>
                     <Button
                       size="sm"
@@ -4221,7 +4221,7 @@ function ProductsRoute() {
                       title={!selectedProduct ? 'Save the product before syncing.' : (!canEditProducts ? editPermissionTitle : undefined)}
                       iconStart={<RefreshCw className={cn('size-4', isSyncingProviderProduct && 'animate-spin')} />}
                     >
-                      {isSyncingProviderProduct ? 'Syncing...' : 'Sync Stripe catalog'}
+                      {isSyncingProviderProduct ? 'Syncing...' : 'Sync provider catalog'}
                     </Button>
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">

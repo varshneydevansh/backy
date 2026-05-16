@@ -1414,7 +1414,7 @@ interface ApiCollectionRecordResponse {
 export interface CommerceProductProviderSyncResult {
   provider: string;
   status: 'handoff' | 'synced' | 'failed';
-  executionMode: 'handoff' | 'stripe-api';
+  executionMode: 'handoff' | 'stripe-api' | 'http-api';
   syncedAt: string;
   requestId: string;
   reason?: string;
@@ -1443,6 +1443,13 @@ export interface CommerceProductProviderSyncResult {
     type?: string;
     code?: string;
     message?: string;
+  };
+  providerResponse?: {
+    id?: string;
+    reference?: string;
+    status?: string;
+    url?: string;
+    requestId?: string;
   };
 }
 
@@ -2023,6 +2030,8 @@ export interface SiteSettingsInput {
       shippingProviderUrl?: string;
       discountProvider?: 'manual' | 'http';
       discountProviderUrl?: string;
+      catalogSyncProvider?: 'manual' | 'http' | 'generic-http' | 'custom-http';
+      catalogSyncProviderUrl?: string;
       shippingLabelProvider?: 'manual' | 'easypost' | 'shippo';
       shippingOriginAddress?: string;
       shippingDefaultParcel?: string;

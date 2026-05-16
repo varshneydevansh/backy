@@ -29,6 +29,7 @@ const COMMERCE_WEBHOOK_SECRET = 'smoke-commerce-webhook-secret';
 const COMMERCE_WEBHOOK_SECRET_REFERENCE = 'env:BACKY_COMMERCE_WEBHOOK_SECRET';
 let apiAdminSessionToken = '';
 let stripeCheckoutMock = null;
+let commerceProviderMock = null;
 
 const PRODUCT_VALUE_KEYS = {
   title: 'title',
@@ -349,6 +350,31 @@ const startCommerceProviderMock = async () => {
       payload,
     });
 
+    if (request.method === 'POST' && request.url === '/catalog/products') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `http_product_${requests.length}`,
+        productId: `http_product_${requests.length}`,
+        priceId: `http_price_${requests.length}`,
+        reference: `provider_catalog_${requests.length}`,
+        status: 'synced',
+        url: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products/${payload.product?.slug || payload.product?.id || requests.length}`,
+        product: {
+          id: `http_product_${requests.length}`,
+          name: payload.product?.title,
+          active: payload.product?.status !== 'archived',
+          url: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products/${payload.product?.slug || payload.product?.id || requests.length}`,
+        },
+        price: {
+          id: `http_price_${requests.length}`,
+          currency: String(payload.product?.currency || 'USD').toLowerCase(),
+          unitAmount: Math.round(Number(payload.product?.price || 0) * 100),
+        },
+        requestId: payload.requestId,
+      }));
+      return;
+    }
+
     if (request.method !== 'POST' || !request.url?.startsWith('/quote/')) {
       response.writeHead(404, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'Not found' } }));
@@ -494,6 +520,8 @@ const enableCommercePricingSettings = async (settings) => {
       shippingProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/shipping`,
       discountProvider: 'http',
       discountProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/quote/discount`,
+      catalogSyncProvider: 'http',
+      catalogSyncProviderUrl: `${COMMERCE_PROVIDER_MOCK_BASE_URL}/catalog/products`,
       taxRatePercent: 10,
       digitalTaxRatePercent: 5,
       shippingBaseAmount: 12,
@@ -1864,7 +1892,32 @@ const assertProductProviderSync = async ({ productCollection, productRecord }) =
     assert(String(sync.reason || '').includes('STRIPE_SECRET_KEY'), `Product provider sync did not explain missing Stripe credentials: ${JSON.stringify(sync)}`);
   }
 
-  return refreshed;
+  const beforeHttpRequests = commerceProviderMock?.requests.length || 0;
+  const httpPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
+    method: 'POST',
+    body: JSON.stringify({ provider: 'http' }),
+  });
+  const httpSync = httpPayload.data?.sync || httpPayload.sync;
+  const httpUpdated = httpPayload.data?.product || httpPayload.product;
+  assert(httpSync?.provider === 'http', `HTTP product provider sync did not return HTTP metadata: ${JSON.stringify(httpPayload).slice(0, 500)}`);
+  assert(httpSync.status === 'synced', `HTTP product provider sync did not execute against the mock provider: ${JSON.stringify(httpSync)}`);
+  assert(httpSync.executionMode === 'http-api', `HTTP product sync execution mode was unexpected: ${JSON.stringify(httpSync)}`);
+  assert(/^http_product_/.test(httpSync.product?.id || ''), `HTTP product sync did not persist provider product id: ${JSON.stringify(httpSync)}`);
+  assert(/^http_price_/.test(httpSync.price?.id || ''), `HTTP product sync did not persist provider price id: ${JSON.stringify(httpSync)}`);
+  assert(httpUpdated?.id === productRecord.id, `HTTP product provider sync did not return the updated product: ${JSON.stringify(httpUpdated)}`);
+  const catalogRequest = commerceProviderMock.requests.slice(beforeHttpRequests).find((request) => request.url === '/catalog/products');
+  assert(catalogRequest?.headers['x-backy-provider-kind'] === 'product-catalog', `HTTP product sync did not mark provider kind: ${JSON.stringify(catalogRequest)}`);
+  assert(catalogRequest.payload?.schemaVersion === 'backy.commerce-product-sync.v1', `HTTP product sync payload schema was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
+  assert(catalogRequest.payload?.siteId === SITE_ID, `HTTP product sync payload site id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
+  assert(catalogRequest.payload?.product?.id === productRecord.id, `HTTP product sync payload product id was unexpected: ${JSON.stringify(catalogRequest?.payload)}`);
+  assert(catalogRequest.payload?.product?.subscription?.enabled === true, `HTTP product sync payload did not include subscription metadata: ${JSON.stringify(catalogRequest?.payload)}`);
+
+  const httpRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
+  const httpPersisted = readProductValue(httpRefreshed.values, 'providerSync');
+  assert(httpPersisted?.requestId === httpSync.requestId, `HTTP product provider sync was not persisted: ${JSON.stringify(httpRefreshed.values)}`);
+  assert(httpPersisted.executionMode === 'http-api', `Persisted HTTP provider sync mode differed: ${JSON.stringify(httpPersisted)}`);
+
+  return httpRefreshed;
 };
 
 const assertStripeCheckoutExecution = async ({
@@ -2294,7 +2347,8 @@ const assertProductsLayout = async (client) => {
           document.body?.innerText?.includes('Trial days'),
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
-          document.body?.innerText?.includes('Sync Stripe catalog'),
+          document.body?.innerText?.includes('Sync provider catalog') &&
+          document.body?.innerText?.includes('configured HTTP product and price metadata'),
         hasProviderReconciliation: Boolean(providerReconciliation) &&
           providerReconciliationText.includes('Provider execution and reconciliation') &&
           providerReconciliationText.includes('Scheduled worker') &&
@@ -2593,7 +2647,6 @@ const main = async () => {
   let frontendTemplateProduct = null;
   let frontendCatalogProduct = null;
   let managedCustomerProfile = null;
-  let commerceProviderMock = null;
 
   try {
     commerceProviderMock = await startCommerceProviderMock();
