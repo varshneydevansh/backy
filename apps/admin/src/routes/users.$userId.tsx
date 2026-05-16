@@ -48,11 +48,14 @@ import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDenie
 import {
   createAdminInviteToken,
   createAdminPasswordResetToken,
+  getAdminUserMfa,
   listAdminAuthSessions,
   revokeAdminAuthSession,
+  updateAdminUserMfa,
   type AdminInviteToken,
   type AdminPasswordResetToken,
   type AdminSessionSummary,
+  type AdminUserMfaEnrollment,
 } from '@/lib/adminAuthApi';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
@@ -109,6 +112,8 @@ const USER_AUDIT_ACTION_OPTIONS = [
   { value: 'user.invite.accept', label: 'Invite accepted' },
   { value: 'user.password_reset_token.create', label: 'Reset tokens' },
   { value: 'user.password_reset.accept', label: 'Reset accepted' },
+  { value: 'user.mfa.update', label: 'MFA changes' },
+  { value: 'user.mfa.recovery_codes.rotate', label: 'MFA recovery codes' },
   { value: 'user.import.rollback', label: 'Import rollback' },
 ];
 
@@ -164,6 +169,11 @@ const USER_DETAIL_CONTROL_AREAS = [
     title: 'Recovery',
     detail: 'Password reset token, email handoff, and lifecycle actions.',
     href: '#user-detail-recovery',
+  },
+  {
+    title: 'MFA',
+    detail: 'Per-user two-factor enforcement and one-time recovery codes.',
+    href: '#user-detail-mfa',
   },
   {
     title: 'Ownership',
@@ -235,6 +245,11 @@ function EditUserPage() {
   const [resetExpiresInMinutes, setResetExpiresInMinutes] = useState(60);
   const [isCreatingResetToken, setIsCreatingResetToken] = useState(false);
   const [resetTokenNotice, setResetTokenNotice] = useState<string | null>(null);
+  const [userMfa, setUserMfa] = useState<AdminUserMfaEnrollment | null>(null);
+  const [isLoadingUserMfa, setIsLoadingUserMfa] = useState(false);
+  const [isSavingUserMfa, setIsSavingUserMfa] = useState(false);
+  const [mfaNotice, setMfaNotice] = useState<string | null>(null);
+  const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[]>([]);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState(false);
   const [ownershipTransferNotice, setOwnershipTransferNotice] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -520,6 +535,44 @@ function EditUserPage() {
     void loadUserSessions();
   }, [loadUserSessions]);
 
+  const loadUserMfa = useCallback(async () => {
+    if (isCurrentAdminPermissionMatrixPending) return;
+    if (!user) {
+      setUserMfa(null);
+      return;
+    }
+
+    if (!currentSessionToken) {
+      setUserMfa(null);
+      setMfaNotice('Sign in with a valid admin session to review MFA controls.');
+      return;
+    }
+
+    if (!canViewUsers) {
+      setUserMfa(null);
+      setMfaNotice(viewPermissionTitle || 'Your account cannot view user MFA settings.');
+      return;
+    }
+
+    setIsLoadingUserMfa(true);
+    setMfaNotice(null);
+
+    try {
+      const mfa = await getAdminUserMfa(currentSessionToken, user.id);
+      setUserMfa(mfa);
+    } catch (error) {
+      setUserMfa(null);
+      setMfaNotice(error instanceof Error ? error.message : 'Unable to load user MFA settings.');
+    } finally {
+      setIsLoadingUserMfa(false);
+    }
+  }, [canViewUsers, currentSessionToken, isCurrentAdminPermissionMatrixPending, user, viewPermissionTitle]);
+
+  useEffect(() => {
+    setMfaRecoveryCodes([]);
+    void loadUserMfa();
+  }, [loadUserMfa]);
+
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
     [formData.role],
@@ -563,6 +616,13 @@ function EditUserPage() {
     !isCreatingInviteToken &&
     formData.status === 'invited',
   );
+  const canManageUserMfa = Boolean(
+    currentSessionToken &&
+    canManageUsers &&
+    !isUserDetailBusy &&
+    !isLoadingUserMfa &&
+    !isSavingUserMfa,
+  );
   const canTransferOwnership = Boolean(
     canManageUsers &&
     currentAdmin?.role === 'owner' &&
@@ -601,6 +661,13 @@ function EditUserPage() {
         label: 'Admin guardrail',
         detail: isPrivileged ? 'This account can control settings, integrations, and users.' : 'This account cannot manage workspace settings or users.',
         ready: true,
+      },
+      {
+        label: 'MFA recovery',
+        detail: userMfa?.enabled
+          ? `${userMfa.recoveryCodesRemaining} recovery code${userMfa.recoveryCodesRemaining === 1 ? '' : 's'} available for two-factor fallback.`
+          : 'Per-user two-factor enforcement is optional for this account.',
+        ready: !userMfa?.enabled || userMfa.recoveryCodesRemaining > 0,
       },
       {
         label: 'Ownership transfer',
@@ -645,7 +712,7 @@ function EditUserPage() {
         { label: 'Recover', detail: 'Use reset help, suspension, or removal when access needs intervention.' },
       ],
     };
-  }, [canSubmit, canTransferOwnership, currentAdmin?.role, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user]);
+  }, [canSubmit, canTransferOwnership, currentAdmin?.role, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user, userMfa]);
 
   if (!isCurrentAdminPermissionMatrixPending && (!canViewUsers || isUserAccessDenied)) {
     return (
@@ -928,6 +995,16 @@ function EditUserPage() {
         active: action.status === formData.status,
       })),
     },
+    mfa: {
+      endpoint: `${userDetailUrl}/mfa`,
+      enabled: userMfa?.enabled || false,
+      method: userMfa?.method || 'recovery-code',
+      recoveryCodesRemaining: userMfa?.recoveryCodesRemaining || 0,
+      recoveryCodesIssuedAt: userMfa?.recoveryCodesIssuedAt || null,
+      rawRecoveryCodesIncluded: false,
+      oneTimeRecoveryCodesVisible: mfaRecoveryCodes.length > 0,
+      note: 'Raw MFA recovery codes are intentionally excluded from copy/download manifests. Use the permission-gated copy action while they are visible.',
+    },
     ownershipTransfer: {
       endpoint: `${userDetailUrl}/transfer-ownership`,
       method: 'POST',
@@ -1056,6 +1133,40 @@ function EditUserPage() {
       setResetTokenNotice(error instanceof Error ? error.message : 'Unable to generate password reset token.');
     } finally {
       setIsCreatingResetToken(false);
+    }
+  };
+
+  const saveUserMfa = async (input: { enabled?: boolean; generateRecoveryCodes?: boolean }) => {
+    if (!canManageUsers) {
+      setMfaNotice(managePermissionTitle || 'Your account cannot change user MFA settings.');
+      return;
+    }
+
+    if (!currentSessionToken || isSavingUserMfa) {
+      setMfaNotice('Sign in with a valid admin session to update MFA settings.');
+      return;
+    }
+
+    setIsSavingUserMfa(true);
+    setMfaNotice(null);
+    if (!input.generateRecoveryCodes) {
+      setMfaRecoveryCodes([]);
+    }
+
+    try {
+      const result = await updateAdminUserMfa(currentSessionToken, user.id, input);
+      setUserMfa(result.mfa);
+      setMfaRecoveryCodes(result.recoveryCodes);
+      setMfaNotice(result.recoveryCodes.length > 0
+        ? 'New recovery codes generated. Store them now because they are shown once.'
+        : result.mfa.enabled
+          ? 'Per-user MFA enabled.'
+          : 'Per-user MFA disabled.');
+      await loadUserAuditLogs();
+    } catch (error) {
+      setMfaNotice(error instanceof Error ? error.message : 'Unable to update user MFA settings.');
+    } finally {
+      setIsSavingUserMfa(false);
     }
   };
 
@@ -1887,6 +1998,133 @@ function EditUserPage() {
                 );
               })}
             </div>
+          </section>
+
+          <section id="user-detail-mfa" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-mfa">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                  <KeyRound className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Per-user MFA</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Require a second factor for this account and issue one-time recovery codes for lockout recovery.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadUserMfa()}
+                disabled={isLoadingUserMfa || !canViewUsers}
+                title={!canViewUsers ? viewPermissionTitle : undefined}
+                iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserMfa && 'animate-spin')} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {mfaNotice && (
+              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="user-detail-mfa-notice">
+                {mfaNotice}
+              </div>
+            )}
+
+            {isLoadingUserMfa ? (
+              <div className="mt-4 space-y-2" aria-label="Loading user MFA">
+                {[0, 1].map((index) => (
+                  <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Status</div>
+                    <div className="mt-2 text-sm font-semibold text-foreground" data-testid="user-detail-mfa-status">
+                      {userMfa?.enabled ? 'Enabled' : 'Disabled'}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Recovery codes</div>
+                    <div className="mt-2 text-sm font-semibold text-foreground" data-testid="user-detail-mfa-recovery-count">
+                      {userMfa?.recoveryCodesRemaining || 0} remaining
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-semibold uppercase tracking-normal text-muted-foreground">Issued</div>
+                    <div className="mt-2 text-sm font-semibold text-foreground">
+                      {userMfa?.recoveryCodesIssuedAt ? formatAuditDate(userMfa.recoveryCodesIssuedAt) : 'Not issued'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant={userMfa?.enabled ? 'outline' : 'primary'}
+                    onClick={() => void saveUserMfa({ enabled: !userMfa?.enabled })}
+                    disabled={!canManageUserMfa}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    iconStart={<Shield className="size-4" />}
+                    data-testid="user-detail-mfa-toggle"
+                  >
+                    {isSavingUserMfa ? 'Saving...' : userMfa?.enabled ? 'Disable per-user MFA' : 'Enable per-user MFA'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void saveUserMfa({ enabled: true, generateRecoveryCodes: true })}
+                    disabled={!canManageUserMfa}
+                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    iconStart={<RefreshCw className="size-4" />}
+                    data-testid="user-detail-mfa-generate-recovery"
+                  >
+                    Generate recovery codes
+                  </Button>
+                </div>
+
+                {mfaRecoveryCodes.length > 0 && (
+                  <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3" data-testid="user-detail-mfa-recovery-codes">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-emerald-950">Recovery codes shown once</div>
+                        <div className="mt-1 text-xs leading-5 text-emerald-800">
+                          Copy these codes before leaving this page. Backy stores only hashes.
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copyUserDetailText(mfaRecoveryCodes.join('\n'), 'MFA recovery codes')}
+                        disabled={!canManageUsers}
+                        title={!canManageUsers ? managePermissionTitle : undefined}
+                        iconStart={<Copy className="size-3.5" />}
+                        data-testid="user-detail-mfa-copy-recovery"
+                      >
+                        Copy codes
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {mfaRecoveryCodes.map((code) => (
+                        <code key={code} className="rounded border border-emerald-200 bg-white px-2 py-1 font-mono text-xs text-emerald-950">
+                          {code}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {userMfa?.enabled && !userMfa.recoveryCodesRemaining && mfaRecoveryCodes.length === 0 && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Generate recovery codes before relying on this account-specific MFA requirement.
+                  </div>
+                )}
+              </>
+            )}
           </section>
 
           <section

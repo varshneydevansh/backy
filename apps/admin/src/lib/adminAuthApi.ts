@@ -44,6 +44,18 @@ export interface AdminInviteToken {
   inviteUrl: string;
 }
 
+export interface AdminUserMfaEnrollment {
+  userId: string;
+  email: string;
+  enabled: boolean;
+  method: 'recovery-code';
+  recoveryCodesRemaining: number;
+  recoveryCodesIssuedAt: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+  disabledAt: string | null;
+}
+
 interface AdminAuthResponse {
   success: boolean;
   data?: {
@@ -142,6 +154,17 @@ interface AdminInviteTokenResponse {
   success: boolean;
   data?: {
     invite: AdminInviteToken;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface AdminUserMfaResponse {
+  success: boolean;
+  data?: {
+    mfa: AdminUserMfaEnrollment;
+    recoveryCodes?: string[];
   };
   error?: {
     message?: string;
@@ -346,6 +369,46 @@ export async function createAdminInviteToken(
   }
 
   return payload.data.invite;
+}
+
+export async function getAdminUserMfa(token: string, userId: string) {
+  const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/mfa`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const payload = await readJson<AdminUserMfaResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to load user MFA settings');
+  }
+
+  return payload.data.mfa;
+}
+
+export async function updateAdminUserMfa(
+  token: string,
+  userId: string,
+  input: { enabled?: boolean; generateRecoveryCodes?: boolean },
+) {
+  const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/mfa`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<AdminUserMfaResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to update user MFA settings');
+  }
+
+  return {
+    mfa: payload.data.mfa,
+    recoveryCodes: payload.data.recoveryCodes || [],
+  };
 }
 
 export async function acceptAdminInvite(token: string) {

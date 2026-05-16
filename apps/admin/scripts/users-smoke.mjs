@@ -317,6 +317,27 @@ const listUserAuditLogs = async (userId) => {
   return payload.data?.logs || payload.logs || [];
 };
 
+const getUserMfa = async (userId) => {
+  const payload = await requestApi(`/api/admin/users/${userId}/mfa`);
+  return payload.data?.mfa;
+};
+
+const loginWithCredentials = async ({ email, password, twoFactorCode }) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
 const deleteUser = async (userId) => {
   if (!userId) return;
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
@@ -1225,6 +1246,131 @@ const resetUserPasswordToken = async (token, userId, email, password) => {
   assert(loginResponse.ok && loginPayload.data?.session?.token, `New password did not sign in: ${JSON.stringify(loginPayload).slice(0, 500)}`);
 };
 
+const configureUserDetailMfa = async (client, { userId, email, password }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-mfa"]');
+      const text = panel?.textContent || '';
+      const toggle = panel?.querySelector('[data-testid="user-detail-mfa-toggle"]');
+      const generate = panel?.querySelector('[data-testid="user-detail-mfa-generate-recovery"]');
+      return {
+        ready: Boolean(panel),
+        hasPanel: text.includes('Per-user MFA'),
+        hasEmail: document.body?.innerText?.includes(${JSON.stringify(email)}) || false,
+        toggleEnabled: toggle instanceof HTMLButtonElement && !toggle.disabled,
+        generateEnabled: generate instanceof HTMLButtonElement && !generate.disabled,
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.hasPanel && state.hasEmail && state.toggleEnabled && state.generateEnabled) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`User detail MFA panel was not ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await clickButton(client, 'Enable per-user MFA');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-mfa"]');
+      const text = panel?.textContent || '';
+      const generate = panel?.querySelector('[data-testid="user-detail-mfa-generate-recovery"]');
+      return {
+        enabled: panel?.querySelector('[data-testid="user-detail-mfa-status"]')?.textContent?.includes('Enabled') || false,
+        notice: text.includes('Per-user MFA enabled'),
+        generateEnabled: generate instanceof HTMLButtonElement && !generate.disabled,
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.enabled && state.notice && state.generateEnabled) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`User detail MFA enable state did not persist: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await clickButton(client, 'Generate recovery codes');
+
+  const recoveryState = await (async () => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await evaluate(client, `(() => {
+        const panel = document.querySelector('[data-testid="user-detail-mfa"]');
+        const text = panel?.textContent || '';
+        const codes = Array.from(panel?.querySelectorAll('[data-testid="user-detail-mfa-recovery-codes"] code') || [])
+          .map((node) => node.textContent?.trim() || '')
+          .filter(Boolean);
+        return {
+          hasNotice: text.includes('New recovery codes generated'),
+          hasCodePanel: Boolean(panel?.querySelector('[data-testid="user-detail-mfa-recovery-codes"]')),
+          countText: panel?.querySelector('[data-testid="user-detail-mfa-recovery-count"]')?.textContent || '',
+          codes,
+          text: text.slice(0, 2000),
+        };
+      })()`);
+      if (state.hasNotice && state.hasCodePanel && state.codes.length === 10 && state.codes.every((code) => /^mfa_[a-f0-9]{10}$/.test(code))) {
+        return state;
+      }
+      if (attempt === 99) {
+        throw new Error(`User detail MFA recovery codes did not render: ${JSON.stringify(state)}`);
+      }
+      await sleep(250);
+    }
+    return null;
+  })();
+
+  const copied = await evaluate(client, `(async () => {
+    window.__backyUsersSmokeClipboard = '';
+    const clipboard = {
+      writeText: async (value) => {
+        window.__backyUsersSmokeClipboard = String(value || '');
+      },
+    };
+    try {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
+    } catch {
+      navigator.clipboard.writeText = clipboard.writeText;
+    }
+    const button = document.querySelector('[data-testid="user-detail-mfa-copy-recovery"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return { ok: false, reason: 'copy-recovery-button-unavailable' };
+    }
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const codes = (window.__backyUsersSmokeClipboard || '').split(/\\n+/).filter(Boolean);
+    return { ok: codes.length === 10 && codes.every((code) => /^mfa_[a-f0-9]{10}$/.test(code)), codes };
+  })()`);
+  assert(copied.ok, `MFA recovery code copy action did not expose usable codes: ${JSON.stringify(copied)}`);
+
+  const missingMfa = await loginWithCredentials({ email, password });
+  assert(missingMfa.response.status === 401, `Per-user MFA should require a second factor, got ${missingMfa.response.status}: ${JSON.stringify(missingMfa.payload).slice(0, 500)}`);
+  assert(missingMfa.payload?.error?.code === 'MFA_REQUIRED', `Missing MFA should return MFA_REQUIRED: ${JSON.stringify(missingMfa.payload).slice(0, 500)}`);
+
+  const [recoveryCode] = copied.codes;
+  const recoveredLogin = await loginWithCredentials({ email, password, twoFactorCode: recoveryCode });
+  assert(recoveredLogin.response.ok && recoveredLogin.payload?.data?.session?.token, `Recovery code did not complete login: ${JSON.stringify(recoveredLogin.payload).slice(0, 500)}`);
+  assert(recoveredLogin.payload?.data?.user?.id === userId, `Recovery login returned wrong user: ${JSON.stringify(recoveredLogin.payload?.data?.user).slice(0, 500)}`);
+
+  const reusedLogin = await loginWithCredentials({ email, password, twoFactorCode: recoveryCode });
+  assert(reusedLogin.response.status === 401, `Reused recovery code should be rejected, got ${reusedLogin.response.status}: ${JSON.stringify(reusedLogin.payload).slice(0, 500)}`);
+  assert(reusedLogin.payload?.error?.code === 'INVALID_MFA_CODE', `Reused recovery code should return INVALID_MFA_CODE: ${JSON.stringify(reusedLogin.payload).slice(0, 500)}`);
+
+  const mfa = await getUserMfa(userId);
+  assert(mfa.enabled === true, `MFA endpoint did not report enabled after setup: ${JSON.stringify(mfa).slice(0, 500)}`);
+  assert(mfa.recoveryCodesRemaining === 9, `MFA recovery code was not consumed exactly once: ${JSON.stringify(mfa).slice(0, 500)}`);
+
+  return {
+    generatedCount: copied.codes.length,
+    remainingAfterUse: mfa.recoveryCodesRemaining,
+    firstCode: recoveryCode,
+    uiCountText: recoveryState.countText,
+  };
+};
+
 const setUserDetailLifecycle = async (client, label) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1825,7 +1971,9 @@ const main = async () => {
     const inviteState = await generateUserDetailInviteLink(client, email);
     await acceptUserInviteToken(inviteState?.token, createdUserId);
     const resetState = await generateUserDetailResetToken(client, email);
-    await resetUserPasswordToken(resetState?.token, createdUserId, email, `Reset-${suffix}-123`);
+    const resetPassword = `Reset-${suffix}-123`;
+    await resetUserPasswordToken(resetState?.token, createdUserId, email, resetPassword);
+    const mfaState = await configureUserDetailMfa(client, { userId: createdUserId, email, password: resetPassword });
     const recoveryAuditLogs = await listUserAuditLogs(createdUserId);
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.invite.accept'),
@@ -1846,6 +1994,14 @@ const main = async () => {
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.password_reset.accept'),
       `User reset acceptance audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.mfa.update' && log.after?.enabled === true),
+      `User MFA enable audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.mfa.recovery_codes.rotate' && log.metadata?.recoveryCodesRemaining === 10),
+      `User MFA recovery-code rotation audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
@@ -1910,6 +2066,10 @@ const main = async () => {
       pagination,
       filters,
       sorting,
+      mfa: {
+        generatedRecoveryCodes: mfaState.generatedCount,
+        remainingAfterUse: mfaState.remainingAfterUse,
+      },
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

@@ -19,7 +19,12 @@ import {
   SupabaseAdminAuthUnavailableError,
 } from '@/lib/admin-auth/supabaseAuth';
 import { isAdminMfaConfigured, verifyAdminMfaCode } from '@/lib/admin-auth/mfa';
-import { getAdminSettings, getAdminUserByEmail } from '@/lib/backyStore';
+import {
+  hasUserMfaRecoveryCodes,
+  isUserMfaRequired,
+  verifyUserMfaRecoveryCode,
+} from '@/lib/admin-auth/userMfa';
+import { getAdminSettings, getAdminUserByEmail, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -71,10 +76,6 @@ const successResponse = (requestId: string, session: AdminSession) => attachAdmi
   },
 }), session);
 
-const requiresMfa = (authSettings: Record<string, unknown> | undefined): boolean => (
-  authSettings?.requireTwoFactor === true
-);
-
 type LoginAuditRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>> | null;
 
 const sessionAuditMetadata = (
@@ -113,7 +114,8 @@ const completeLoginResponse = async (
   authSettings: Record<string, unknown> | undefined,
   twoFactorCode: unknown,
 ) => {
-  if (!requiresMfa(authSettings)) {
+  const mfaRequired = isUserMfaRequired(authSettings, session.user.id);
+  if (!mfaRequired) {
     await recordAuthAudit({
       repositories,
       requestId,
@@ -124,14 +126,54 @@ const completeLoginResponse = async (
     return successResponse(requestId, session);
   }
 
-  if (!isAdminMfaConfigured()) {
+  const envMfaConfigured = isAdminMfaConfigured();
+  const recoveryCodesConfigured = hasUserMfaRecoveryCodes(authSettings, session.user.id);
+
+  if (typeof twoFactorCode !== 'string' || !twoFactorCode.trim()) {
+    revokeAdminSession(session.token);
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.mfa_required',
+      session,
+      metadata: { mfaRequired: true, envMfaConfigured, recoveryCodesConfigured },
+    });
+    return errorResponse(401, 'MFA_REQUIRED', 'Enter your two-factor authentication code.', requestId);
+  }
+
+  const recoveryVerification = verifyUserMfaRecoveryCode({
+    auth: authSettings,
+    userId: session.user.id,
+    code: twoFactorCode,
+  });
+  if (recoveryVerification.ok) {
+    if (repositories) {
+      await repositories.settings.update({ auth: recoveryVerification.auth });
+    } else {
+      updateAdminSettings({ auth: recoveryVerification.auth });
+    }
+    await recordAuthAudit({
+      repositories,
+      requestId,
+      action: 'auth.login.success',
+      session,
+      metadata: {
+        mfaRequired: true,
+        mfaMethod: 'recovery-code',
+        recoveryCodesRemaining: recoveryVerification.recoveryCodesRemaining,
+      },
+    });
+    return successResponse(requestId, session);
+  }
+
+  if (!envMfaConfigured && !recoveryCodesConfigured) {
     revokeAdminSession(session.token);
     await recordAuthAudit({
       repositories,
       requestId,
       action: 'auth.login.mfa_provider_missing',
       session,
-      metadata: { mfaRequired: true },
+      metadata: { mfaRequired: true, envMfaConfigured, recoveryCodesConfigured },
     });
     return errorResponse(
       503,
@@ -141,26 +183,14 @@ const completeLoginResponse = async (
     );
   }
 
-  if (typeof twoFactorCode !== 'string' || !twoFactorCode.trim()) {
-    revokeAdminSession(session.token);
-    await recordAuthAudit({
-      repositories,
-      requestId,
-      action: 'auth.login.mfa_required',
-      session,
-      metadata: { mfaRequired: true },
-    });
-    return errorResponse(401, 'MFA_REQUIRED', 'Enter your two-factor authentication code.', requestId);
-  }
-
-  if (!verifyAdminMfaCode(twoFactorCode)) {
+  if (!envMfaConfigured || !verifyAdminMfaCode(twoFactorCode)) {
     revokeAdminSession(session.token);
     await recordAuthAudit({
       repositories,
       requestId,
       action: 'auth.login.mfa_invalid',
       session,
-      metadata: { mfaRequired: true },
+      metadata: { mfaRequired: true, envMfaConfigured, recoveryCodesConfigured },
     });
     return errorResponse(401, 'INVALID_MFA_CODE', 'Invalid two-factor authentication code.', requestId);
   }
@@ -170,7 +200,7 @@ const completeLoginResponse = async (
     requestId,
     action: 'auth.login.success',
     session,
-    metadata: { mfaRequired: true },
+    metadata: { mfaRequired: true, mfaMethod: 'configured-verifier' },
   });
   return successResponse(requestId, session);
 };
