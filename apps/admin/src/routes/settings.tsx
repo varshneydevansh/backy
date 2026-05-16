@@ -597,7 +597,7 @@ function normalizeAuthSettings(settings?: SiteSettingsInput['auth']): SiteSettin
 
   return {
     ...settings,
-    requireTwoFactor: false,
+    requireTwoFactor: settings.requireTwoFactor === true,
   };
 }
 
@@ -5593,7 +5593,7 @@ function SecuritySettings({
   const policy: AuthPolicySettingsConfig = {
     ...DEFAULT_AUTH_SETTINGS,
     ...(authSettings || {}),
-    requireTwoFactor: false,
+    requireTwoFactor: authSettings?.requireTwoFactor === true,
   };
 
   const updatePolicy = (next: Partial<AuthSettingsConfig>) => {
@@ -5602,7 +5602,6 @@ function SecuritySettings({
       ...DEFAULT_AUTH_SETTINGS,
       ...(current || {}),
       ...next,
-      requireTwoFactor: false,
     }));
   };
 
@@ -5708,15 +5707,15 @@ function SecuritySettings({
               <span className="flex flex-col gap-1">
                 <span>Require two-factor authentication</span>
                 <span className="text-xs leading-4 text-muted-foreground">
-                  Not available until Backy adds a second-factor login challenge.
+                  Require a configured admin MFA code or TOTP secret after password verification.
                 </span>
               </span>
               <input
                 type="checkbox"
-                checked={false}
-                disabled
-                readOnly
-                title="Two-factor enforcement is not available yet."
+                checked={policy.requireTwoFactor}
+                disabled={!canConfigureSettings}
+                title={configurePermissionTitle}
+                onChange={(event) => updatePolicy({ requireTwoFactor: event.target.checked })}
                 className="size-4 rounded border-input"
               />
             </label>

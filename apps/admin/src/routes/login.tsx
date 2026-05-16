@@ -13,8 +13,9 @@
 
 import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { CheckCircle2, Code2, Database, Eye, EyeOff, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Code2, Database, Eye, EyeOff, KeyRound, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { AdminAuthApiError } from '@/lib/adminAuthApi';
 import { cn } from '@/lib/utils';
 
 const DEMO_ACCOUNTS = [
@@ -78,6 +79,8 @@ function LoginPage() {
   // Form state
   const [email, setEmail] = useState(search.email?.trim().toLowerCase() || '');
   const [password, setPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [requiresMfa, setRequiresMfa] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const isLoginBusy = isLoading;
@@ -101,6 +104,10 @@ function LoginPage() {
       errors.password = 'Password is required';
     } else if (password.length < 6) {
       errors.password = 'Password must be at least 6 characters';
+    }
+
+    if (requiresMfa && !twoFactorCode.trim()) {
+      errors.twoFactorCode = 'Two-factor code is required';
     }
 
     setFormErrors(errors);
@@ -128,10 +135,14 @@ function LoginPage() {
     if (!validateForm()) return;
 
     try {
-      await signIn(email, password);
+      await signIn(email, password, requiresMfa ? twoFactorCode : undefined);
       // Redirect to dashboard on success
       navigate({ to: '/' });
-    } catch {
+    } catch (signInError) {
+      if (signInError instanceof AdminAuthApiError && signInError.code === 'MFA_REQUIRED') {
+        setRequiresMfa(true);
+        setFormErrors({ twoFactorCode: 'Enter your two-factor code to finish signing in' });
+      }
       // Error is handled by the store
     }
   };
@@ -242,7 +253,13 @@ function LoginPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (requiresMfa) {
+                        setRequiresMfa(false);
+                        setTwoFactorCode('');
+                      }
+                    }}
                     placeholder="admin@backy.io"
                     className={cn(
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-10 text-sm outline-none transition focus:ring-2 focus:ring-ring',
@@ -280,7 +297,13 @@ function LoginPage() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (requiresMfa) {
+                        setRequiresMfa(false);
+                        setTwoFactorCode('');
+                      }
+                    }}
                     placeholder="Enter password"
                     className={cn(
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-12 text-sm outline-none transition focus:ring-2 focus:ring-ring',
@@ -310,6 +333,36 @@ function LoginPage() {
                   </p>
                 )}
               </div>
+
+              {requiresMfa && (
+                <div>
+                  <label htmlFor="twoFactorCode" className="block text-sm font-medium">
+                    Two-factor code
+                  </label>
+                  <div className="relative mt-2">
+                    <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="twoFactorCode"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value)}
+                      placeholder="123456"
+                      className={cn(
+                        'w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring',
+                        formErrors.twoFactorCode && 'border-red-500 focus:ring-red-500',
+                      )}
+                      disabled={isLoginBusy}
+                    />
+                  </div>
+                  {formErrors.twoFactorCode && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {formErrors.twoFactorCode}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -354,6 +407,8 @@ function LoginPage() {
                       if (isLoginBusy) return;
                       setEmail(account.email);
                       setPassword(account.password);
+                      setTwoFactorCode('');
+                      setRequiresMfa(false);
                       setFormErrors({});
                       clearError();
                     }}

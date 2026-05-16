@@ -16,7 +16,8 @@ import {
   isSupabaseAdminAuthConfigured,
   SupabaseAdminAuthUnavailableError,
 } from '@/lib/admin-auth/supabaseAuth';
-import { getAdminUserByEmail } from '@/lib/backyStore';
+import { isAdminMfaConfigured, verifyAdminMfaCode } from '@/lib/admin-auth/mfa';
+import { getAdminSettings, getAdminUserByEmail } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -68,11 +69,46 @@ const successResponse = (requestId: string, session: AdminSession) => attachAdmi
   },
 }), session);
 
+const requiresMfa = (authSettings: Record<string, unknown> | undefined): boolean => (
+  authSettings?.requireTwoFactor === true
+);
+
+const completeLoginResponse = (
+  requestId: string,
+  session: AdminSession,
+  authSettings: Record<string, unknown> | undefined,
+  twoFactorCode: unknown,
+) => {
+  if (!requiresMfa(authSettings)) {
+    return successResponse(requestId, session);
+  }
+
+  if (!isAdminMfaConfigured()) {
+    return errorResponse(
+      503,
+      'MFA_PROVIDER_NOT_CONFIGURED',
+      'Two-factor authentication is required but no admin MFA verifier is configured.',
+      requestId,
+    );
+  }
+
+  if (typeof twoFactorCode !== 'string' || !twoFactorCode.trim()) {
+    return errorResponse(401, 'MFA_REQUIRED', 'Enter your two-factor authentication code.', requestId);
+  }
+
+  if (!verifyAdminMfaCode(twoFactorCode)) {
+    return errorResponse(401, 'INVALID_MFA_CODE', 'Invalid two-factor authentication code.', requestId);
+  }
+
+  return successResponse(requestId, session);
+};
+
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const body = await parseJsonBody(request);
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
+  const twoFactorCode = body.twoFactorCode;
 
   if (!email || !email.includes('@') || !password) {
     return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
@@ -81,7 +117,9 @@ export async function POST(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
-  const authSettings = repositories ? asAuthSettings((await repositories.settings.get()).auth) : undefined;
+  const authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : asAuthSettings(getAdminSettings().auth);
   const supabaseAuthConfigured = isSupabaseAdminAuthConfigured();
   let supabaseAuthUnavailable = false;
   if (supabaseAuthConfigured) {
@@ -92,13 +130,13 @@ export async function POST(request: NextRequest) {
           ? await repositories.users.getByEmail(supabaseIdentity.email)
           : getAdminUserByEmail(supabaseIdentity.email);
         if (user?.status === 'active') {
-          return successResponse(requestId, createAdminSessionForExternalUser({
+          return completeLoginResponse(requestId, createAdminSessionForExternalUser({
             id: user.id,
             email: user.email,
             fullName: user.fullName,
             role: user.role,
             status: user.status,
-          }, 'supabase', authSettings));
+          }, 'supabase', authSettings), authSettings, twoFactorCode);
         }
       }
     } catch (error) {
@@ -141,5 +179,5 @@ export async function POST(request: NextRequest) {
     return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
   }
 
-  return successResponse(requestId, session);
+  return completeLoginResponse(requestId, session, authSettings, twoFactorCode);
 }

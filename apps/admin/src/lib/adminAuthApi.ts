@@ -5,7 +5,7 @@ export interface AdminSession {
   token: string;
   issuedAt: string;
   expiresAt: string;
-  authMode: 'local-demo';
+  authMode: 'local-demo' | 'supabase';
 }
 
 export interface AdminSessionSummary {
@@ -16,7 +16,7 @@ export interface AdminSessionSummary {
   issuedAt: string;
   expiresAt: string;
   lastSeenAt: string;
-  authMode: 'local-demo';
+  authMode: 'local-demo' | 'supabase';
   current: boolean;
 }
 
@@ -51,8 +51,21 @@ interface AdminAuthResponse {
     session: AdminSession;
   };
   error?: {
+    code?: string;
     message?: string;
   };
+}
+
+export class AdminAuthApiError extends Error {
+  code?: string;
+  status: number;
+
+  constructor(message: string, options: { code?: string; status: number }) {
+    super(message);
+    this.name = 'AdminAuthApiError';
+    this.code = options.code;
+    this.status = options.status;
+  }
 }
 
 interface AdminInviteAcceptResponse {
@@ -188,18 +201,25 @@ export async function fetchAdminPasswordPolicy() {
   return payload.data.policy;
 }
 
-export async function loginAdmin(email: string, password: string) {
+export async function loginAdmin(email: string, password: string, twoFactorCode?: string) {
   const response = await fetch(`${getAdminApiBase()}/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
+    }),
   });
   const payload = await readJson<AdminAuthResponse>(response);
 
   if (!response.ok || !payload?.success || !payload.data) {
-    throw new Error(payload?.error?.message || 'Invalid email or password');
+    throw new AdminAuthApiError(payload?.error?.message || 'Invalid email or password', {
+      code: payload?.error?.code,
+      status: response.status,
+    });
   }
 
   return payload.data;

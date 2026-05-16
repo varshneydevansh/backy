@@ -153,6 +153,9 @@ export async function PATCH(
           return next.overrides;
         })()
       : updateAdminUserPermissionOverrides(user.id, overrides);
+    if (!repositories) {
+      updateAdminSessionPermissionOverrides(user.id, savedOverrides);
+    }
     const permissions = buildUserPermissionMatrix(user, savedOverrides);
 
     await recordAdminAudit({

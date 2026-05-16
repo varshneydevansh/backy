@@ -938,7 +938,7 @@ const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined
 
   return {
     ...safeInput,
-    requireTwoFactor: false,
+    requireTwoFactor: boolValue(safeInput.requireTwoFactor),
   };
 };
 

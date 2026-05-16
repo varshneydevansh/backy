@@ -13,6 +13,7 @@ const NEXT_BIN = path.join(repoRoot, 'node_modules/next/dist/bin/next');
 const SUPABASE_KEY = 'supabase-route-smoke-key';
 const SUPABASE_EMAIL = 'admin@backy.io';
 const SUPABASE_PASSWORD = 'supabase-route-password';
+const MFA_CODE = '654321';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -124,6 +125,7 @@ const startPublicServer = async (port, supabaseUrl) => {
       ...process.env,
       BACKY_SUPABASE_URL: supabaseUrl,
       BACKY_SUPABASE_ANON_KEY: SUPABASE_KEY,
+      BACKY_ADMIN_MFA_CODE: MFA_CODE,
       NEXT_TELEMETRY_DISABLED: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -156,39 +158,119 @@ const startPublicServer = async (port, supabaseUrl) => {
   throw new Error(`Public Next server did not become ready:\n${output}`);
 };
 
+const loginLocalAdmin = async (baseUrl) => {
+  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: SUPABASE_EMAIL,
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(response.ok && payload.data?.session?.token, `Unable to create local admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data.session.token;
+};
+
+const readSettings = async (baseUrl, token) => {
+  const response = await fetch(`${baseUrl}/api/admin/settings`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(response.ok && payload.data?.settings, `Unable to read settings: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data.settings;
+};
+
+const patchAuthSettings = async (baseUrl, token, auth) => {
+  const response = await fetch(`${baseUrl}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ auth }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(response.ok && payload.success !== false, `Unable to patch auth settings: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data?.settings;
+};
+
+const postLogin = async (baseUrl, body) => {
+  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  return {
+    response,
+    payload,
+    setCookie: response.headers.get('set-cookie') || '',
+  };
+};
+
 const main = async () => {
   const supabaseMock = await startSupabaseMock();
   const publicPort = await freePort();
   let publicServer;
+  let adminToken = '';
+  let originalAuth;
 
   try {
     publicServer = await startPublicServer(publicPort, supabaseMock.url);
-    const response = await fetch(`${publicServer.baseUrl}/api/admin/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        email: SUPABASE_EMAIL,
-        password: SUPABASE_PASSWORD,
-      }),
+    adminToken = await loginLocalAdmin(publicServer.baseUrl);
+    const settings = await readSettings(publicServer.baseUrl, adminToken);
+    originalAuth = settings.auth || {};
+    await patchAuthSettings(publicServer.baseUrl, adminToken, {
+      ...originalAuth,
+      requireTwoFactor: true,
     });
-    const payload = await response.json().catch(() => ({}));
-    const setCookie = response.headers.get('set-cookie') || '';
+
+    const missingMfa = await postLogin(publicServer.baseUrl, {
+      email: SUPABASE_EMAIL,
+      password: SUPABASE_PASSWORD,
+    });
+    assert(missingMfa.response.status === 401, `Missing MFA code should return 401, got ${missingMfa.response.status}: ${JSON.stringify(missingMfa.payload).slice(0, 500)}`);
+    assert(missingMfa.payload.error?.code === 'MFA_REQUIRED', `Missing MFA code returned wrong error: ${JSON.stringify(missingMfa.payload).slice(0, 500)}`);
+
+    const invalidMfa = await postLogin(publicServer.baseUrl, {
+      email: SUPABASE_EMAIL,
+      password: SUPABASE_PASSWORD,
+      twoFactorCode: '000000',
+    });
+    assert(invalidMfa.response.status === 401, `Invalid MFA code should return 401, got ${invalidMfa.response.status}: ${JSON.stringify(invalidMfa.payload).slice(0, 500)}`);
+    assert(invalidMfa.payload.error?.code === 'INVALID_MFA_CODE', `Invalid MFA code returned wrong error: ${JSON.stringify(invalidMfa.payload).slice(0, 500)}`);
+
+    const { response, payload, setCookie } = await postLogin(publicServer.baseUrl, {
+      email: SUPABASE_EMAIL,
+      password: SUPABASE_PASSWORD,
+      twoFactorCode: MFA_CODE,
+    });
 
     assert(response.ok, `Supabase-backed login route returned ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload.success === true, `Supabase-backed login route did not return success: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload.data?.user?.email === SUPABASE_EMAIL, `Supabase-backed login mapped the wrong user: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(payload.data?.session?.authMode === 'supabase', `Supabase-backed login did not issue authMode=supabase: ${JSON.stringify(payload).slice(0, 500)}`);
     assert(setCookie.includes('backy_admin_session=') && /HttpOnly/i.test(setCookie), `Supabase-backed login did not set an httpOnly session cookie: ${setCookie}`);
-    assert(supabaseMock.requests.length === 1, `Supabase Auth mock expected one request, got ${supabaseMock.requests.length}`);
+    assert(supabaseMock.requests.length === 4, `Supabase Auth mock expected four requests, got ${supabaseMock.requests.length}`);
 
     console.log(JSON.stringify({
       ok: true,
       route: '/api/admin/auth/login',
       authMode: payload.data.session.authMode,
+      mfa: {
+        missingCode: missingMfa.payload.error?.code,
+        invalidCode: invalidMfa.payload.error?.code,
+      },
       supabaseRequests: supabaseMock.requests.length,
       publicPort,
     }));
   } finally {
+    if (publicServer?.baseUrl && adminToken && originalAuth) {
+      await patchAuthSettings(publicServer.baseUrl, adminToken, originalAuth).catch(() => undefined);
+    }
     await stopProcess(publicServer?.childProcess);
     await closeServer(supabaseMock.server);
   }

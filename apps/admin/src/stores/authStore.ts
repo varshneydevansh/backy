@@ -35,7 +35,7 @@ interface AuthState {
 }
 
 interface AuthActions {
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, twoFactorCode?: string) => Promise<void>;
   acceptInvite: (token: string) => Promise<void>;
   resetPassword: (token: string, password: string) => Promise<void>;
   signOut: () => void;
@@ -64,11 +64,11 @@ export const useAuthStore = create<AuthStore>()(
       // ACTIONS
       // ============================================
 
-      signIn: async (email: string, password: string) => {
+      signIn: async (email: string, password: string, twoFactorCode?: string) => {
         set({ isLoading: true, error: null });
 
         try {
-          const data = await loginAdmin(email, password);
+          const data = await loginAdmin(email, password, twoFactorCode);
           set({
             user: data.user,
             session: data.session,

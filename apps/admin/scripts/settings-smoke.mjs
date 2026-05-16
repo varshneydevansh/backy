@@ -672,7 +672,7 @@ const setLabeledControl = async (client, labelText, value, options = {}) => {
   return result;
 };
 
-const assertTwoFactorUnavailable = async (client) => {
+const assertTwoFactorAvailable = async (client) => {
   const state = await evaluate(client, `(() => {
     const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
     const label = Array.from(document.querySelectorAll('label')).find((candidate) => (
@@ -689,8 +689,8 @@ const assertTwoFactorUnavailable = async (client) => {
   })()`);
 
   assert(
-    state.found && state.disabled && state.checked === false && /not available/i.test(state.text),
-    `Require 2FA should be visibly unavailable until login enforcement exists: ${JSON.stringify(state)}`,
+    state.found && !state.disabled && state.checked === false && /MFA code|TOTP secret/i.test(state.text),
+    `Require 2FA should be available now that login enforcement exists: ${JSON.stringify(state)}`,
   );
   return state;
 };
@@ -1208,7 +1208,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       !securityKeyState.leakedStaleAdminKey,
     `Admin API key should stay hidden from non-key managers even with stale local storage: ${JSON.stringify(securityKeyState)}`,
   );
-  await assertTwoFactorUnavailable(client);
+  await assertTwoFactorAvailable(client);
+  await setLabeledControl(client, 'Require two-factor authentication', true);
   await setLabeledControl(client, 'Invite-only workspace access', true);
   await setLabeledControl(client, 'Minimum password length', '12');
   await setLabeledControl(client, 'Session timeout', '120');
@@ -1311,7 +1312,7 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.notifications?.inApp?.mentions !== true, 'Planned mention notification should not persist as enabled');
   assert(settings.integrations?.notifications?.digestFrequency === 'instant', 'Planned digest frequency should normalize to instant');
   assert(settings.integrations?.notifications?.webhookUrl === notificationWebhookUrl, 'Notification webhook was not persisted');
-  assert(settings.auth?.requireTwoFactor !== true, 'Require 2FA should not persist as enabled without login enforcement');
+  assert(settings.auth?.requireTwoFactor === true, 'Require 2FA toggle was not persisted');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
   assert(settings.auth?.minPasswordLength === 12, 'Password length was not persisted');
 };
