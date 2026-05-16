@@ -262,6 +262,12 @@ const paddleCatalogSyncEnabled = () => {
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const squareCatalogSyncEnabled = () => {
+  const token = process.env.BACKY_SQUARE_ACCESS_TOKEN || process.env.SQUARE_ACCESS_TOKEN || '';
+  const apiBaseUrl = process.env.BACKY_SQUARE_API_BASE_URL || process.env.SQUARE_API_BASE_URL || '';
+  return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
+};
+
 const httpSubscriptionExecutionEnabled = () => {
   const url = process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL || process.env.COMMERCE_SUBSCRIPTION_ACTION_URL || '';
   return url === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/subscription/action`;
@@ -353,6 +359,45 @@ const startStripeCheckoutMock = async () => {
           trial_period: payload.trial_period,
           custom_data: payload.custom_data,
         },
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/v2/catalog/object') {
+      const payload = JSON.parse(body || '{}');
+      const itemId = `sq_item_mock_${requests.length}`;
+      const variationId = `sq_variation_mock_${requests.length}`;
+      const item = payload.object || {};
+      const itemData = item.item_data || {};
+      const variation = Array.isArray(itemData.variations) ? itemData.variations[0] || {} : {};
+      const variationData = variation.item_variation_data || {};
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        catalog_object: {
+          ...item,
+          id: itemId,
+          type: 'ITEM',
+          is_deleted: false,
+          item_data: {
+            ...itemData,
+            variations: [
+              {
+                ...variation,
+                id: variationId,
+                type: 'ITEM_VARIATION',
+                is_deleted: false,
+                item_variation_data: {
+                  ...variationData,
+                  item_id: itemId,
+                },
+              },
+            ],
+          },
+        },
+        id_mappings: [
+          { client_object_id: item.id, object_id: itemId },
+          { client_object_id: variation.id, object_id: variationId },
+        ],
       }));
       return;
     }
@@ -2066,6 +2111,45 @@ const assertProductProviderSync = async ({ productCollection, productRecord }) =
     assert(paddlePersisted.executionMode === 'paddle-api', `Persisted Paddle provider sync mode differed: ${JSON.stringify(paddlePersisted)}`);
   }
 
+  if (squareCatalogSyncEnabled()) {
+    const beforeSquareRequests = stripeCheckoutMock?.requests.length || 0;
+    const squarePayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
+      method: 'POST',
+      body: JSON.stringify({ provider: 'square' }),
+    });
+    const squareSync = squarePayload.data?.sync || squarePayload.sync;
+    const squareUpdated = squarePayload.data?.product || squarePayload.product;
+    assert(squareSync?.provider === 'square', `Square product provider sync did not return Square metadata: ${JSON.stringify(squarePayload).slice(0, 500)}`);
+    assert(squareSync.status === 'synced', `Square product provider sync did not execute against the mock provider: ${JSON.stringify(squareSync)}`);
+    assert(squareSync.executionMode === 'square-api', `Square product sync execution mode was unexpected: ${JSON.stringify(squareSync)}`);
+    assert(/^sq_item_mock_/.test(squareSync.product?.id || ''), `Square item id was not returned: ${JSON.stringify(squareSync)}`);
+    assert(/^sq_variation_mock_/.test(squareSync.price?.id || ''), `Square variation id was not returned: ${JSON.stringify(squareSync)}`);
+    assert(squareSync.price?.unitAmount === 4900, `Square variation price amount was unexpected: ${JSON.stringify(squareSync.price)}`);
+    assert(squareUpdated?.id === productRecord.id, `Square product provider sync did not return the updated product: ${JSON.stringify(squareUpdated)}`);
+
+    const squareRequests = stripeCheckoutMock.requests.slice(beforeSquareRequests);
+    const squareCatalogRequest = squareRequests.find((request) => request.method === 'POST' && request.url === '/v2/catalog/object');
+    assert(squareCatalogRequest?.headers.authorization === 'Bearer square_smoke_access_token', `Square product sync did not send bearer auth: ${JSON.stringify(squareCatalogRequest?.headers)}`);
+    assert(squareCatalogRequest.headers['square-version'] === (process.env.BACKY_SQUARE_VERSION || process.env.SQUARE_VERSION || '2026-01-22'), `Square product sync did not send Square-Version: ${JSON.stringify(squareCatalogRequest.headers)}`);
+    const squareBody = JSON.parse(squareCatalogRequest.body || '{}');
+    const squareObject = squareBody.object || {};
+    const squareItemData = squareObject.item_data || {};
+    const squareVariation = Array.isArray(squareItemData.variations) ? squareItemData.variations[0] || {} : {};
+    const squareVariationData = squareVariation.item_variation_data || {};
+    assert(squareBody.idempotency_key, `Square catalog body did not include idempotency key: ${JSON.stringify(squareBody)}`);
+    assert(squareObject.type === 'ITEM', `Square catalog body did not create an ITEM: ${JSON.stringify(squareBody)}`);
+    assert(squareItemData.name === readProductValue(productRecord.values, 'title'), `Square item body did not include product name: ${JSON.stringify(squareBody)}`);
+    assert(squareVariation.type === 'ITEM_VARIATION', `Square catalog body did not include an ITEM_VARIATION: ${JSON.stringify(squareBody)}`);
+    assert(squareVariationData.sku === readProductValue(productRecord.values, 'sku'), `Square variation body did not include SKU: ${JSON.stringify(squareBody)}`);
+    assert(squareVariationData.price_money?.amount === 4900, `Square variation body amount was unexpected: ${JSON.stringify(squareBody)}`);
+    assert(squareVariationData.price_money?.currency === String(readProductValue(productRecord.values, 'currency')).toUpperCase(), `Square variation body currency was unexpected: ${JSON.stringify(squareBody)}`);
+
+    const squareRefreshed = await getCollectionRecordBySlug(productCollection.id, productRecord.slug);
+    const squarePersisted = readProductValue(squareRefreshed.values, 'providerSync');
+    assert(squarePersisted?.requestId === squareSync.requestId, `Square product provider sync was not persisted: ${JSON.stringify(squareRefreshed.values)}`);
+    assert(squarePersisted.executionMode === 'square-api', `Persisted Square provider sync mode differed: ${JSON.stringify(squarePersisted)}`);
+  }
+
   const beforeHttpRequests = commerceProviderMock?.requests.length || 0;
   const httpPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/provider-sync`, {
     method: 'POST',
@@ -2650,6 +2734,7 @@ const assertProductsLayout = async (client) => {
         hasProviderSync: Boolean(document.querySelector('[data-testid="products-provider-sync"]')) &&
           document.body?.innerText?.includes('Provider catalog sync') &&
           document.body?.innerText?.includes('Paddle') &&
+          document.body?.innerText?.includes('Square') &&
           document.body?.innerText?.includes('HTTP') &&
           document.body?.innerText?.includes('configured HTTP product and price metadata'),
         hasProviderReconciliation: Boolean(providerReconciliation) &&

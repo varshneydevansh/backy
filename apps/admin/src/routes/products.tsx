@@ -1314,7 +1314,7 @@ function ProductsRoute() {
     },
     providerExecution: {
       quoteProviders: 'Configured HTTP tax, shipping, and discount quote providers can adjust checkout totals before order persistence.',
-      catalogSync: 'Product records can be synchronized to Stripe, Paddle, or a configured HTTP catalog-sync provider from the Products workspace.',
+      catalogSync: 'Product records can be synchronized to Stripe, Paddle, Square, or a configured HTTP catalog-sync provider from the Products workspace.',
       reconciliation: {
         readiness: reconciliationReadiness,
         lastPreview: reconciliationResult
@@ -2350,6 +2350,7 @@ function ProductsRoute() {
   const providerSyncLabel = (provider: string | undefined): string => {
     if (provider === 'http') return 'HTTP provider';
     if (provider === 'paddle') return 'Paddle';
+    if (provider === 'square') return 'Square';
     if (provider === 'stripe') return 'Stripe';
     return 'Provider';
   };
@@ -3093,7 +3094,7 @@ function ProductsRoute() {
                   <div data-testid="products-provider-reconciliation" className="rounded-lg border border-border bg-card p-3">
                     <div className="text-xs font-semibold text-foreground">Provider execution and reconciliation</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe, Paddle, or configured HTTP catalog metadata, settle provider webhooks, and preview scheduled reconciliation through the scheduled worker. Deeper marketplace-specific provider automation remains backend rollout work.
+                      Backy can capture private orders, execute HTTP quote providers, create checkout-session handoffs, sync Stripe, Paddle, Square, or configured HTTP catalog metadata, settle provider webhooks, and preview scheduled reconciliation through the scheduled worker. Deeper marketplace-specific provider automation remains backend rollout work.
                     </p>
                     <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3 text-xs">
                       <div className="flex items-center justify-between gap-3">
@@ -4484,13 +4485,14 @@ function ProductsRoute() {
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-foreground">Provider catalog sync</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Stripe, Paddle, or configured HTTP product and price metadata for provider checkout catalogs.</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Stripe, Paddle, Square, or configured HTTP product and price metadata for provider checkout catalogs.</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {[
                         ['auto', 'Auto'],
                         ['stripe', 'Stripe'],
                         ['paddle', 'Paddle'],
+                        ['square', 'Square'],
                         ['http', 'HTTP'],
                       ].map(([provider, label]) => (
                         <Button

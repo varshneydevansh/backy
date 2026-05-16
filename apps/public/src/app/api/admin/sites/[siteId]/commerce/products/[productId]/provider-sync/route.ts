@@ -17,7 +17,7 @@ interface RouteParams {
 }
 
 type ProviderSyncStatus = 'handoff' | 'synced' | 'failed';
-type ProductSyncProvider = 'stripe' | 'http' | 'paddle';
+type ProductSyncProvider = 'stripe' | 'http' | 'paddle' | 'square';
 
 const PROVIDER_SYNC_FIELD = 'providersync';
 
@@ -59,6 +59,8 @@ const stripeSecretKey = () => envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRE
 
 const paddleApiKey = () => envValue(['BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY']);
 
+const squareAccessToken = () => envValue(['BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN']);
+
 const productSyncToken = () => envValue(['BACKY_COMMERCE_PRODUCT_SYNC_TOKEN', 'COMMERCE_PRODUCT_SYNC_TOKEN']);
 
 const jsonRecord = (value: unknown): Record<string, unknown> => (
@@ -92,6 +94,7 @@ const configuredProductSyncProvider = (settings: unknown): ProductSyncProvider |
 
   if (configured === 'stripe') return 'stripe';
   if (configured === 'paddle') return 'paddle';
+  if (configured === 'square') return 'square';
   if (['http', 'generic-http', 'custom-http'].includes(configured)) return 'http';
   if (configuredHttpCatalogSyncUrl(settings)) return 'http';
   return null;
@@ -103,6 +106,7 @@ const resolveProductSyncProvider = (provider: string, settings: unknown): Produc
   }
   if (provider === 'stripe') return 'stripe';
   if (provider === 'paddle') return 'paddle';
+  if (provider === 'square') return 'square';
   if (['http', 'generic-http', 'custom-http'].includes(provider)) return 'http';
   return null;
 };
@@ -131,6 +135,20 @@ const paddleApiUrl = (path: string) => {
 const paddleHeaders = () => ({
   authorization: `Bearer ${paddleApiKey()}`,
   'content-type': 'application/json',
+});
+
+const squareApiUrl = (path: string) => {
+  const baseUrl = envValue(['BACKY_SQUARE_API_BASE_URL', 'SQUARE_API_BASE_URL']) || 'https://connect.squareup.com';
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return new URL(path.replace(/^\/+/, ''), normalizedBase).toString();
+};
+
+const squareVersion = () => envValue(['BACKY_SQUARE_VERSION', 'SQUARE_VERSION']) || '2026-01-22';
+
+const squareHeaders = () => ({
+  authorization: `Bearer ${squareAccessToken()}`,
+  'content-type': 'application/json',
+  'square-version': squareVersion(),
 });
 
 const centsValue = (value: number) => (
@@ -662,6 +680,147 @@ const executePaddleProductSync = async ({
   };
 };
 
+const safeSquareCatalogObject = (value: unknown): Record<string, unknown> => {
+  const object = jsonRecord(value);
+  const catalogObject = jsonRecord(object.catalog_object);
+  return Object.keys(catalogObject).length ? catalogObject : object;
+};
+
+const safeSquareVariationObject = (value: Record<string, unknown>): Record<string, unknown> => {
+  const itemData = jsonRecord(value.item_data);
+  const variations = Array.isArray(itemData.variations) ? itemData.variations : [];
+  const firstVariation = variations.find((variation) => jsonRecord(variation).type === 'ITEM_VARIATION') || variations[0];
+  return jsonRecord(firstVariation);
+};
+
+const safeSquareProductPayload = (payload: Record<string, unknown>) => {
+  const value = safeSquareCatalogObject(payload);
+  const itemData = jsonRecord(value.item_data);
+  return {
+    id: textValue(value.id),
+    object: textValue(value.type) || 'ITEM',
+    active: typeof value.is_deleted === 'boolean' ? !value.is_deleted : null,
+    name: textValue(itemData.name),
+  };
+};
+
+const safeSquarePricePayload = (payload: Record<string, unknown>, product: CommerceProduct) => {
+  const value = safeSquareCatalogObject(payload);
+  const variation = safeSquareVariationObject(value);
+  const variationData = jsonRecord(variation.item_variation_data);
+  const priceMoney = jsonRecord(variationData.price_money);
+  return {
+    id: textValue(variation.id),
+    object: textValue(variation.type) || 'ITEM_VARIATION',
+    active: typeof variation.is_deleted === 'boolean' ? !variation.is_deleted : null,
+    currency: textValue(priceMoney.currency).toLowerCase() || product.currency.toLowerCase(),
+    unitAmount: typeof priceMoney.amount === 'number' ? priceMoney.amount : centsValue(product.price),
+    recurring: product.subscription.enabled
+      ? {
+        interval: product.subscription.interval,
+        trialDays: product.subscription.trialDays,
+      }
+      : null,
+  };
+};
+
+const safeSquareErrorPayload = (value: Record<string, unknown>) => {
+  const errors = Array.isArray(value.errors) ? value.errors.map((error) => jsonRecord(error)) : [];
+  const firstError = errors[0] || jsonRecord(value.error) || value;
+  return {
+    type: textValue(firstError.category) || textValue(firstError.type) || 'square-api',
+    code: textValue(firstError.code) || textValue(firstError.status),
+    message: textValue(firstError.detail) || textValue(firstError.message) || 'Square catalog sync failed.',
+  };
+};
+
+const squareTemporaryId = (prefix: string, product: CommerceProduct, requestId: string) => (
+  `#${prefix}_${product.id.replace(/[^a-zA-Z0-9_-]/g, '_')}_${requestId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+);
+
+const buildSquareCatalogPayload = (product: CommerceProduct, requestId: string) => {
+  const itemId = squareTemporaryId('backy_item', product, requestId);
+  const variationId = squareTemporaryId('backy_variation', product, requestId);
+  return {
+    idempotency_key: requestId,
+    object: {
+      type: 'ITEM',
+      id: itemId,
+      present_at_all_locations: true,
+      item_data: {
+        name: product.title,
+        description: product.description ? product.description.slice(0, 1000) : undefined,
+        abbreviation: product.sku ? product.sku.slice(0, 5).toUpperCase() : undefined,
+        variations: [
+          {
+            type: 'ITEM_VARIATION',
+            id: variationId,
+            present_at_all_locations: true,
+            item_variation_data: {
+              item_id: itemId,
+              name: product.sku || 'Default',
+              sku: product.sku,
+              pricing_type: 'FIXED_PRICING',
+              price_money: {
+                amount: centsValue(product.price),
+                currency: product.currency.toUpperCase(),
+              },
+              track_inventory: product.inventory.policy !== 'continue',
+            },
+          },
+        ],
+      },
+    },
+  };
+};
+
+const callSquare = async (path: string, body: Record<string, unknown>) => {
+  const response = await fetch(squareApiUrl(path), {
+    method: 'POST',
+    headers: squareHeaders(),
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  return { response, payload };
+};
+
+const executeSquareProductSync = async ({
+  product,
+  requestId,
+}: {
+  product: CommerceProduct;
+  requestId: string;
+}) => {
+  if (!squareAccessToken()) {
+    return buildHandoffSync({
+      product,
+      requestId,
+      provider: 'square',
+      reason: 'BACKY_SQUARE_ACCESS_TOKEN or SQUARE_ACCESS_TOKEN is not configured.',
+    });
+  }
+
+  const createdCatalogObject = await callSquare('v2/catalog/object', buildSquareCatalogPayload(product, requestId));
+  if (!createdCatalogObject.response.ok) {
+    return {
+      ...buildHandoffSync({ product, requestId, provider: 'square', reason: 'Square catalog object upsert failed.' }),
+      status: 'failed' as ProviderSyncStatus,
+      executionMode: 'square-api',
+      error: safeSquareErrorPayload(createdCatalogObject.payload),
+    };
+  }
+
+  return {
+    provider: 'square',
+    status: 'synced' as ProviderSyncStatus,
+    executionMode: 'square-api',
+    syncedAt: new Date().toISOString(),
+    requestId,
+    product: safeSquareProductPayload(createdCatalogObject.payload),
+    price: safeSquarePricePayload(createdCatalogObject.payload, product),
+  };
+};
+
 const executeProductProviderSync = async ({
   siteId,
   product,
@@ -680,6 +839,9 @@ const executeProductProviderSync = async ({
   }
   if (provider === 'paddle') {
     return executePaddleProductSync({ product, requestId, settings });
+  }
+  if (provider === 'square') {
+    return executeSquareProductSync({ product, requestId });
   }
   return executeStripeProductSync({
     product,
@@ -739,7 +901,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const settings = await repositories.settings.get();
       const provider = resolveProductSyncProvider(requestedProvider, settings);
       if (!provider) {
-        return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+        return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, square, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
       }
       const product = productRecordToCommerceProduct(sourceRecordFromRecord(record));
       const sync = await executeProductProviderSync({
@@ -811,7 +973,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const settings = getAdminSettings();
     const provider = resolveProductSyncProvider(requestedProvider, settings);
     if (!provider) {
-      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
+      return errorResponse(400, 'UNSUPPORTED_PROVIDER', 'Supported product sync providers are stripe, paddle, square, http, generic-http, custom-http, or auto.', requestId, { provider: requestedProvider });
     }
     const sync = await executeProductProviderSync({
       siteId: site.id,
