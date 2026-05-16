@@ -563,6 +563,18 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
 }))});
 `;
 
+const setBrowserSession = async (client, sessionToken) => {
+  await client.send('Network.enable');
+  await client.send('Network.setCookie', {
+    url: API_BASE_URL,
+    name: 'backy_admin_session',
+    value: sessionToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -1267,6 +1279,7 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
+    await setBrowserSession(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
