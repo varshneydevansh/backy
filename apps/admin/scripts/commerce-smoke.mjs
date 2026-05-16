@@ -250,6 +250,11 @@ const paypalSubscriptionExecutionEnabled = () => {
   return Boolean(token && apiBaseUrl === STRIPE_MOCK_BASE_URL);
 };
 
+const httpSubscriptionExecutionEnabled = () => {
+  const url = process.env.BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL || process.env.COMMERCE_SUBSCRIPTION_ACTION_URL || '';
+  return url === `${COMMERCE_PROVIDER_MOCK_BASE_URL}/subscription/action`;
+};
+
 const readRequestBody = (request) => new Promise((resolve, reject) => {
   const chunks = [];
   request.on('data', (chunk) => chunks.push(chunk));
@@ -409,6 +414,21 @@ const startCommerceProviderMock = async () => {
           unitAmount: Math.round(Number(payload.product?.price || 0) * 100),
         },
         requestId: payload.requestId,
+      }));
+      return;
+    }
+
+    if (request.method === 'POST' && request.url === '/subscription/action') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        id: `http_subscription_action_${requests.length}`,
+        actionId: `http_subscription_action_${requests.length}`,
+        status: 'succeeded',
+        provider: payload.provider || 'generic-http',
+        reference: payload.subscription?.reference,
+        message: `${payload.action || 'action'} accepted`,
+        nextStatus: payload.action === 'pause' ? 'paused' : payload.action === 'resume' ? 'active' : 'cancelled',
+        requestId: payload.idempotencyKey,
       }));
       return;
     }
@@ -2234,6 +2254,29 @@ const assertStripeCheckoutExecution = async ({
       assert(paypalActionRequest, `PayPal mock did not receive subscription cancellation action: ${JSON.stringify(stripeCheckoutMock.requests.slice(beforePayPalActionRequests))}`);
       assert(paypalActionRequest.headers.authorization === 'Bearer paypal_smoke_access_token', `PayPal subscription action did not send bearer auth: ${JSON.stringify(paypalActionRequest.headers)}`);
       assert(paypalActionRequest.headers['paypal-request-id'], `PayPal subscription action did not send idempotency header: ${JSON.stringify(paypalActionRequest.headers)}`);
+    }
+
+    if (httpSubscriptionExecutionEnabled()) {
+      const beforeHttpSubscriptionRequests = commerceProviderMock.requests.length;
+      const httpActionPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/products/${productRecord.id}/subscriptions/${orderRecord.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'pause',
+          provider: 'generic-http',
+          subscriptionReference: `http-sub-${slug}`,
+          reason: 'Smoke generic HTTP subscription pause action.',
+        }),
+      });
+      const httpSubscriptionAction = httpActionPayload.data?.action || httpActionPayload.action;
+      assert(httpSubscriptionAction?.status === 'succeeded', `HTTP subscription action did not execute against mock: ${JSON.stringify(httpActionPayload).slice(0, 500)}`);
+      assert(httpSubscriptionAction.executionMode === 'http-api', `HTTP subscription action did not use HTTP execution: ${JSON.stringify(httpSubscriptionAction)}`);
+      assert(httpSubscriptionAction.subscriptionReference === `http-sub-${slug}`, `HTTP subscription action used the wrong subscription reference: ${JSON.stringify(httpSubscriptionAction)}`);
+      const httpActionRequest = commerceProviderMock.requests.slice(beforeHttpSubscriptionRequests).find((request) => request.method === 'POST' && request.url === '/subscription/action');
+      assert(httpActionRequest, `HTTP provider mock did not receive subscription action: ${JSON.stringify(commerceProviderMock.requests.slice(beforeHttpSubscriptionRequests))}`);
+      assert(httpActionRequest.headers['x-backy-provider-kind'] === 'subscription-action', `HTTP subscription action omitted provider-kind header: ${JSON.stringify(httpActionRequest.headers)}`);
+      assert(httpActionRequest.headers['x-backy-subscription-action'] === 'pause', `HTTP subscription action omitted action header: ${JSON.stringify(httpActionRequest.headers)}`);
+      assert(httpActionRequest.payload?.schemaVersion === 'backy.product-subscription-action-request.v1', `HTTP subscription action sent unexpected schema: ${JSON.stringify(httpActionRequest.payload)}`);
+      assert(httpActionRequest.payload?.subscription?.reference === `http-sub-${slug}`, `HTTP subscription action sent wrong reference: ${JSON.stringify(httpActionRequest.payload)}`);
     }
 
     const stripeCustomerRecord = customersCollection?.id

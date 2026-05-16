@@ -1533,7 +1533,7 @@ export interface ProductSubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;

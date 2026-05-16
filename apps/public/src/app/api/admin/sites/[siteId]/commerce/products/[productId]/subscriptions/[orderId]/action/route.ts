@@ -13,6 +13,7 @@ import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { PRODUCT_COLLECTION_SLUG, productRecordToCommerceProduct, type CommerceSourceRecord } from '@/lib/commerceCatalog';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import {
+  getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
@@ -55,7 +56,7 @@ interface SubscriptionLifecycleAction {
   action: 'pause' | 'resume' | 'cancel';
   status: 'requested' | 'succeeded' | 'failed' | 'requires_action';
   provider: string;
-  executionMode: 'stripe-api' | 'paypal-api' | 'handoff';
+  executionMode: 'stripe-api' | 'paypal-api' | 'http-api' | 'handoff';
   productId: string;
   productSlug: string;
   orderId: string;
@@ -206,6 +207,29 @@ const canExecutePayPalSubscriptionAction = (provider: string, subscriptionRefere
   Boolean(subscriptionReference)
 );
 
+const envValue = (keys: string[]): string => (
+  keys.map((key) => process.env[key]?.trim() || '').find(Boolean) || ''
+);
+
+const subscriptionActionProviderUrl = (): string => {
+  const commerce = toRecord(toRecord(getAdminSettings().integrations).commerce);
+  const configuredUrl = envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL'])
+    || textValue(commerce.subscriptionActionProviderUrl)
+    || textValue(commerce.subscriptionLifecycleProviderUrl);
+  if (!configuredUrl) return '';
+  try {
+    const url = new URL(configuredUrl);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const canExecuteHttpSubscriptionAction = (provider: string) => (
+  ['http', 'generic-http', 'custom-http'].includes(provider.toLowerCase()) &&
+  Boolean(subscriptionActionProviderUrl())
+);
+
 const safeStripeSubscriptionPayload = (value: Record<string, unknown>) => ({
   id: textValue(value.id),
   object: textValue(value.object),
@@ -233,6 +257,15 @@ const safePayPalErrorPayload = (value: Record<string, unknown>) => ({
   debugId: textValue(value.debug_id || value.debugId),
   issue: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).issue),
   description: textValue(toRecord(Array.isArray(value.details) ? value.details[0] : {}).description),
+});
+
+const safeHttpProviderPayload = (value: Record<string, unknown>) => ({
+  id: textValue(value.id || value.actionId || value.subscriptionActionId),
+  status: textValue(value.status),
+  provider: textValue(value.provider),
+  reference: textValue(value.reference || value.subscriptionReference),
+  message: textValue(value.message),
+  nextStatus: textValue(value.nextStatus || value.lifecycleStatus),
 });
 
 const executeStripeSubscriptionAction = async (input: {
@@ -322,6 +355,69 @@ const executePayPalSubscriptionAction = async (input: {
   };
 };
 
+const executeHttpSubscriptionAction = async (input: {
+  action: SubscriptionLifecycleAction['action'];
+  actionId: string;
+  subscriptionReference: string;
+  reason: string;
+  provider: string;
+  product: ReturnType<typeof productRecordToCommerceProduct>;
+  order: SourceRecord;
+}) => {
+  const values = toRecord(input.order.values);
+  const response = await fetch(subscriptionActionProviderUrl(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-backy-provider-kind': 'subscription-action',
+      'x-backy-subscription-action': input.action,
+    },
+    body: JSON.stringify({
+      schemaVersion: 'backy.product-subscription-action-request.v1',
+      action: input.action,
+      provider: input.provider,
+      idempotencyKey: input.actionId,
+      reason: input.reason,
+      product: {
+        id: input.product.id,
+        slug: input.product.slug,
+        title: input.product.title,
+        sku: input.product.sku,
+        subscription: input.product.subscription,
+      },
+      order: {
+        id: input.order.id,
+        slug: input.order.slug,
+        orderNumber: textValue(values.ordernumber) || input.order.slug,
+        paymentProvider: textValue(values.paymentprovider),
+        paymentReference: textValue(values.paymentreference),
+        paymentStatus: textValue(values.paymentstatus),
+        fulfillmentStatus: textValue(values.fulfillmentstatus),
+        currency: textValue(values.currency),
+        total: Number(values.total || 0),
+      },
+      subscription: {
+        reference: input.subscriptionReference,
+      },
+    }),
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  const payloadRecord = toRecord(payload);
+
+  if (!response.ok) {
+    return {
+      ok: false as const,
+      payload: safeHttpProviderPayload(payloadRecord),
+    };
+  }
+
+  return {
+    ok: true as const,
+    payload: safeHttpProviderPayload(payloadRecord),
+  };
+};
+
 const appendNote = (current: unknown, note: string): string => {
   const existing = textValue(current);
   return existing ? `${existing}\n${note}` : note;
@@ -395,7 +491,8 @@ const buildSubscriptionActionUpdate = async (
   const actionId = `subact_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const shouldExecuteStripe = canExecuteStripeSubscriptionAction(provider, subscriptionReference);
   const shouldExecutePayPal = canExecutePayPalSubscriptionAction(provider, subscriptionReference);
-  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : 'handoff';
+  const shouldExecuteHttp = canExecuteHttpSubscriptionAction(provider);
+  const executionMode: SubscriptionLifecycleAction['executionMode'] = shouldExecuteStripe ? 'stripe-api' : shouldExecutePayPal ? 'paypal-api' : shouldExecuteHttp ? 'http-api' : 'handoff';
   const providerPayload: Record<string, unknown> = {
     schemaVersion: 'backy.product-subscription-action.v1',
     action: `subscription.${actionName}`,
@@ -409,9 +506,9 @@ const buildSubscriptionActionUpdate = async (
     reason,
     idempotencyKey: actionId,
   };
-  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal ? 'requested' : 'requires_action';
+  let status: SubscriptionLifecycleAction['status'] = shouldExecuteStripe || shouldExecutePayPal || shouldExecuteHttp ? 'requested' : 'requires_action';
   let completedAt: string | null = null;
-  let statusNote = shouldExecuteStripe || shouldExecutePayPal ? 'requested' : 'handoff';
+  let statusNote = shouldExecuteStripe || shouldExecutePayPal || shouldExecuteHttp ? 'requested' : 'handoff';
 
   if (shouldExecuteStripe) {
     const result = await executeStripeSubscriptionAction({
@@ -442,6 +539,33 @@ const buildSubscriptionActionUpdate = async (
       status = 'succeeded';
       completedAt = new Date().toISOString();
       statusNote = 'executed';
+    } else {
+      status = 'failed';
+      completedAt = new Date().toISOString();
+      statusNote = 'failed';
+    }
+  } else if (shouldExecuteHttp) {
+    const result = await executeHttpSubscriptionAction({
+      action: actionName,
+      actionId,
+      subscriptionReference,
+      reason,
+      provider,
+      product,
+      order: orderRecord,
+    });
+    providerPayload.execution = result;
+    if (result.ok) {
+      const providerStatus = result.payload.status.toLowerCase();
+      if (providerStatus === 'failed' || providerStatus === 'error') {
+        status = 'failed';
+      } else if (providerStatus === 'requires_action' || providerStatus === 'requires-action') {
+        status = 'requires_action';
+      } else {
+        status = 'succeeded';
+      }
+      completedAt = status === 'requires_action' ? null : new Date().toISOString();
+      statusNote = status === 'succeeded' ? 'executed' : status;
     } else {
       status = 'failed';
       completedAt = new Date().toISOString();
