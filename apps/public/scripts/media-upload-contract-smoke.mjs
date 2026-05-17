@@ -71,6 +71,12 @@ assert(
   'Media upload policy must support extension and MIME-family allowlist rules for generic files.',
 );
 assert(
+  uploadPolicy.includes("'application/font-woff2': 'font'") &&
+    uploadPolicy.includes("'.woff2': 'font'") &&
+    uploadPolicy.includes('fileMatchesMimeFamily'),
+  'Media upload policy must allow known font extensions and application font MIME types through font/* allowlist rules.',
+);
+assert(
   /export type MediaType\s*=\s*[\s\S]*["']image["'][\s\S]*["']video["'][\s\S]*["']audio["'][\s\S]*["']document["'][\s\S]*["']font["'][\s\S]*["']other["']/.test(coreTypes),
   'Core media type contract must include other.',
 );

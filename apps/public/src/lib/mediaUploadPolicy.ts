@@ -79,6 +79,41 @@ export const mediaQuotaPayload = (limitBytes: number, usedBytes: number, policy?
     : {}),
 });
 
+const EXTENSION_MIME_FAMILIES: Record<string, string> = {
+  '.avif': 'image',
+  '.gif': 'image',
+  '.jpeg': 'image',
+  '.jpg': 'image',
+  '.png': 'image',
+  '.svg': 'image',
+  '.webp': 'image',
+  '.mp4': 'video',
+  '.mov': 'video',
+  '.webm': 'video',
+  '.mp3': 'audio',
+  '.ogg': 'audio',
+  '.wav': 'audio',
+  '.eot': 'font',
+  '.otf': 'font',
+  '.ttf': 'font',
+  '.woff': 'font',
+  '.woff2': 'font',
+};
+
+const MIME_TYPE_FAMILIES: Record<string, string> = {
+  'application/font-woff': 'font',
+  'application/font-woff2': 'font',
+  'application/vnd.ms-fontobject': 'font',
+  'application/x-font-otf': 'font',
+  'application/x-font-ttf': 'font',
+};
+
+const fileMatchesMimeFamily = (family: string, mimeType: string, extension: string) => (
+  mimeType.startsWith(`${family}/`) ||
+  MIME_TYPE_FAMILIES[mimeType] === family ||
+  EXTENSION_MIME_FAMILIES[extension] === family
+);
+
 const toRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as TRecord
@@ -147,7 +182,7 @@ export const isUploadAllowedByFileType = (
     }
 
     if (rule.endsWith('/*')) {
-      return mimeType.startsWith(`${rule.slice(0, -1)}`);
+      return fileMatchesMimeFamily(rule.slice(0, -2), mimeType, extension);
     }
 
     return mimeType === rule;

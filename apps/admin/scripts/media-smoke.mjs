@@ -18,6 +18,29 @@ const ONE_PIXEL_PNG = Buffer.from(
   'base64',
 );
 
+const minimalPdf = (text) => {
+  const safeText = text.replace(/[()\\]/g, '');
+  return Buffer.from(`%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [3 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 120] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length ${safeText.length + 54} >>
+stream
+BT /F1 12 Tf 20 80 Td (${safeText}) Tj ET
+endstream
+endobj
+trailer << /Root 1 0 R >>
+%%EOF
+`, 'utf8');
+};
+
 const MINIMAL_WOFF2 = Buffer.from([
   0x77, 0x4f, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x30, 0x00, 0x01, 0x00, 0x00,
@@ -75,7 +98,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -83,9 +106,19 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  const smokeMfaCode = process.env.BACKY_MEDIA_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    response = await login(smokeMfaCode);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -436,9 +469,9 @@ const assertMediaBillingLimitEnforced = async (suffix) => {
   const originalLimits = originalBillingQuota.limits || {};
   const originalIntegrations = settings.integrations || {};
   const originalCommerce = originalIntegrations.commerce || {};
-  const blockedName = `blocked-media-limit-${suffix}.txt`;
+  const blockedName = `blocked-media-limit-${suffix}.pdf`;
   const formData = new FormData();
-  formData.append('file', new Blob([Buffer.from(`Blocked media quota smoke ${suffix}\n`, 'utf8')], { type: 'text/plain' }), blockedName);
+  formData.append('file', new Blob([minimalPdf(`Blocked media quota smoke ${suffix}`)], { type: 'application/pdf' }), blockedName);
   formData.set('visibility', 'public');
   formData.set('scope', 'global');
 
@@ -1092,7 +1125,7 @@ const assertMediaPaginationControls = async (client) => {
 
 const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, options = {}) => {
   const mode = options.mode || 'file';
-  const acceptIncludes = options.acceptIncludes || '.txt';
+  const acceptIncludes = options.acceptIncludes || '.pdf';
   let modeResult = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     modeResult = await evaluate(client, `(() => {
@@ -1158,7 +1191,11 @@ const uploadCentralMediaThroughUi = async (client, uploadPath, uploadName, optio
       uploading: document.body?.innerText?.includes('Uploading files') || false,
       body: document.body?.innerText?.slice(0, 1800) || '',
     }))()`);
-    if (state.hasUploadName && state.hasSummary && !state.uploading) {
+    if (state.hasSummary && !state.uploading) {
+      if (typeof options.verifyUploaded === 'function') {
+        const uploaded = await options.verifyUploaded();
+        return { ...state, uploadedMediaId: uploaded.id };
+      }
       return state;
     }
     if (attempt === 159) {
@@ -2440,7 +2477,15 @@ const uploadFontThroughUiAndAssert = async (client, {
   display,
   fallback,
 }) => {
-  await uploadCentralMediaThroughUi(client, uploadPath, uploadName, { mode: 'font', acceptIncludes: '.woff2' });
+  await uploadCentralMediaThroughUi(client, uploadPath, uploadName, {
+    mode: 'font',
+    acceptIncludes: '.woff2',
+    verifyUploaded: () => waitForMedia(marker, (item) => (
+      item.originalName === uploadName &&
+      item.type === 'font' &&
+      item.visibility === 'public'
+    )),
+  });
   const uploadedFont = await waitForMedia(marker, (item) => (
     item.originalName === uploadName &&
     item.type === 'font' &&
@@ -2650,12 +2695,12 @@ const main = async () => {
   const imageName = `${marker}.png`;
   const replacementName = `${marker}-replacement.png`;
   const renamedImageName = `${marker}-renamed.png`;
-  const privateName = `${marker}.txt`;
-  const childFolderAssetName = `${marker}-child-folder.txt`;
-  const centralUploadName = `${marker}-central-upload.txt`;
+  const privateName = `${marker}.pdf`;
+  const childFolderAssetName = `${marker}-child-folder.pdf`;
+  const centralUploadName = `${marker}-central-upload.pdf`;
   const fontUploadName = `${marker}-brand-font.woff2`;
   const rejectedUploadModeName = `${marker}-image-mode-rejected.txt`;
-  const bulkName = `${marker}-bulk.txt`;
+  const bulkName = `${marker}-bulk.pdf`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
   const fontFamily = `Backy Smoke ${suffix}`;
   const fontWeight = '600';
@@ -2676,7 +2721,7 @@ const main = async () => {
     await assertMediaMutationPermissionOverridesAreEnforced();
     originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
-    fs.writeFileSync(centralUploadPath, `Backy central upload UI smoke ${suffix}\n`, 'utf8');
+    fs.writeFileSync(centralUploadPath, minimalPdf(`Backy central upload UI smoke ${suffix}`));
     fs.writeFileSync(fontUploadPath, MINIMAL_WOFF2);
     const existing = await listMedia(marker);
     assert(existing.length === 0, `Temporary media already exists for marker ${marker}`);
@@ -2722,8 +2767,8 @@ const main = async () => {
     await assertMediaMutationBillingLimitEnforced(suffix, publicImage.id, imageName);
     const privateFile = await uploadMedia({
       filename: privateName,
-      mimeType: 'text/plain',
-      bytes: Buffer.from(`Backy media smoke ${suffix}\n`, 'utf8'),
+      mimeType: 'application/pdf',
+      bytes: minimalPdf(`Backy media smoke ${suffix}`),
       visibility: 'private',
       folderId: null,
       tags: ['smoke', 'private-file'],
@@ -2732,8 +2777,8 @@ const main = async () => {
     mediaIds.push(privateFile.id);
     const childFolderFile = await uploadMedia({
       filename: childFolderAssetName,
-      mimeType: 'text/plain',
-      bytes: Buffer.from(`Backy nested folder media smoke ${suffix}\n`, 'utf8'),
+      mimeType: 'application/pdf',
+      bytes: minimalPdf(`Backy nested folder media smoke ${suffix}`),
       visibility: 'public',
       folderId: childFolderId,
       tags: ['smoke', 'nested-folder'],
@@ -2742,8 +2787,8 @@ const main = async () => {
     mediaIds.push(childFolderFile.id);
     const bulkFile = await uploadMedia({
       filename: bulkName,
-      mimeType: 'text/plain',
-      bytes: Buffer.from(`Backy media bulk smoke ${suffix}\n`, 'utf8'),
+      mimeType: 'application/pdf',
+      bytes: minimalPdf(`Backy media bulk smoke ${suffix}`),
       visibility: 'public',
       folderId: null,
       tags: ['bulk-original'],
@@ -2825,7 +2870,13 @@ const main = async () => {
     await waitForMediaPageAsset(client, privateName);
     await assertFolderFilterShowsAsset(client, { folderId, assetName: childFolderAssetName, searchText: marker });
     await navigateToMedia(client, marker);
-    await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName);
+    await uploadCentralMediaThroughUi(client, centralUploadPath, centralUploadName, {
+      verifyUploaded: () => waitForMedia(marker, (item) => (
+        item.originalName === centralUploadName &&
+        (item.type === 'document' || item.type === 'file') &&
+        item.visibility === 'public'
+      )),
+    });
     await assertUploadModeRejectsDroppedFiles(client, rejectedUploadModeName);
     const rejectedModeMatches = await listMedia(rejectedUploadModeName);
     assert(rejectedModeMatches.length === 0, `Upload mode rejected file should not be persisted: ${JSON.stringify(rejectedModeMatches).slice(0, 500)}`);
