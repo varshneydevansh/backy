@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS public.form_contacts (
   notes TEXT,
   source_values JSONB DEFAULT '{}'::JSONB,
   status TEXT NOT NULL DEFAULT 'new',
-  source_submission_id UUID,
+  source_submission_id UUID REFERENCES public.form_submissions(id) ON DELETE SET NULL,
   request_id TEXT,
   source_ip_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -263,6 +263,22 @@ CREATE TRIGGER update_form_contacts_updated_at
   BEFORE UPDATE ON public.form_contacts
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'form_contacts_source_submission_id_fkey'
+      AND conrelid = 'public.form_contacts'::regclass
+  ) THEN
+    ALTER TABLE public.form_contacts
+      ADD CONSTRAINT form_contacts_source_submission_id_fkey
+      FOREIGN KEY (source_submission_id)
+      REFERENCES public.form_submissions(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- ============================================
 -- INDEXES
 -- ============================================
@@ -272,12 +288,19 @@ CREATE INDEX IF NOT EXISTS idx_form_definitions_page_id ON public.form_definitio
 CREATE INDEX IF NOT EXISTS idx_form_definitions_post_id ON public.form_definitions(post_id);
 CREATE INDEX IF NOT EXISTS idx_form_definitions_is_active ON public.form_definitions(is_active);
 CREATE INDEX IF NOT EXISTS idx_form_definitions_updated_at ON public.form_definitions(updated_at);
+CREATE INDEX IF NOT EXISTS form_definitions_site_active_updated_idx ON public.form_definitions(site_id, is_active, updated_at);
+CREATE INDEX IF NOT EXISTS form_definitions_site_page_updated_idx ON public.form_definitions(site_id, page_id, updated_at);
+CREATE INDEX IF NOT EXISTS form_definitions_site_post_updated_idx ON public.form_definitions(site_id, post_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_form_definitions_settings_gin ON public.form_definitions USING GIN(settings);
 
 CREATE INDEX IF NOT EXISTS idx_form_submissions_site_form ON public.form_submissions(site_id, form_id);
 CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON public.form_submissions(status);
 CREATE INDEX IF NOT EXISTS idx_form_submissions_request_id ON public.form_submissions(request_id);
 CREATE INDEX IF NOT EXISTS idx_form_submissions_submitted_at ON public.form_submissions(submitted_at);
+CREATE INDEX IF NOT EXISTS form_submissions_site_form_submitted_idx ON public.form_submissions(site_id, form_id, submitted_at);
+CREATE INDEX IF NOT EXISTS form_submissions_site_form_status_submitted_idx ON public.form_submissions(site_id, form_id, status, submitted_at);
+CREATE INDEX IF NOT EXISTS form_submissions_site_request_idx ON public.form_submissions(site_id, request_id);
+CREATE INDEX IF NOT EXISTS form_submissions_site_status_updated_idx ON public.form_submissions(site_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_form_submissions_values_gin ON public.form_submissions USING GIN(values);
 
 CREATE INDEX IF NOT EXISTS idx_form_contacts_site_form ON public.form_contacts(site_id, form_id);
@@ -285,3 +308,7 @@ CREATE INDEX IF NOT EXISTS idx_form_contacts_status ON public.form_contacts(stat
 CREATE INDEX IF NOT EXISTS idx_form_contacts_request_id ON public.form_contacts(request_id);
 CREATE INDEX IF NOT EXISTS idx_form_contacts_email ON public.form_contacts(email);
 CREATE INDEX IF NOT EXISTS idx_form_contacts_source_submission_id ON public.form_contacts(source_submission_id);
+CREATE INDEX IF NOT EXISTS form_contacts_site_form_updated_idx ON public.form_contacts(site_id, form_id, updated_at);
+CREATE INDEX IF NOT EXISTS form_contacts_site_form_status_updated_idx ON public.form_contacts(site_id, form_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS form_contacts_site_request_idx ON public.form_contacts(site_id, request_id);
+CREATE INDEX IF NOT EXISTS form_contacts_site_email_idx ON public.form_contacts(site_id, email);

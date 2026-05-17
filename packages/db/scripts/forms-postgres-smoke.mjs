@@ -21,6 +21,8 @@ Required:
 
 Optional:
   BACKY_DATABASE_LOGGING=true
+  BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST=...
+  BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE=...
 
 Example:
   BACKY_DATABASE_URL="postgres://..." npm run test:forms-postgres --workspace @backy/db
@@ -38,12 +40,291 @@ if (!databaseUrl) {
   throw new Error('BACKY_DATABASE_URL or DATABASE_URL is required for the forms Postgres smoke.');
 }
 
+const assertExpectedDatabaseTarget = () => {
+  const expectedHost = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim();
+  const expectedDatabase = (process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE || '').trim();
+  if (!expectedHost && !expectedDatabase) return;
+
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('BACKY_DATABASE_URL or DATABASE_URL must be a valid Postgres URL before target certification can run.');
+  }
+
+  const actualHost = parsed.hostname;
+  const actualDatabase = decodeURIComponent(parsed.pathname.replace(/^\/+/, '').split('/')[0] || '');
+  if (expectedHost && actualHost !== expectedHost) {
+    throw new Error(`Forms Postgres certification expected database host ${expectedHost}, but BACKY_DATABASE_URL points at ${actualHost || 'unknown'}.`);
+  }
+  if (expectedDatabase && actualDatabase !== expectedDatabase) {
+    throw new Error(`Forms Postgres certification expected database name ${expectedDatabase}, but BACKY_DATABASE_URL points at ${actualDatabase || 'unknown'}.`);
+  }
+};
+
+assertExpectedDatabaseTarget();
+
+const requiredSchema = {
+  sites: [
+    'id',
+    'team_id',
+    'name',
+    'slug',
+    'description',
+    'theme',
+    'settings',
+    'is_published',
+    'published_at',
+    'created_at',
+    'updated_at',
+  ],
+  pages: [
+    'id',
+    'site_id',
+    'title',
+    'slug',
+    'description',
+    'content',
+    'meta',
+    'status',
+    'published_at',
+    'scheduled_at',
+    'is_homepage',
+    'sort_order',
+    'created_at',
+    'updated_at',
+  ],
+  form_definitions: [
+    'id',
+    'site_id',
+    'page_id',
+    'post_id',
+    'name',
+    'title',
+    'description',
+    'audience',
+    'is_active',
+    'fields',
+    'notification_email',
+    'notification_webhook',
+    'success_redirect_url',
+    'success_message',
+    'enable_honeypot',
+    'enable_captcha',
+    'moderation_mode',
+    'contact_share',
+    'collection_target',
+    'settings',
+    'created_by',
+    'updated_by',
+    'created_at',
+    'updated_at',
+  ],
+  form_submissions: [
+    'id',
+    'site_id',
+    'form_id',
+    'page_id',
+    'post_id',
+    'values',
+    'ip_hash',
+    'user_agent',
+    'request_id',
+    'status',
+    'reviewed_by',
+    'reviewed_at',
+    'admin_notes',
+    'collection_record',
+    'collection_record_errors',
+    'submitted_at',
+    'updated_at',
+  ],
+  form_contacts: [
+    'id',
+    'site_id',
+    'form_id',
+    'page_id',
+    'post_id',
+    'name',
+    'email',
+    'phone',
+    'notes',
+    'source_values',
+    'status',
+    'source_submission_id',
+    'request_id',
+    'source_ip_hash',
+    'created_at',
+    'updated_at',
+  ],
+};
+
+const requiredRlsTables = [
+  'form_definitions',
+  'form_submissions',
+  'form_contacts',
+];
+
+const requiredPolicies = {
+  form_definitions: [
+    'Team members can view form definitions',
+    'Public can view active published form definitions',
+    'Editors can manage form definitions',
+  ],
+  form_submissions: [
+    'Team members can view form submissions',
+    'Public can create active published form submissions',
+    'Editors can manage form submissions',
+  ],
+  form_contacts: [
+    'Team members can view form contacts',
+    'Editors can manage form contacts',
+  ],
+};
+
+const requiredIndexes = {
+  form_definitions: [
+    'form_definitions_site_active_updated_idx',
+    'form_definitions_site_page_updated_idx',
+    'form_definitions_site_post_updated_idx',
+    'idx_form_definitions_settings_gin',
+  ],
+  form_submissions: [
+    'form_submissions_site_form_submitted_idx',
+    'form_submissions_site_form_status_submitted_idx',
+    'form_submissions_site_request_idx',
+    'form_submissions_site_status_updated_idx',
+    'idx_form_submissions_values_gin',
+  ],
+  form_contacts: [
+    'form_contacts_site_form_updated_idx',
+    'form_contacts_site_form_status_updated_idx',
+    'form_contacts_site_request_idx',
+    'form_contacts_site_email_idx',
+    'idx_form_contacts_source_submission_id',
+  ],
+};
+
+const requiredConstraints = {
+  form_definitions: [
+    'form_definitions_audience_check',
+    'form_definitions_moderation_mode_check',
+  ],
+  form_submissions: [
+    'form_submissions_status_check',
+  ],
+  form_contacts: [
+    'form_contacts_status_check',
+    'form_contacts_source_submission_id_fkey',
+  ],
+};
+
+const assertPostgresSchemaReady = async () => {
+  const postgres = (await import('postgres')).default;
+  const sql = postgres(databaseUrl, { max: 1 });
+  const missing = [];
+
+  try {
+    for (const [tableName, expectedColumns] of Object.entries(requiredSchema)) {
+      const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = ${tableName}
+      `;
+      const columns = new Set(rows.map((row) => row.column_name));
+      if (columns.size === 0) {
+        missing.push(`public.${tableName} table`);
+        continue;
+      }
+
+      for (const columnName of expectedColumns) {
+        if (!columns.has(columnName)) {
+          missing.push(`public.${tableName}.${columnName}`);
+        }
+      }
+    }
+
+    for (const tableName of requiredRlsTables) {
+      const rows = await sql`
+        SELECT c.relrowsecurity
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = ${tableName}
+      `;
+      if (rows[0]?.relrowsecurity !== true) {
+        missing.push(`public.${tableName} row level security`);
+      }
+    }
+
+    for (const [tableName, expectedPolicies] of Object.entries(requiredPolicies)) {
+      const rows = await sql`
+        SELECT policyname
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = ${tableName}
+      `;
+      const policies = new Set(rows.map((row) => row.policyname));
+      for (const policyName of expectedPolicies) {
+        if (!policies.has(policyName)) {
+          missing.push(`public.${tableName} policy ${policyName}`);
+        }
+      }
+    }
+
+    for (const [tableName, expectedIndexes] of Object.entries(requiredIndexes)) {
+      const rows = await sql`
+        SELECT indexname
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ${tableName}
+      `;
+      const indexes = new Set(rows.map((row) => row.indexname));
+      for (const indexName of expectedIndexes) {
+        if (!indexes.has(indexName)) {
+          missing.push(`public.${tableName} index ${indexName}`);
+        }
+      }
+    }
+
+    for (const [tableName, expectedConstraints] of Object.entries(requiredConstraints)) {
+      const rows = await sql`
+        SELECT con.conname
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        JOIN pg_namespace n ON n.oid = rel.relnamespace
+        WHERE n.nspname = 'public'
+          AND rel.relname = ${tableName}
+      `;
+      const constraints = new Set(rows.map((row) => row.conname));
+      for (const constraintName of expectedConstraints) {
+        if (!constraints.has(constraintName)) {
+          missing.push(`public.${tableName} constraint ${constraintName}`);
+        }
+      }
+    }
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+
+  if (missing.length > 0) {
+    throw new Error([
+      'Configured Postgres/Supabase database is not migrated for the Backy Forms/Contacts contract.',
+      `Missing schema objects: ${missing.join(', ')}`,
+      'Apply supabase/migrations/*.sql or the equivalent Drizzle migrations before running this smoke.',
+    ].join(' '));
+  }
+};
+
 const now = Date.now().toString(36);
 const suffix = `forms-db-smoke-${now}`;
 let adapter;
 let createdSiteId = null;
 
 const run = async () => {
+  await assertPostgresSchemaReady();
+
   adapter = await createDatabaseAdapter({
     type: 'postgres',
     url: databaseUrl,
@@ -244,6 +525,83 @@ const run = async () => {
   assert(qualifiedContact.status === 'qualified', 'Expected contact status update to persist.');
   assert((await repositories.forms.getContactById(site.id, form.id, contact.id))?.notes === 'Qualified by real database smoke', 'Expected contact getById to read updated notes.');
 
+  const duplicateContact = (await repositories.forms.createContact({
+    siteId: site.id,
+    formId: form.id,
+    pageId: page.id,
+    postId: null,
+    name: 'Backy DB Smoke Duplicate',
+    email: 'reader-db-smoke@example.com',
+    phone: '+15555550124',
+    notes: 'Duplicate lead from the same database smoke reader',
+    sourceValues: {
+      email: 'reader-db-smoke@example.com',
+      company: 'Backy DB Smoke Duplicate',
+      message: 'Duplicate lead follow-up from the real database-mode smoke.',
+      consent: true,
+    },
+    status: 'contacted',
+    sourceSubmissionId: approvedSubmission.id,
+    requestId: `${suffix}-contact-duplicate`,
+    sourceIpHash: 'forms-db-smoke-duplicate-ip-hash',
+  })).item;
+  const unrelatedContact = (await repositories.forms.createContact({
+    siteId: site.id,
+    formId: form.id,
+    pageId: page.id,
+    postId: null,
+    name: 'Backy DB Smoke Other',
+    email: 'other-reader-db-smoke@example.com',
+    phone: null,
+    notes: 'Separate database smoke lead',
+    sourceValues: {
+      email: 'other-reader-db-smoke@example.com',
+      consent: true,
+    },
+    status: 'new',
+    sourceSubmissionId: null,
+    requestId: `${suffix}-contact-other`,
+    sourceIpHash: 'forms-db-smoke-other-ip-hash',
+  })).item;
+  assert((await repositories.forms.listContacts({ siteId: site.id, formId: form.id, status: 'contacted' })).items.some((item) => item.id === duplicateContact.id), 'Expected duplicate contact status filter to find the duplicate lead.');
+  assert((await repositories.forms.listContacts({ siteId: site.id, formId: form.id, search: 'duplicate' })).items.some((item) => item.id === duplicateContact.id), 'Expected duplicate contact search filter to find the duplicate lead.');
+  assert((await repositories.forms.getContactById(site.id, form.id, unrelatedContact.id))?.email === 'other-reader-db-smoke@example.com', 'Expected contact getById to honor the exact unrelated contact id.');
+
+  const mergedPrimaryContact = (await repositories.forms.updateContact(site.id, duplicateContact.id, {
+    status: 'qualified',
+    notes: 'Merged duplicate lead into primary database smoke contact',
+    sourceValues: {
+      ...duplicateContact.sourceValues,
+      __backyMerge: {
+        primaryContactId: duplicateContact.id,
+        mergedDuplicateIds: [contact.id],
+        mergedAt: '2030-01-02T03:04:05.000Z',
+      },
+      __backyPromotion: {
+        userId: 'user_forms_db_smoke',
+        email: 'reader-db-smoke@example.com',
+        status: 'invited',
+        promotedAt: '2030-01-02T03:04:05.000Z',
+      },
+      __backyCustomerPromotion: {
+        collectionId: 'collection_forms_db_smoke_customers',
+        recordId: 'record_forms_db_smoke_customer',
+        promotedAt: '2030-01-02T03:04:05.000Z',
+      },
+    },
+  })).item;
+  const archivedMergedContact = (await repositories.forms.updateContact(site.id, contact.id, {
+    status: 'archived',
+    notes: 'Merged into reader-db-smoke@example.com primary database smoke contact',
+  })).item;
+  assert(mergedPrimaryContact.id === duplicateContact.id && mergedPrimaryContact.sourceValues?.__backyMerge?.mergedDuplicateIds?.includes(contact.id), 'Expected duplicate merge metadata to persist on the primary contact.');
+  assert(mergedPrimaryContact.sourceValues?.__backyPromotion?.userId === 'user_forms_db_smoke', 'Expected contact-to-user promotion metadata to persist on the primary contact.');
+  assert(mergedPrimaryContact.sourceValues?.__backyCustomerPromotion?.recordId === 'record_forms_db_smoke_customer', 'Expected contact-to-customer promotion metadata to persist on the primary contact.');
+  assert(archivedMergedContact.id === contact.id && archivedMergedContact.status === 'archived', 'Expected merged duplicate contact to archive by exact id.');
+  assert((await repositories.forms.getContactById(site.id, form.id, contact.id))?.notes?.includes('Merged into'), 'Expected archived duplicate merge notes to persist.');
+
+  assert(await repositories.forms.deleteContact(site.id, unrelatedContact.id), 'Expected unrelated contact delete to report deletion.');
+  assert(await repositories.forms.deleteContact(site.id, duplicateContact.id), 'Expected merged primary contact delete to report deletion.');
   assert(await repositories.forms.deleteContact(site.id, contact.id), 'Expected contact delete to report deletion.');
   await repositories.forms.delete(site.id, form.id);
   await repositories.pages.delete(site.id, page.id);
@@ -253,14 +611,20 @@ const run = async () => {
   console.log(JSON.stringify({
     ok: true,
     database: 'postgres',
+    targetGuard: {
+      expectedHostConfigured: Boolean((process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST || '').trim()),
+      expectedDatabaseConfigured: Boolean((process.env.BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE || '').trim()),
+    },
     siteSlug: suffix,
     verified: [
+      'schema preflight for Forms/Contacts contract tables, RLS, policies, indexes, and constraints',
       'adapter connection',
       'site/page repository create/delete',
       'form create/list/get/update/delete',
       'spam and consent settings merge',
       'submission create/list/search/update/get',
       'contact create/list/search/update/get/delete',
+      'duplicate contact merge and promotion metadata',
     ],
   }, null, 2));
 };
