@@ -171,6 +171,21 @@ assert(
   'Doctor S3 storage mode should report S3 credential failure.',
 );
 
+const s3StorageAliases = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_STORAGE: '1',
+  BACKY_MEDIA_STORAGE_PROVIDER: 's3',
+  AWS_ACCESS_KEY_ID: 'aws_alias_access',
+  AWS_SECRET_ACCESS_KEY: 'aws_alias_secret',
+  BACKY_STORAGE_BUCKET: 'backy-alias-bucket',
+  AWS_REGION: 'us-east-1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  s3StorageAliases.code === 0,
+  `Doctor S3 storage mode should accept runtime storage aliases, got ${s3StorageAliases.code}.`,
+);
+
 const missingSupabaseStorage = await runDoctor({
   BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
   BACKY_SETTINGS_CERTIFY_STORAGE: '1',
@@ -186,6 +201,20 @@ assert(missingSupabaseStorageJson.ok === false, 'Doctor Supabase storage mode sh
 assert(
   missingSupabaseStorageJson.failures.includes('Supabase storage credentials'),
   'Doctor Supabase storage mode should report Supabase credential failure.',
+);
+
+const supabaseStorageAliases = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_STORAGE: '1',
+  BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER: 'supabase',
+  SUPABASE_URL: 'https://supabase.example.test',
+  SUPABASE_SERVICE_ROLE_KEY: 'supabase_alias_service_role',
+  BACKY_STORAGE_BUCKET: 'backy-alias-bucket',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  supabaseStorageAliases.code === 0,
+  `Doctor Supabase storage mode should accept runtime storage aliases, got ${supabaseStorageAliases.code}.`,
 );
 
 const missingResendNotification = await runDoctor({

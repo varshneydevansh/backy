@@ -81,7 +81,10 @@ const providerCredentials = {
   ]],
 };
 
-const storageProvider = selected('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', selected('BACKY_STORAGE_PROVIDER', 'auto'));
+const storageProvider = selected(
+  'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
+  selected('BACKY_STORAGE_PROVIDER', selected('BACKY_MEDIA_STORAGE_PROVIDER', 'auto')),
+);
 const notificationProvider = selected('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER');
 const paymentProvider = selected('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER');
 const taxProvider = selected('BACKY_COMMERCE_CERTIFY_TAX_PROVIDER');
@@ -107,9 +110,18 @@ const database = {
 };
 
 const storageChecks = [
-  checkAny('storage provider selector', ['BACKY_STORAGE_PROVIDER'], storageProvider === 'auto'),
-  check('S3 storage credentials', ['BACKY_S3_ACCESS_KEY_ID', 'BACKY_S3_SECRET_ACCESS_KEY', 'BACKY_S3_BUCKET', 'BACKY_S3_REGION'], storageProvider === 's3'),
-  check('Supabase storage credentials', ['BACKY_SUPABASE_URL', 'BACKY_SUPABASE_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_STORAGE_BUCKET'], storageProvider === 'supabase'),
+  checkAny('storage provider selector', ['BACKY_STORAGE_PROVIDER', 'BACKY_MEDIA_STORAGE_PROVIDER'], storageProvider === 'auto'),
+  checkCompleteAny('S3 storage credentials', [[
+    ['BACKY_S3_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'],
+    ['BACKY_S3_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY'],
+    ['BACKY_S3_BUCKET', 'BACKY_STORAGE_BUCKET'],
+    ['BACKY_S3_REGION', 'AWS_REGION'],
+  ]], storageProvider === 's3'),
+  checkCompleteAny('Supabase storage credentials', [[
+    ['BACKY_SUPABASE_URL', 'SUPABASE_URL'],
+    ['BACKY_SUPABASE_SERVICE_ROLE_KEY', 'BACKY_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY'],
+    ['BACKY_SUPABASE_STORAGE_BUCKET', 'BACKY_STORAGE_BUCKET'],
+  ]], storageProvider === 'supabase'),
 ];
 
 const notificationChecks = [

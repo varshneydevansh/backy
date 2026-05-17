@@ -39,7 +39,11 @@ if (requireCertification && !adminKey) {
 
 if (requireCertification && !externalBaseUrl) {
   const missing = [];
-  if ((certifyStorage || certifyRotation) && !process.env.BACKY_STORAGE_PROVIDER && requestedStorageProvider !== 'local') missing.push('BACKY_STORAGE_PROVIDER');
+  if (
+    (certifyStorage || certifyRotation) &&
+    !(process.env.BACKY_STORAGE_PROVIDER || process.env.BACKY_MEDIA_STORAGE_PROVIDER) &&
+    requestedStorageProvider !== 'local'
+  ) missing.push('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER');
   if (certifyVercelSecrets && !(process.env.VERCEL_TOKEN || process.env.BACKY_VERCEL_TOKEN)) missing.push('VERCEL_TOKEN or BACKY_VERCEL_TOKEN');
   if (certifyVercelSecrets && !(process.env.VERCEL_PROJECT_ID || process.env.BACKY_VERCEL_PROJECT_ID)) missing.push('VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID');
   if (certifyRotation && !Object.keys(process.env).some((key) => key.includes('_NEXT_'))) missing.push('BACKY_*_NEXT_* replacement storage env');
